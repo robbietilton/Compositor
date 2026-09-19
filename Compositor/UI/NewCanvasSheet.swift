@@ -28,32 +28,37 @@ struct NewCanvasSheet: View {
             }
             Text(valid ? "Transparent canvas · sRGB" : "Enter whole numbers from 1 to 30,000 pixels.")
                 .font(.callout).foregroundStyle(valid ? Color.secondary : Color.orange)
-            HStack(spacing: 10) {
-                Button("Open project") { onOpen?() }.buttonStyle(.bordered)
-                Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
-                Button("Open from clipboard") {
-                    if let onClipboard {
-                        onClipboard()
-                    } else if let image = session.clipboardImage() ?? EditorSession.clipboardImage() {
-                        session.createDocument(with: image)
-                    } else {
-                        NSSound.beep()
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    Button("Open project") { onOpen?() }.buttonStyle(.bordered)
+                    Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
+                    Spacer()
+                }
+                HStack(spacing: 10) {
+                    Button("Open from clipboard") {
+                        if let onClipboard {
+                            onClipboard()
+                        } else if let image = session.clipboardImage() ?? EditorSession.clipboardImage() {
+                            session.createDocument(with: image)
+                        } else {
+                            NSSound.beep()
+                        }
                     }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("openFromClipboard")
+                    Spacer()
+                    Button("Create canvas") {
+                        guard let w = CanvasDocument.validDimension(width),
+                              let h = CanvasDocument.validDimension(height) else { return }
+                        if let onCreate { onCreate(w, h) }
+                        else { session.createDocument(width: w, height: h, emptyLayer: true) }
+                    }
+                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .disabled(!valid).accessibilityIdentifier("createCanvas")
                 }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("openFromClipboard")
-                Spacer()
-                Button("Create canvas") {
-                    guard let w = CanvasDocument.validDimension(width),
-                          let h = CanvasDocument.validDimension(height) else { return }
-                    if let onCreate { onCreate(w, h) }
-                    else { session.createDocument(width: w, height: h, emptyLayer: true) }
-                }
-                .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-                .disabled(!valid).accessibilityIdentifier("createCanvas")
             }
         }
-        .padding(28).frame(maxWidth: 540)
+        .padding(28).frame(maxWidth: 500)
         .disabled(session.isImporting || session.showsBusy)
         .onAppear {
             if !suggestedClipboardSize {
