@@ -206,6 +206,22 @@ final class ProjectController {
         if proceed { session.clearProject() }
     }
 
+    func newFromClipboard(_ pasteboard: NSPasteboard = .general) async {
+        if let workspace { await workspace.newFromClipboard(pasteboard); return }
+        guard begin() else { return }
+        guard let image = session.clipboardImage(pasteboard) ?? EditorSession.clipboardImage(pasteboard) else {
+            session.isProjectBusy = false
+            NSSound.beep()
+            return
+        }
+        let proceed = await confirmReplacement()
+        session.isProjectBusy = false
+        if proceed {
+            session.clearProject()
+            session.createDocument(with: image)
+        }
+    }
+
     func close(_ window: NSWindow) async {
         if let workspace, let tab = workspace.tabs.first(where: { $0.controller === self }) {
             await workspace.close(tab.id); return

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 extension EditorSession {
     func projectSnapshot() -> ProjectSnapshot? {
@@ -51,5 +52,11 @@ extension EditorSession {
         guard !isProjectBusy, !isImporting, (1...30_000).contains(width), (1...30_000).contains(height) else { return }
         clearProject()
         createDocument(width: width, height: height, emptyLayer: true)
+    }
+
+    func createNewProject(with image: CGImage, name: String = "Layer 1") {
+        guard !isProjectBusy, !isImporting, (1...30_000).contains(image.width), (1...30_000).contains(image.height) else { return }
+        clearProject()
+        createDocument(with: image, name: name)
     }
 }

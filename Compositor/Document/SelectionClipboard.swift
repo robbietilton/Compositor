@@ -115,7 +115,8 @@ extension EditorSession {
     var canPaste: Bool {
         guard document != nil, canEditLayers else { return false }
         if let pixelClipboard, NSPasteboard.general.changeCount == pixelClipboard.changeCount { return true }
-        return NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil)
+        return NSPasteboard.general.canReadObject(forClasses: [NSImage.self, NSURL.self], options: nil)
+            || NSPasteboard.general.types?.contains(where: { [NSPasteboard.PasteboardType.png, .tiff].contains($0) }) == true
     }
 
     /// Cmd-V: pastes as a new layer above the active one. Pixels copied here go back exactly
@@ -125,8 +126,7 @@ extension EditorSession {
         let pasteboard = NSPasteboard.general
         if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
             addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
-        } else if let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                  let image = try? Self.sRGBCopy(of: external) {
+        } else if let image = clipboardImage(pasteboard) {
             let origin = CGPoint(x: floor((document.size.width - CGFloat(image.width)) / 2),
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))
             addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste")
@@ -195,10 +195,73 @@ extension EditorSession {
     }
 
     /// Normalizes an image from another app to the working sRGB RGBA format.
-    private static func sRGBCopy(of image: CGImage) throws -> CGImage {
+    static func sRGBCopy(of image: CGImage) throws -> CGImage {
         let context = try BrushRaster.context(width: image.width, height: image.height, mask: false)
         BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), mask: false, context: context)
         guard let copy = context.makeImage() else { throw ExportError.render }
         return copy
+    }
+
+    /// Reads and normalizes an image from the pasteboard (or the active session's pixel clipboard).
+    func clipboardImage(_ pasteboard: NSPasteboard = .general) -> CGImage? {
+        if let pixelClipboard, pasteboard.changeCount == pixelClipboard.changeCount {
+            return pixelClipboard.image
+        }
+        return Self.clipboardImage(pasteboard)
+    }
+
+    /// Reads and normalizes an image from any pasteboard.
+    static func clipboardImage(_ pasteboard: NSPasteboard = .general) -> CGImage? {
+        let types = [
+            NSPasteboard.PasteboardType.png,
+            NSPasteboard.PasteboardType.tiff,
+            NSPasteboard.PasteboardType("public.jpeg"),
+            NSPasteboard.PasteboardType("public.heic"),
+            NSPasteboard.PasteboardType("public.image")
+        ]
+        for type in types {
+            if let data = pasteboard.data(forType: type),
+               let source = CGImageSourceCreateWithData(data as CFData, nil),
+               let raw = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+                let orientation = (properties?[kCGImagePropertyOrientation] as? Int32) ?? 1
+                let oriented: CGImage
+                if orientation > 1 {
+                    let ci = CIImage(cgImage: raw).oriented(forExifOrientation: orientation)
+                    oriented = CIContext().createCGImage(ci, from: ci.extent) ?? raw
+                } else {
+                    oriented = raw
+                }
+                guard (1...30_000).contains(oriented.width), (1...30_000).contains(oriented.height),
+                      oriented.width * oriented.height <= 100_000_000 else { continue }
+                return (try? sRGBCopy(of: oriented)) ?? oriented
+            }
+        }
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [NSPasteboard.ReadingOptionKey.urlReadingFileURLsOnly: true]) as? [URL] {
+            for url in urls where url.isFileURL {
+                if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                   let raw = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                    let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+                    let orientation = (properties?[kCGImagePropertyOrientation] as? Int32) ?? 1
+                    let oriented: CGImage
+                    if orientation > 1 {
+                        let ci = CIImage(cgImage: raw).oriented(forExifOrientation: orientation)
+                        oriented = CIContext().createCGImage(ci, from: ci.extent) ?? raw
+                    } else {
+                        oriented = raw
+                    }
+                    guard (1...30_000).contains(oriented.width), (1...30_000).contains(oriented.height),
+                          oriented.width * oriented.height <= 100_000_000 else { continue }
+                    return (try? sRGBCopy(of: oriented)) ?? oriented
+                }
+            }
+        }
+        if let nsImage = NSImage(pasteboard: pasteboard),
+           let raw = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           (1...30_000).contains(raw.width), (1...30_000).contains(raw.height),
+           raw.width * raw.height <= 100_000_000 {
+            return (try? sRGBCopy(of: raw)) ?? raw
+        }
+        return nil
     }
 }

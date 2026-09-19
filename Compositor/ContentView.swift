@@ -240,7 +240,18 @@ struct ContentView: View {
     private var welcome: some View {
         NewCanvasSheet(session: session,
             onCreate: { session.createNewProject(width: $0, height: $1) },
-            onOpen: { Task { await applicationDelegate?.projects.open() } })
+            onOpen: { Task { await applicationDelegate?.projects.open() } },
+            onClipboard: {
+                Task {
+                    if let projects = applicationDelegate?.projects {
+                        await projects.newFromClipboard()
+                    } else if let image = session.clipboardImage() ?? EditorSession.clipboardImage() {
+                        session.createNewProject(with: image)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
+            })
     }
     private var statusBar: some View {
         HStack(spacing: 16) {

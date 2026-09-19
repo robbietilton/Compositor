@@ -677,6 +677,25 @@ final class EditorSession {
         showsNewDocument = false
     }
 
+    /// Starts a canvas matching the image dimensions with the image on Layer 1, as File > New from Clipboard does.
+    func createDocument(with image: CGImage, name: String = "Layer 1") {
+        guard !isProjectBusy, !isImporting,
+              (1...30_000).contains(image.width), (1...30_000).contains(image.height),
+              let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
+        commitTransform()
+        beginEdit("New from Clipboard")
+        defer { endEdit() }
+        var document = CanvasDocument(width: image.width, height: image.height)
+        let asset = ImportedImage(image: image, thumbnail: thumbnail, name: name)
+        let layer = ImageLayer(asset: asset, origin: .zero)
+        document.layers = [layer]
+        self.document = document
+        activeLayerID = layer.id
+        renamingLayerID = nil
+        viewport.fit(documentSize: document.size)
+        showsNewDocument = false
+    }
+
     func fit() {
         guard let document else { return }
         viewport.fit(documentSize: document.size)

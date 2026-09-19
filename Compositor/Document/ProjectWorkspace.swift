@@ -56,6 +56,24 @@ final class ProjectWorkspace {
         _ = addTab(reuseEmpty: false)
     }
     @discardableResult
+    func newFromClipboard(_ pasteboard: NSPasteboard = .general) async -> Bool {
+        guard canSwitch else { return false }
+        guard let image = current.session.clipboardImage(pasteboard) ?? EditorSession.clipboardImage(pasteboard) else {
+            NSSound.beep()
+            return false
+        }
+        current.session.commitTransform()
+        let tab: ProjectTab
+        if current.session.document == nil {
+            tab = current
+        } else {
+            tab = addTab(reuseEmpty: false)
+        }
+        selectedID = tab.id
+        tab.session.createDocument(with: image)
+        return true
+    }
+    @discardableResult
     func open(_ suppliedURL: URL? = nil) async -> Bool {
         guard canSwitch else { return false }
         isManaging = true

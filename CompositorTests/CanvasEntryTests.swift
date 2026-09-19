@@ -48,4 +48,38 @@ import UniformTypeIdentifiers
         #expect(window.firstResponder === canvas)
         window.contentView = nil
     }
+
+    @Test func createDocumentWithImageSetsSizeAndPlacesLayer() throws {
+        let session = EditorSession()
+        let context = try #require(CGContext(data: nil, width: 120, height: 80, bitsPerComponent: 8,
+            bytesPerRow: 120 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        let image = try #require(context.makeImage())
+        session.createDocument(with: image, name: "Layer 1")
+        let doc = try #require(session.document)
+        #expect(doc.width == 120 && doc.height == 80)
+        #expect(doc.layers.count == 1)
+        #expect(doc.layers.first?.name == "Layer 1")
+        #expect(doc.layers.first?.transform.origin == .zero)
+        #expect(session.activeLayerID == doc.layers.first?.id)
+        #expect(!session.showsNewDocument)
+    }
+
+    @Test func clipboardImageReadsDirectDataAndFileUrls() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let url = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // Test direct data
+        pasteboard.setData(try Data(contentsOf: url), forType: .png)
+        let direct = try #require(EditorSession.clipboardImage(pasteboard))
+        #expect(direct.width == 64 && direct.height == 32)
+
+        // Test file URL
+        pasteboard.clearContents()
+        pasteboard.writeObjects([url as NSURL])
+        let fromURL = try #require(EditorSession.clipboardImage(pasteboard))
+        #expect(fromURL.width == 64 && fromURL.height == 32)
+    }
 }

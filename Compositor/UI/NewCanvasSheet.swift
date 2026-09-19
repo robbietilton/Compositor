@@ -6,6 +6,7 @@ struct NewCanvasSheet: View {
     let session: EditorSession
     var onCreate: ((Int, Int) -> Void)? = nil
     var onOpen: (() -> Void)? = nil
+    var onClipboard: (() -> Void)? = nil
     @State private var width = "1920"
     @State private var height = "1080"
     @State private var suggestedClipboardSize = false
@@ -30,6 +31,17 @@ struct NewCanvasSheet: View {
             HStack(spacing: 10) {
                 Button("Open project") { onOpen?() }.buttonStyle(.bordered)
                 Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
+                Button("Open from clipboard") {
+                    if let onClipboard {
+                        onClipboard()
+                    } else if let image = session.clipboardImage() ?? EditorSession.clipboardImage() {
+                        session.createDocument(with: image)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("openFromClipboard")
                 Spacer()
                 Button("Create canvas") {
                     guard let w = CanvasDocument.validDimension(width),
@@ -41,7 +53,7 @@ struct NewCanvasSheet: View {
                 .disabled(!valid).accessibilityIdentifier("createCanvas")
             }
         }
-        .padding(28).frame(maxWidth: 500)
+        .padding(28).frame(maxWidth: 540)
         .disabled(session.isImporting || session.showsBusy)
         .onAppear {
             if !suggestedClipboardSize {
@@ -57,20 +69,10 @@ struct NewCanvasSheet: View {
         }
     }
     static func clipboardDimensions(_ pasteboard: NSPasteboard = .general) -> (width: Int, height: Int)? {
-        for type in [NSPasteboard.PasteboardType.png, .tiff] {
-            guard let data = pasteboard.data(forType: type),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                  var width = properties[kCGImagePropertyPixelWidth] as? Int,
-                  var height = properties[kCGImagePropertyPixelHeight] as? Int else { continue }
-            if let orientation = properties[kCGImagePropertyOrientation] as? Int, (5...8).contains(orientation) {
-                swap(&width, &height)
-            }
-            guard CanvasDocument.validDimension(String(width)) != nil,
-                  CanvasDocument.validDimension(String(height)) != nil else { continue }
-            return (width, height)
-        }
-        return nil
+        guard let image = EditorSession.clipboardImage(pasteboard) else { return nil }
+        guard CanvasDocument.validDimension(String(image.width)) != nil,
+              CanvasDocument.validDimension(String(image.height)) != nil else { return nil }
+        return (image.width, image.height)
     }
     private func dimension(_ title: String, text: Binding<String>, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 8) {

@@ -102,4 +102,49 @@ import Testing
         workspace.select(first.id)
         #expect(workspace.quitOrder.map(\.id) == [first.id, second.id, third.id])
     }
+
+    @Test @MainActor func newFromClipboardReusesEmptyTabAndLoadsImage() async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let url = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: url) }
+        pasteboard.setData(try Data(contentsOf: url), forType: .png)
+
+        let workspace = ProjectWorkspace()
+        #expect(workspace.tabs.count == 1 && workspace.current.session.document == nil)
+        let opened = await workspace.newFromClipboard(pasteboard)
+        #expect(opened)
+        #expect(workspace.tabs.count == 1)
+        let doc = try #require(workspace.current.session.document)
+        #expect(doc.width == 64 && doc.height == 32)
+        #expect(doc.layers.count == 1)
+        #expect(doc.layers.first?.name == "Layer 1")
+    }
+
+    @Test @MainActor func newFromClipboardOpensNewTabWhenCurrentHasDocument() async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let url = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: url) }
+        pasteboard.setData(try Data(contentsOf: url), forType: .png)
+
+        let workspace = ProjectWorkspace()
+        workspace.current.session.createDocument(width: 400, height: 300)
+        let opened = await workspace.newFromClipboard(pasteboard)
+        #expect(opened)
+        #expect(workspace.tabs.count == 2)
+        let doc = try #require(workspace.current.session.document)
+        #expect(doc.width == 64 && doc.height == 32)
+    }
+
+    @Test @MainActor func newFromClipboardReturnsFalseWhenNoImageOnClipboard() async throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("Just text", forType: .string)
+
+        let workspace = ProjectWorkspace()
+        let opened = await workspace.newFromClipboard(pasteboard)
+        #expect(!opened)
+        #expect(workspace.current.session.document == nil)
+    }
 }
