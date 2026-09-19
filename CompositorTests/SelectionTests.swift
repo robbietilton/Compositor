@@ -330,7 +330,7 @@ struct SelectionTests {
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 40, y: 45, width: 20, height: 10))
         marquee(session, from: CGPoint(x: 50, y: 50), to: CGPoint(x: 45, y: 58), square: true, fromCenter: true)
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 42, y: 42, width: 16, height: 16))
-        #expect(NavigationTool.marquee.isSelectionTool && !NavigationTool.brush.isSelectionTool)
+        #expect(NavigationTool.marquee.isSelectionTool && NavigationTool.objectSelection.isSelectionTool && !NavigationTool.brush.isSelectionTool)
     }
 
     @Test func marqueeEllipseSelectsAnOvalInItsBoxAndShiftMakesACircle() throws {

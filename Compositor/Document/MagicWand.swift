@@ -98,7 +98,7 @@ extension EditorSession {
     func magicWand(at point: CGPoint, mode: SelectionMode) async {
         guard canEditSelection, !isProjectBusy, selectionMoveOrigin == nil, let document,
               point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height,
-              let sample = wandSample(document) else { return }
+              let sample = selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else { return }
         let job = WandJob(image: sample, point: point, settings: wandSettings)
         isProjectBusy = true
         let result = await Task.detached(priority: .userInitiated) { () -> WandResult in
@@ -122,12 +122,12 @@ extension EditorSession {
         }
     }
 
-    /// What the wand reads, at document size: every visible layer as shown on the canvas, or
-    /// just the active layer's own pixels (without its mask, as Cmd-click selection reads
-    /// them). A folder or blank layer reads as transparent.
-    private func wandSample(_ document: CanvasDocument) -> CGImage? {
+    /// What selection-from-image tools read, at document size: every visible layer as shown on the canvas,
+    /// or just the active layer's own pixels (without its mask, as Cmd-click selection reads them).
+    /// A folder or blank layer reads as transparent.
+    func selectionSample(_ document: CanvasDocument, sampleAllLayers: Bool) -> CGImage? {
         guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return nil }
-        if wandSettings.sampleAllLayers {
+        if sampleAllLayers {
             drawLiveComposite(document, in: context)
         } else if let layer = activeLayer, !layer.isGroup, let image = layer.asset?.image {
             let transform = displayedTransform(for: layer)

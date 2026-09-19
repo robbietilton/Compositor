@@ -125,8 +125,8 @@ extension EditorSession {
     }
 
     func beginLasso(at point: CGPoint, mode: SelectionMode) {
-        // The Magic Wand selects with a click; it never draws an outline.
-        guard tool.isSelectionTool, tool != .wand, canEditSelection, selectionMoveOrigin == nil else { return }
+        // Click-selection tools never draw a draft outline.
+        guard tool.isSelectionTool, tool != .wand, tool != .objectSelection, canEditSelection, selectionMoveOrigin == nil else { return }
         if tool == .marquee {
             let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
             lassoDraft = LassoDraft(points: [anchor], cursor: nil, mode: mode, kind: marqueeKind, anchor: anchor)
@@ -174,6 +174,11 @@ extension EditorSession {
     func toggleMarqueeKind() {
         cancelLasso()
         marqueeKind = marqueeKind == .rectangle ? .ellipse : .rectangle
+    }
+
+    /// W picks the Magic Wand first, then cycles between similar-color and object-outline selection.
+    func pressWandKey() {
+        selectTool(tool == .wand ? .objectSelection : .wand)
     }
 
     /// The L key chooses the Lasso in whichever mode it was last set to (switched only in the tool bar). The mode

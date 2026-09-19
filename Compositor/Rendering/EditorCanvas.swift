@@ -214,7 +214,7 @@ final class CanvasView: NSView {
         return NSCursor(image: image, hotSpot: base.hotSpot)
     }
     /// Which selection tool a crosshair names: the tool rail's icon, small, beneath and right of the crosshair.
-    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, rectangleMarquee, ellipseMarquee }
+    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, rectangleMarquee, ellipseMarquee, objectSelection }
 
     /// Crosshair with the tool's icon, and a "+" (add) or "−" (subtract) beside the icon, as Photoshop shows.
     static let selectionCursors: [SelectionIcon: [SelectionMode: NSCursor]] = Dictionary(uniqueKeysWithValues:
@@ -275,6 +275,36 @@ final class CanvasView: NSView {
             NSColor.black.setStroke()
             path.lineWidth = 1.4 * unit
             path.stroke()
+            return
+        }
+        if icon == .objectSelection {
+            let unit = box.width / 18
+            func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: box.minX + x * unit, y: box.minY + y * unit) }
+            let corners = NSBezierPath()
+            for part in [[point(2, 6), point(2, 2), point(6, 2)], [point(12, 2), point(16, 2), point(16, 6)],
+                         [point(16, 12), point(16, 16), point(12, 16)], [point(6, 16), point(2, 16), point(2, 12)]] {
+                corners.move(to: part[0]); corners.line(to: part[1]); corners.line(to: part[2])
+            }
+            corners.lineCapStyle = .round
+            corners.lineJoinStyle = .round
+            NSColor.white.setStroke()
+            corners.lineWidth = 1.6 * unit + 2
+            corners.stroke()
+            NSColor.black.setStroke()
+            corners.lineWidth = 1.6 * unit
+            corners.stroke()
+            let cursor = NSBezierPath()
+            for (index, p) in [point(7, 5), point(7, 14), point(9.6, 11.7), point(11.3, 15.3),
+                               point(13.2, 14.4), point(11.5, 10.9), point(14.5, 10.9)].enumerated() {
+                index == 0 ? cursor.move(to: p) : cursor.line(to: p)
+            }
+            cursor.close()
+            cursor.lineJoinStyle = .round
+            NSColor.white.setStroke()
+            cursor.lineWidth = 2
+            cursor.stroke()
+            NSColor.black.setFill()
+            cursor.fill()
             return
         }
         let name = icon == .freehandLasso ? "lasso" : icon == .ellipseMarquee ? "circle.dashed" : "rectangle.dashed"
@@ -602,7 +632,7 @@ final class CanvasView: NSView {
             return flags.contains(.command) ? pixelDragCursor(duplicate: flags.contains(.option)) : Self.moveSelectionCursor
         }
         if session.tool == .wand { return Self.wandCursors[mode] ?? .crosshair }
-        let icon: SelectionIcon = session.tool == .marquee
+        let icon: SelectionIcon = session.tool == .objectSelection ? .objectSelection : session.tool == .marquee
             ? (session.marqueeKind == .ellipse ? .ellipseMarquee : .rectangleMarquee)
             : (session.lassoKind == .polygonal ? .polygonalLasso : .freehandLasso)
         return Self.selectionCursors[icon]?[mode] ?? .crosshair
@@ -1405,6 +1435,8 @@ final class CanvasView: NSView {
             if !moved, session.tool == .wand {
                 // The wand's click inside the selection selects afresh from that pixel.
                 Task { await session.magicWand(at: start, mode: .replace); synchronizeDisplay(); refreshLassoCursor() }
+            } else if !moved, session.tool == .objectSelection {
+                Task { await session.selectObject(at: start, mode: .replace); synchronizeDisplay(); refreshLassoCursor() }
             } else if !moved {
                 // A click without a drag deselects, as anywhere else with the lasso.
                 session.deselect()
@@ -1533,7 +1565,8 @@ final class CanvasView: NSView {
             case "i": session.selectTool(.eyedropper)
             // M (Shift or not) chooses the Marquee, then switches Rectangle/Ellipse; holding it doesn't flicker.
             case "m": if !event.isARepeat { session.pressMarqueeKey(); refreshLassoCursor() }
-            case "w": session.selectTool(.wand)
+            case "w": if !event.isARepeat { session.pressWandKey(); refreshLassoCursor() }
+            case "o": session.selectTool(.objectSelection)
             // L (Shift or not) chooses the Lasso, then switches Freehand/Polygonal; holding it doesn't flicker.
             case "l": if !event.isARepeat { session.pressLassoKey(); refreshLassoCursor() }
             case let key? where Int(key) != nil && session.usesOpacityKeys:
@@ -1667,6 +1700,10 @@ final class CanvasView: NSView {
             }
             if session.tool == .wand {
                 Task { await session.magicWand(at: pixel, mode: mode); synchronizeDisplay(); refreshLassoCursor() }
+                return
+            }
+            if session.tool == .objectSelection {
+                Task { await session.selectObject(at: pixel, mode: mode); synchronizeDisplay(); refreshLassoCursor() }
                 return
             }
             session.beginLasso(at: pixel, mode: mode)
