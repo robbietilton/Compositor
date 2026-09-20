@@ -14,6 +14,13 @@
         <key>LSHandlerRank</key><string>Owner</string>
         <key>LSTypeIsPackage</key><true/>
         <key>LSItemContentTypes</key><array><string>com.compositor.project</string></array>
+    </dict><dict>
+        <key>CFBundleTypeName</key><string>Adobe Photoshop Document</string>
+        <key>CFBundleTypeRole</key><string>Editor</string>
+        <key>LSHandlerRank</key><string>Alternate</string>
+        <key>CFBundleTypeExtensions</key><array><string>psd</string></array>
+        <key>CFBundleTypeOSTypes</key><array><string>8BPS</string></array>
+        <key>LSItemContentTypes</key><array><string>com.adobe.photoshop-image</string></array>
     </dict></array>
     <key>UTExportedTypeDeclarations</key>
     <array><dict>
@@ -26,6 +33,16 @@
         <key>UTTypeConformsTo</key><array><string>com.apple.package</string></array>
         <key>UTTypeTagSpecification</key><dict>
             <key>public.filename-extension</key><array><string>comp</string></array>
+        </dict>
+    </dict></array>
+    <key>UTImportedTypeDeclarations</key>
+    <array><dict>
+        <key>UTTypeIdentifier</key><string>com.adobe.photoshop-image</string>
+        <key>UTTypeDescription</key><string>Adobe Photoshop Document</string>
+        <key>UTTypeConformsTo</key><array><string>public.image</string><string>public.data</string></array>
+        <key>UTTypeTagSpecification</key><dict>
+            <key>public.filename-extension</key><array><string>psd</string></array>
+            <key>public.mime-type</key><array><string>image/vnd.adobe.photoshop</string></array>
         </dict>
     </dict></array>
     <!-- Sparkle updates: where the feed lives (permanent), the key updates are signed with, and the helper a

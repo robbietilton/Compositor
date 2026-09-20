@@ -62,13 +62,8 @@ final class ProjectWorkspace {
         defer { isManaging = false }
         var urls = suppliedURL.map { [$0] } ?? []
         if urls.isEmpty {
-            let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.compositorProject]
-            panel.allowsMultipleSelection = true
-            panel.treatsFilePackagesAsDirectories = false
-            let response = if let window { await panel.beginSheetModal(for: window) } else { await panel.begin() }
-            guard response == .OK else { return false }
-            urls = panel.urls
+            urls = await ProjectFilePanel.pick(window: window, multiple: true)
+            guard !urls.isEmpty else { return false }
         }
         var opened = false
         for url in urls { opened = await loadProject(url) || opened }
@@ -129,7 +124,7 @@ final class ProjectWorkspace {
         }
         isManaging = true; defer { isManaging = false }
         for url in urls {
-            if url.pathExtension.lowercased() == "comp" { _ = await loadProject(url); continue }
+            if url.isProjectDocument { _ = await loadProject(url); continue }
             let tab: ProjectTab
             if let destination {
                 guard let existing = tabs.first(where: { $0.id == destination }) else { continue }

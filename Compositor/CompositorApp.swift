@@ -50,9 +50,9 @@ struct CompositorApp: App {
                         Task { await applicationDelegate.projects.newCanvas() }
                     }.keyboardShortcut("n")
                         .disabled(!applicationDelegate.projects.canStart)
-                    Button("Open Project…") {
+                    Button("Open…") {
                         applicationDelegate.showEditor?()
-                        Task { await applicationDelegate.projects.open() }
+                        applicationDelegate.session.showsProjectOpener = true
                     }
                         .keyboardShortcut("o").disabled(!applicationDelegate.projects.canStart)
                     Button("Import Images…") { session.showsImporter = true }

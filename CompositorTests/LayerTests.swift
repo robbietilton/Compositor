@@ -101,18 +101,17 @@ struct LayerTests {
         #expect(session.activeLayerID == bottom) // Synchronous delegate, no click timer.
         coordinator.update(table)
         #expect(table.reloadCount == reloads)
-        #expect(coordinator.moveLayer(bottom, to: 0))
+        #expect(session.placeLayer(bottom, in: nil))
         coordinator.update(table)
         #expect(table.selectedRow == 0)
         #expect(session.document?.layers.last?.id == bottom)
-        #expect(coordinator.moveLayer(bottom, to: 3))
+        #expect(session.placeLayer(bottom, in: nil, atBottom: true))
         coordinator.update(table)
         #expect(table.selectedRow == 2)
         #expect(session.document?.layers.first?.id == bottom)
-        #expect(!coordinator.moveLayer(UUID(), to: 0))
-        #expect(!coordinator.moveLayer(bottom, to: 4))
+        #expect(!session.placeLayer(UUID(), in: nil))
         session.isImporting = true
-        #expect(!coordinator.moveLayer(bottom, to: 0))
+        #expect(!session.placeLayer(bottom, in: nil))
     }
 
     @Test func selectionAndRenameDoNotInvalidateCanvasButPixelChangesDo() throws {

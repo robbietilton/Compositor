@@ -66,7 +66,9 @@ struct ProjectTabStrip: View {
                 dragging = false
                 dragChangeCount = pasteboard.changeCount
             } else if pasteboard.changeCount != dragChangeCount {
-                dragging = pasteboard.availableType(from: [.fileURL, .png, .tiff, NSPasteboard.PasteboardType(ProjectWorkspace.layerType)]) != nil
+                dragging = pasteboard.availableType(from: [.fileURL, .png, .tiff,
+                    NSPasteboard.PasteboardType("com.adobe.photoshop-image"),
+                    NSPasteboard.PasteboardType(ProjectWorkspace.layerType)]) != nil
             }
         }
         }
@@ -86,7 +88,7 @@ private struct NewTabDropSlot: View {
             .contentShape(Capsule())
             .help("Drop to open in a new canvas")
             .accessibilityLabel("Drop into new canvas")
-            .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+            .onDrop(of: ImageFileDrop.dropTypeIdentifiers, delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
 }
@@ -120,7 +122,7 @@ private struct ProjectTabButton: View {
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
         .help(targeted ? "Add to \(tab.title)" : tab.title)
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+        .onDrop(of: ImageFileDrop.dropTypeIdentifiers, delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
     }
 }
@@ -132,7 +134,7 @@ struct NewProjectDropTarget: ViewModifier {
         content
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
             .help(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs")
-            .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+            .onDrop(of: ImageFileDrop.dropTypeIdentifiers, delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
 }
@@ -161,7 +163,7 @@ private struct ProjectTabDropDelegate: DropDelegate {
         // Option-dragging a layer duplicates it within the Layers panel, so it is not a drag to another project.
         if NSEvent.modifierFlags.contains(.option), info.hasItemsConforming(to: [ProjectWorkspace.layerType]) { return false }
         return workspace?.canSwitch == true && workspace?.canReceiveDrag(into: destination) == true
-            && info.hasItemsConforming(to: [ProjectWorkspace.layerType, UTType.fileURL.identifier, UTType.image.identifier])
+            && info.hasItemsConforming(to: ImageFileDrop.dropTypeIdentifiers)
     }
     func dropEntered(info: DropInfo) { targeted = validateDrop(info: info) }
     func dropExited(info: DropInfo) { targeted = false }
@@ -171,7 +173,7 @@ private struct ProjectTabDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         targeted = false
         guard let workspace, validateDrop(info: info) else { return false }
-        let providers = info.itemProviders(for: [ProjectWorkspace.layerType, UTType.fileURL.identifier, UTType.image.identifier])
+        let providers = info.itemProviders(for: ImageFileDrop.dropTypeIdentifiers)
         Task { await workspace.receiveProviders(providers, into: destination) }
         return true
     }

@@ -89,7 +89,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
+        .onDrop(of: ImageFileDrop.dropTypeIdentifiers, isTargeted: $isDropTargeted) { providers, location in
             guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
             let point: CGPoint?
             if let document = session.document, canvasFrame.contains(location) {
@@ -185,6 +185,21 @@ struct ContentView: View {
                 if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
             }
         }
+        .fileImporter(isPresented: $session.showsProjectOpener,
+                      allowedContentTypes: UTType.projectOpenTypes, allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls):
+                Task {
+                    if let workspace = applicationDelegate?.workspace {
+                        for url in urls { _ = await workspace.open(url) }
+                    } else {
+                        for url in urls { _ = await applicationDelegate?.projects.open(url) }
+                    }
+                }
+            case .failure(let error):
+                if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
+            }
+        }
         .alert("Import couldn’t finish", isPresented: Binding(
             get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
                 Button("OK", role: .cancel) { session.importError = nil }
@@ -240,7 +255,17 @@ struct ContentView: View {
     private var welcome: some View {
         NewCanvasSheet(session: session,
             onCreate: { session.createNewProject(width: $0, height: $1) },
-            onOpen: { Task { await applicationDelegate?.projects.open() } })
+            onOpen: { session.showsProjectOpener = true })
+            .onDrop(of: ImageFileDrop.projectDropTypeIdentifiers, isTargeted: $isDropTargeted) { providers, _ in
+                guard session.levels == nil, !session.isProjectBusy, !session.showsImporter, session.renamingLayerID == nil else { return false }
+                if let workspace = applicationDelegate?.workspace {
+                    guard workspace.canSwitch else { return false }
+                    Task { await workspace.receiveProviders(providers, into: workspace.current.id, at: nil) }
+                } else {
+                    Task { await ImageFileDrop.importProviders(providers, into: session, at: nil) }
+                }
+                return true
+            }
     }
     private var statusBar: some View {
         HStack(spacing: 16) {

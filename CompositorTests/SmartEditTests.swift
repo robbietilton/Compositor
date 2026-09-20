@@ -72,7 +72,7 @@ import Testing
     @Test func visionRequestRunsOnAnImage() async throws {
         let image = try #require(fixture().activeLayer?.asset?.image)
         do {
-            let result = try await Task.detached { try SubjectRemoval.run(image) }.value
+            let result = try await Task.detached { try SubjectRemoval.run(image, settings: FilterSettings()) }.value
             #expect(result.width == image.width && result.height == image.height)
         } catch SubjectRemoval.Failure.noSubject {
             // A flat synthetic fixture may correctly contain no recognizable subject.

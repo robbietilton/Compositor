@@ -130,14 +130,19 @@ final class ProjectController {
         var destination = asNew ? nil : session.projectURL
         if destination == nil {
             let panel = NSSavePanel()
-            panel.allowedContentTypes = [.compositorProject]
+            let current = session.projectURL
+            let format = current?.isPhotoshopDocument == true ? SaveFormat.photoshop : .compositor
+            let picker = SaveFormatPicker(format: format, panel: panel)
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
-            panel.title = asNew ? "Save Project As" : "Save Project"
+            panel.title = asNew ? "Save As" : "Save"
+            panel.nameFieldStringValue = SaveFormatPicker.filename(
+                current?.deletingPathExtension().lastPathComponent ?? "Untitled", format: format)
+            picker.apply()
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
+            withExtendedLifetime(picker) {}
             guard response == .OK, let url = panel.url else { return false }
             destination = url
         }
@@ -145,14 +150,14 @@ final class ProjectController {
         let scoped = destination.startAccessingSecurityScopedResource()
         defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
         do {
-            try await ProjectStore.shared.save(snapshot, to: destination)
+            try await saveSnapshot(snapshot, to: destination)
             session.projectURL = destination
             session.history.markSaved()
             saveGeneration += 1
             NSDocumentController.shared.noteNewRecentDocumentURL(destination)
             return true
         } catch {
-            await showError("Couldn’t save the project", error: error)
+            await showError("Couldn’t save the document", error: error)
             return false
         }
     }
@@ -164,36 +169,27 @@ final class ProjectController {
         defer { session.isProjectBusy = false }
         var source = suppliedURL
         if source == nil {
-            let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.compositorProject]
-            panel.allowsMultipleSelection = false
-            panel.canChooseDirectories = false
-            panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
-            let response: NSApplication.ModalResponse
-            if let window { response = await panel.beginSheetModal(for: window) }
-            else { response = await panel.begin() }
-            guard response == .OK, let url = panel.url else { return false }
-            source = url
+            source = await ProjectFilePanel.pick(window: window, multiple: false).first
+            guard source != nil else { return false }
         }
         guard let source else { return false }
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         do {
             // Validate first. A corrupt project never discards the live document.
-            var snapshot = try await ProjectStore.shared.load(from: source)
+            var snapshot = try await loadSnapshot(from: source)
             let previousSave = saveGeneration
             guard await confirmReplacement() else { return false }
             // Saving in the confirmation can replace the very file being opened.
             if saveGeneration != previousSave,
                session.projectURL?.resolvingSymlinksInPath() == source.resolvingSymlinksInPath() {
-                snapshot = try await ProjectStore.shared.load(from: source)
+                snapshot = try await loadSnapshot(from: source)
             }
             session.installProject(snapshot, from: source)
             NSDocumentController.shared.noteNewRecentDocumentURL(source)
             return true
         } catch {
-            await showError("Couldn’t open the project", error: error)
+            await showError("Couldn’t open the document", error: error)
             return false
         }
     }
@@ -280,14 +276,14 @@ final class ProjectController {
             let request = incoming.removeFirst()
             await session.waitForFileRequest()
             let urls = request.files.map(\.0)
-            let projects = urls.filter { $0.pathExtension.lowercased() == "comp" }
+            let projects = urls.filter(\.isProjectDocument)
             if projects.count > 1 {
                 await showError("Open one project at a time", error: ProjectError.invalid)
             } else {
                 var proceed = true
                 if let project = projects.first { proceed = await open(project) }
                 if proceed {
-                    await session.importImages(urls.filter { $0.pathExtension.lowercased() != "comp" },
+                    await session.importImages(urls.filter { !$0.isProjectDocument },
                                                at: projects.isEmpty ? request.point : nil)
                 }
             }
@@ -295,5 +291,157 @@ final class ProjectController {
             request.completion.resume()
         }
         processing = false
+    }
+
+    private func loadSnapshot(from url: URL) async throws -> ProjectSnapshot {
+        if url.hasPhotoshopFilename || url.hasPhotoshopSignature {
+            return try await PSDCodec.shared.load(from: url)
+        }
+        return try await ProjectStore.shared.load(from: url)
+    }
+
+    private func saveSnapshot(_ snapshot: ProjectSnapshot, to url: URL) async throws {
+        if url.isPhotoshopDocument { try await PSDCodec.shared.save(snapshot, to: url) }
+        else { try await ProjectStore.shared.save(snapshot, to: url) }
+    }
+}
+
+/// Open includes `public.image` so Photoshop files on disk are enabled; `.comp` packages stay listed too.
+enum ProjectFilePanel {
+    @MainActor
+    static func pick(window: NSWindow?, multiple: Bool) async -> [URL] {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = multiple
+        panel.treatsFilePackagesAsDirectories = false
+        panel.title = "Open"
+        panel.allowedContentTypes = UTType.projectOpenTypes
+        let response: NSApplication.ModalResponse
+        if let window { response = await panel.beginSheetModal(for: window) }
+        else { response = await panel.begin() }
+        guard response == .OK else { return [] }
+        return panel.urls
+    }
+}
+
+enum SaveFormat: Int {
+    case compositor, photoshop
+    var contentType: UTType { self == .photoshop ? .photoshopDocument : .compositorProject }
+    var pathExtension: String { self == .photoshop ? "psd" : "comp" }
+}
+
+/// Format control for Save As. Installed as the panel accessory, then moved into the
+/// button row between New Folder and Cancel once the panel is on screen.
+@MainActor
+final class SaveFormatPicker: NSObject {
+    private let control: NSSegmentedControl
+    let view: NSView
+    weak var panel: NSSavePanel?
+    private(set) var format: SaveFormat
+
+    init(format: SaveFormat, panel: NSSavePanel) {
+        self.format = format
+        self.panel = panel
+        let label = NSTextField(labelWithString: "Format:")
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        let control = NSSegmentedControl()
+        control.segmentCount = 2
+        control.setLabel("Compositor (.comp)", forSegment: 0)
+        control.setLabel("Photoshop (.PSD)", forSegment: 1)
+        control.segmentStyle = .rounded
+        control.trackingMode = .selectOne
+        control.selectedSegment = format.rawValue
+        control.controlSize = .small
+        control.sizeToFit()
+        self.control = control
+        let stack = NSStackView(views: [label, control])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        let wrap = NSView()
+        wrap.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: wrap.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: wrap.bottomAnchor),
+            wrap.heightAnchor.constraint(equalToConstant: 28)
+        ])
+        view = wrap
+        super.init()
+        control.target = self
+        control.action = #selector(changed)
+        panel.accessoryView = wrap
+        NotificationCenter.default.addObserver(self, selector: #selector(panelDidAppear), name: NSWindow.didBecomeKeyNotification, object: panel)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    static func filename(_ base: String, format: SaveFormat) -> String {
+        let trimmed = (base as NSString).deletingPathExtension
+        let name = trimmed.isEmpty ? "Untitled" : trimmed
+        return "\(name).\(format.pathExtension)"
+    }
+
+    func apply() {
+        guard let panel else { return }
+        panel.allowedContentTypes = [format.contentType]
+        panel.nameFieldStringValue = Self.filename(panel.nameFieldStringValue, format: format)
+    }
+
+    @objc private func changed() {
+        format = SaveFormat(rawValue: control.selectedSegment) ?? .compositor
+        apply()
+    }
+
+    @objc private func panelDidAppear() {
+        DispatchQueue.main.async { [weak self] in self?.insertIntoButtonRow() }
+    }
+
+    /// Prefer the empty span on the button row (New Folder … Cancel) over the accessory strip.
+    private func insertIntoButtonRow() {
+        guard let panel, let content = panel.contentView, view.superview != nil else { return }
+        guard let newFolder = button(titled: "New Folder", in: content),
+              let cancel = button(titled: "Cancel", in: content),
+              let row = commonSuperview(newFolder, cancel),
+              view.superview !== row else { return }
+        view.removeFromSuperview()
+        panel.accessoryView = nil
+        view.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.centerYAnchor.constraint(equalTo: newFolder.centerYAnchor),
+            view.leadingAnchor.constraint(greaterThanOrEqualTo: newFolder.trailingAnchor, constant: 12),
+            view.trailingAnchor.constraint(lessThanOrEqualTo: cancel.leadingAnchor, constant: -12),
+            view.centerXAnchor.constraint(equalTo: row.centerXAnchor)
+        ])
+    }
+
+    private func button(titled title: String, in root: NSView) -> NSButton? {
+        if let button = root as? NSButton, button.title == title { return button }
+        for child in root.subviews {
+            if let match = button(titled: title, in: child) { return match }
+        }
+        return nil
+    }
+
+    private func commonSuperview(_ a: NSView, _ b: NSView) -> NSView? {
+        var ancestors = Set<ObjectIdentifier>()
+        var node: NSView? = a
+        while let current = node {
+            ancestors.insert(ObjectIdentifier(current))
+            node = current.superview
+        }
+        node = b
+        while let current = node {
+            if ancestors.contains(ObjectIdentifier(current)) { return current }
+            node = current.superview
+        }
+        return nil
     }
 }

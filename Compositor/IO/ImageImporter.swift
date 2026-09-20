@@ -12,13 +12,14 @@ nonisolated struct ImportedImage: @unchecked Sendable {
     var raster: RasterSnapshot? = nil
 }
 
-nonisolated enum ImageImportError: LocalizedError {
-    case unreadable, unsupported, tooLarge
+nonisolated enum ImageImportError: LocalizedError, Equatable {
+    case unreadable, unsupported, tooLarge, photoshopDocument
     var errorDescription: String? {
         switch self {
         case .unreadable: "The image could not be read. It may be damaged or unavailable."
         case .unsupported: "Choose a JPEG, PNG, HEIC, or TIFF image."
         case .tooLarge: "This import exceeds the current 100-megapixel document budget or 30,000-pixel side limit."
+        case .photoshopDocument: "This Photoshop document should be opened as a project."
         }
     }
 }
@@ -34,6 +35,13 @@ actor ImageImporter {
             guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
                   let identifier = CGImageSourceGetType(source) as String?,
                   let type = UTType(identifier) else { throw ImageImportError.unreadable }
+            if url.lastPathComponent.lowercased().hasSuffix(".psd")
+                || identifier == "com.adobe.photoshop-image"
+                || type.conforms(to: .photoshopDocument)
+                || url.hasPhotoshopFilename
+                || url.hasPhotoshopSignature {
+                throw ImageImportError.photoshopDocument
+            }
             guard [UTType.jpeg, .png, .heic, .tiff].contains(where: { type.conforms(to: $0) }) else {
                 throw ImageImportError.unsupported
             }

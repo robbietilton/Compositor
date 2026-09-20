@@ -425,6 +425,7 @@ final class EditorSession {
     }
     var showsNewDocument = false { didSet { resumeFileRequests() } }
     var showsImporter = false { didSet { resumeFileRequests() } }
+    var showsProjectOpener = false { didSet { resumeFileRequests() } }
     var isImporting = false { didSet { resumeFileRequests() } }
     var importError: String? { didSet { resumeFileRequests() } }
     var opacityEditLayerID: UUID?
@@ -619,28 +620,65 @@ final class EditorSession {
         var failures: [String] = []
         while !pendingImports.isEmpty {
           let request = pendingImports.removeFirst()
-          beginEdit("Import Images")
+          var importedImages = false
           // No document: the first successful image determines the canvas, regardless of drop point.
           let point = document == nil ? nil : request.point
           for (url, scoped) in request.files {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
-                guard url.isFileURL else { throw ImageImportError.unsupported }
+                if url.lastPathComponent.lowercased().hasSuffix(".psd") || url.isProjectDocument {
+                    if document == nil {
+                        try await installDroppedProject(url)
+                    } else {
+                        failures.append("\(url.lastPathComponent): Open this file from File > Open or drop it on the tab bar to load it as its own project.")
+                    }
+                    continue
+                }
                 let usedPixels = document?.layers.reduce(0) { total, layer in
                     guard let image = layer.asset?.image else { return total }
                     return total + image.width * image.height
                 } ?? 0
                 let asset = try await ImageImporter.shared.decode(url, remainingPixels: 100_000_000 - usedPixels)
+                if !importedImages {
+                    beginEdit("Import Images")
+                    importedImages = true
+                }
                 insert(asset, centeredAt: point)
+            } catch let error as ImageImportError {
+                if error == .photoshopDocument || url.lastPathComponent.lowercased().hasSuffix(".psd") {
+                    if document == nil {
+                        do { try await installDroppedProject(url) }
+                        catch { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+                    } else {
+                        failures.append("\(url.lastPathComponent): Open this file from File > Open or drop it on the tab bar to load it as its own project.")
+                    }
+                } else if document == nil, url.hasPhotoshopFilename || url.hasPhotoshopSignature {
+                    do { try await installDroppedProject(url) }
+                    catch { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+                } else {
+                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+                }
             } catch {
-                failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+                if document == nil, url.lastPathComponent.lowercased().hasSuffix(".psd") || url.hasPhotoshopFilename || url.hasPhotoshopSignature {
+                    do { try await installDroppedProject(url) }
+                    catch { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") }
+                } else {
+                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+                }
             }
           }
-          endEdit()
+          if importedImages { endEdit() }
           request.completion.resume()
         }
         isImporting = false
         if !failures.isEmpty { importError = failures.joined(separator: "\n\n") }
+    }
+
+    private func installDroppedProject(_ url: URL) async throws {
+        let snapshot = url.isCompositorProject && !url.hasPhotoshopSignature
+            ? try await ProjectStore.shared.load(from: url)
+            : try await PSDCodec.shared.load(from: url)
+        installProject(snapshot, from: url)
     }
 
     func insert(_ asset: ImportedImage, centeredAt point: CGPoint? = nil) {
