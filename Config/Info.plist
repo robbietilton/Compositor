@@ -7,7 +7,7 @@
         <key>CFBundleTypeRole</key><string>Viewer</string>
         <key>LSHandlerRank</key><string>Alternate</string>
         <key>LSItemContentTypes</key>
-        <array><string>public.jpeg</string><string>public.png</string><string>public.heic</string><string>public.tiff</string></array>
+        <array><string>public.jpeg</string><string>public.png</string><string>public.heic</string><string>public.tiff</string><string>com.adobe.photoshop-image</string></array>
     </dict><dict>
         <key>CFBundleTypeName</key><string>Compositor Project</string>
         <key>CFBundleTypeRole</key><string>Editor</string>

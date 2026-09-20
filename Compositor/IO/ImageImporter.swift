@@ -17,10 +17,15 @@ nonisolated enum ImageImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unreadable: "The image could not be read. It may be damaged or unavailable."
-        case .unsupported: "Choose a JPEG, PNG, HEIC, or TIFF image."
+        case .unsupported: "Choose a JPEG, PNG, HEIC, TIFF, or PSD image."
         case .tooLarge: "This import exceeds the current 100-megapixel document budget or 30,000-pixel side limit."
         }
     }
+}
+
+extension UTType {
+    /// macOS ships no `.psd` constant; ImageIO registers the Photoshop type by identifier, so the lookup stays optional.
+    static let psd = UTType("com.adobe.photoshop-image")
 }
 
 actor ImageImporter {
@@ -34,7 +39,8 @@ actor ImageImporter {
             guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
                   let identifier = CGImageSourceGetType(source) as String?,
                   let type = UTType(identifier) else { throw ImageImportError.unreadable }
-            guard [UTType.jpeg, .png, .heic, .tiff].contains(where: { type.conforms(to: $0) }) else {
+            let accepted: [UTType] = [.jpeg, .png, .heic, .tiff] + [UTType.psd].compactMap { $0 }
+            guard accepted.contains(where: { type.conforms(to: $0) }) else {
                 throw ImageImportError.unsupported
             }
             guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],

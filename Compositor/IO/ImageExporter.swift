@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import Accelerate
 import UniformTypeIdentifiers
 
 nonisolated enum ExportError: LocalizedError {
@@ -82,6 +83,33 @@ actor ImageExporter {
         ] as CFDictionary)
     }
 
+    /// A flattened single-layer PSD (8BPS RGBA); layers are not preserved. ImageIO's PSD writer
+    /// stores the composite's channels as premultiplied bytes no matter what alpha flavor it is
+    /// handed (verified on this SDK: premultipliedLast and straight inputs produce byte-identical
+    /// files), while the PSD format — Photoshop included — reads the composite as straight alpha,
+    /// so translucent colors would come out darkened by their own alpha. The composite section is
+    /// therefore rewritten here with unpremultiplied channels.
+    func psdData(_ snapshot: ProjectSnapshot) throws -> Data {
+        guard let psd = UTType.psd else { throw ExportError.encode }
+        let raster = try render(snapshot)
+        let encoded = try encode(raster.image, type: psd, properties: [
+            kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution
+        ] as CFDictionary)
+        let width = raster.image.width, height = raster.image.height
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
+            throw ExportError.encode
+        }
+        context.draw(raster.image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let pixels = context.data else { throw ExportError.encode }
+        // `straightened` unpremultiplies the pixels itself; keep exactly one unpremultiply on the path.
+        return try autoreleasepool {
+            try PSDCompositeStraightener.straightened(encoded, rgba: pixels, width: width, height: height)
+        }
+    }
+
     private func encode(_ image: CGImage, type: UTType, properties: CFDictionary? = nil) throws -> Data {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
@@ -127,6 +155,11 @@ actor ImageExporter {
         try write(data, to: url)
     }
 
+    func exportPSD(_ snapshot: ProjectSnapshot, to url: URL) throws {
+        let data = try psdData(snapshot)
+        try write(data, to: url)
+    }
+
     func write(_ data: Data, to url: URL) throws {
         var coordinationError: NSError?
         var writeError: Error?
@@ -141,6 +174,93 @@ actor ImageExporter {
 nonisolated struct ExportRaster: @unchecked Sendable {
     let image: CGImage
     var resolution: Double = 72
+}
+
+/// Rewrites the composite image-data section of a flattened PSD that ImageIO just wrote, replacing
+/// its premultiplied channels with straight-alpha ones. Only the trailing composite section is
+/// touched; the header, color-mode data, image resources and (empty) layer section stay as ImageIO
+/// produced them.
+private nonisolated enum PSDCompositeStraightener {
+    /// - Parameters:
+    ///   - psd: a PSD produced by ImageIO from the same pixels `rgba` holds.
+    ///   - rgba: premultiplied RGBA8 pixels in byte order R,G,B,A (straightened here in place).
+    static func straightened(_ psd: Data, rgba: UnsafeMutableRawPointer, width: Int, height: Int) throws -> Data {
+        var data = psd
+        // Header is 26 bytes; three length-prefixed sections (color mode, resources, layers) follow.
+        var offset = 26
+        for _ in 0..<3 {
+            guard data.count >= offset + 4, let length = data.readBE32(at: offset) else { throw ExportError.encode }
+            offset += 4 + Int(length)
+        }
+        guard data.count >= offset + 2 else { throw ExportError.encode }
+        var vBuffer = vImage_Buffer(data: rgba, height: vImagePixelCount(height),
+                                    width: vImagePixelCount(width), rowBytes: width * 4)
+        vImageUnpremultiplyData_RGBA8888(&vBuffer, &vBuffer, vImage_Flags(kvImageNoFlags))
+        data.replaceSubrange(offset..., with: compositeSection(rgba: rgba, width: width, height: height))
+        return data
+    }
+
+    /// The composite section (compression + per-channel PackBits rows), channels in R,G,B,A order.
+    private static func compositeSection(rgba: UnsafeRawPointer, width: Int, height: Int) -> Data {
+        var rows = [ArraySlice<UInt8>]()
+        rows.reserveCapacity(4 * height)
+        for channel in 0..<4 {
+            for y in 0..<height {
+                var line = [UInt8](); line.reserveCapacity(width)
+                let row = UnsafeRawPointer(rgba) + y * width * 4
+                for x in 0..<width { line.append(row.load(fromByteOffset: x * 4 + channel, as: UInt8.self)) }
+                rows.append(packBits(line)[...])
+            }
+        }
+        var section = Data([0, 1]) // compression = 1, RLE
+        for row in rows { section.append(contentsOf: UInt16(row.count).bigEndianBytes) }
+        for row in rows { section.append(contentsOf: row) }
+        return section
+    }
+
+    /// Standard PackBits encoding of one scanline.
+    private static func packBits(_ input: [UInt8]) -> [UInt8] {
+        var out = [UInt8]()
+        out.reserveCapacity(input.count + input.count / 64)
+        var index = 0
+        while index < input.count {
+            var run = 1
+            while index + run < input.count && input[index + run] == input[index] && run < 128 { run += 1 }
+            if run >= 3 {
+                out.append(UInt8(257 - run))
+                out.append(input[index])
+                index += run
+            } else {
+                let literalStart = index
+                var literalCount = 0
+                while index < input.count {
+                    var next = 1
+                    while index + next < input.count && input[index + next] == input[index] && next < 128 { next += 1 }
+                    if next >= 3 { break } // a worthwhile run starts here; keep it for a repeat packet
+                    // A literal packet carries at most 128 bytes; `next` can be 2, so cap before adding,
+                    // or the header degenerates into the no-op control byte 128 and shifts the whole row.
+                    if literalCount + next > 128 { break }
+                    index += next
+                    literalCount += next
+                }
+                out.append(UInt8(literalCount - 1))
+                out.append(contentsOf: input[literalStart..<literalStart + literalCount])
+            }
+        }
+        return out
+    }
+}
+
+private extension Data {
+    /// A big-endian UInt32 at `offset`, when it fits.
+    func readBE32(at offset: Int) -> UInt32? {
+        guard count >= offset + 4 else { return nil }
+        return UInt32(self[startIndex + offset]) << 24 | UInt32(self[startIndex + offset + 1]) << 16
+            | UInt32(self[startIndex + offset + 2]) << 8 | UInt32(self[startIndex + offset + 3])
+    }
+}
+private extension UInt16 {
+    var bigEndianBytes: [UInt8] { [UInt8(self >> 8), UInt8(truncatingIfNeeded: self)] }
 }
 nonisolated struct JPEGOptions: Equatable, Sendable {
     var quality: Double = 0.85

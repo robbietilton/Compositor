@@ -90,8 +90,13 @@ nonisolated struct GradientMapSettings: Codable, Equatable, Sendable {
         let (dark, light) = ends
         let table: [UInt8] = (0...255).flatMap { index -> [UInt8] in
             let t = Double(index) / 255
-            return [dark.red + (light.red - dark.red) * t, dark.green + (light.green - dark.green) * t,
-                    dark.blue + (light.blue - dark.blue) * t].map { UInt8(min(255, max(0, ($0 * 255).rounded()))) }
+            // Split into named stops so the compiler type-checks each piece (one nested expression times out).
+            let stops: [Double] = [
+                dark.red + (light.red - dark.red) * t,
+                dark.green + (light.green - dark.green) * t,
+                dark.blue + (light.blue - dark.blue) * t
+            ]
+            return stops.map { stop in UInt8(min(255, max(0, (stop * 255).rounded()))) }
         }
         return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
             adjust_gradient_map(pixels, width, height, stride, table)

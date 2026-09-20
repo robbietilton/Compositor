@@ -51,8 +51,8 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - Crop with snapping, and Option for symmetric cropping
 - Canvas Size and Image Size
 - Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
-- Import JPEG, PNG, HEIC and TIFF — including dropped screenshots and images from other apps
-- Export JPEG with a live preview (⇧⌥⌘S); Copy Merged
+- Import JPEG, PNG, HEIC, TIFF and PSD — including dropped screenshots and images from other apps
+- Export PNG (⇧⌘E), JPEG with a live preview (⇧⌥⌘S) and flattened Photoshop PSD (⇧⌥⌘E); Copy Merged
 - Photoshop-style keyboard shortcuts throughout
 
 ## Requirements

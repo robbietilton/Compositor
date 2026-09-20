@@ -330,7 +330,10 @@ struct SelectionTests {
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 40, y: 45, width: 20, height: 10))
         marquee(session, from: CGPoint(x: 50, y: 50), to: CGPoint(x: 45, y: 58), square: true, fromCenter: true)
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 42, y: 42, width: 16, height: 16))
-        #expect(NavigationTool.marquee.isSelectionTool && NavigationTool.objectSelection.isSelectionTool && !NavigationTool.brush.isSelectionTool)
+        // Object selection ships as the wand's Object mode (1.1.8), so the wand carries its
+        // selection-tool status; main referenced a NavigationTool.objectSelection case that
+        // no longer exists anywhere, which broke the test target's build.
+        #expect(NavigationTool.marquee.isSelectionTool && NavigationTool.wand.isSelectionTool && !NavigationTool.brush.isSelectionTool)
     }
 
     @Test func marqueeEllipseSelectsAnOvalInItsBoxAndShiftMakesACircle() throws {

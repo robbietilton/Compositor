@@ -22,7 +22,30 @@ struct ContentView: View {
         return workspace.canReceiveDrag(into: workspace.current.id)
     }
     var body: some View {
-        VStack(spacing: 0) {
+        panelsAndAlerts(
+            editorLayout
+                .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType],
+                        isTargeted: $isDropTargeted) { providers, location in
+                    receiveDrop(providers, at: location)
+                }
+        .overlay {
+            if isDropTargeted, acceptsDrop {
+                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
+                    .frame(width: max(0, canvasFrame.width - 6), height: max(0, canvasFrame.height - 6))
+                    .position(x: canvasFrame.midX, y: canvasFrame.midY)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onAppear { applicationDelegate?.showEditor = { openWindow(id: "editor") } }
+        .preferredColorScheme(.dark)
+        .navigationTitle(session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+        .toolbar { toolbarContent }
+        )
+    }
+
+    /// The upper bar: whichever inspector the active tool shows, over a divider.
+    private var toolHeader: some View {
+        Group {
             if session.tool == .move {
                 TransformInspector(session: session).id(session.activeLayerID)
                 Divider()
@@ -71,6 +94,13 @@ struct ContentView: View {
                 }.padding(.horizontal, 18).toolHeaderBar()
                 Divider()
             }
+        }
+    }
+
+    /// The canvas column, tool rail and layers panel, plus the window-chrome backgrounds.
+    private var editorLayout: some View {
+        VStack(spacing: 0) {
+            toolHeader
             HStack(spacing: 0) {
                 toolRail
                 Divider()
@@ -110,136 +140,139 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
-            guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
-            let point: CGPoint?
-            if let document = session.document, canvasFrame.contains(location) {
-                point = session.viewport.documentPoint(
-                    from: CGPoint(x: location.x - canvasFrame.minX, y: location.y - canvasFrame.minY),
-                    documentSize: document.size)
-            } else { point = nil }
-            if let workspace = applicationDelegate?.workspace {
-                let destination = workspace.current.id
-                guard workspace.canSwitch, workspace.canReceiveDrag(into: destination) else { return false }
-                Task { await workspace.receiveProviders(providers, into: destination, at: point) }
-            } else {
-                Task { await ImageFileDrop.importProviders(providers, into: session, at: point) }
-            }
-            return true
-        }
-        .overlay {
-            if isDropTargeted, acceptsDrop {
-                RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
-                    .frame(width: max(0, canvasFrame.width - 6), height: max(0, canvasFrame.height - 6))
-                    .position(x: canvasFrame.midX, y: canvasFrame.midY)
-                    .allowsHitTesting(false)
-            }
-        }
-        .onAppear { applicationDelegate?.showEditor = { openWindow(id: "editor") } }
-        .preferredColorScheme(.dark)
-        .navigationTitle(session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button { requestNewCanvas() } label: { Label("New canvas", systemImage: "plus") }
-                    .help("New canvas (⌘N)").accessibilityIdentifier("newCanvasToolbar")
-                    .disabled(session.isImporting || session.showsBusy || session.levels != nil)
-                    .modifier(NewProjectDropTarget(workspace: applicationDelegate?.workspace))
-            }
-            ToolbarSpacer(.fixed, placement: .navigation)
-            if let workspace = applicationDelegate?.workspace {
-                ToolbarItem(placement: .navigation) {
-                    ProjectTabStrip(workspace: workspace)
-                        // As wide as the toolbar allows: the window less the traffic lights and New button before it
-                        // and the zoom controls after it. Bounded, so adding tabs never pushes those aside; the
-                        // strip scrolls instead.
-                        .frame(width: max(200, windowWidth - 352), height: 34, alignment: .center)
-                }
-                .sharedBackgroundVisibility(.hidden)
-            }
-            // Absorb all remaining navigation-toolbar width before the zoom controls.
-            // Without this spacer, the growing tab strip pushes the primary actions left.
-            ToolbarSpacer(.flexible, placement: .navigation)
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("Fit") { session.fit() }.help("Fit canvas in window (⌘0)")
-                    .accessibilityIdentifier("fitCanvas").disabled(session.document == nil)
-                Button("100%") { session.zoom(to: 1) }.help("Actual pixels (⌘1)")
-                    .accessibilityIdentifier("actualPixels").disabled(session.document == nil)
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button { session.zoom(to: session.viewport.zoom * 1.25) } label: {
-                    Image(systemName: "plus.magnifyingglass")
-                }.help("Zoom in (⌘+)").disabled(session.document == nil)
-                Button { session.zoom(to: session.viewport.zoom / 1.25) } label: {
-                    Image(systemName: "minus.magnifyingglass")
-                }.help("Zoom out (⌘−)").disabled(session.document == nil)
-            }
-        }
-        .onChange(of: session.levels == nil) { _, closed in
-            if closed { levelsPanel.close() }
-            else {
-                levelsPanel.onClose = { session.cancelLevels() }
-                levelsPanel.show(title: "Levels", content: LevelsSheet(session: session))
-            }
-        }
-        .onChange(of: session.hueSaturation == nil) { _, closed in
-            if closed { adjustmentPanel.close() }
-            else {
-                adjustmentPanel.onClose = { session.cancelHueSaturation() }
-                adjustmentPanel.show(title: "Hue/Saturation", content: HueSaturationSheet(session: session))
-            }
-        }
-        .onChange(of: session.effectsEditing) { _, selection in
-            if let selection {
-                effectsPanel.onClose = { session.finishEffectsEditing(commit: false) }
-                effectsPanel.show(title: selection.kind.rawValue, content: EffectsSheet(session: session, kind: selection.kind))
-            } else { effectsPanel.close() }
-        }
-        .onChange(of: session.document?.layers) { _, layers in
-            if let editing = session.effectsEditing,
-               layers?.first(where: { $0.id == editing.layerID })?.effects?.contains(editing.kind) != true {
-                if let picker = session.colorPicker, case .effect = picker.target { session.closeColorPicker(commit: false) }
-                session.effectsEditing = nil
-                session.effectsEditingOriginal = nil
-            }
-        }
-        .onChange(of: session.selectionAmountOperation) { _, operation in
-            if let operation {
-                selectionAmountPanel.onClose = { session.selectionAmountOperation = nil }
-                selectionAmountPanel.show(title: operation.rawValue + " Selection",
-                    content: SelectionAmountSheet(session: session, operation: operation))
-            } else { selectionAmountPanel.close() }
-        }
-        .onChange(of: session.filterEdit == nil) { _, closed in
-            if closed { filterPanel.close() }
-            else {
-                filterPanel.onClose = { session.cancelFilter() }
-                filterPanel.show(title: session.filterEdit?.kind.rawValue ?? "Filter", content: FilterSheet(session: session))
-            }
-        }
-        .onChange(of: session.document == nil) { _, empty in
-            if !empty { session.canvasFocusRequest += 1 }
-        }
-        .fileImporter(isPresented: $session.showsImporter,
-                      allowedContentTypes: [.jpeg, .png, .heic, .tiff], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): Task { await session.importImages(urls) }
-            case .failure(let error):
-                if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
-            }
-        }
-        .alert("Import couldn’t finish", isPresented: Binding(
-            get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
-                Button("OK", role: .cancel) { session.importError = nil }
-            } message: { Text(session.importError ?? "") }
-        .alert("Couldn’t paint", isPresented: Binding(get: { session.brushError != nil },
-            set: { if !$0 { session.brushError = nil } })) {
-                Button("OK") { session.brushError = nil }
-            } message: { Text(session.brushError ?? "") }
-        .alert("Couldn’t crop", isPresented: Binding(get: { session.cropError != nil },
-            set: { if !$0 { session.cropError = nil } })) {
-                Button("OK") { session.cropError = nil }
-            } message: { Text(session.cropError ?? "") }
     }
+
+    /// The drag-and-drop entry: routes canvas-point drops into the current workspace tab or
+    /// the plain session, refusing while a modal edit owns the canvas.
+    private func receiveDrop(_ providers: [NSItemProvider], at location: CGPoint) -> Bool {
+        guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
+        let point: CGPoint?
+        if let document = session.document, canvasFrame.contains(location) {
+            point = session.viewport.documentPoint(
+                from: CGPoint(x: location.x - canvasFrame.minX, y: location.y - canvasFrame.minY),
+                documentSize: document.size)
+        } else { point = nil }
+        if let workspace = applicationDelegate?.workspace {
+            let destination = workspace.current.id
+            guard workspace.canSwitch, workspace.canReceiveDrag(into: destination) else { return false }
+            Task { await workspace.receiveProviders(providers, into: destination, at: point) }
+        } else {
+            Task { await ImageFileDrop.importProviders(providers, into: session, at: point) }
+        }
+        return true
+    }
+
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button { requestNewCanvas() } label: { Label("New canvas", systemImage: "plus") }
+                .help("New canvas (⌘N)").accessibilityIdentifier("newCanvasToolbar")
+                .disabled(session.isImporting || session.showsBusy || session.levels != nil)
+                .modifier(NewProjectDropTarget(workspace: applicationDelegate?.workspace))
+        }
+        ToolbarSpacer(.fixed, placement: .navigation)
+        if let workspace = applicationDelegate?.workspace {
+            ToolbarItem(placement: .navigation) {
+                ProjectTabStrip(workspace: workspace)
+                    .frame(width: max(200, windowWidth - 352), height: 34, alignment: .center)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
+        ToolbarSpacer(.flexible, placement: .navigation)
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button("Fit") { session.fit() }.help("Fit canvas in window (⌘0)")
+                .accessibilityIdentifier("fitCanvas").disabled(session.document == nil)
+            Button("100%") { session.zoom(to: 1) }.help("Actual pixels (⌘1)")
+                .accessibilityIdentifier("actualPixels").disabled(session.document == nil)
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button { session.zoom(to: session.viewport.zoom * 1.25) } label: {
+                Image(systemName: "plus.magnifyingglass")
+            }.help("Zoom in (⌘+)").disabled(session.document == nil)
+            Button { session.zoom(to: session.viewport.zoom / 1.25) } label: {
+                Image(systemName: "minus.magnifyingglass")
+            }.help("Zoom out (⌘−)").disabled(session.document == nil)
+        }
+    }
+
+    /// The floating-panel bookkeeping, image importer and alert chain, split off the body
+    /// so neither expression overwhelms the type checker.
+    private func panelsAndAlerts(_ view: some View) -> some View {
+        importerAndAlerts(view
+            .onChange(of: session.levels == nil) { _, closed in
+                if closed { levelsPanel.close() }
+                else {
+                    levelsPanel.onClose = { session.cancelLevels() }
+                    levelsPanel.show(title: "Levels", content: LevelsSheet(session: session))
+                }
+            }
+            .onChange(of: session.hueSaturation == nil) { _, closed in
+                if closed { adjustmentPanel.close() }
+                else {
+                    adjustmentPanel.onClose = { session.cancelHueSaturation() }
+                    adjustmentPanel.show(title: "Hue/Saturation", content: HueSaturationSheet(session: session))
+                }
+            }
+            .onChange(of: session.effectsEditing) { _, selection in
+                if let selection {
+                    effectsPanel.onClose = { session.finishEffectsEditing(commit: false) }
+                    effectsPanel.show(title: selection.kind.rawValue, content: EffectsSheet(session: session, kind: selection.kind))
+                } else { effectsPanel.close() }
+            }
+            .onChange(of: session.document?.layers) { _, layers in
+                if let editing = session.effectsEditing,
+                   layers?.first(where: { $0.id == editing.layerID })?.effects?.contains(editing.kind) != true {
+                    if let picker = session.colorPicker, case .effect = picker.target { session.closeColorPicker(commit: false) }
+                    session.effectsEditing = nil
+                    session.effectsEditingOriginal = nil
+                }
+            }
+            .onChange(of: session.selectionAmountOperation) { _, operation in
+                if let operation {
+                    selectionAmountPanel.onClose = { session.selectionAmountOperation = nil }
+                    selectionAmountPanel.show(title: operation.rawValue + " Selection",
+                        content: SelectionAmountSheet(session: session, operation: operation))
+                } else { selectionAmountPanel.close() }
+            }
+            .onChange(of: session.filterEdit == nil) { _, closed in
+                if closed { filterPanel.close() }
+                else {
+                    filterPanel.onClose = { session.cancelFilter() }
+                    filterPanel.show(title: session.filterEdit?.kind.rawValue ?? "Filter", content: FilterSheet(session: session))
+                }
+            }
+            .onChange(of: session.document == nil) { _, empty in
+                if !empty { session.canvasFocusRequest += 1 }
+            }
+            )
+    }
+
+    /// The image-import sheet and the alert stack.
+    private func importerAndAlerts(_ view: some View) -> some View {
+        view
+            .fileImporter(isPresented: $session.showsImporter,
+                          allowedContentTypes: [.jpeg, .png, .heic, .tiff] + [UTType.psd].compactMap { $0 },
+                          allowsMultipleSelection: true) { result in
+                switch result {
+                case .success(let urls):
+                    Task { await session.importImages(urls) }
+                case .failure(let error):
+                    if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
+                }
+            }
+            .alert("Import couldn’t finish", isPresented: Binding(
+                get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
+                    Button("OK", role: .cancel) { session.importError = nil }
+                } message: { Text(session.importError ?? "") }
+            .alert("Couldn’t paint", isPresented: Binding(get: { session.brushError != nil },
+                set: { if !$0 { session.brushError = nil } })) {
+                    Button("OK") { session.brushError = nil }
+                } message: { Text(session.brushError ?? "") }
+            .alert("Couldn’t crop", isPresented: Binding(get: { session.cropError != nil },
+                set: { if !$0 { session.cropError = nil } })) {
+                    Button("OK") { session.cropError = nil }
+                } message: { Text(session.cropError ?? "") }
+    }
+
     private func requestNewCanvas() {
         if let applicationDelegate { Task { await applicationDelegate.projects.newCanvas() } }
         else { session.clearProject() }

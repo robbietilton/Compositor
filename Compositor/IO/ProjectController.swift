@@ -92,6 +92,28 @@ final class ProjectController {
         } catch { await showError("Couldn’t resize the image", error: error) }
     }
 
+    func exportPSD() async {
+        guard session.document != nil, begin() else { return }
+        defer { session.isProjectBusy = false }
+        guard let snapshot = session.projectSnapshot() else { return }
+        let panel = NSSavePanel()
+        // The Photoshop type has no static UTType member; an empty fallback list would allow any file,
+        // but the .psd extension in the name field still produces the right file.
+        panel.allowedContentTypes = [UTType.psd].compactMap { $0 }
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.title = "Export PSD"
+        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".psd"
+        let response: NSApplication.ModalResponse
+        if let window { response = await panel.beginSheetModal(for: window) }
+        else { response = await panel.begin() }
+        guard response == .OK, let url = panel.url else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try await ImageExporter.shared.exportPSD(snapshot, to: url) }
+        catch { await showError("Couldn’t export PSD", error: error) }
+    }
+
     func exportJPEG() async {
         guard let window, session.document != nil, begin() else { return }
         defer { session.isProjectBusy = false }
