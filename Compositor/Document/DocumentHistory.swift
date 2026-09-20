@@ -20,7 +20,7 @@ final class DocumentHistory {
     private var revision = UUID()
     private var savedRevision: UUID?
     private var pending: Snapshot?
-    private var pendingName = "Edit"
+    private var pendingName = L10n.string("Edit")
     private var depth = 0
     let entryLimit: Int
     let retainedByteLimit: Int

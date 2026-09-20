@@ -8,13 +8,13 @@ struct TransformInspector: View {
     }
     var body: some View {
         HStack(spacing: 12) {
-          Text(session.transformTargetsMask ? "Transform Mask" : "Transform").font(ToolHeaderStyle.titleFont)
+          Text(session.transformTargetsMask ? L10n.string("Transform Mask") : L10n.string("Transform")).font(ToolHeaderStyle.titleFont)
               .padding(.leading, 18)
-          Toggle("Auto Select", isOn: $session.transformAutoSelect)
-              .help("Select layers by clicking the canvas. When off, hold Command to select a layer.")
+          Toggle(L10n.string("Auto Select"), isOn: $session.transformAutoSelect)
+              .help(L10n.string("Select layers by clicking the canvas. When off, hold Command to select a layer."))
               .accessibilityIdentifier("transformAutoSelect")
-          Toggle("Show Controls", isOn: $session.showsTransformControls)
-              .help("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.")
+          Toggle(L10n.string("Show Controls"), isOn: $session.showsTransformControls)
+              .help(L10n.string("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer."))
           ScrollView(.horizontal) {
             HStack(spacing: 12) {
                 field("X", value: value.origin.x) { $0.origin.x = $1 }.frame(width: 85)
@@ -22,29 +22,29 @@ struct TransformInspector: View {
                 TransformValueField(label: "W", value: value.size.width) { resize($0, width: true) }.frame(width: 85)
                 TransformValueField(label: "H", value: value.size.height) { resize($0, width: false) }.frame(width: 85)
                 Toggle(isOn: $session.locksTransformRatio) { Image(systemName: "link") }
-                    .toggleStyle(.button).help("Lock aspect ratio")
+                    .toggleStyle(.button).help(L10n.string("Lock aspect ratio"))
                 TransformValueField(label: "Scale", suffix: "%", value: value.scalePercent(pixelSize: pixelSize)) { number in
                     change { value in
                         guard number > 0 else { return }
                         value = value.scaled(toPercent: number, pixelSize: pixelSize)
                     }
-                }.frame(width: 110).help("Scale width and height together, about the center")
+                }.frame(width: 110).help(L10n.string("Scale width and height together, about the center"))
                 field("°", value: value.rotation) { $0.rotation = $1.truncatingRemainder(dividingBy: 360) }.frame(width: 75)
-                Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
+                Picker(L10n.string("Sampling"), selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }.frame(width: 170)
-                Button("Flip H") { change { $0.flipX.toggle() } }
-                Button("Flip V") { change { $0.flipY.toggle() } }
+                Button(L10n.string("Flip H")) { change { $0.flipX.toggle() } }
+                Button(L10n.string("Flip V")) { change { $0.flipY.toggle() } }
 
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.
             }.disabled((!session.canTransform && session.transformEdit == nil) || session.transformEdit?.corners != nil)
                 .padding(.horizontal, 18)
           }.scrollIndicators(.hidden)
-          Button("Cancel") { session.cancelTransform() }.keyboardShortcut(.cancelAction)
+          Button(L10n.string("Cancel")) { session.cancelTransform() }.keyboardShortcut(.cancelAction)
               .disabled(session.transformEdit == nil)
-          Button("Apply") { session.commitTransform() }.keyboardShortcut(.defaultAction)
+          Button(L10n.string("Apply")) { session.commitTransform() }.keyboardShortcut(.defaultAction)
               .disabled(session.transformEdit == nil).accessibilityIdentifier("applyTransform")
         }.padding(.trailing, 18).toolHeaderBar().releasesFocusOnCommit(session)
     }
@@ -84,8 +84,8 @@ private struct TransformValueField: View {
     @FocusState private var focused: Bool
     var body: some View {
         HStack(spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            TextField(label, text: $text)
+            Text(L10n.string(label)).font(.caption).foregroundStyle(.secondary)
+            TextField(L10n.string(label), text: $text)
                 .textFieldStyle(.roundedBorder).focused($focused)
                 .accessibilityIdentifier("transform\(label)")
                 .onAppear { sync() }

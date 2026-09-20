@@ -170,7 +170,7 @@ final class WarpStroke {
 extension EditorSession {
     func beginWarp(at point: CGPoint) {
         guard canPaint, !isMaskSelected, let layer = activeLayer, let image = layer.asset?.image, let document else {
-            if isMaskSelected { brushError = "Smudge and Liquify work on a layer's pixels, not its mask." }
+            if isMaskSelected { brushError = L10n.string("Smudge and Liquify work on a layer's pixels, not its mask.") }
             return
         }
         finishOpacityEdit()
@@ -201,7 +201,7 @@ extension EditorSession {
             let stroke = try makeRasterEdit(for: current, settings: settings)
             stroke.clone = (result, .zero)
             stroke.replacesWithClone = true
-            stroke.editName = warp.mode.rawValue
+            stroke.editName = L10n.string(warp.mode.rawValue)
             for point in warp.points { try stroke.append(point) }
             try stroke.flush()
             if !stroke.patches.isEmpty { try commitPaintSnapshot(stroke) }

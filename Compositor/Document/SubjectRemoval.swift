@@ -4,7 +4,7 @@ import CoreImage
 nonisolated enum SubjectRemoval {
     enum Failure: LocalizedError {
         case noSubject
-        var errorDescription: String? { "No foreground subject was detected in this layer. Try an image with a more distinct subject." }
+        var errorDescription: String? { L10n.string("No foreground subject was detected in this layer. Try an image with a more distinct subject.") }
     }
     /// Vision's own mask for an image, kept while the panel is open so moving a slider only redoes the refining.
     private static let cache = MaskCache()

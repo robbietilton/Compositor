@@ -59,6 +59,12 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - macOS 26
 - Xcode 26 (to build from source)
 
+## Languages
+
+Compositor supports English and Simplified Chinese. It follows the macOS preferred language, including a per-app language selected in System Settings → General → Language & Region. Relaunch the app after changing its language.
+
+Translations live in `Compositor/en.lproj/Localizable.strings` and `Compositor/zh-Hans.lproj/Localizable.strings`. Keep English lookup keys and positional format arguments in sync. Translate display labels only; persisted enum values, picker selections, and accessibility identifiers must stay language-independent.
+
 ## Building
 
 Open `Compositor.xcodeproj` and run the **Compositor** scheme.

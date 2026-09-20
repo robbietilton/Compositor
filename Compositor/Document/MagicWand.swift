@@ -2,7 +2,7 @@ import AppKit
 
 nonisolated enum WandSampleSize: Int, CaseIterable, Sendable {
     case point, threeByThree, fiveByFive
-    var title: String { ["Point Sample", "3 by 3 Average", "5 by 5 Average"][rawValue] }
+    var title: String { [L10n.string("Point Sample"), L10n.string("3 by 3 Average"), L10n.string("5 by 5 Average")][rawValue] }
     /// Pixels either side of the click that are averaged into the color to match.
     var radius: Int { rawValue }
 }
@@ -25,8 +25,8 @@ nonisolated enum MagicWand {
         case tooDetailed, memory
         var errorDescription: String? {
             switch self {
-            case .tooDetailed: "That selection is too detailed to outline. Try a different Tolerance, or turn on Contiguous."
-            case .memory: "There isn’t enough memory to make that selection."
+            case .tooDetailed: L10n.string("That selection is too detailed to outline. Try a different Tolerance, or turn on Contiguous.")
+            case .memory: L10n.string("There isn’t enough memory to make that selection.")
             }
         }
     }
@@ -116,9 +116,9 @@ extension EditorSession {
         // A traced outline already lies on the canvas, so a new selection skips the clip to
         // the canvas, which is costly for a detailed outline.
         if mode == .replace {
-            setSelection(DocumentSelection(path: path, antialiased: selectionAntialiased), name: "Magic Wand")
+            setSelection(DocumentSelection(path: path, antialiased: selectionAntialiased), name: L10n.string("Magic Wand"))
         } else {
-            applySelection(path, mode: mode, name: "Magic Wand")
+            applySelection(path, mode: mode, name: L10n.string("Magic Wand"))
         }
     }
 

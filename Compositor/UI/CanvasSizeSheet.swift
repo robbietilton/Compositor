@@ -8,7 +8,7 @@ struct CanvasSizeSheet: View {
     @State private var anchor = 4
     @State private var extensionChoice = "Transparent"
     @State private var customColor = Color.white
-    private let anchorNames = ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"]
+    private let anchorNames = [L10n.string("Top left"), L10n.string("Top center"), L10n.string("Top right"), L10n.string("Middle left"), L10n.string("Center"), L10n.string("Middle right"), L10n.string("Bottom left"), L10n.string("Bottom center"), L10n.string("Bottom right")]
 
     init(document: CanvasDocument, foreground: PaletteColor = .black, background: PaletteColor = .white, finish: @escaping (CanvasSizeOptions?) -> Void) {
         self.foreground = foreground
@@ -40,37 +40,37 @@ struct CanvasSizeSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Canvas Size").font(.title2.bold())
-            Text("Current: \(draft.originalWidth) × \(draft.originalHeight) pixels")
-            Text("\(bytes(draft.originalWidth, draft.originalHeight)) uncompressed RGBA canvas")
+            Text(L10n.string("Canvas Size")).font(.title2.bold())
+            Text(L10n.format("Current: %1$@ × %2$@ pixels", String(draft.originalWidth), String(draft.originalHeight)))
+            Text(L10n.format("%1$@ uncompressed RGBA canvas", bytes(draft.originalWidth, draft.originalHeight)))
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
-            Picker("Units", selection: $draft.unit) {
-                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            Picker(L10n.string("Units"), selection: $draft.unit) {
+                ForEach(CanvasUnit.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             HStack {
-                Text("Width").frame(width: 60, alignment: .leading)
-                TextField("Width", value: dimension(true), format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Width")).frame(width: 60, alignment: .leading)
+                TextField(L10n.string("Width"), value: dimension(true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
-                Text("Height").frame(width: 60, alignment: .leading)
-                TextField("Height", value: dimension(false), format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Height")).frame(width: 60, alignment: .leading)
+                TextField(L10n.string("Height"), value: dimension(false), format: .number.precision(.fractionLength(0...3)))
             }
-            Toggle("Relative to current dimensions", isOn: $draft.relative)
-            Toggle("Lock original aspect ratio", isOn: $draft.locked)
+            Toggle(L10n.string("Relative to current dimensions"), isOn: $draft.relative)
+            Toggle(L10n.string("Lock original aspect ratio"), isOn: $draft.locked)
                 .onChange(of: draft.locked) { _, locked in
                     if locked { draft.set(draft.displayed(widthAxis: true), widthAxis: true) }
                 }
             if draft.valid {
-                Text("New: \(Int(draft.width.rounded())) × \(Int(draft.height.rounded())) pixels · \(bytes(Int(draft.width.rounded()), Int(draft.height.rounded()))) uncompressed")
+                Text(L10n.format("New: %1$@ × %2$@ pixels · %3$@ uncompressed", String(Int(draft.width.rounded())), String(Int(draft.height.rounded())), bytes(Int(draft.width.rounded()), Int(draft.height.rounded()))))
                     .font(.callout).foregroundStyle(.secondary)
             } else {
-                Text("Final dimensions must be 1–30,000 pixels per side.")
+                Text(L10n.string("Final dimensions must be 1–30,000 pixels per side."))
                     .font(.callout).foregroundStyle(.orange)
             }
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Anchor")
+                    Text(L10n.string("Anchor"))
                     Grid(horizontalSpacing: 3, verticalSpacing: 3) {
                         ForEach(0..<3) { row in
                             GridRow {
@@ -82,7 +82,7 @@ struct CanvasSizeSheet: View {
                                     }
                                     .tint(index == anchor ? .accentColor : .secondary)
                                     .help(anchorNames[index]).accessibilityLabel(anchorNames[index])
-                                    .accessibilityValue(index == anchor ? "Selected" : "")
+                                    .accessibilityValue(index == anchor ? L10n.string("Selected") : "")
                                 }
                             }
                         }
@@ -90,20 +90,20 @@ struct CanvasSizeSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(anchorNames[anchor]).font(.callout.bold())
-                    Text("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas.")
+                    Text(L10n.string("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas."))
                         .font(.callout).foregroundStyle(.secondary)
                 }.padding(.top, 28)
             }
-            Picker("Canvas extension", selection: $extensionChoice) {
-                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text($0) }
+            Picker(L10n.string("Canvas extension"), selection: $extensionChoice) {
+                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text(L10n.string($0)).tag($0) }
             }
             if extensionChoice == "Custom" {
-                ColorPicker("Extension color", selection: $customColor, supportsOpacity: false)
+                ColorPicker(L10n.string("Extension color"), selection: $customColor, supportsOpacity: false)
             }
             HStack {
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button(L10n.string("Cancel")) { finish(nil) }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("OK") {
+                Button(L10n.string("OK")) {
                     guard draft.valid else { return }
                     finish(CanvasSizeOptions(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()), anchor: anchor, fill: fill))
                 }.keyboardShortcut(.defaultAction).disabled(!draft.valid)

@@ -60,23 +60,23 @@ struct ImageSizeSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Image Size").font(.title2.bold())
-            Text("Current: \(document.width) × \(document.height) pixels").foregroundStyle(.secondary)
-            Picker("Units", selection: $unit) {
-                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0) }
+            Text(L10n.string("Image Size")).font(.title2.bold())
+            Text(L10n.format("Current: %1$@ × %2$@ pixels", String(document.width), String(document.height))).foregroundStyle(.secondary)
+            Picker(L10n.string("Units"), selection: $unit) {
+                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text(L10n.string($0)).tag($0) }
             }
             HStack {
-                Text("Width").frame(width: 75, alignment: .leading)
-                TextField("Width", value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Width")).frame(width: 75, alignment: .leading)
+                TextField(L10n.string("Width"), value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
-                Text("Height").frame(width: 75, alignment: .leading)
-                TextField("Height", value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Height")).frame(width: 75, alignment: .leading)
+                TextField(L10n.string("Height"), value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
             }
-            Toggle("Lock aspect ratio", isOn: $locked).disabled(!resample)
+            Toggle(L10n.string("Lock aspect ratio"), isOn: $locked).disabled(!resample)
             HStack {
-                Text("Resolution")
-                TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Resolution"))
+                TextField(L10n.string("Resolution"), value: $resolution, format: .number.precision(.fractionLength(0...3)))
                     .onChange(of: resolution) { old, new in
                         if resample, unit == "Inches" || unit == "Centimeters",
                            old > 0, new > 0, new.isFinite {
@@ -84,9 +84,9 @@ struct ImageSizeSheet: View {
                             height *= new / old
                         }
                     }
-                Text("pixels/inch").foregroundStyle(.secondary)
+                Text(L10n.string("pixels/inch")).foregroundStyle(.secondary)
             }
-            Toggle("Resample", isOn: $resample).onChange(of: resample) { _, enabled in
+            Toggle(L10n.string("Resample"), isOn: $resample).onChange(of: resample) { _, enabled in
                 if !enabled {
                     width = Double(document.width)
                     height = Double(document.height)
@@ -95,21 +95,21 @@ struct ImageSizeSheet: View {
                 }
             }
             if resample {
-                Picker("Sampling", selection: $sampling) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                Picker(L10n.string("Sampling"), selection: $sampling) {
+                    ForEach(LayerSampling.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
-                Text("Resizes layer pixels and applies existing transforms. Undo restores the originals.")
+                Text(L10n.string("Resizes layer pixels and applies existing transforms. Undo restores the originals."))
                     .font(.callout).foregroundStyle(.secondary)
             } else {
-                Text("Only print dimensions and resolution change. Pixels stay unchanged.")
+                Text(L10n.string("Only print dimensions and resolution change. Pixels stay unchanged."))
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Text(valid ? "Result: \(Int(width.rounded())) × \(Int(height.rounded())) pixels" : "Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch.")
+            Text(valid ? L10n.format("Result: %1$@ × %2$@ pixels", String(Int(width.rounded())), String(Int(height.rounded()))) : L10n.string("Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch."))
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
             HStack {
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button(L10n.string("Cancel")) { finish(nil) }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Resize") {
+                Button(L10n.string("Resize")) {
                     guard valid else { return }
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))
