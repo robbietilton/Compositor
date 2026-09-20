@@ -32,7 +32,7 @@ extension EditorSession {
         var clone: (image: CGImage, offset: CGSize)?
         if tool == .cloneStamp {
             guard let offset = cloneStrokeOffset(at: point) else {
-                brushError = "Option-click where Clone Stamp should copy from first."
+                brushError = "Option-click where Clone Stamp should copy from first.".localized
                 return
             }
             guard let image = cloneSample(document) else { return }

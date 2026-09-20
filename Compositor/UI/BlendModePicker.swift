@@ -6,11 +6,11 @@ struct BlendModePicker: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: false)
-        button.addItems(withTitles: LayerBlendMode.allCases.map(\.rawValue))
+        button.addItems(withTitles: LayerBlendMode.allCases.map { $0.rawValue.localized })
         button.menu?.delegate = context.coordinator
         button.target = context.coordinator
         button.action = #selector(Coordinator.choose(_:))
-        button.setAccessibilityLabel("Blend mode")
+        button.setAccessibilityLabel("Blend mode".localized)
         // A capsule like the SwiftUI buttons and menus (`roundedControls`), which don't reach this AppKit pop-up.
         button.borderShape = .capsule
         return button
@@ -18,7 +18,7 @@ struct BlendModePicker: NSViewRepresentable {
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         button.isEnabled = session.canEditAppearance
         if !context.coordinator.tracking {
-            button.selectItem(withTitle: (session.activeLayer?.blendMode ?? .normal).rawValue)
+            button.selectItem(at: LayerBlendMode.allCases.firstIndex(of: session.activeLayer?.blendMode ?? .normal) ?? 0)
         }
     }
     static func dismantleNSView(_ button: NSPopUpButton, coordinator: Coordinator) {
@@ -37,7 +37,7 @@ struct BlendModePicker: NSViewRepresentable {
             highlightedMode = nil
         }
         func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
-            let mode = item.flatMap { LayerBlendMode(rawValue: $0.title) }
+            let mode = item.flatMap { menu.items.firstIndex(of: $0) }.map { LayerBlendMode.allCases[$0] }
             if let mode { highlightedMode = mode }
             session.previewBlendMode(mode, for: layerID)
         }
@@ -47,9 +47,9 @@ struct BlendModePicker: NSViewRepresentable {
         }
         @objc func choose(_ button: NSPopUpButton) {
             guard session.activeLayerID == layerID,
-                  let mode = highlightedMode ?? button.selectedItem.flatMap({ LayerBlendMode(rawValue: $0.title) }) else { return }
+                  let mode = highlightedMode ?? (button.indexOfSelectedItem >= 0 ? LayerBlendMode.allCases[button.indexOfSelectedItem] : nil) else { return }
             session.setLayerBlendMode(mode)
-            button.selectItem(withTitle: mode.rawValue)
+            button.selectItem(at: LayerBlendMode.allCases.firstIndex(of: mode) ?? 0)
             highlightedMode = nil
             session.refreshCanvasPreview?()
         }

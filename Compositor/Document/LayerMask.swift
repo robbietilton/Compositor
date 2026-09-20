@@ -30,7 +30,7 @@ nonisolated struct LayerMask: Equatable, @unchecked Sendable {
               let image = CGImage(width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: 1,
                 space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
-        return LayerMask(asset: ImportedImage(image: image, thumbnail: image, name: "Layer Mask"))
+        return LayerMask(asset: ImportedImage(image: image, thumbnail: image, name: "Layer Mask".localized))
     }
     static func asset(from image: CGImage) throws -> ImportedImage {
         guard isValid(image) else { throw ProjectError.invalid }
@@ -44,7 +44,7 @@ nonisolated struct LayerMask: Equatable, @unchecked Sendable {
         context.setFillColor(gray: 1, alpha: 1)
         context.fill(bounds)
         guard let thumbnail = context.makeImage() else { throw ExportError.render }
-        return ImportedImage(image: image, thumbnail: thumbnail, name: "Layer Mask")
+        return ImportedImage(image: image, thumbnail: thumbnail, name: "Layer Mask".localized)
     }
 
     // MARK: Placement
@@ -416,4 +416,3 @@ extension BrushStroke {
         }
     }
 }
-

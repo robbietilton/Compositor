@@ -13,7 +13,7 @@ extension View {
     func unitSuffix(_ unit: String) -> some View {
         HStack(spacing: 2) {
             self
-            Text(unit)
+            Text(unit.localized)
         }
     }
 

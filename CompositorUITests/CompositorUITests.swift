@@ -36,6 +36,21 @@ final class CompositorUITests: XCTestCase {
     }
 
     @MainActor
+    func testSimplifiedChineseLocalization() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+
+        let create = app.buttons["createCanvas"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        XCTAssertEqual(create.label, "创建画布")
+        XCTAssertTrue(app.staticTexts["新建画布"].exists)
+
+        create.click()
+        XCTAssertTrue(app.staticTexts["图层"].waitForExistence(timeout: 2))
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // Explicit macOS baseline: includes XCTest launch/idle/accessibility overhead.
         let app = XCUIApplication()

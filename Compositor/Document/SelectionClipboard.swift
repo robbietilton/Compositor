@@ -147,7 +147,7 @@ extension EditorSession {
     func duplicateActiveLayer() {
         guard canEditLayers, let layer = activeLayer, !layer.isGroup,
               let index = document?.layers.firstIndex(where: { $0.id == layer.id }) else { return }
-        let copy = ImageLayer(id: UUID(), asset: layer.asset, name: "\(layer.name) copy", isVisible: layer.isVisible,
+        let copy = ImageLayer(id: UUID(), asset: layer.asset, name: String(localized: "\(layer.name) copy"), isVisible: layer.isVisible,
                               transform: layer.transform, parentID: layer.parentID, isGroup: false,
                               opacity: layer.opacity, blendMode: layer.blendMode, mask: layer.mask, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, shape: layer.shape)
         beginEdit("Duplicate Layer")
@@ -190,8 +190,8 @@ extension EditorSession {
     func nextLayerName() -> String {
         let names = Set(document?.layers.map(\.name) ?? [])
         var number = 1
-        while names.contains("Layer \(number)") { number += 1 }
-        return "Layer \(number)"
+        while names.contains(String(localized: "Layer \(number)")) { number += 1 }
+        return String(localized: "Layer \(number)")
     }
 
     /// Normalizes an image from another app to the working sRGB RGBA format.

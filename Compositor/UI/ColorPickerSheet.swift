@@ -135,7 +135,7 @@ struct ColorPickerSheet: View {
                                 rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue.rounded()))) / 255
                                 hsb.setRGB(rgb)
                             })
-                .accessibilityLabel(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")
+                .accessibilityLabel((label == "R" ? "Red" : label == "G" ? "Green" : "Blue").localized)
         }
     }
 
@@ -172,7 +172,7 @@ final class ColorPickerPanelController: NSObject {
         panel.onClose = { [weak session] in
             if session?.colorPicker != nil { session?.closeColorPicker(commit: false) }
         }
-        panel.show(title: state.target.title,
+        panel.show(title: state.target.title.localized,
                    content: ColorPickerSheet(state: state) { [weak session] commit in
                        session?.closeColorPicker(commit: commit)
                    })
