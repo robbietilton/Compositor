@@ -61,8 +61,8 @@ struct ProjectTabStrip: View {
             clipped = overflowing
         }
         // Tabs fade out where they scroll under an edge instead of being cut off — the right edge whenever they
-        // overflow the space they were given, the left once scrolled away from the first tab. A mask rather than a painted gradient, so whatever the toolbar shows
-        // behind them shows through.
+        // overflow the space they were given, the left once scrolled away from the first tab. A mask rather than
+        // a painted gradient, so whatever the toolbar shows behind them shows through.
         .mask {
             HStack(spacing: 0) {
                 LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
