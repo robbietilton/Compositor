@@ -95,7 +95,6 @@ final class TransformOverlay: NSView {
         else { drawTransformHandles() }
         drawSelection()
         drawLassoDraft()
-        drawShapeDraft()
         drawSnapGuides()
     }
 
@@ -142,22 +141,6 @@ final class TransformOverlay: NSView {
         context.restoreGState()
     }
 
-    /// The shape being dragged, filled with the color it will get and outlined so it reads on any background.
-    private func drawShapeDraft() {
-        guard let draft = session.shapeDraft, !draft.rect.isEmpty, let transform = documentToView,
-              let context = NSGraphicsContext.current?.cgContext else { return }
-        let rect = draft.rect.applying(transform)
-        let path = draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * session.viewport.pointsPerPixel)
-        context.saveGState()
-        context.addPath(path)
-        context.setFillColor(session.foregroundColor.nsColor.cgColor)
-        context.fillPath()
-        context.addPath(path)
-        context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
-        context.setLineWidth(1)
-        context.strokePath()
-        context.restoreGState()
-    }
 
     private func drawLassoDraft() {
         guard let draft = session.lassoDraft, let transform = documentToView,

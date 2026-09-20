@@ -37,6 +37,7 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - Clone Stamp, aligned or not, sampling one layer or all of them
 - Blur tool, on pixels or masks
 - Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)
+- Type tool (T): inline multiline editing in draggable, resizable paragraph boxes; font, size, color, alignment and spacing in the tool header; transform text and use it as a clipping mask
 - Eyedropper and a full color picker
 
 ### Adjustments and filters

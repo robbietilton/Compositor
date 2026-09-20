@@ -220,6 +220,7 @@ extension EditorSession {
     /// Layers and folders alike take a mask.
     var canEditMask: Bool { canEditLayers && selectedLayerIDs.count == 1 && activeLayer != nil }
     func selectLayerTarget(_ id: UUID, mask: Bool) {
+        effectSelection = nil
         guard !isProjectBusy, !isImporting, brushStroke == nil else { return }
         resolveGradient()
         selectLayer(id)

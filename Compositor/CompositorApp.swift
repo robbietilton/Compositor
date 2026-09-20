@@ -24,7 +24,7 @@ struct CompositorApp: App {
                 CommandGroup(replacing: .undoRedo) {
                     // Dialog text fields keep native text undo; document history
                     // is unavailable while an import or modal edit is active.
-                    if session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
+                    if session.textDraft != nil || session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
                         Button("Undo") {
                             if NSApp.keyWindow?.firstResponder is NSTextView {
                                 NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
@@ -260,7 +260,7 @@ struct CompositorApp: App {
                             .disabled(!session.canTransform)
                     }
                     Divider()
-                    Button(session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {
+                    Button(session.selectedEffect != nil ? "Delete " + session.selectedEffect!.kind.rawValue : session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {
                         session.deleteLayerOrMask()
                     }
                         .disabled(!session.canEditLayers || session.activeLayer == nil)

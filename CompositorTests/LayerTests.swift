@@ -110,6 +110,7 @@ struct LayerTests {
         #expect(table.selectedRow == 2)
         #expect(session.document?.layers.first?.id == bottom)
         #expect(!session.placeLayer(UUID(), in: nil))
+        #expect(!session.placeLayer(bottom, in: nil, above: UUID()))
         session.isImporting = true
         #expect(!session.placeLayer(bottom, in: nil))
     }

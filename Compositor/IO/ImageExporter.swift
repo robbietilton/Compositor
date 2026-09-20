@@ -40,7 +40,14 @@ actor ImageExporter {
             let live = LiveMaskRenderer(bounds: CGRect(x: 0, y: 0, width: width, height: height), source: { records[$0]?.maskSourceID }) { id, target in
                 guard let layer = records[id], let image = snapshot.images[id]?.image else { return }
                 let mask = snapshot.mask(for: layer).flatMap { $0.clipImage(placement: $0.placement, over: layer.transform, width: image.width, height: image.height) }
+                let effects = LayerEffectsRenderer.cached(image, mask: mask, effects: layer.effects)
                 func drawLayer(_ mode: LayerBlendMode, _ into: CGContext) {
+                    if let effects {
+                        let grown = LayerEffectsRenderer.placed(layer.transform, image: effects.image, inset: effects.inset)
+                        LayerRenderer.draw(effects.image, transform: grown, center: grown.center,
+                            opacity: layer.opacity ?? 1, blendMode: mode, mask: nil, in: into)
+                        return
+                    }
                     LayerRenderer.draw(image, transform: layer.transform, center: layer.transform.center,
                         opacity: layer.opacity ?? 1, blendMode: mode, mask: mask, in: into)
                 }

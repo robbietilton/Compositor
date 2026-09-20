@@ -177,8 +177,13 @@ struct TransformDrag {
             let localX = (dx * cos(original.radians) + dy * sin(original.radians)) * span
             let localY = (-dx * sin(original.radians) + dy * cos(original.radians)) * span
             let sx = handle.x * 2 - 1, sy = handle.y * 2 - 1
-            var width = sx == 0 ? original.size.width : max(1, localX * sx)
-            var height = sy == 0 ? original.size.height : max(1, localY * sy)
+            // Dragging a handle past the opposite side turns the layer over rather than stopping at nothing:
+            // the size stays positive and the layer is flipped on that axis, as a negative scale would.
+            let rawWidth = sx == 0 ? original.size.width : localX * sx
+            let rawHeight = sy == 0 ? original.size.height : localY * sy
+            let mirroredX = rawWidth < 0, mirroredY = rawHeight < 0
+            var width = max(1, abs(rawWidth))
+            var height = max(1, abs(rawHeight))
             if lockRatio != shift {
                 let factor: CGFloat
                 if sx == 0 { factor = height / original.size.height }
@@ -193,8 +198,11 @@ struct TransformDrag {
                 height = original.size.height * factor
             }
             result.size = CGSize(width: width, height: height)
-            let offsetX = (0.5 - anchorUnit.x) * width
-            let offsetY = (0.5 - anchorUnit.y) * height
+            if mirroredX { result.flipX.toggle() }
+            if mirroredY { result.flipY.toggle() }
+            // Turned over, the box lies on the other side of the anchor.
+            let offsetX = (0.5 - anchorUnit.x) * width * (mirroredX ? -1 : 1)
+            let offsetY = (0.5 - anchorUnit.y) * height * (mirroredY ? -1 : 1)
             let center = CGPoint(x: anchor.x + offsetX * cos(original.radians) - offsetY * sin(original.radians),
                                  y: anchor.y + offsetX * sin(original.radians) + offsetY * cos(original.radians))
             result.origin = CGPoint(x: center.x - width / 2, y: center.y - height / 2)

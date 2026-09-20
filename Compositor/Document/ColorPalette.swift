@@ -33,32 +33,68 @@ extension EditorSession {
             let white = color == .white
             maskPaintWhite = background ? !white : white
         } else if background { backgroundColor = color }
-        else { foregroundColor = color }
+        else {
+            foregroundColor = color
+            // Type paints in the foreground color, so text being edited follows the swatch. A text layer merely
+            // selected keeps its color: it changes only while its text is open for editing.
+            if tool == .type, textDraft != nil {
+                changeTextStyle { $0.red = color.red; $0.green = color.green; $0.blue = color.blue }
+            }
+        }
     }
     func swapPaletteColors() {
         guard canEditPalette else { return }
         if isMaskSelected { maskPaintWhite.toggle() }
         else {
             let old = foregroundColor
-            foregroundColor = backgroundColor
+            setPaletteColor(backgroundColor, background: false)
             backgroundColor = old
         }
     }
     func resetPaletteColors() {
         guard canEditPalette else { return }
         if isMaskSelected { maskPaintWhite = false }
-        else { foregroundColor = .black; backgroundColor = .white }
+        else { setPaletteColor(.black, background: false); backgroundColor = .white }
     }
 
     func openColorPicker(background: Bool) {
         guard canEditPalette, !isMaskSelected else { return }
         colorPicker = ColorPickerState(background: background, original: paletteColor(background: background))
     }
+    /// What the Type bar's swatch shows and edits: the text being edited, otherwise the foreground color the next
+    /// text will use. A text layer that is only selected is not touched.
+    var typeColor: PaletteColor {
+        guard let style = textDraft?.style else { return foregroundColor }
+        return PaletteColor(red: style.red, green: style.green, blue: style.blue)
+    }
+    func openTextColorPicker() {
+        guard canEditPalette, colorPicker == nil, tool == .type else { return }
+        colorPicker = ColorPickerState(target: .text(draftID: textDraft?.id), original: typeColor)
+    }
+    /// Opens the app's picker on a layer effect's color.
+    func openEffectColorPicker(_ kind: LayerEffectKind) {
+        guard canEditPalette, colorPicker == nil, effectsEditing != nil else { return }
+        colorPicker = ColorPickerState(target: .effect(kind: kind), original: editingEffects.color(kind) ?? .black)
+    }
     func closeColorPicker(commit: Bool) {
         if let colorPicker {
             switch colorPicker.target {
             case .palette(let background):
                 if commit, !isMaskSelected { setPaletteColor(colorPicker.color, background: background) }
+            case .text(let draftID):
+                if commit, tool == .type, textDraft?.id == draftID {
+                    let color = colorPicker.color
+                    if draftID != nil {
+                        changeTextStyle { $0.red = color.red; $0.green = color.green; $0.blue = color.blue }
+                    } else {
+                        textDefaults.red = color.red; textDefaults.green = color.green; textDefaults.blue = color.blue
+                    }
+                    // The text color is the foreground color: picking one in the Type bar moves the swatch too.
+                    if !isMaskSelected { foregroundColor = color }
+                }
+            case .effect(let kind):
+                let color = commit ? colorPicker.color : colorPicker.original
+                changeEffects { $0.setColor(color, for: kind) }
             case .gradientMap(let highlights):
                 // The end has been previewing the working color; Cancel puts the original back.
                 setGradientMapColor(commit ? colorPicker.color : colorPicker.original, highlights: highlights)
@@ -72,6 +108,11 @@ extension EditorSession {
         let value = highlights ? edit.settings.gradientMap.highlights : edit.settings.gradientMap.shadows
         colorPicker = ColorPickerState(target: .gradientMap(highlights: highlights),
                                        original: PaletteColor(red: value.red, green: value.green, blue: value.blue))
+    }
+    /// While the picker is open on an effect's color, the canvas follows its working color.
+    func previewEffectColor() {
+        guard let colorPicker, case .effect(let kind) = colorPicker.target else { return }
+        changeEffects { $0.setColor(colorPicker.color, for: kind) }
     }
     /// While the picker is open on a Gradient Map end, the gradient (and canvas) follow its working color.
     func previewGradientMapColor() {
@@ -120,9 +161,14 @@ extension EditorSession {
 /// What the open color picker edits: a palette swatch, or one end of the Gradient Map being edited.
 enum ColorPickerTarget: Equatable {
     case palette(background: Bool)
+    /// A layer effect's own color.
+    case effect(kind: LayerEffectKind)
     case gradientMap(highlights: Bool)
+    case text(draftID: UUID?)
     var title: String {
         switch self {
+        case .text: return "Color Picker (Text Color)"
+        case .effect(let kind): return "Color Picker (\(kind.rawValue) Color)"
         case .palette(let background): return background ? "Color Picker (Background Color)" : "Color Picker (Foreground Color)"
         case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
         }

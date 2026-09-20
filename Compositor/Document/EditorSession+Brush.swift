@@ -118,7 +118,7 @@ extension EditorSession {
         } else {
             document?.layers[index] = ImageLayer(id: current.id, asset: result.asset, name: current.name,
                 isVisible: current.isVisible, transform: result.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID)
+                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID, effects: current.effects)
         }
         endEdit()
     }
@@ -155,7 +155,7 @@ extension EditorSession {
                     var kept = mask
                     kept.isEnabled = current.mask?.isEnabled ?? mask.isEnabled
                     return kept
-                }, maskSourceID: current.maskSourceID)
+                }, maskSourceID: current.maskSourceID, effects: current.effects)
         }
         alsoApply?()
         endEdit()

@@ -25,7 +25,7 @@ struct NativeLayerList: NSViewRepresentable {
         table.target = context.coordinator
         table.doubleAction = #selector(Coordinator.renameClickedLayer(_:))
         table.action = #selector(Coordinator.clickedLayer(_:))
-        table.registerForDraggedTypes([Coordinator.layerType, Coordinator.maskType])
+        table.registerForDraggedTypes([Coordinator.layerType, Coordinator.maskType, Coordinator.effectType])
         table.setDraggingSourceOperationMask([.move, .copy], forLocal: true)
         table.setDraggingSourceOperationMask([], forLocal: false)
         table.setAccessibilityIdentifier("layersList")
@@ -44,6 +44,7 @@ struct NativeLayerList: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         static let layerType = NSPasteboard.PasteboardType("com.compositor.layer-row")
         /// An Option-drag from a mask thumbnail: the id of the layer whose mask is being copied.
+        static let effectType = NSPasteboard.PasteboardType("com.compositor.layer-effect")
         static let maskType = NSPasteboard.PasteboardType("com.compositor.layer-mask")
         let session: EditorSession
         private var rows: [ImageLayer] = []
@@ -73,11 +74,18 @@ struct NativeLayerList: NSViewRepresentable {
             } else {
                 // Selection never reloads cells or recreates thumbnails.
                 let changed = IndexSet(next.indices.filter {
-                    editableChanged || expansionChanged || (old[$0].name != next[$0].name || old[$0].isVisible != next[$0].isVisible || old[$0].size != next[$0].size || old[$0].parentID != next[$0].parentID || old[$0].isGroup != next[$0].isGroup || old[$0].asset?.image !== next[$0].asset?.image || old[$0].mask != next[$0].mask || old[$0].maskSourceID != next[$0].maskSourceID) || previousDetails[next[$0].id]?.depth != rowDetails[next[$0].id]?.depth || previousDetails[next[$0].id]?.visible != rowDetails[next[$0].id]?.visible
+                    editableChanged || expansionChanged || (old[$0].name != next[$0].name || old[$0].isVisible != next[$0].isVisible || old[$0].size != next[$0].size || old[$0].parentID != next[$0].parentID || old[$0].isGroup != next[$0].isGroup || old[$0].asset?.image !== next[$0].asset?.image || (old[$0].liveText != nil) != (next[$0].liveText != nil) || old[$0].effects != next[$0].effects || old[$0].mask != next[$0].mask || old[$0].maskSourceID != next[$0].maskSourceID) || previousDetails[next[$0].id]?.depth != rowDetails[next[$0].id]?.depth || previousDetails[next[$0].id]?.visible != rowDetails[next[$0].id]?.visible
                 })
+                let resized = IndexSet(next.indices.filter { (old[$0].effects?.kinds.count ?? 0) != (next[$0].effects?.kinds.count ?? 0) })
+                // Adding or removing an effect only changes how tall a row is. Left to AppKit that is animated, and
+                // the row appears to be taken away and put back; here it simply becomes its new height.
+                NSAnimationContext.beginGrouping()
+                NSAnimationContext.current.duration = 0
+                if !resized.isEmpty { table.noteHeightOfRows(withIndexesChanged: resized) }
                 if !changed.isEmpty { table.reloadData(forRowIndexes: changed, columnIndexes: IndexSet(integer: 0)) }
+                NSAnimationContext.endGrouping()
             }
-            let indices = IndexSet(next.indices.filter { session.selectedLayerIDs.contains(next[$0].id) })
+            let indices = IndexSet(next.indices.filter { session.selectedEffect == nil && session.selectedLayerIDs.contains(next[$0].id) })
             if table.selectedRowIndexes != indices { table.selectRowIndexes(indices, byExtendingSelection: false) }
             // Border-only updates: selecting a target never rebuilds thumbnails or canvas pixels.
             let visible = table.rows(in: table.visibleRect)
@@ -96,6 +104,9 @@ struct NativeLayerList: NSViewRepresentable {
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
+        func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+            52 + CGFloat(rows[row].effects?.kinds.count ?? 0) * 24
+        }
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
             let identifier = NSUserInterfaceItemIdentifier("layerCell")
             let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? LayerCell ?? LayerCell()
@@ -126,7 +137,14 @@ struct NativeLayerList: NSViewRepresentable {
             guard session.canEditLayers, rows.indices.contains(table.clickedRow) else { return }
             let id = rows[table.clickedRow].id
             session.activeLayerID = id
-            if rows[table.clickedRow].adjustment != nil { session.adjustmentEditingID = id; return }
+            // On the thumbnail (or another of the row's controls) a double-click opens what the layer holds: its
+            // text, or an adjustment's settings. On the name it renames the layer, as it does for every other layer.
+            let point = NSApp.currentEvent?.locationInWindow ?? .zero
+            let cell = table.view(atColumn: 0, row: table.clickedRow, makeIfNecessary: false) as? LayerCell
+            if cell?.isOnControl(point) == true {
+                if rows[table.clickedRow].liveText != nil { session.editActiveText(); return }
+                if rows[table.clickedRow].adjustment != nil { session.adjustmentEditingID = id; return }
+            }
             session.renamingLayerID = id
         }
         func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
@@ -137,6 +155,13 @@ struct NativeLayerList: NSViewRepresentable {
         }
         func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
                        proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
+            if let source = info.draggingSource as? LayerEffectRow {
+                let target = tableView.row(at: tableView.convert(info.draggingLocation, from: nil))
+                guard source.session === session, rows.indices.contains(target),
+                      session.canCopyEffect(source.kind, from: source.layerID, to: rows[target].id) else { return [] }
+                tableView.setDropRow(target, dropOperation: .on)
+                return .copy
+            }
             if let source = draggedMask(info) {
                 // A mask lands on whichever row is under the pointer.
                 let target = tableView.row(at: tableView.convert(info.draggingLocation, from: nil))
@@ -159,6 +184,12 @@ struct NativeLayerList: NSViewRepresentable {
         }
         func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
                        row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+            if let source = info.draggingSource as? LayerEffectRow {
+                guard source.session === session, rows.indices.contains(row),
+                      session.canCopyEffect(source.kind, from: source.layerID, to: rows[row].id) else { return false }
+                session.copyEffect(source.kind, from: source.layerID, to: rows[row].id)
+                return true
+            }
             if let source = draggedMask(info) {
                 guard rows.indices.contains(row), session.canCopyMask(from: source, to: rows[row].id) else { return false }
                 session.copyMask(from: source, to: rows[row].id)
@@ -294,11 +325,13 @@ final class LayerTableView: NSTableView {
         return layer.maskSourceID == nil ? Self.createClippingCursor : Self.releaseClippingCursor
     }
 
-    /// The bottom quarter of a row, where Option-click clips the layer to the one below.
+    /// Option-click clips along the bottom edge of a row: a fixed strip, not a share of the row's height, so a row
+    /// listing several effects keeps the rest of itself free for Option-dragging those effects.
+    private static let clippingStrip: CGFloat = 10
     private func isClippingZone(_ point: NSPoint, row: Int) -> Bool {
         guard row >= 0 else { return false }
         let rect = rect(ofRow: row)
-        return point.y >= rect.maxY - rect.height / 4
+        return point.y >= rect.maxY - min(Self.clippingStrip, rect.height / 3)
     }
     /// Command held over a thumbnail that loads a selection: that thumbnail shows its cursor.
     private func thumbnailOwnsCursor(at point: NSPoint, flags: NSEvent.ModifierFlags) -> Bool {
@@ -328,18 +361,42 @@ final class LayerTableView: NSTableView {
         if clippingCursorActive { NSCursor.arrow.set(); clippingCursorActive = false }
     }
 
+    /// Effect rows are interactive subviews. In the clipping zone, Option-click belongs to the table
+    /// instead, so the same region that advertises the clipping cursor also handles the click.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard hit != nil else { return nil }
+        let flags = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+        let local = convert(point, from: superview)
+        guard flags.contains(.option), !flags.contains(.command),
+              isClippingZone(local, row: row(at: local)) else { return hit }
+        // Option-dragging a mask thumbnail must still copy its mask.
+        var target = hit
+        while let view = target, view !== self {
+            if let thumbnail = view as? LayerThumbnailButton, thumbnail.isMaskTarget { return hit }
+            target = view.superview
+        }
+        return self
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let row = row(at: point)
-        // Option-click on the bottom of a row makes or releases a clipping mask. Elsewhere on the row the click
-        // selects as usual, so an Option-drag can drop a duplicate.
+        // Handle clipping before effect selection: effects occupy the lower portion of taller rows.
         if event.modifierFlags.contains(.option), !event.modifierFlags.contains(.command), isClippingZone(point, row: row),
            thumbnail(at: point)?.isMaskTarget != true,
            let entries = session?.layerRows, entries.indices.contains(row) {
+            session?.effectSelection = nil
             session?.toggleClippingMask(entries[row].layer.id)
             refreshClippingCursor(event.modifierFlags)
             return
         }
+        if row >= 0, let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? LayerCell,
+           cell.selectEffect(at: event.locationInWindow, editing: event.clickCount > 1) {
+            window?.makeFirstResponder(self)
+            return
+        }
+        session?.effectSelection = nil
         if row >= 0, event.modifierFlags.intersection([.command, .shift]).isEmpty,
            !(selectedRowIndexes.count > 1 && selectedRowIndexes.contains(row)) {
             // Paint selection before AppKit enters its click/drag tracking loop.
@@ -355,6 +412,8 @@ final class LayerTableView: NSTableView {
             session?.cancelTransform()
         } else if [36, 76].contains(event.keyCode), session?.transformEdit != nil {
             session?.commitTransform()
+        } else if plain, event.keyCode == 48 {
+            session?.cycleToolMode()
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "x" {
             session?.swapPaletteColors()
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "d" {
@@ -386,6 +445,8 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     private var layerName = ""
     private var renaming = false
     private let eye = EyeSwipeButton()
+    private let effectRows = NSStackView()
+    private var effectButtons: [LayerEffectRow] = []
     private let disclosure = NSButton()
     private var indentation: NSLayoutConstraint!
     private let thumbnail = LayerThumbnailButton()
@@ -425,6 +486,16 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        effectRows.orientation = .vertical
+        effectRows.alignment = .leading
+        effectRows.spacing = 0
+        effectRows.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(effectRows)
+        NSLayoutConstraint.activate([
+            effectRows.leadingAnchor.constraint(equalTo: leadingAnchor),
+            effectRows.trailingAnchor.constraint(equalTo: trailingAnchor),
+            effectRows.topAnchor.constraint(equalTo: topAnchor, constant: 52)
+        ])
         disclosure.isBordered = false
         disclosure.target = self
         disclosure.action = #selector(toggleExpansion)
@@ -455,6 +526,9 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         disabledMaskMark.textColor = .systemRed
         disabledMaskMark.isHidden = true
         nameLabel.lineBreakMode = .byTruncatingTail
+        // One line, whatever the name holds: a text layer named after a paragraph would otherwise grow the row.
+        nameLabel.usesSingleLineMode = true
+        nameLabel.maximumNumberOfLines = 1
         nameLabel.font = .systemFont(ofSize: 13)
         dimensions.font = .systemFont(ofSize: 10)
         dimensions.textColor = .secondaryLabelColor
@@ -481,25 +555,25 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         maskThumbnailHeight = maskThumbnail.heightAnchor.constraint(equalToConstant: 30)
         NSLayoutConstraint.activate([
             eye.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            eye.centerYAnchor.constraint(equalTo: centerYAnchor),
+            eye.centerYAnchor.constraint(equalTo: topAnchor, constant: 26),
             eye.widthAnchor.constraint(equalToConstant: 20), eye.heightAnchor.constraint(equalToConstant: 32),
             indentation,
-            disclosure.centerYAnchor.constraint(equalTo: centerYAnchor),
+            disclosure.centerYAnchor.constraint(equalTo: topAnchor, constant: 26),
             disclosure.widthAnchor.constraint(equalToConstant: 16), disclosure.heightAnchor.constraint(equalToConstant: 24),
             thumbnailSlot.leadingAnchor.constraint(equalTo: disclosure.trailingAnchor, constant: -2),
             thumbnailSlot.widthAnchor.constraint(equalToConstant: 36),
-            thumbnailSlot.topAnchor.constraint(equalTo: topAnchor), thumbnailSlot.bottomAnchor.constraint(equalTo: bottomAnchor),
+            thumbnailSlot.topAnchor.constraint(equalTo: topAnchor), thumbnailSlot.bottomAnchor.constraint(equalTo: topAnchor, constant: 52),
             thumbnail.centerXAnchor.constraint(equalTo: thumbnailSlot.centerXAnchor),
-            thumbnail.centerYAnchor.constraint(equalTo: centerYAnchor),
+            thumbnail.centerYAnchor.constraint(equalTo: topAnchor, constant: 26),
             thumbnailWidth, thumbnailHeight,
             maskGap,
             linkButton.centerXAnchor.constraint(equalTo: maskSlot.leadingAnchor, constant: -6.5),
-            linkButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            linkButton.centerYAnchor.constraint(equalTo: topAnchor, constant: 26),
             linkButton.widthAnchor.constraint(equalToConstant: 9), linkButton.heightAnchor.constraint(equalToConstant: 20),
             maskWidth,
-            maskSlot.topAnchor.constraint(equalTo: topAnchor), maskSlot.bottomAnchor.constraint(equalTo: bottomAnchor),
+            maskSlot.topAnchor.constraint(equalTo: topAnchor), maskSlot.bottomAnchor.constraint(equalTo: topAnchor, constant: 52),
             maskThumbnail.centerXAnchor.constraint(equalTo: maskSlot.centerXAnchor),
-            maskThumbnail.centerYAnchor.constraint(equalTo: centerYAnchor),
+            maskThumbnail.centerYAnchor.constraint(equalTo: topAnchor, constant: 26),
             maskThumbnailWidth, maskThumbnailHeight,
             disabledMaskMark.centerXAnchor.constraint(equalTo: maskThumbnail.centerXAnchor),
             disabledMaskMark.centerYAnchor.constraint(equalTo: maskThumbnail.centerYAnchor),
@@ -525,22 +599,35 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
 
     func configure(_ layer: ImageLayer, enabled: Bool, session: EditorSession, depth: Int, visible: Bool) {
         self.session = session
+        for row in effectButtons { effectRows.removeArrangedSubview(row); row.removeFromSuperview() }
+        effectButtons = (layer.effects?.kinds ?? []).map { kind in
+            let row = LayerEffectRow(session: session, layerID: layer.id, kind: kind,
+                                     enabled: layer.effects?.isEnabled(kind) == true,
+                                     // The same step in as the row above them, so a clipped layer's effects sit
+                                     // under its name rather than out to the left of it.
+                                     indent: CGFloat(min(depth, 8)) * 24 + (layer.maskSourceID == nil ? 0 : 24))
+            effectRows.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: effectRows.widthAnchor).isActive = true
+            return row
+        }
         // A folder steps its contents in by the same distance a clipping mask does; the two add up.
         indentation.constant = CGFloat(min(depth, 8)) * 24 + (layer.maskSourceID == nil ? 0 : 24)
         disclosure.isHidden = !layer.isGroup
         disclosure.isEnabled = enabled
         disclosure.image = NSImage(systemSymbolName: session.collapsedGroupIDs.contains(layer.id) ? "chevron.right" : "chevron.down", accessibilityDescription: "Expand or collapse folder")
         // Pixel layers and masks show the whole canvas with their pixels where they sit, as Photoshop does;
-        // adjustments and folders keep a square icon. Pictures redraw only when what they show changes.
+        // editable text, adjustments and folders keep a square icon. Pictures redraw only when what they show changes.
         let canvas = session.document?.size ?? CGSize(width: 1, height: 1)
-        let framed = layer.adjustment == nil && !layer.isGroup
+        let editableText = layer.liveText != nil
+        let framed = layer.adjustment == nil && !layer.isGroup && !editableText
         let layerSize = framed ? CanvasThumbnail.fittedSize(canvas: canvas, box: 36) : CGSize(width: 36, height: 36)
         thumbnailWidth.constant = layerSize.width
         thumbnailHeight.constant = layerSize.height
-        let key = ThumbnailKey(image: layer.asset.map { ObjectIdentifier($0.thumbnail) }, transform: layer.transform, canvas: canvas)
+        let key = ThumbnailKey(image: layer.asset.map { ObjectIdentifier($0.thumbnail) }, transform: layer.transform, canvas: canvas, editableText: editableText)
         if layerID != layer.id || thumbnailKey != key {
             thumbnail.image = layer.adjustment.map { Self.adjustmentIcon($0.kind.symbol, description: $0.kind.rawValue, quarterTurnClockwise: $0.kind == .curves) }
                 ?? (layer.isGroup ? Self.folderIcon
+                    : editableText ? Self.adjustmentIcon("textformat", description: "Editable text")
                     : CanvasThumbnail.layer(layer.asset?.thumbnail, transform: layer.transform, canvas: canvas, box: 36))
             thumbnailKey = key
         }
@@ -559,7 +646,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         disabledMaskMark.isHidden = layer.mask?.isEnabled != false
         thumbnail.isEnabled = !session.showsBusy && !session.isImporting
         maskThumbnail.isEnabled = thumbnail.isEnabled
-        let linkable = layer.mask != nil && framed
+        let linkable = layer.mask != nil && layer.adjustment == nil && !layer.isGroup
         maskGap.constant = linkable ? 13 : 5
         linkButton.isHidden = !linkable
         linkButton.image = layer.mask?.isLinked == false ? nil : Self.linkImage
@@ -567,16 +654,16 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         linkButton.toolTip = layer.mask?.isLinked == false ? "Link layer and mask so they move together"
             : "Unlink layer and mask to move or transform them separately"
         linkButton.setAccessibilityLabel(layer.mask?.isLinked == false ? "Link mask: \(layer.name)" : "Unlink mask: \(layer.name)")
-        thumbnail.toolTip = "Select image pixels"
+        thumbnail.toolTip = editableText ? "Editable text layer" : "Select image pixels"
         maskThumbnail.toolTip = "Select layer mask; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
-        thumbnail.setAccessibilityLabel("Select image: \(layer.name)")
+        thumbnail.setAccessibilityLabel("Select \(editableText ? "text" : "image"): \(layer.name)")
         maskThumbnail.setAccessibilityLabel("Select mask: \(layer.name)")
         updateTarget()
         layerName = layer.name
         // A reused cell must not carry another row's half-finished rename.
         if renaming, layerID != layer.id { restoreLabel() }
         if !renaming { nameLabel.stringValue = (layer.maskSourceID == nil ? "" : "↳ ") + layer.name }
-        dimensions.stringValue = layer.adjustment != nil ? "Adjustment · Double-click to edit" : layer.isGroup ? "Folder" : "\(Int(layer.size.width.rounded())) × \(Int(layer.size.height.rounded())) px"
+        dimensions.stringValue = layer.liveText != nil ? "Text · Double-click to edit" : layer.adjustment != nil ? "Adjustment · Double-click to edit" : layer.isGroup ? "Folder" : "\(Int(layer.size.width.rounded())) × \(Int(layer.size.height.rounded())) px"
         if let source = layer.maskSourceID {
             let sourceName = session.document?.layers.first(where: { $0.id == source })?.name ?? "Missing source"
             dimensions.stringValue = "Clipped to \(sourceName)"
@@ -590,7 +677,13 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         alphaValue = visible ? 1 : 0.35
     }
     private var maskThumbnailKey: ThumbnailKey?
+    func selectEffect(at point: NSPoint, editing: Bool) -> Bool {
+        guard let row = effectButtons.first(where: { $0.bounds.contains($0.convert(point, from: nil)) }) else { return false }
+        row.select(editing: editing)
+        return true
+    }
     func updateTarget() {
+        effectButtons.forEach { $0.updateSelection() }
         if let layer = session?.document?.layers.first(where: { $0.id == layerID }),
            let sourceID = layer.maskSourceID,
            let source = session?.document?.layers.first(where: { $0.id == sourceID }) {
@@ -732,6 +825,100 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         icon.accessibilityDescription = description
         adjustmentIcons[symbolName] = icon
         return icon
+    }
+}
+
+/// An effect belongs visually to its layer but has its own selection and visibility control.
+private final class LayerEffectRow: NSView, NSDraggingSource {
+    fileprivate weak var session: EditorSession?
+    fileprivate let layerID: UUID
+    fileprivate let kind: LayerEffectKind
+    private var copyDown: NSEvent?
+    private let eye = NSButton()
+    private let label: NSTextField
+    init(session: EditorSession, layerID: UUID, kind: LayerEffectKind, enabled: Bool, indent: CGFloat) {
+        self.session = session; self.layerID = layerID; self.kind = kind
+        label = NSTextField(labelWithString: kind.rawValue)
+        super.init(frame: .zero)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 24).isActive = true
+        eye.isBordered = false
+        eye.image = NSImage(systemSymbolName: enabled ? "eye" : "eye.slash", accessibilityDescription: nil)
+        eye.imagePosition = .imageOnly
+        eye.contentTintColor = .secondaryLabelColor
+        eye.target = self; eye.action = #selector(toggle)
+        eye.isEnabled = session.canEditLayers
+        eye.setAccessibilityLabel((enabled ? "Hide " : "Show ") + kind.rawValue)
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = enabled ? .labelColor : .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        for view in [eye, label] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
+        NSLayoutConstraint.activate([
+            eye.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 38 + indent),
+            eye.centerYAnchor.constraint(equalTo: centerYAnchor),
+            eye.widthAnchor.constraint(equalToConstant: 20), eye.heightAnchor.constraint(equalToConstant: 22),
+            label.leadingAnchor.constraint(equalTo: eye.trailingAnchor, constant: 8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        ])
+        toolTip = "Click to select; double-click to edit; Option-drag to copy " + kind.rawValue.lowercased()
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel(kind.rawValue + " effect")
+        updateSelection()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard bounds.contains(local) else { return nil }
+        let flags = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+        if flags.contains(.option), !flags.contains(.command) { return self }
+        return eye.frame.contains(local) ? eye : self
+    }
+    func select(editing: Bool) {
+        session?.selectEffect(kind, on: layerID, editing: editing)
+        var ancestor = superview
+        while let view = ancestor, !(view is NSTableView) { ancestor = view.superview }
+        if let ancestor { window?.makeFirstResponder(ancestor) }
+        updateSelection()
+    }
+    override func mouseDown(with event: NSEvent) {
+        copyDown = nil
+        if event.modifierFlags.contains(.option), !event.modifierFlags.contains(.command), session?.canEditLayers == true {
+            copyDown = event
+        } else { select(editing: event.clickCount > 1) }
+    }
+    override func mouseUp(with event: NSEvent) {
+        if copyDown != nil { copyDown = nil; select(editing: false) }
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let down = copyDown else { return }
+        let dx = event.locationInWindow.x - down.locationInWindow.x
+        let dy = event.locationInWindow.y - down.locationInWindow.y
+        guard dx * dx + dy * dy >= 9 else { return }
+        copyDown = nil
+        guard event.modifierFlags.contains(.option), session?.canEditLayers == true else { return }
+        let item = NSPasteboardItem()
+        item.setString(layerID.uuidString + ":" + kind.rawValue, forType: NativeLayerList.Coordinator.effectType)
+        let dragging = NSDraggingItem(pasteboardWriter: item)
+        let snapshot = NSImage(size: bounds.size)
+        if let rep = bitmapImageRepForCachingDisplay(in: bounds) {
+            cacheDisplay(in: bounds, to: rep)
+            snapshot.addRepresentation(rep)
+        }
+        dragging.setDraggingFrame(bounds, contents: snapshot)
+        beginDraggingSession(with: [dragging], event: down, source: self)
+    }
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? .copy : []
+    }
+    func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
+    override func accessibilityPerformPress() -> Bool { select(editing: false); return true }
+    @objc private func toggle() { session?.toggleEffect(kind, on: layerID) }
+    func updateSelection() {
+        let selected = session?.selectedEffect == LayerEffectSelection(layerID: layerID, kind: kind)
+        layer?.backgroundColor = selected ? NSColor.controlAccentColor.withAlphaComponent(0.3).cgColor : NSColor.clear.cgColor
     }
 }
 
@@ -893,4 +1080,5 @@ private struct ThumbnailKey: Equatable {
     let image: ObjectIdentifier?
     let transform: LayerTransform
     let canvas: CGSize
+    var editableText = false
 }

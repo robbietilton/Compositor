@@ -11,11 +11,22 @@ nonisolated enum DistortWarp {
         [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1)].map(transform.point)
     }
 
-    /// Four finite corners making a convex, non-degenerate shape; a twisted (bow-tie) or collapsed
-    /// shape has no sensible warp and is refused.
+    /// Four finite corners with some area to them. A convex shape is warped in perspective; anything else — a corner
+    /// pulled past its neighbours, which folds the shape over — is warped as two triangles instead (see `warp`).
     static func isUsable(_ corners: [CGPoint]) -> Bool {
         guard corners.count == 4,
               corners.allSatisfy({ $0.x.isFinite && $0.y.isFinite && abs($0.x) <= 1_000_000 && abs($0.y) <= 1_000_000 }) else { return false }
+        // Both halves need area, or one of them has nothing to draw.
+        return abs(area(corners[0], corners[1], corners[2])) > 0.01 && abs(area(corners[0], corners[2], corners[3])) > 0.01
+    }
+
+    private static func area(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGFloat {
+        (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    }
+
+    /// A shape a perspective warp can take: convex, wound consistently either way (so a mirrored one counts).
+    static func isConvex(_ corners: [CGPoint]) -> Bool {
+        guard isUsable(corners) else { return false }
         var sign: CGFloat = 0
         for index in 0..<4 {
             let a = corners[index], b = corners[(index + 1) % 4], c = corners[(index + 2) % 4]
@@ -24,6 +35,21 @@ nonisolated enum DistortWarp {
             if sign == 0 { sign = cross < 0 ? -1 : 1 } else if (cross < 0) != (sign < 0) { return false }
         }
         return true
+    }
+
+    /// The affine map taking three source points to three destination points.
+    private static func affine(from source: (CGPoint, CGPoint, CGPoint), to target: (CGPoint, CGPoint, CGPoint)) -> CGAffineTransform? {
+        let u = CGPoint(x: source.1.x - source.0.x, y: source.1.y - source.0.y)
+        let v = CGPoint(x: source.2.x - source.0.x, y: source.2.y - source.0.y)
+        let uu = CGPoint(x: target.1.x - target.0.x, y: target.1.y - target.0.y)
+        let vv = CGPoint(x: target.2.x - target.0.x, y: target.2.y - target.0.y)
+        let det = u.x * v.y - v.x * u.y
+        guard abs(det) > 1e-9 else { return nil }
+        let a = (uu.x * v.y - vv.x * u.y) / det, c = (vv.x * u.x - uu.x * v.x) / det
+        let b = (uu.y * v.y - vv.y * u.y) / det, d = (vv.y * u.x - uu.y * v.x) / det
+        return CGAffineTransform(a: a, b: b, c: c, d: d,
+                                 tx: target.0.x - (a * source.0.x + c * source.0.y),
+                                 ty: target.0.y - (b * source.0.x + d * source.0.y))
     }
 
     /// The perspective mapping of the unit square (corners in `corners(of:)` order) onto `c`.
@@ -75,6 +101,12 @@ nonisolated enum DistortWarp {
         let width = max(1, Int((bounds.width * factor).rounded(.up)))
         let height = max(1, Int((bounds.height * factor).rounded(.up)))
         let target = imageCorners(corners, flipX: transform.flipX, flipY: transform.flipY)
+        // A folded shape (a corner dragged past its neighbours) has no perspective that takes the image to it, so
+        // each half is taken there on its own, as two triangles meeting along the shape's diagonal.
+        if !isConvex(corners) {
+            return (try warpFolded(image, target: target, bounds: bounds, factor: factor,
+                                   width: width, height: height, isMask: isMask), placed)
+        }
         // Core Image measures y upward from the bottom of the output.
         func vector(_ point: CGPoint) -> CIVector {
             CIVector(x: (point.x - bounds.minX) * factor, y: (bounds.maxY - point.y) * factor)
@@ -84,6 +116,39 @@ nonisolated enum DistortWarp {
             "inputBottomRight": vector(target.bottomRight), "inputBottomLeft": vector(target.bottomLeft),
         ])
         return (try PixelAdjust.render(warped, width: width, height: height, isMask: isMask), placed)
+    }
+
+    /// The image drawn into a shape as two triangles: the halves either side of the diagonal, each taken there by
+    /// its own affine map. Handles folded and dented shapes, which a perspective warp cannot.
+    private static func warpFolded(_ image: CGImage, target: (topLeft: CGPoint, topRight: CGPoint, bottomRight: CGPoint, bottomLeft: CGPoint),
+                                   bounds: CGRect, factor: CGFloat, width: Int, height: Int, isMask: Bool) throws -> CGImage {
+        let context = try BrushRaster.context(width: width, height: height, mask: isMask)
+        let source = CGRect(x: 0, y: 0, width: CGFloat(image.width), height: CGFloat(image.height))
+        let corners = (topLeft: CGPoint(x: source.minX, y: source.minY), topRight: CGPoint(x: source.maxX, y: source.minY),
+                       bottomRight: CGPoint(x: source.maxX, y: source.maxY), bottomLeft: CGPoint(x: source.minX, y: source.maxY))
+        func placed(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: (point.x - bounds.minX) * factor, y: (point.y - bounds.minY) * factor)
+        }
+        let halves = [((corners.topLeft, corners.topRight, corners.bottomRight), (target.topLeft, target.topRight, target.bottomRight)),
+                      ((corners.topLeft, corners.bottomRight, corners.bottomLeft), (target.topLeft, target.bottomRight, target.bottomLeft))]
+        for (from, to) in halves {
+            let destination = (placed(to.0), placed(to.1), placed(to.2))
+            guard let map = affine(from: from, to: destination) else { continue }
+            context.saveGState()
+            // Hard edges along the shared diagonal, so the two halves meet exactly instead of blending twice.
+            context.setShouldAntialias(false)
+            let triangle = CGMutablePath()
+            triangle.addLines(between: [destination.0, destination.1, destination.2])
+            triangle.closeSubpath()
+            context.addPath(triangle)
+            context.clip()
+            context.concatenate(map)
+            context.setShouldAntialias(true)
+            BrushRaster.draw(image, in: source, mask: isMask, context: context)
+            context.restoreGState()
+        }
+        guard let result = context.makeImage() else { throw ExportError.render }
+        return result
     }
 
     /// A full-resolution warp cropped to its visible pixels. A distorted shape rarely fills its
@@ -146,7 +211,7 @@ nonisolated enum DistortWarp {
     /// distorted shape, so a transformed selection keeps matching its pixels.
     static func mapPath(_ path: CGPath, pixelToDocument: CGAffineTransform, pixelSize: CGSize,
                         transform: LayerTransform, corners: [CGPoint]) -> CGPath? {
-        guard isUsable(corners), pixelSize.width > 0, pixelSize.height > 0 else { return nil }
+        guard isConvex(corners), pixelSize.width > 0, pixelSize.height > 0 else { return nil }
         let toPixels = pixelToDocument.inverted()
         let map = homography(corners)
         func carry(_ point: CGPoint) -> CGPoint {
@@ -174,6 +239,13 @@ nonisolated enum DistortWarp {
 }
 
 /// The canvas's last warped preview, reused while the distortion and layer are unchanged.
+/// The last effects image warped for a distortion, so the corners can keep moving without redoing it.
+struct DistortEffectsCache {
+    let corners: [CGPoint]
+    let image: CGImage
+    let result: (image: CGImage, transform: LayerTransform)?
+}
+
 struct DistortPreviewCache {
     let corners: [CGPoint]
     let draft: LayerTransform
@@ -208,6 +280,28 @@ extension EditorSession {
     }
 
     /// The layer warped into the pending distortion, at preview size, for the canvas to draw.
+    /// A layer's effects, warped into the shape a distortion in progress is making — so its stroke and shadow stay
+    /// on while the corners are dragged, rather than disappearing until the distortion is applied. `image` is the
+    /// layer with its effects around it (see `LayerEffectsRenderer`), which already includes its mask.
+    func distortedEffects(for layer: ImageLayer, effects image: CGImage, inset: CGFloat) -> (image: CGImage, transform: LayerTransform)? {
+        guard let edit = transformEdit, !edit.mask, let shape = edit.corners,
+              let target = distortTarget(for: layer, edit: edit, shape: shape) else { return nil }
+        return distortedEffects(for: layer, effects: image, inset: inset, target: target)
+    }
+
+    /// The same, for a distortion whose target is already known — the commit, which runs once the edit is over.
+    func distortedEffects(for layer: ImageLayer, effects image: CGImage, inset: CGFloat,
+                          target: (transform: LayerTransform, corners: [CGPoint])) -> (image: CGImage, transform: LayerTransform)? {
+        // The effects image is the layer's box grown by its margin; its corners take the same perspective.
+        let grown = LayerEffectsRenderer.placed(target.transform, image: image, inset: inset)
+        let carried = DistortWarp.carried(grown, by: target.transform, to: target.corners)
+        if let cache = distortEffectsCache[layer.id], cache.corners == carried, cache.image === image { return cache.result }
+        let result = (try? DistortWarp.warp(image, transform: grown, corners: carried, isMask: false, limit: 2048))
+            .map { (image: $0.image, transform: $0.transform) }
+        distortEffectsCache[layer.id] = DistortEffectsCache(corners: carried, image: image, result: result)
+        return result
+    }
+
     func distortPreview(for layer: ImageLayer) -> (image: CGImage, mask: CGImage?, transform: LayerTransform)? {
         guard let edit = transformEdit, !edit.mask, let shape = edit.corners, let image = layer.asset?.image,
               let target = distortTarget(for: layer, edit: edit, shape: shape) else { return nil }
@@ -223,7 +317,7 @@ extension EditorSession {
                 warpedMask = mask.flatMap { try? DistortWarp.warp($0, transform: transform, corners: corners, isMask: true, limit: 2048).image }
             } else if let owned, owned.isLinked, let placed = owned.placement,
                       case let placement = placed.following(from: layer.transform, to: transform),
-                      case let carried = DistortWarp.carried(placement, by: transform, to: corners), DistortWarp.isUsable(carried),
+                      case let carried = DistortWarp.carried(placement, by: transform, to: corners), DistortWarp.isConvex(carried),
                       let moved = try? DistortWarp.warpMask(owned.asset.image, transform: placement, corners: carried,
                                                             background: LayerMask.background(of: owned.asset.thumbnail), limit: 2048) {
                 // A linked mask placed apart takes the same perspective over its own bounds.
@@ -244,13 +338,21 @@ extension EditorSession {
     /// Apply for a distortion: each distorted layer's pixels and mask are resampled into its shape, as one undo step.
     func commitDistort(_ edit: TransformEdit, corners shape: [CGPoint]) {
         distortPreviewCache = [:]
+        defer { distortEffectsCache = [:] }
         let ids = edit.group.map { Array($0.originals.keys) } ?? [edit.layerID]
         beginEdit(edit.group == nil ? "Distort" : "Distort Layers")
         for id in ids {
             guard let index = document?.layers.firstIndex(where: { $0.id == id }), let layer = document?.layers[index],
                   let target = distortTarget(for: layer, edit: edit, shape: shape) else { continue }
+            // The effects warped for this distortion are already in hand: keep showing them until the worker has
+            // rendered the effects for the layer's new pixels, or they blink off for a frame on Apply.
+            let warpedEffects = effectsPreviews.rendered(id)
+                .flatMap { distortedEffects(for: layer, effects: $0.image, inset: $0.inset, target: target) }
             do { try distort(at: index, transform: target.transform, corners: target.corners) }
             catch { brushError = error.localizedDescription }
+            // Placed where it was warped to: applying a distortion also crops the layer, so the margins around it
+            // are no longer even and an inset could not put it back in the right place.
+            if let warpedEffects { effectsPreviews.seed(id, image: warpedEffects.image, placement: warpedEffects.transform) }
         }
         endEdit()
     }
@@ -274,7 +376,7 @@ extension EditorSession {
             mask = original.replacing(maskAsset)
         } else if let original = layer.mask, original.isLinked, let placed = original.placement,
                   case let placement = placed.following(from: layer.transform, to: transform),
-                  case let carried = DistortWarp.carried(placement, by: transform, to: corners), DistortWarp.isUsable(carried) {
+                  case let carried = DistortWarp.carried(placement, by: transform, to: corners), DistortWarp.isConvex(carried) {
             // A linked mask placed apart takes the same perspective over its own bounds.
             let moved = try DistortWarp.warpMask(original.asset.image, transform: placement, corners: carried,
                                                  background: LayerMask.background(of: original.asset.thumbnail))

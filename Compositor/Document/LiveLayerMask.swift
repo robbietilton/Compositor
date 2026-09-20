@@ -166,7 +166,14 @@ extension EditorSession {
             guard let layer = records[id], let image = layer.asset?.image else { return }
             let transform = self.displayedTransform(for: layer)
             let mask = layer.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
+            let effects = LayerEffectsRenderer.cached(image, mask: mask, effects: layer.effects)
             func drawLayer(_ mode: LayerBlendMode, _ target: CGContext) {
+                if let effects {
+                    let grown = LayerEffectsRenderer.placed(transform, image: effects.image, inset: effects.inset)
+                    LayerRenderer.draw(effects.image, transform: grown, center: grown.center, opacity: layer.opacity,
+                        blendMode: mode, mask: nil, in: target)
+                    return
+                }
                 LayerRenderer.draw(image, transform: transform, center: transform.center, opacity: layer.opacity,
                     blendMode: mode, mask: mask, in: target)
             }

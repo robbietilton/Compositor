@@ -40,6 +40,9 @@ extension EditorSession {
     func fillSelection(with source: FillSource) async {
         guard canEditPixels, let layer = activeLayer else { return }
         let value = paletteColor(background: source == .background)
+        // A text layer that is still text takes the color as its own, rather than being painted over: the letters
+        // change color and stay editable.
+        if !isMaskSelected, selection == nil, layer.liveText != nil, recolorText(layer.id, to: value) { return }
         let color = isMaskSelected
             ? CGColor(gray: value.red, alpha: 1)
             : CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: [value.red, value.green, value.blue, 1])!
@@ -58,6 +61,7 @@ extension EditorSession {
     /// The Delete key: clears the selection when there is one; otherwise deletes the
     /// targeted mask, or the layer when its pixels are targeted.
     func deleteKeyPressed() {
+        if selectedEffect != nil { removeSelectedEffect(); return }
         if selection != nil { Task { await clearSelectedPixels() } }
         else { deleteLayerOrMask() }
     }
@@ -65,6 +69,7 @@ extension EditorSession {
     /// The trash button and Delete without a selection: with one layer's mask thumbnail targeted
     /// only the mask goes; otherwise every selected layer does, in one undo step.
     func deleteLayerOrMask() {
+        if selectedEffect != nil { removeSelectedEffect(); return }
         if isMaskSelected, activeLayer?.mask != nil, selectedLayerIDs.count <= 1 { deleteLayerMask() }
         else { deleteSelectedLayers() }
     }

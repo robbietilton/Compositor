@@ -141,6 +141,7 @@ struct SelectionTests {
         #expect(session.displayedSelectionMode == .subtract)
         session.updateHeldSelectionKeys(shift: false, option: false)
         #expect(session.displayedSelectionMode == .replace)
+        #expect(CanvasView.selectionCursors.values.allSatisfy { $0.count == 3 && $0[.replace] != nil })
     }
 
     @Test func draggingMovesTheOutlineInWholePixelsAsOneUndo() throws {

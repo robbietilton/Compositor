@@ -24,8 +24,7 @@ struct BrushControls: View {
                 Picker("Type", selection: $session.spotHealingMode) {
                     ForEach(SpotHealingMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 330)
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .accessibilityIdentifier("spotHealingType")
             }
             if session.tool == .cloneStamp {

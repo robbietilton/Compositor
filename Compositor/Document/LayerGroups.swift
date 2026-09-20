@@ -63,11 +63,26 @@ extension CanvasDocument {
 
 extension EditorSession {
     func selectLayers(_ ids: Set<UUID>, primary: UUID?) {
+        effectSelection = nil
+        if ids != selectedLayerIDs, !finishText() { return }
         guard brushStroke == nil else { return }
         let valid = ids.intersection(Set(document?.layers.map(\.id) ?? []))
         if valid != selectedLayerIDs { commitTransform(); resolveGradient() }
         activeLayerID = primary.flatMap { valid.contains($0) ? $0 : nil } ?? valid.first
         selectedLayerIDs = valid
+    }
+
+    /// Cmd-Shift-click on the canvas: adds a layer to the selection, or takes it out again when it is already in it.
+    func extendSelection(with id: UUID) {
+        guard canEditLayers || transformEdit != nil, document?.layers.contains(where: { $0.id == id }) == true else { return }
+        var ids = selectedLayerIDs
+        if ids.contains(id), ids.count > 1 {
+            ids.remove(id)
+            selectLayers(ids, primary: activeLayerID == id ? ids.first : activeLayerID)
+        } else {
+            ids.insert(id)
+            selectLayers(ids, primary: id)
+        }
     }
 
     func groupSelectedLayers() {
