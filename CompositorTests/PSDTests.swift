@@ -128,6 +128,37 @@ struct PSDTests {
         #expect(url.isProjectDocument)
     }
 
+    @Test func layerOriginsRoundTripWithoutSwappingAxes() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 50, height: 80)
+        let bytes: [UInt8] = [255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255]
+        let image = try #require(CGImage(width: 2, height: 2, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 8,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
+            provider: CGDataProvider(data: Data(bytes) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Offset"))
+        session.document?.layers[0].transform.origin = CGPoint(x: 10, y: 40)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("PSD-origin-\(UUID().uuidString).psd")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await PSDCodec.shared.save(try #require(session.projectSnapshot()), to: url)
+        let reopened = EditorSession()
+        reopened.installProject(try await PSDCodec.shared.load(from: url), from: url)
+        let origin = try #require(reopened.document?.layers.first?.transform.origin)
+        #expect(origin.x == 10)
+        #expect(origin.y == 40)
+
+        session.document?.layers[0].transform.size = CGSize(width: 4, height: 2)
+        session.document?.layers[0].transform.origin = CGPoint(x: 6, y: 24)
+        let scaled = FileManager.default.temporaryDirectory.appendingPathComponent("PSD-scaled-\(UUID().uuidString).psd")
+        defer { try? FileManager.default.removeItem(at: scaled) }
+        try await PSDCodec.shared.save(try #require(session.projectSnapshot()), to: scaled)
+        let baked = EditorSession()
+        baked.installProject(try await PSDCodec.shared.load(from: scaled), from: scaled)
+        let bakedOrigin = try #require(baked.document?.layers.first?.transform.origin)
+        #expect(bakedOrigin.x == 6)
+        #expect(bakedOrigin.y == 24)
+    }
+
     @Test func masksGroupsClippingAndVisibilityRoundTrip() async throws {
         let session = EditorSession()
         session.createDocument(width: 2, height: 2)

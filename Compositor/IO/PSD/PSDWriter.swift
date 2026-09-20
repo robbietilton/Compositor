@@ -130,7 +130,7 @@ nonisolated enum PSDWriter {
             layer.mask = try maskChannel(record, snapshot)
             return layer
         }
-        let (pixels, top, left) = try raster(record, snapshot)
+        let (pixels, left, top) = try raster(record, snapshot)
         var layer = WrittenLayer(top: top, left: left, bottom: top + (pixels?.height ?? 0), right: left + (pixels?.width ?? 0),
             name: record.name, visible: record.isVisible,
             opacity: UInt8(((record.opacity ?? 1) * 255).rounded()), clipped: clipped,
@@ -140,7 +140,7 @@ nonisolated enum PSDWriter {
         return layer
     }
 
-    private static func raster(_ record: ProjectLayerRecord, _ snapshot: ProjectSnapshot) throws -> (PSDPixels.RGBA?, Int, Int) {
+    private static func raster(_ record: ProjectLayerRecord, _ snapshot: ProjectSnapshot) throws -> (pixels: PSDPixels.RGBA?, left: Int, top: Int) {
         guard let asset = snapshot.images[record.id] else { return (nil, 0, 0) }
         let image = asset.image
         let transform = record.transform
