@@ -26,6 +26,17 @@ struct ProjectTabStrip: View {
     @State private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private let dragTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     var body: some View {
+        HStack(spacing: 0) {
+            // Only as wide as the tabs themselves. A scroll view hit-tests its whole frame however little
+            // it holds, so one stretched to the toolbar's full width swallows every title-bar drag that
+            // starts in the middle of the window.
+            tabs.frame(maxWidth: contentWidth ?? .infinity).layoutPriority(1)
+            // The room the tabs don't need stays title bar, and keeps dragging the window.
+            Color.clear.contentShape(Rectangle()).gesture(WindowDragGesture())
+        }
+        .frame(height: 34, alignment: .center)
+    }
+    private var tabs: some View {
         ScrollViewReader { reader in
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
