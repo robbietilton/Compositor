@@ -156,6 +156,38 @@ struct ProjectTests {
         catch {}
     }
 
+    @Test func versions1Through7RemainReadable() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for version in 1...7 {
+            let package = root.appendingPathComponent("Version-\(version).comp")
+            try FileManager.default.createDirectory(at: package.appendingPathComponent("images"),
+                                                    withIntermediateDirectories: true)
+            var manifest = ProjectManifest(documentID: UUID(), width: 32, height: 24,
+                                           activeLayerID: nil, layers: [])
+            manifest.version = version
+            try JSONEncoder().encode(manifest).write(to: package.appendingPathComponent("manifest.json"))
+            let loaded = try await ProjectStore.shared.load(from: package)
+            #expect(loaded.manifest.version == version)
+        }
+    }
+
+    @Test func invalidVersion8TextMetadataIsRejected() async throws {
+        let id = UUID()
+        let invalid = LayerTextStyle(content: "Text", fontPostScriptName: "Helvetica", fontSizePoints: 0,
+            red: 0, green: 0, blue: 0, alpha: 1, alignment: .left,
+            lineSpacingPoints: 0, trackingPoints: 0, layout: .point)
+        let record = ProjectLayerRecord(id: id, name: "Text", isVisible: true,
+            transform: LayerTransform(origin: .zero, size: CGSize(width: 10, height: 10)),
+            imageFile: "\(id).png", text: invalid)
+        let snapshot = ProjectSnapshot(manifest: ProjectManifest(documentID: UUID(), width: 32, height: 24,
+            activeLayerID: id, layers: [record]), images: [:])
+        await #expect(throws: ProjectError.self) {
+            try await ProjectStore.shared.save(snapshot, to: FileManager.default.temporaryDirectory
+                .appendingPathComponent("Invalid-Text-\(UUID()).comp"))
+        }
+    }
+
     @Test func projectOperationsBlockEditsAndQueueImageImports() async throws {
         let source = try ImageImportTests().fixture(.png)
         defer { try? FileManager.default.removeItem(at: source) }

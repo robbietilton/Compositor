@@ -5683,6 +5683,90 @@
     "Clipping mask based on %@. Option-click the bottom of its row to release.": {
       "extractionState": "manual",
       "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "基于 %@ 的剪贴蒙版。按住 Option 键点按其行底部可释放。" } } }
+    },
+    "Text": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "文字" } } }
+    },
+    "Font": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体" } } }
+    },
+    "Alignment": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "对齐" } } }
+    },
+    "Line": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "行距" } } }
+    },
+    "Tracking": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字距" } } }
+    },
+    "Import font": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "导入字体" } } }
+    },
+    "Import an OTF, TTF, or TTC font": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "导入 OTF、TTF 或 TTC 字体" } } }
+    },
+    "Missing font — using Source Han Sans": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体缺失——正使用思源黑体替代" } } }
+    },
+    "Text editor": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "文字编辑器" } } }
+    },
+    "Text (T)": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "文字 (T)" } } }
+    },
+    "Add Text": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加文字" } } }
+    },
+    "Edit Text": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "编辑文字" } } }
+    },
+    "Text %lld": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "文字 %lld" } } }
+    },
+    "Choose one OTF, TTF, or TTC font file.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "请选择一个 OTF、TTF 或 TTC 字体文件。" } } }
+    },
+    "The font file is empty.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体文件为空。" } } }
+    },
+    "The font file is larger than 100 MB.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体文件大于 100 MB。" } } }
+    },
+    "The font file is damaged or contains no usable faces.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "字体文件已损坏或不含可用字形。" } } }
+    },
+    "The font could not be copied into Compositor’s font library.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法将字体复制到 Compositor 字体库。" } } }
+    },
+    "The font could not be registered for this app.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法为此应用注册字体。" } } }
+    },
+    "Click for point text · Drag for a text box · ⌘Return commits · Escape cancels": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "点按创建点文字 · 拖动创建文本框 · ⌘Return 提交 · Escape 取消" } } }
+    },
+    "This project uses format version %lld. This app supports versions 1–8.": {
+      "extractionState": "manual",
+      "localizations": { "zh-Hans": { "stringUnit": { "state": "translated", "value": "此项目使用格式版本 %lld。本应用支持版本 1–8。" } } }
     }
   },
   "version": "1.0"

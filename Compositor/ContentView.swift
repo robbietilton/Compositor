@@ -41,6 +41,10 @@ struct ContentView: View {
                 ShapeControls(session: session)
                 Divider()
             }
+            if session.tool == .text {
+                TextControls(session: session)
+                Divider()
+            }
             if session.tool == .eyedropper {
                 HStack(spacing: 16) {
                     Text("Eyedropper").font(ToolHeaderStyle.titleFont)
@@ -297,6 +301,8 @@ struct ContentView: View {
             let constraint = (session.shapeKind == .rectangle ? "square" : "circle").localized
             let alternate = (session.shapeKind == .rectangle ? "ellipse" : "rectangle").localized
             return String(localized: "Drag to draw a shape on a new layer · Shift \(constraint) · Option from center · Shift-U \(alternate) · Escape cancel · Space to pan")
+        case .text:
+            return "Click for point text · Drag for a text box · ⌘Return commits · Escape cancels".localized
         case .gradient:
             return "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel".localized
         case .crop:

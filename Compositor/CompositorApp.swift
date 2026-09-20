@@ -28,7 +28,7 @@ struct CompositorApp: App {
                 CommandGroup(replacing: .undoRedo) {
                     // Dialog text fields keep native text undo; document history
                     // is unavailable while an import or modal edit is active.
-                    if session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
+                    if session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true || session.textDraft != nil {
                         Button("Undo") {
                             if NSApp.keyWindow?.firstResponder is NSTextView {
                                 NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)

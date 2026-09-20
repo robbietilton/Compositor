@@ -149,7 +149,7 @@ extension EditorSession {
               let index = document?.layers.firstIndex(where: { $0.id == layer.id }) else { return }
         let copy = ImageLayer(id: UUID(), asset: layer.asset, name: String(localized: "\(layer.name) copy"), isVisible: layer.isVisible,
                               transform: layer.transform, parentID: layer.parentID, isGroup: false,
-                              opacity: layer.opacity, blendMode: layer.blendMode, mask: layer.mask, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, shape: layer.shape)
+                              opacity: layer.opacity, blendMode: layer.blendMode, mask: layer.mask, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, shape: layer.shape, text: layer.text)
         beginEdit("Duplicate Layer")
         document?.layers.insert(copy, at: index + 1)
         activeLayerID = copy.id
@@ -172,11 +172,12 @@ extension EditorSession {
 
     /// Inserts pixels as a new layer above the active one (inside its folder), all in one undo
     /// step. Pasting drops the selection, as in Photoshop; a drawn shape keeps it.
-    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true, shape: LayerShape? = nil) {
+    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true, shape: LayerShape? = nil, text: LayerText? = nil) {
         guard let document, let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
         var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: thumbnail, name: name), origin: origin)
         layer.name = name
         layer.shape = shape
+        layer.text = text
         layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
         let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
         finishOpacityEdit()

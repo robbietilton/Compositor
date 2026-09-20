@@ -1,8 +1,8 @@
-# Compositor project format, versions 1–6
+# Compositor project format, versions 1–8
 
 A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
-The manifest identifies `com.compositor.project`, version `6` for new saves (versions `1`–`5` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+The manifest identifies `com.compositor.project`, version `8` for new saves (versions `1`–`7` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 
 Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
 
@@ -25,3 +25,7 @@ Version 5 adds optional `maskSourceID`: the UUID of a non-group layer supplying 
 UI terminology: these alpha links are clipping masks. Option-click assigns the lower sibling’s base or releases the connection. Multiple clipped layers share one base, show indented above it, and release when moved outside the contiguous stack. The underlying `maskSourceID` representation is unchanged.
 
 Version 6 allows `maskFile` and `maskEnabled` on group records. A folder has no image, so its mask covers the folder's own transform rectangle (the canvas size when the folder was created); Image Size resamples it through that transform, and Canvas Size and Crop preserve its pixels, exactly as for layer masks. Groups are pass-through, so an enabled folder mask multiplies the coverage of every descendant layer, together with that layer's own mask and any enclosing folders' masks; clipping-mask coverage is unaffected. Files declaring versions 1–5 cannot give a group a mask, and older app builds reject v6.
+
+Version 7 adds optional non-destructive `adjustment` metadata to adjustment layers. These records are non-group layers without image assets; older versions cannot contain adjustment metadata.
+
+Version 8 adds optional `text` metadata to raster-backed text layers: Unicode content, PostScript font name, point size, sRGB color and alpha, paragraph alignment, line spacing, tracking, and point- or fixed-width box layout. The embedded PNG remains the display fallback when a saved font is unavailable. Text metadata is editable until a pixel operation intentionally rasterizes the layer; transform-only edits keep it live. While the native text editor is open, its canvas preview does not apply layer blending, masks, or clipping masks; committing restores the final composite. Files declaring versions 1–7 cannot contain text metadata.

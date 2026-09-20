@@ -9,7 +9,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     var format = "com.compositor.project"
-    var version = 7
+    var version = 8
     var colorSpace = "sRGB"
     var resolution: Double? = nil // Older version-1 projects default to 72 pixels/inch.
     let documentID: UUID
@@ -39,6 +39,8 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     var maskLinked: Bool? = nil
     /// A shape layer's shape, drawn again when the layer is scaled. Older versions ignore it and keep the pixels.
     var shape: LayerShapeStyle? = nil
+    /// A text layer's single style. Its PNG remains authoritative when the font is unavailable.
+    var text: LayerTextStyle? = nil
 }
 
 nonisolated struct ProjectSnapshot: @unchecked Sendable {
@@ -52,7 +54,7 @@ nonisolated enum ProjectError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid: "This is not a valid Compositor project, or its metadata is damaged.".localized
-        case .version(let version): String(localized: "This project uses format version \(version). This app supports versions 1–7.")
+        case .version(let version): String(localized: "This project uses format version \(version). This app supports versions 1–8.")
         case .missingImage: "An image inside the project is missing or damaged. The current document has not been replaced.".localized
         case .tooLarge: "This project exceeds the supported canvas, layer, file-size, or 100-megapixel image limit.".localized
         case .encode: "An image could not be saved. The previous project has not been replaced.".localized
@@ -132,7 +134,7 @@ actor ProjectStore {
         do { header = try JSONDecoder().decode(Header.self, from: metadata) }
         catch { throw ProjectError.invalid }
         guard header.format == "com.compositor.project" else { throw ProjectError.invalid }
-        guard (1...7).contains(header.version) else { throw ProjectError.version(header.version) }
+        guard (1...8).contains(header.version) else { throw ProjectError.version(header.version) }
         do { manifest = try JSONDecoder().decode(ProjectManifest.self, from: metadata) }
         catch { throw ProjectError.invalid }
         try validate(manifest)
@@ -172,7 +174,7 @@ actor ProjectStore {
 
     private func validate(_ manifest: ProjectManifest) throws {
         guard manifest.format == "com.compositor.project" else { throw ProjectError.invalid }
-        guard (1...7).contains(manifest.version) else { throw ProjectError.version(manifest.version) }
+        guard (1...8).contains(manifest.version) else { throw ProjectError.version(manifest.version) }
         guard manifest.colorSpace == "sRGB" else { throw ProjectError.invalid }
         if let resolution = manifest.resolution {
             guard resolution.isFinite, (1...9600).contains(resolution) else { throw ProjectError.invalid }
@@ -180,6 +182,18 @@ actor ProjectStore {
         guard (1...30_000).contains(manifest.width), (1...30_000).contains(manifest.height),
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
+            if let text = layer.text {
+                guard manifest.version >= 8, layer.isGroup != true, layer.imageFile != nil,
+                      !text.content.isEmpty, text.content.utf8.count <= 1_000_000,
+                      !text.fontPostScriptName.isEmpty, text.fontPostScriptName.utf8.count <= 1024,
+                      text.fontSizePoints.isFinite, (1...2000).contains(text.fontSizePoints),
+                      [text.red, text.green, text.blue, text.alpha].allSatisfy({ $0.isFinite && (0...1).contains($0) }),
+                      text.lineSpacingPoints.isFinite, (-2000...2000).contains(text.lineSpacingPoints),
+                      text.trackingPoints.isFinite, (-2000...2000).contains(text.trackingPoints) else { throw ProjectError.invalid }
+                if case .box(let width) = text.layout {
+                    guard width.isFinite, (1...30_000).contains(width) else { throw ProjectError.invalid }
+                }
+            }
             if let adjustment = layer.adjustment {
                 guard manifest.version >= 7, layer.isGroup != true, layer.imageFile == nil, adjustment.isValid else { throw ProjectError.invalid }
             }

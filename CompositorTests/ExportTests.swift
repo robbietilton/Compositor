@@ -73,4 +73,34 @@ struct ExportTests {
             activeLayerID: nil, layers: []), images: [:])
         await #expect(throws: ExportError.self) { try await ImageExporter.shared.pngData(huge) }
     }
+
+    @Test func rotatedChineseBoxTextExportsToPNGAndJPEG() async throws {
+        let style = LayerTextStyle(content: "中文与 English 👋 自动换行", fontPostScriptName: "Helvetica",
+            fontSizePoints: 24, red: 0.1, green: 0.2, blue: 0.8, alpha: 1, alignment: .center,
+            lineSpacingPoints: 5, trackingPoints: 1, layout: .box(width: 120))
+        let rendered = try TextLayoutSession(style: style, resolution: 144).render()
+        let id = UUID()
+        let transform = LayerTransform(origin: CGPoint(x: 40, y: 30), size: rendered.naturalSize,
+                                       rotation: 28, flipX: true)
+        let record = ProjectLayerRecord(id: id, name: "Text", isVisible: true, transform: transform,
+            imageFile: "\(id).png", text: style)
+        let asset = ImportedImage(image: rendered.image, thumbnail: rendered.image, name: "Text")
+        let snapshot = ProjectSnapshot(manifest: ProjectManifest(resolution: 144, documentID: UUID(),
+            width: 320, height: 220, activeLayerID: id, layers: [record]), images: [id: asset])
+
+        let png = try await ImageExporter.shared.pngData(snapshot)
+        let pngBitmap = try #require(NSBitmapImageRep(data: png))
+        var visiblePixels = 0
+        for y in 0..<pngBitmap.pixelsHigh {
+            for x in 0..<pngBitmap.pixelsWide where (pngBitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 {
+                visiblePixels += 1
+            }
+        }
+        #expect(visiblePixels > 100)
+
+        let raster = try await ImageExporter.shared.render(snapshot)
+        let jpeg = try await ImageExporter.shared.jpeg(raster, options: JPEGOptions())
+        #expect(!jpeg.data.isEmpty)
+        #expect(jpeg.preview.width > 0 && jpeg.preview.height > 0)
+    }
 }

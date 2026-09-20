@@ -22,6 +22,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        FontLibrary.shared.registerBundledAndImportedFonts()
         // Slider knobs snap to a click on the track instead of gliding there.
         SliderSnap.install()
     }

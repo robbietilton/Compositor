@@ -50,6 +50,7 @@ final class CanvasView: NSView {
         didSet { if cropDrag == nil { releaseDragCursor() } }
     }
     private let transformOverlay: TransformOverlay
+    private let textEditorOverlay: TextEditorOverlay
     private var displayedState: DisplayState?
     private var displayedTool: NavigationTool?
     private var displayedPicking = false
@@ -412,6 +413,8 @@ final class CanvasView: NSView {
             let maskPlacement: LayerTransform?
         }
         let brushRevision: Int
+        let textRevision: Int
+        let textPlacement: CGRect?
         let pixelGrid: Bool
         let documentID: UUID?
         let size: CGSize?
@@ -431,7 +434,8 @@ final class CanvasView: NSView {
     func synchronizeDisplay() -> Bool {
         // Image identity detects raster replacement without comparing pixel data.
         let document = session.document
-        let state = DisplayState(brushRevision: session.brushRevision, pixelGrid: session.showsPixelGrid, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
+        let state = DisplayState(brushRevision: session.brushRevision, textRevision: session.textRevision,
+            textPlacement: session.textPlacementDraft?.rect, pixelGrid: session.showsPixelGrid, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
             layers: (document.map { $0.layers.contains(where: { $0.maskSourceID != nil }) ? $0.layers : $0.renderLayers } ?? []).filter { $0.asset != nil || $0.adjustment != nil }.map {
                 DisplayState.Layer(id: $0.id, transform: session.displayedTransform(for: $0),
                                    imageID: $0.asset.map { ObjectIdentifier($0.image) }, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: document?.effectiveVisibleIDs.contains($0.id) == true, opacity: $0.opacity, blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment,
@@ -482,6 +486,8 @@ final class CanvasView: NSView {
         }
         updateBrushCursor()
         updateAntsTimer()
+        if let document { textEditorOverlay.synchronize(documentSize: document.size, viewport: session.viewport) }
+        else { textEditorOverlay.isHidden = true }
         // Observe selection only for the lightweight handles overlay.
         _ = session.activeLayerID
         _ = session.cropRect
@@ -492,6 +498,7 @@ final class CanvasView: NSView {
     init(session: EditorSession) {
         self.session = session
         transformOverlay = TransformOverlay(session: session)
+        textEditorOverlay = TextEditorOverlay(session: session)
         super.init(frame: .zero)
         session.refreshCanvasPreview = { [weak self] in
             self?.synchronizeDisplay()
@@ -500,6 +507,13 @@ final class CanvasView: NSView {
         addSubview(transformOverlay)
         addSubview(brushCursor)
         addSubview(sampleRing)
+        addSubview(textEditorOverlay)
+        textEditorOverlay.didChange = { [weak self] in
+            guard let self else { return }
+            self.needsDisplay = true
+            self.synchronizeDisplay()
+            if self.session.textDraft == nil { self.window?.makeFirstResponder(self) }
+        }
         // Each overlay draws into its own layer. Without one, redrawing a transparent overlay (every crop
         // or transform drag, marching-ants tick, or cursor move) makes AppKit redraw the canvas beneath —
         // the whole checkerboard and layer composite. All three get layers so they keep their stacking order.
@@ -520,6 +534,7 @@ final class CanvasView: NSView {
         super.layout()
         transformOverlay.frame = bounds
         brushCursor.frame = bounds
+        if let document = session.document { textEditorOverlay.synchronize(documentSize: document.size, viewport: session.viewport) }
         syncGeometry()
     }
     override func viewDidMoveToWindow() {
@@ -683,6 +698,17 @@ final class CanvasView: NSView {
             drawPixelGrid(in: visible, document: document, context: context)
         }
         context.restoreGState()
+        if let draft = session.textPlacementDraft {
+            let box = draft.rect
+            let origin = session.viewport.viewPoint(from: box.origin, documentSize: document.size)
+            context.saveGState()
+            context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            context.setLineWidth(1)
+            context.setLineDash(phase: 0, lengths: [4, 3])
+            context.stroke(CGRect(origin: origin, size: CGSize(width: box.width * session.viewport.pointsPerPixel,
+                                                               height: max(1, box.height * session.viewport.pointsPerPixel))))
+            context.restoreGState()
+        }
         context.setStrokeColor(NSColor.white.withAlphaComponent(0.13).cgColor)
         context.setLineWidth(1 / session.viewport.backingScale)
         context.stroke(rect)
@@ -711,6 +737,7 @@ final class CanvasView: NSView {
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
             guard let layer = byID[id] else { return }
+            if session.textDraft?.layerID == layer.id { return }
             let mode = session.displayedBlendMode(for: layer)
             if SeparableBlend.isCoreGraphicsWrong(mode), normalBlendLayerID != id {
                 normalBlendLayerID = id
@@ -933,6 +960,7 @@ final class CanvasView: NSView {
         let cursor: NSCursor = spaceHeld || session.tool == .hand ? .openHand
             // The Move tool's cursor depends on the pointer (handles, Option to duplicate), so match it here.
             : session.tool == .move ? window.map { transformCursor(at: convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? .arrow
+            : session.tool == .text ? .iBeam
             : session.tool == .idle ? .arrow
             : session.tool == .zoom ? (optionHeld ? Self.zoomOutCursor : Self.zoomInCursor)
             : .crosshair
@@ -1169,6 +1197,12 @@ final class CanvasView: NSView {
     }
     override func mouseDown(with event: NSEvent) {
         optionHeld = event.modifierFlags.contains(.option)
+        if session.textDraft != nil {
+            guard session.commitText() else { return }
+            synchronizeDisplay()
+            window?.makeFirstResponder(self)
+            return
+        }
         window?.makeFirstResponder(self)
         guard session.document != nil, !session.isProjectBusy, !session.isImporting else { return }
         let point = convert(event.locationInWindow, from: nil)
@@ -1227,6 +1261,8 @@ final class CanvasView: NSView {
             beginGradientDrag(at: point)
         } else if session.tool == .shape, let document = session.document {
             session.beginShape(at: session.viewport.documentPoint(from: point, documentSize: document.size))
+        } else if session.tool == .text, let document = session.document {
+            session.beginText(at: session.viewport.documentPoint(from: point, documentSize: document.size))
         } else if session.tool == .crop {
             beginCropDrag(at: point)
         } else if session.tool == .move {
@@ -1281,6 +1317,11 @@ final class CanvasView: NSView {
             // Unlike the Marquee, Option has no other job here, so it draws from the center as in Photoshop.
             session.dragShape(to: session.viewport.documentPoint(from: point, documentSize: document.size),
                               square: event.modifierFlags.contains(.shift), fromCenter: event.modifierFlags.contains(.option))
+            synchronizeDisplay()
+            return
+        }
+        if session.textPlacementDraft != nil, lastDragPoint == nil, let document = session.document {
+            session.dragText(to: session.viewport.documentPoint(from: point, documentSize: document.size))
             synchronizeDisplay()
             return
         }
@@ -1390,6 +1431,10 @@ final class CanvasView: NSView {
             session.finishShape()
             synchronizeDisplay()
         }
+        if session.textPlacementDraft != nil {
+            session.finishTextPlacement()
+            synchronizeDisplay()
+        }
         if hueTargetStart != nil {
             hueTargetStart = nil
             session.endHueTargeting()
@@ -1475,6 +1520,16 @@ final class CanvasView: NSView {
         } else if session.shapeDraft != nil, event.keyCode == 53 {
             session.cancelShape()
             synchronizeDisplay()
+        } else if session.textPlacementDraft != nil, event.keyCode == 53 {
+            session.cancelText()
+            synchronizeDisplay()
+        } else if session.textDraft != nil, event.keyCode == 53 {
+            session.cancelText()
+            synchronizeDisplay()
+        } else if session.textDraft != nil, [36, 76].contains(event.keyCode),
+                  event.modifierFlags.contains(.command) {
+            _ = session.commitText()
+            synchronizeDisplay()
         } else if session.gradientEdit != nil, event.keyCode == 53 {
             gradientDrag = nil
             session.cancelGradient()
@@ -1530,6 +1585,7 @@ final class CanvasView: NSView {
             case "u":
                 if event.modifierFlags.contains(.shift), session.tool == .shape { session.toggleShapeKind() }
                 else { session.selectTool(.shape) }
+            case "t": session.selectTool(.text)
             case "i": session.selectTool(.eyedropper)
             // M (Shift or not) chooses the Marquee, then switches Rectangle/Ellipse; holding it doesn't flicker.
             case "m": if !event.isARepeat { session.pressMarqueeKey(); refreshLassoCursor() }
