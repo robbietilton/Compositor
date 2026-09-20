@@ -23,6 +23,8 @@ struct ProjectTabStrip: View {
     @State private var scrolledFromStart = false
     /// The tabs' own width, so the strip can claim only the room it uses.
     @State private var contentWidth: CGFloat?
+    /// Tabs wider than the space they were given, so the right edge has something to fade.
+    @State private var clipped = false
     @State private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private let dragTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     var body: some View {
@@ -55,17 +57,22 @@ struct ProjectTabStrip: View {
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x > 1 } action: { _, scrolled in
             scrolledFromStart = scrolled
         }
-        // Tabs fade out where they scroll under an edge instead of being cut off — the right edge always, the left
-        // once scrolled away from the first tab. A mask rather than a painted gradient, so whatever the toolbar shows
+        .onScrollGeometryChange(for: Bool.self) { $0.contentSize.width > $0.containerSize.width + 1 } action: { _, overflowing in
+            clipped = overflowing
+        }
+        // Tabs fade out where they scroll under an edge instead of being cut off — the right edge whenever they
+        // overflow the space they were given, the left once scrolled away from the first tab. A mask rather than a painted gradient, so whatever the toolbar shows
         // behind them shows through.
         .mask {
             HStack(spacing: 0) {
                 LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
                     .frame(width: scrolledFromStart ? 28 : 0)
                 Rectangle()
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 28)
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: clipped ? 28 : 0)
             }
             .animation(.easeOut(duration: 0.15), value: scrolledFromStart)
+            .animation(.easeOut(duration: 0.15), value: clipped)
         }
         .accessibilityLabel("Project tabs")
         .onChange(of: workspace.selectedID) { _, id in reader.scrollTo(id) }
