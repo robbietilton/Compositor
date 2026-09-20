@@ -213,12 +213,12 @@ extension EditorSession {
         do {
             let asset = try await Task.detached(priority: .userInitiated) {
                 let image = try LevelsFilter.run(job)
-                return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: "Levels")
+                return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: L10n.string("Levels"))
             }.value
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index], current.asset?.image === edit.original.image,
                   current.transform == edit.transform else { return }
-            beginEdit("Levels")
+            beginEdit(L10n.string("Levels"))
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: current.transform, parentID: current.parentID, isGroup: false,
                 opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID)

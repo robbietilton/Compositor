@@ -59,11 +59,11 @@ actor CanvasResizer {
                 thumb.interpolationQuality = .high
                 thumb.draw(image, in: CGRect(x: 0, y: 0, width: tw, height: th))
                 guard let thumbnail = thumb.makeImage() else { throw ExportError.render }
-                return ImportedImage(image: image, thumbnail: thumbnail, name: "Canvas Extension")
+                return ImportedImage(image: image, thumbnail: thumbnail, name: L10n.string("Canvas Extension"))
             }
             let id = UUID()
             images[id] = asset
-            manifest.layers.insert(ProjectLayerRecord(id: id, name: "Canvas Extension", isVisible: true,
+            manifest.layers.insert(ProjectLayerRecord(id: id, name: L10n.string("Canvas Extension"), isVisible: true,
                 transform: LayerTransform(origin: .zero, size: CGSize(width: options.width, height: options.height)),
                 imageFile: "\(id.uuidString).png"), at: 0)
         }

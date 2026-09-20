@@ -20,7 +20,7 @@ extension EditorSession {
         do {
             let raster = try await ImageExporter.shared.render(source)
             guard !Task.isCancelled, adjustmentEditingID == id, adjustmentOriginal == nil else { return }
-            let asset = ImportedImage(image: raster.image, thumbnail: try PixelAdjust.thumbnail(of: raster.image), name: "Adjustment input")
+            let asset = ImportedImage(image: raster.image, thumbnail: try PixelAdjust.thumbnail(of: raster.image), name: L10n.string("Adjustment input"))
             let layer = ImageLayer(asset: asset, origin: .zero)
             switch original.kind {
             case .levels:
@@ -47,7 +47,7 @@ extension EditorSession {
                 filterEdit = try FilterEdit(kind: original.kind.filterKind ?? .curves, layer: layer, selection: nil, settings: settings)
             }
             adjustmentOriginal = original
-            beginEdit("Edit \(original.kind.rawValue) Adjustment")
+            beginEdit(L10n.format("Edit %1$@ Adjustment", L10n.string(original.kind.rawValue)))
         } catch {
             guard adjustmentEditingID == id else { return }
             adjustmentEditingID = nil

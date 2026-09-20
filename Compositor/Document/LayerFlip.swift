@@ -38,7 +38,7 @@ extension EditorSession {
         let ids = Set(members.map(\.id))
         guard !ids.isEmpty else { return }
         finishOpacityEdit()
-        beginEdit(horizontally ? "Flip Horizontal" : "Flip Vertical")
+        beginEdit(horizontally ? L10n.string("Flip Horizontal") : L10n.string("Flip Vertical"))
         for index in document.layers.indices where ids.contains(document.layers[index].id) {
             let layer = document.layers[index]
             let flipped = layer.transform.mirrored(horizontally: horizontally, across: axis)
@@ -58,7 +58,7 @@ extension EditorSession {
         guard canEditLayers, let document else { return }
         let axis = horizontally ? document.size.width / 2 : document.size.height / 2
         finishOpacityEdit()
-        beginEdit(horizontally ? "Flip Canvas Horizontal" : "Flip Canvas Vertical")
+        beginEdit(horizontally ? L10n.string("Flip Canvas Horizontal") : L10n.string("Flip Canvas Vertical"))
         for index in document.layers.indices {
             let layer = document.layers[index]
             self.document?.layers[index].transform = layer.transform.mirrored(horizontally: horizontally, across: axis)

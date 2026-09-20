@@ -38,7 +38,7 @@ extension EditorSession {
     var canEditAppearance: Bool { canEditLayers && selectedLayerIDs.count == 1 && activeLayer?.isGroup == false }
     func beginOpacityEdit() {
         guard canEditAppearance, opacityEditLayerID == nil, let id = activeLayerID else { return }
-        beginEdit("Layer Opacity")
+        beginEdit(L10n.string("Layer Opacity"))
         opacityEditLayerID = id
     }
     func finishOpacityEdit() {
@@ -51,7 +51,7 @@ extension EditorSession {
               let id = opacityEditLayerID ?? activeLayerID,
               let index = document?.layers.firstIndex(where: { $0.id == id }) else { return }
         let standalone = opacityEditLayerID == nil
-        if standalone { beginEdit("Layer Opacity") }
+        if standalone { beginEdit(L10n.string("Layer Opacity")) }
         document?.layers[index].opacity = min(1, max(0, opacity))
         if standalone { endEdit() }
     }
@@ -65,7 +65,7 @@ extension EditorSession {
         }
         guard !indices.isEmpty else { return }
         finishOpacityEdit()
-        beginEdit("Layer Opacity")
+        beginEdit(L10n.string("Layer Opacity"))
         for index in indices { self.document?.layers[index].opacity = value }
         endEdit()
     }
@@ -81,7 +81,7 @@ extension EditorSession {
         blendPreview = nil
         guard canEditAppearance, let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
         finishOpacityEdit()
-        beginEdit("Layer Blend Mode")
+        beginEdit(L10n.string("Layer Blend Mode"))
         document?.layers[index].blendMode = mode
         endEdit()
     }

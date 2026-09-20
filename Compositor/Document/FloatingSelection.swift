@@ -33,7 +33,7 @@ extension EditorSession {
         } catch { brushError = error.localizedDescription; return }
         let before = document, beforeActive = activeLayerID
         // Outer edit: closed by commitTransform (merge) or cancelTransform (restore).
-        beginEdit("Transform Selection")
+        beginEdit(L10n.string("Transform Selection"))
         await clearSelectedPixels()
         guard let index = self.document?.layers.firstIndex(where: { $0.id == source.id }),
               let thumbnail = try? PixelInvert.thumbnail(of: lifted.image) else {
@@ -41,9 +41,9 @@ extension EditorSession {
             endEdit()
             return
         }
-        var floating = ImageLayer(asset: ImportedImage(image: lifted.image, thumbnail: thumbnail, name: "Floating Selection"),
+        var floating = ImageLayer(asset: ImportedImage(image: lifted.image, thumbnail: thumbnail, name: L10n.string("Floating Selection")),
                                   origin: lifted.region.origin)
-        floating.name = "Floating Selection"
+        floating.name = L10n.string("Floating Selection")
         floating.parentID = source.parentID
         floating.opacity = source.opacity
         floating.blendMode = source.blendMode

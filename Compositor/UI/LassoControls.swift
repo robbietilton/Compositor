@@ -5,51 +5,51 @@ struct LassoControls: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .marquee ? "Marquee" : session.tool == .wand ? "Magic Wand" : "Lasso").font(ToolHeaderStyle.titleFont)
+            Text(session.tool == .marquee ? L10n.string("Marquee") : session.tool == .wand ? L10n.string("Magic Wand") : L10n.string("Lasso")).font(ToolHeaderStyle.titleFont)
             if session.tool == .marquee {
-                Picker("Shape", selection: Binding(get: { session.marqueeKind }, set: { kind in
+                Picker(L10n.string("Shape"), selection: Binding(get: { session.marqueeKind }, set: { kind in
                     session.cancelLasso()
                     session.marqueeKind = kind
                 })) {
-                    ForEach(LassoKind.marqueeChoices, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LassoKind.marqueeChoices, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("Press M to switch between Rectangle and Ellipse")
+                .help(L10n.string("Press M to switch between Rectangle and Ellipse"))
             }
             if session.tool == .lasso {
-                Picker("Lasso", selection: Binding(get: { session.lassoKind }, set: { kind in
+                Picker(L10n.string("Lasso"), selection: Binding(get: { session.lassoKind }, set: { kind in
                     session.cancelLasso()
                     session.lassoKind = kind
                 })) {
-                    ForEach(LassoKind.lassoChoices, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LassoKind.lassoChoices, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("Press L to switch between Freehand and Polygonal")
+                .help(L10n.string("Press L to switch between Freehand and Polygonal"))
             }
             // Shows held Shift/Option (or an outline's mode) live; clicking sets the choice.
-            Picker("Mode", selection: Binding(get: { session.displayedSelectionMode },
+            Picker(L10n.string("Mode"), selection: Binding(get: { session.displayedSelectionMode },
                                               set: { session.selectionModeChoice = $0 })) {
-                ForEach(SelectionMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(SelectionMode.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
-            .help("Hold Shift to add or Option to subtract for one outline")
+            .help(L10n.string("Hold Shift to add or Option to subtract for one outline"))
             if session.tool == .wand { wandControls }
             // Rectangles snap to whole pixels, so smoothing doesn't apply (as in Photoshop); ellipses curve.
             if session.tool == .lasso || session.tool == .wand || (session.tool == .marquee && session.marqueeKind == .ellipse) {
-                Toggle("Anti-alias", isOn: $session.selectionAntialiased)
-                    .help("Smooth selection edges; turn off for hard pixel edges")
+                Toggle(L10n.string("Anti-alias"), isOn: $session.selectionAntialiased)
+                    .help(L10n.string("Smooth selection edges; turn off for hard pixel edges"))
             }
             Divider().frame(height: 18)
-            modifyControl("Expand", amount: $session.selectionExpandAmount) {
+            modifyControl(L10n.string("Expand"), amount: $session.selectionExpandAmount) {
                 session.expandSelection(by: session.selectionExpandAmount)
             }
-            modifyControl("Contract", amount: $session.selectionContractAmount) {
+            modifyControl(L10n.string("Contract"), amount: $session.selectionContractAmount) {
                 session.contractSelection(by: session.selectionContractAmount)
             }
             Spacer(minLength: 0)
             if let selection = session.selection {
-                if selection.isEmpty { Text("Empty selection").foregroundStyle(.secondary) }
-                Button("Deselect") { session.deselect() }.disabled(!session.canEditSelection)
+                if selection.isEmpty { Text(L10n.string("Empty selection")).foregroundStyle(.secondary) }
+                Button(L10n.string("Deselect")) { session.deselect() }.disabled(!session.canEditSelection)
             }
         }
         .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
@@ -60,8 +60,8 @@ struct LassoControls: View {
     private var wandControls: some View {
         HStack(spacing: 12) {
             HStack(spacing: 6) {
-                Text("Tolerance")
-                TextField("Tolerance", value: Binding(get: { session.wandSettings.tolerance },
+                Text(L10n.string("Tolerance"))
+                TextField(L10n.string("Tolerance"), value: Binding(get: { session.wandSettings.tolerance },
                                                       set: { session.wandSettings.tolerance = min(255, max(0, $0)) }),
                           format: .number)
                     .frame(width: 44).textFieldStyle(.roundedBorder)
@@ -69,20 +69,20 @@ struct LassoControls: View {
                     .arrowSteps(value: { Double(session.wandSettings.tolerance) },
                                 change: { session.wandSettings.tolerance = Int(min(255, max(0, $0.rounded()))) })
             }
-            .help("How far each color channel (0–255) can differ from the clicked color and still be selected")
-            Picker("Sample Size", selection: $session.wandSettings.sampleSize) {
+            .help(L10n.string("How far each color channel (0–255) can differ from the clicked color and still be selected"))
+            Picker(L10n.string("Sample Size"), selection: $session.wandSettings.sampleSize) {
                 ForEach(WandSampleSize.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             .labelsHidden().fixedSize()
-            .help("Match the clicked pixel, or the average of the pixels around it")
-            Picker("Sample", selection: $session.wandSettings.sampleAllLayers) {
-                Text("This Layer").tag(false)
-                Text("All Layers").tag(true)
+            .help(L10n.string("Match the clicked pixel, or the average of the pixels around it"))
+            Picker(L10n.string("Sample"), selection: $session.wandSettings.sampleAllLayers) {
+                Text(L10n.string("This Layer")).tag(false)
+                Text(L10n.string("All Layers")).tag(true)
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
-            .help("Read colors from the active layer only, or from every visible layer as shown")
-            Toggle("Contiguous", isOn: $session.wandSettings.contiguous)
-                .help("Select only similar pixels connected to the one you click; off selects them everywhere")
+            .help(L10n.string("Read colors from the active layer only, or from every visible layer as shown"))
+            Toggle(L10n.string("Contiguous"), isOn: $session.wandSettings.contiguous)
+                .help(L10n.string("Select only similar pixels connected to the one you click; off selects them everywhere"))
         }
     }
 
@@ -100,7 +100,7 @@ struct LassoControls: View {
                 .unitSuffix("px")
         }
         .disabled(!session.canModifySelection)
-        .help("\(title) the selection by this many pixels")
+        .help(L10n.format("%1$@ the selection by this many pixels", title))
     }
 }
 

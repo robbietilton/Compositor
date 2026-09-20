@@ -9,16 +9,16 @@ struct LayerAppearanceControls: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Blend").font(.caption)
+                Text(L10n.string("Blend")).font(.caption)
                 BlendModePicker(session: session)
             }
             HStack(spacing: 6) {
-                Text("Opacity").font(.caption)
+                Text(L10n.string("Opacity")).font(.caption)
                 Slider(value: Binding(get: { session.activeLayer?.opacity ?? 1 },
                                       set: { session.setLayerOpacity($0) }), in: 0...1,
                        onEditingChanged: { if $0 { session.beginOpacityEdit() } else { session.finishOpacityEdit() } })
                 HStack(spacing: 2) {
-                    TextField("Opacity percent", text: $percentage)
+                    TextField(L10n.string("Opacity percent"), text: $percentage)
                         .textFieldStyle(.roundedBorder).frame(width: 44).focused($focused)
                         .onSubmit { releaseFocus() }
                         .onExitCommand { releaseFocus() }

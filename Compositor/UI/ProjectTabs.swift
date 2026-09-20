@@ -52,7 +52,7 @@ struct ProjectTabStrip: View {
             }
             .animation(.easeOut(duration: 0.15), value: scrolledFromStart)
         }
-        .accessibilityLabel("Project tabs")
+        .accessibilityLabel(L10n.string("Project tabs"))
         .onChange(of: workspace.selectedID) { _, id in reader.scrollTo(id) }
         .onChange(of: dragging) { _, active in
             if active { reader.scrollTo("new-tab-drop", anchor: .trailing) }
@@ -77,15 +77,15 @@ private struct NewTabDropSlot: View {
     let workspace: ProjectWorkspace
     @State private var targeted = false
     var body: some View {
-        Label("New", systemImage: "plus")
+        Label(L10n.string("New"), systemImage: "plus")
             .font(.system(size: 12, weight: .medium))
             .padding(.horizontal, 14).frame(height: 28)
             .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.04), in: Capsule())
             .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.secondary,
                 style: StrokeStyle(lineWidth: targeted ? 2 : 1, dash: targeted ? [] : [4, 3])))
             .contentShape(Capsule())
-            .help("Drop to open in a new canvas")
-            .accessibilityLabel("Drop into new canvas")
+            .help(L10n.string("Drop to open in a new canvas"))
+            .accessibilityLabel(L10n.string("Drop into new canvas"))
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
@@ -100,7 +100,7 @@ private struct ProjectTabButton: View {
         HStack(spacing: 0) {
             Button { workspace.select(tab.id) } label: {
                 HStack(spacing: 5) {
-                    if tab.session.isModified { Circle().frame(width: 5, height: 5).accessibilityLabel("Unsaved changes") }
+                    if tab.session.isModified { Circle().frame(width: 5, height: 5).accessibilityLabel(L10n.string("Unsaved changes")) }
                     Text(tab.title).font(.system(size: 12, weight: active ? .semibold : .medium)).lineLimit(1)
                 }
                 .frame(minWidth: 35, maxWidth: 155)
@@ -113,13 +113,13 @@ private struct ProjectTabButton: View {
                     .frame(width: 16, height: 28)
                     .padding(.trailing, 5)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain).help("Close \(tab.title)").disabled(!workspace.canSwitch)
-                .accessibilityLabel("Close \(tab.title)")
+            }.buttonStyle(.plain).help(L10n.format("Close %1$@", tab.title)).disabled(!workspace.canSwitch)
+                .accessibilityLabel(L10n.format("Close %1$@", tab.title))
         }
         .frame(height: 28)
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
-        .help(targeted ? "Add to \(tab.title)" : tab.title)
+        .help(targeted ? L10n.format("Add to %1$@", tab.title) : tab.title)
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
     }
@@ -131,7 +131,7 @@ struct NewProjectDropTarget: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
-            .help(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs")
+            .help(targeted ? L10n.string("Open in a new project tab") : L10n.string("New canvas (⌘N) · Drop images here for new tabs"))
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }

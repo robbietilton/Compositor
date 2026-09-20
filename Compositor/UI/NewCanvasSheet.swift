@@ -17,21 +17,21 @@ struct NewCanvasSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("New canvas").font(.title2.weight(.semibold))
-                Text("A blank space for your next composition.").foregroundStyle(.secondary)
+                Text(L10n.string("New canvas")).font(.title2.weight(.semibold))
+                Text(L10n.string("A blank space for your next composition.")).foregroundStyle(.secondary)
             }
             HStack(spacing: 16) {
                 dimension("Width", text: $width, field: .width)
                 Image(systemName: "multiply").foregroundStyle(.tertiary).padding(.top, 20)
                 dimension("Height", text: $height, field: .height)
             }
-            Text(valid ? "Transparent canvas · sRGB" : "Enter whole numbers from 1 to 30,000 pixels.")
+            Text(valid ? L10n.string("Transparent canvas · sRGB") : L10n.string("Enter whole numbers from 1 to 30,000 pixels."))
                 .font(.callout).foregroundStyle(valid ? Color.secondary : Color.orange)
             HStack(spacing: 10) {
-                Button("Open project") { onOpen?() }.buttonStyle(.bordered)
-                Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
+                Button(L10n.string("Open project")) { onOpen?() }.buttonStyle(.bordered)
+                Button(L10n.string("Import image")) { session.showsImporter = true }.buttonStyle(.bordered)
                 Spacer()
-                Button("Create canvas") {
+                Button(L10n.string("Create canvas")) {
                     guard let w = CanvasDocument.validDimension(width),
                           let h = CanvasDocument.validDimension(height) else { return }
                     if let onCreate { onCreate(w, h) }
@@ -74,9 +74,9 @@ struct NewCanvasSheet: View {
     }
     private func dimension(_ title: String, text: Binding<String>, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.callout.weight(.medium))
+            Text(L10n.string(title)).font(.callout.weight(.medium))
             HStack {
-                TextField(title, text: text).textFieldStyle(.plain)
+                TextField(L10n.string(title), text: text).textFieldStyle(.plain)
                     .focused($focusedField, equals: field)
                     .accessibilityIdentifier(title.lowercased() + "Input")
                 Text("px").foregroundStyle(.secondary)
