@@ -737,7 +737,8 @@ final class CanvasView: NSView {
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
             guard let layer = byID[id] else { return }
-            if session.textDraft?.layerID == layer.id { return }
+            let textDraft = session.textDraft?.layerID == layer.id ? session.textDraft : nil
+            let textPreview = textDraft?.previewImage
             let mode = session.displayedBlendMode(for: layer)
             if SeparableBlend.isCoreGraphicsWrong(mode), normalBlendLayerID != id {
                 normalBlendLayerID = id
@@ -747,7 +748,7 @@ final class CanvasView: NSView {
             let stroke = session.brushStroke?.layer.id == layer.id ? session.brushStroke
                 : session.gradientEdit?.raster.layer.id == layer.id ? session.gradientEdit?.raster
                 : session.pixelMove?.raster.layer.id == layer.id ? session.pixelMove?.raster : nil
-            guard layer.asset != nil || stroke != nil else { return }
+            guard layer.asset != nil || stroke != nil || textPreview != nil else { return }
             // Smudge or Liquify in progress: the layer as the stroke has reshaped it so far, across the canvas.
             if let warp = session.warpStroke, warp.layer.id == layer.id, let image = warp.image {
                 let canvas = LayerTransform(origin: .zero, size: document.size)
@@ -764,7 +765,9 @@ final class CanvasView: NSView {
                 return
             }
             // A mask stroke paints the mask's grid; the layer itself stays put.
-            let transform = (stroke?.isMask == true ? nil : stroke?.paintTransform) ?? session.displayedTransform(for: layer)
+            let transform = textDraft?.transform
+                ?? (stroke?.isMask == true ? nil : stroke?.paintTransform)
+                ?? session.displayedTransform(for: layer)
             // A mask placed apart from its layer is resampled into the grid the layer draws in (at most 2048 pixels
             // across while something moves, else about the size it's drawn).
             let mask: CGImage? = {
@@ -811,11 +814,11 @@ final class CanvasView: NSView {
                     image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
                     transform: transform, center: center(transform.center), scale: scale,
                     opacity: layer.opacity, blendMode: blendMode(of: layer), in: context)
-            } else if let asset = layer.asset, let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if textPreview == nil, let asset = layer.asset, let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
                 TiledLayerRenderer.drawRaster(raster, transform: transform, center: center(transform.center), scale: scale,
                     opacity: layer.opacity, blendMode: blendMode(of: layer),
                     mask: mask, in: context)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
+            } else if let image = textPreview ?? session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
                 // LayerRenderer picks a sharp reduction for the image and its mask itself.
                 LayerRenderer.draw(image, transform: transform,
                     center: center(transform.center), scale: scale,

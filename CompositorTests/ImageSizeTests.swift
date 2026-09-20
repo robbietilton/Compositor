@@ -79,4 +79,29 @@ struct ImageSizeTests {
         }
         #expect(session.document?.width == 64)
     }
+
+    @Test func pixelResizeRasterizesTransformedTextMetadata() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 200, height: 120, emptyLayer: true)
+        session.selectTool(.text)
+        session.textStyle.fontPostScriptName = "Helvetica"
+        session.beginText(at: CGPoint(x: 30, y: 25))
+        session.finishTextPlacement()
+        session.updateTextStyle { $0.content = "Resize me" }
+        #expect(session.commitText())
+        let id = try #require(session.activeLayerID)
+        let index = try #require(session.document?.layers.firstIndex(where: { $0.id == id }))
+        session.document?.layers[index].transform.rotation = 28
+        session.document?.layers[index].transform.flipX = true
+        let snapshot = try #require(session.projectSnapshot())
+
+        let resized = try await ImageResizer.shared.resize(snapshot,
+            to: ImageSizeOptions(width: 300, height: 120, resolution: 72))
+
+        #expect(resized.manifest.layers.first(where: { $0.id == id })?.text == nil)
+        session.applyImageSize(resized)
+        let layer = try #require(session.document?.layers.first(where: { $0.id == id }))
+        #expect(layer.liveText == nil)
+        #expect(layer.transform.rotation == 0 && !layer.transform.flipX && !layer.transform.flipY)
+    }
 }

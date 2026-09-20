@@ -147,9 +147,9 @@ extension EditorSession {
     func duplicateActiveLayer() {
         guard canEditLayers, let layer = activeLayer, !layer.isGroup,
               let index = document?.layers.firstIndex(where: { $0.id == layer.id }) else { return }
-        let copy = ImageLayer(id: UUID(), asset: layer.asset, name: String(localized: "\(layer.name) copy"), isVisible: layer.isVisible,
-                              transform: layer.transform, parentID: layer.parentID, isGroup: false,
-                              opacity: layer.opacity, blendMode: layer.blendMode, mask: layer.mask, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, shape: layer.shape, text: layer.text)
+        let copy = ImageLayer(copying: layer, id: UUID(), name: String(localized: "\(layer.name) copy"),
+                              transform: layer.transform, parentID: layer.parentID,
+                              mask: layer.mask, maskSourceID: layer.maskSourceID)
         beginEdit("Duplicate Layer")
         document?.layers.insert(copy, at: index + 1)
         activeLayerID = copy.id

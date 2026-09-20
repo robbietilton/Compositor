@@ -24,12 +24,8 @@ extension EditorSession {
         let manifest = snapshot.manifest
         transformEdit = nil
         document = CanvasDocument(id: manifest.documentID, width: manifest.width, height: manifest.height,
-            layers: manifest.layers.map {
-                ImageLayer(id: $0.id, asset: snapshot.images[$0.id], name: $0.name,
-                           isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
-                           shape: LayerShape.loaded($0.shape, image: snapshot.images[$0.id]?.image),
-                           text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image))
-            }, resolution: manifest.resolution ?? 72)
+            layers: manifest.layers.map { snapshot.imageLayer(for: $0) },
+            resolution: manifest.resolution ?? 72)
         activeLayerID = manifest.activeLayerID
         projectURL = url
         renamingLayerID = nil

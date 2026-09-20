@@ -23,7 +23,7 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     let id: UUID
     let name: String
     var isVisible: Bool
-    let transform: LayerTransform
+    var transform: LayerTransform
     let imageFile: String?
     var parentID: UUID? = nil
     var isGroup: Bool? = nil
@@ -47,6 +47,20 @@ nonisolated struct ProjectSnapshot: @unchecked Sendable {
     let manifest: ProjectManifest
     let images: [UUID: ImportedImage]
     var masks: [UUID: ImportedImage] = [:]
+}
+
+extension ProjectSnapshot {
+    @MainActor
+    func imageLayer(for record: ProjectLayerRecord) -> ImageLayer {
+        ImageLayer(id: record.id, asset: images[record.id], name: record.name,
+                   isVisible: record.isVisible, transform: record.transform,
+                   parentID: record.parentID, isGroup: record.isGroup == true,
+                   opacity: record.opacity ?? 1, blendMode: record.blendMode ?? .normal,
+                   mask: mask(for: record), maskSourceID: record.maskSourceID,
+                   adjustment: record.adjustment,
+                   shape: LayerShape.loaded(record.shape, image: images[record.id]?.image),
+                   text: LayerText.loaded(record.text, image: images[record.id]?.image))
+    }
 }
 
 nonisolated enum ProjectError: LocalizedError {

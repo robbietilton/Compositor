@@ -116,6 +116,54 @@ struct TextToolTests {
         #expect(session.activeLayer?.liveText == nil)
     }
 
+    @Test func layerPanelSelectionCommitsTheActiveTextEdit() throws {
+        let session = session()
+        let text = try add("Before", to: session)
+        session.addBlankLayer()
+        let target = try #require(session.activeLayerID)
+        session.beginEditingText(text.id)
+        session.updateTextStyle { $0.content = "After" }
+        let before = session.history.undoCount
+
+        session.selectLayers([target], primary: target)
+
+        #expect(session.textDraft == nil)
+        #expect(session.activeLayerID == target)
+        #expect(session.document?.layers.first(where: { $0.id == text.id })?.liveText?.style.content == "After")
+        #expect(session.history.undoCount == before + 1)
+    }
+
+    @Test func editingPreviewUsesTheLayerCompositorAndHidesNativeGlyphs() throws {
+        let session = session()
+        let text = try add("Composited", to: session)
+        let index = try #require(session.document?.layers.firstIndex(where: { $0.id == text.id }))
+        session.document?.layers[index].opacity = 0.37
+        let size = try #require(session.document?.size)
+        session.viewport.resize(to: size, backingScale: 1, documentSize: size)
+        session.zoom(to: 1)
+        let view = CanvasView(session: session)
+        view.frame = CGRect(origin: .zero, size: size)
+
+        func pixels() throws -> Data {
+            let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8,
+                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0))
+            NSGraphicsContext.saveGraphicsState()
+            defer { NSGraphicsContext.restoreGraphicsState() }
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+            view.draw(view.bounds)
+            return Data(bytes: try #require(bitmap.bitmapData), count: bitmap.bytesPerRow * bitmap.pixelsHigh)
+        }
+
+        let committed = try pixels()
+        session.beginEditingText(text.id)
+        #expect(session.textDraft?.previewImage != nil)
+        _ = view.synchronizeDisplay()
+        #expect(session.textDraft?.layout.suppressesEditorGlyphs == true)
+        #expect(try pixels() == committed)
+    }
+
     @Test func version8RoundTripAndMissingFontKeepCachedPixelsEditableMetadata() async throws {
         let session = session()
         _ = try add("缺字字体仍显示", to: session)

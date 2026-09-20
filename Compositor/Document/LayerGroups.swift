@@ -65,8 +65,11 @@ extension EditorSession {
     func selectLayers(_ ids: Set<UUID>, primary: UUID?) {
         guard brushStroke == nil else { return }
         let valid = ids.intersection(Set(document?.layers.map(\.id) ?? []))
-        if valid != selectedLayerIDs { commitTransform(); resolveGradient() }
-        activeLayerID = primary.flatMap { valid.contains($0) ? $0 : nil } ?? valid.first
+        let nextActive = primary.flatMap { valid.contains($0) ? $0 : nil } ?? valid.first
+        let changesSelection = valid != selectedLayerIDs || nextActive != activeLayerID
+        if textDraft != nil, changesSelection, !commitText() { return }
+        if changesSelection { commitTransform(); resolveGradient() }
+        activeLayerID = nextActive
         selectedLayerIDs = valid
     }
 

@@ -54,6 +54,15 @@ struct ImageLayer: Identifiable, Equatable {
         self.shape = shape
         self.text = text
     }
+
+    init(copying source: ImageLayer, id: UUID, name: String, transform: LayerTransform,
+         parentID: UUID?, mask: LayerMask?, maskSourceID: UUID?) {
+        self.init(id: id, asset: source.asset, name: name, isVisible: source.isVisible,
+                  transform: transform, parentID: parentID, isGroup: source.isGroup,
+                  opacity: source.opacity, blendMode: source.blendMode, mask: mask,
+                  maskSourceID: maskSourceID, adjustment: source.adjustment,
+                  shape: source.shape, text: source.text)
+    }
 }
 
 struct CanvasDocument: Equatable {

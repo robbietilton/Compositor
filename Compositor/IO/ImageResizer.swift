@@ -90,10 +90,15 @@ actor ImageResizer {
                     masks[layer.id] = try LayerMask.asset(from: image)
                 }
             }
-            manifest.layers.append(ProjectLayerRecord(id: layer.id, name: layer.name, isVisible: layer.isVisible,
-                transform: transform, imageFile: layer.imageFile, parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.maskFile, maskEnabled: layer.maskEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment,
-                maskPlacement: layer.maskPlacement.map { $0.placing($0.unitToDocument.concatenating(CGAffineTransform(scaleX: sx, y: sy))) },
-                maskLinked: layer.maskLinked, shape: layer.shape, text: layer.text))
+            var resized = layer
+            resized.transform = transform
+            resized.maskPlacement = layer.maskPlacement.map {
+                $0.placing($0.unitToDocument.concatenating(CGAffineTransform(scaleX: sx, y: sy)))
+            }
+            // Pixel resizing bakes rotation and flips into the new bitmap. The old text
+            // metadata can no longer recreate that raster through LayerTransform alone.
+            resized.text = nil
+            manifest.layers.append(resized)
         }
         return ProjectSnapshot(manifest: manifest, images: images, masks: masks)
     }
@@ -109,10 +114,7 @@ extension EditorSession {
         beginEdit(actionName)
         let m = snapshot.manifest
         document = CanvasDocument(id: m.documentID, width: m.width, height: m.height,
-            layers: m.layers.map { ImageLayer(id: $0.id, asset: snapshot.images[$0.id], name: $0.name,
-                isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
-                shape: LayerShape.loaded($0.shape, image: snapshot.images[$0.id]?.image),
-                text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image)) }, resolution: m.resolution ?? 72)
+            layers: m.layers.map { snapshot.imageLayer(for: $0) }, resolution: m.resolution ?? 72)
         endEdit()
         viewport.fit(documentSize: document!.size)
     }

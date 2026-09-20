@@ -16,18 +16,17 @@ actor CanvasResizer {
         var manifest = ProjectManifest(resolution: old.resolution, documentID: old.documentID,
             width: options.width, height: options.height, activeLayerID: old.activeLayerID, layers: [])
         for layer in old.layers {
-            var transform = layer.transform
-            transform.origin.x += offset.x
-            transform.origin.y += offset.y
-            guard transform.isValid else { throw ProjectError.tooLarge }
-            manifest.layers.append(ProjectLayerRecord(id: layer.id, name: layer.name,
-                isVisible: layer.isVisible, transform: transform, imageFile: layer.imageFile, parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.maskFile, maskEnabled: layer.maskEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment,
-                maskPlacement: layer.maskPlacement.map { placement -> LayerTransform in
+            var moved = layer
+            moved.transform.origin.x += offset.x
+            moved.transform.origin.y += offset.y
+            guard moved.transform.isValid else { throw ProjectError.tooLarge }
+            moved.maskPlacement = layer.maskPlacement.map { placement -> LayerTransform in
                     var moved = placement
                     moved.origin.x += offset.x
                     moved.origin.y += offset.y
                     return moved
-                }, maskLinked: layer.maskLinked, shape: layer.shape, text: layer.text))
+                }
+            manifest.layers.append(moved)
         }
         var images = snapshot.images
         // A colored extension is separate bottom-layer content. The old canvas

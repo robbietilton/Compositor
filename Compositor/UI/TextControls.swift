@@ -20,7 +20,7 @@ struct TextControls: View {
                 .help("Import an OTF, TTF, or TTC font")
                 .accessibilityLabel("Import font")
             numberField("Size", value: Double(session.textStyle.fontSizePoints), range: 1...2000, suffix: "pt") { value in
-                session.updateTextStyle { $0.fontSizePoints = CGFloat(safe(value, fallback: 36)) }
+                session.updateTextStyle { $0.fontSizePoints = CGFloat(finiteValue(value, fallback: 36)) }
             }
             Picker("Alignment", selection: Binding(get: { session.textStyle.alignment }, set: { value in
                 session.updateTextStyle { $0.alignment = value }
@@ -30,10 +30,10 @@ struct TextControls: View {
                 Image(systemName: "text.alignright").tag(LayerTextAlignment.right)
             }.pickerStyle(.segmented).labelsHidden().fixedSize().accessibilityLabel("Alignment")
             numberField("Line", value: Double(session.textStyle.lineSpacingPoints), range: -2000...2000, suffix: "pt") { value in
-                session.updateTextStyle { $0.lineSpacingPoints = CGFloat(safe(value, fallback: 0)) }
+                session.updateTextStyle { $0.lineSpacingPoints = CGFloat(finiteValue(value, fallback: 0)) }
             }
             numberField("Tracking", value: Double(session.textStyle.trackingPoints), range: -2000...2000, suffix: "pt") { value in
-                session.updateTextStyle { $0.trackingPoints = CGFloat(safe(value, fallback: 0)) }
+                session.updateTextStyle { $0.trackingPoints = CGFloat(finiteValue(value, fallback: 0)) }
             }
             ColorPicker("Color", selection: Binding(get: {
                 Color(red: session.textStyle.red, green: session.textStyle.green, blue: session.textStyle.blue,
@@ -54,7 +54,7 @@ struct TextControls: View {
         .padding(.horizontal, 18).toolHeaderBar()
         .disabled(session.showsBusy || session.document == nil)
         .fileImporter(isPresented: $importsFont,
-            allowedContentTypes: [UTType(filenameExtension: "otf")!, UTType(filenameExtension: "ttf")!, UTType(filenameExtension: "ttc")!],
+            allowedContentTypes: FontLibrary.supportedExtensions.compactMap { UTType(filenameExtension: $0) },
             allowsMultipleSelection: false) { result in
                 do {
                     guard let url = try result.get().first else { return }
@@ -75,5 +75,5 @@ struct TextControls: View {
         }.accessibilityElement(children: .combine)
     }
 
-    private func safe(_ value: Double, fallback: Double) -> Double { value.isFinite ? value : fallback }
+    private func finiteValue(_ value: Double, fallback: Double) -> Double { value.isFinite ? value : fallback }
 }

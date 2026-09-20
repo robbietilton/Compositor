@@ -194,9 +194,9 @@ final class ProjectWorkspace {
                 transform.origin.x += center.x-anchor.x; transform.origin.y += center.y-anchor.y
                 var mask = layer.mask
                 mask?.placement?.origin.x += center.x-anchor.x; mask?.placement?.origin.y += center.y-anchor.y
-                return ImageLayer(id: mapping[layer.id]!, asset: layer.asset, name: layer.name, isVisible: layer.isVisible,
-                    transform: transform, parentID: layer.parentID.flatMap { mapping[$0] }, isGroup: layer.isGroup,
-                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, text: layer.text)
+                return ImageLayer(copying: layer, id: mapping[layer.id]!, name: layer.name,
+                    transform: transform, parentID: layer.parentID.flatMap { mapping[$0] },
+                    mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] })
             }
             target.session.isProjectBusy = false
             target.session.beginEdit("Copy Layers from Project")

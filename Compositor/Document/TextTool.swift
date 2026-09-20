@@ -58,11 +58,22 @@ struct TextRenderResult {
     let naturalSize: CGSize
 }
 
+@MainActor
+final class TextLayoutManager: NSLayoutManager {
+    var suppressesEditorGlyphs = false
+    var isRenderingRaster = false
+
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard !suppressesEditorGlyphs || isRenderingRaster else { return }
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+    }
+}
+
 /// One TextKit stack is shared by native editing and raster output, so wrapping and glyph positions agree.
 @MainActor
 final class TextLayoutSession {
     let textStorage = NSTextStorage()
-    let layoutManager = NSLayoutManager()
+    let layoutManager = TextLayoutManager()
     let textContainer = NSTextContainer()
     private(set) var style: LayerTextStyle
     let resolution: CGFloat
@@ -79,6 +90,10 @@ final class TextLayoutSession {
 
     var string: String { textStorage.string }
     var fontIsAvailable: Bool { NSFont(name: style.fontPostScriptName, size: 12) != nil }
+    var suppressesEditorGlyphs: Bool {
+        get { layoutManager.suppressesEditorGlyphs }
+        set { layoutManager.suppressesEditorGlyphs = newValue }
+    }
 
     func makeTextView() -> NSTextView {
         if let textView { return textView }
@@ -150,9 +165,11 @@ final class TextLayoutSession {
         let graphics = NSGraphicsContext(cgContext: context, flipped: true)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphics
+        layoutManager.isRenderingRaster = true
         let range = layoutManager.glyphRange(for: textContainer)
         layoutManager.drawBackground(forGlyphRange: range, at: .zero)
         layoutManager.drawGlyphs(forGlyphRange: range, at: .zero)
+        layoutManager.isRenderingRaster = false
         NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else { throw ExportError.render }
         return TextRenderResult(image: image, naturalSize: natural)
@@ -223,6 +240,7 @@ final class TextDraft {
     let origin: CGPoint
     let scale: CGSize
     let layout: TextLayoutSession
+    private(set) var previewImage: CGImage?
 
     init(layerID: UUID?, original: ImageLayer?, origin: CGPoint, scale: CGSize, layout: TextLayoutSession) {
         self.layerID = layerID
@@ -230,7 +248,10 @@ final class TextDraft {
         self.origin = origin
         self.scale = scale
         self.layout = layout
+        refreshPreview()
     }
+
+    func refreshPreview() { previewImage = try? layout.render().image }
 
     var transform: LayerTransform {
         let natural = layout.naturalSize()
@@ -294,6 +315,7 @@ extension EditorSession {
         change(&style)
         textStyle = style
         textDraft?.layout.update(style: style)
+        textDraft?.refreshPreview()
         textRevision += 1
     }
 
@@ -301,6 +323,7 @@ extension EditorSession {
         guard let textDraft else { return }
         textDraft.layout.textDidChange()
         textStyle = textDraft.layout.currentStyle()
+        textDraft.refreshPreview()
         textRevision += 1
     }
 

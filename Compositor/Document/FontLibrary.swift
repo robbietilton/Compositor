@@ -26,6 +26,7 @@ nonisolated enum FontLibraryError: LocalizedError {
 final class FontLibrary {
     static let shared = FontLibrary()
     static let bundledNames = ["SourceHanSansSC-Regular", "SourceHanSerifSC-Regular"]
+    static let supportedExtensions = ["otf", "ttf", "ttc"]
     private(set) var availableFaces: [FontFace] = []
     let fontsDirectory: URL
     private let bundledURLs: [URL]
@@ -36,7 +37,7 @@ final class FontLibrary {
             in: .userDomainMask)[0].appendingPathComponent("Compositor/Fonts", isDirectory: true)
         if let bundledURLs { self.bundledURLs = bundledURLs }
         else {
-            self.bundledURLs = ["SourceHanSansSC-Regular", "SourceHanSerifSC-Regular"].compactMap {
+            self.bundledURLs = Self.bundledNames.compactMap {
                 Bundle.main.url(forResource: $0, withExtension: "otf", subdirectory: "Fonts")
                     ?? Bundle.main.url(forResource: $0, withExtension: "otf")
             }
@@ -48,7 +49,7 @@ final class FontLibrary {
         try? FileManager.default.createDirectory(at: fontsDirectory, withIntermediateDirectories: true)
         let imported = (try? FileManager.default.contentsOfDirectory(at: fontsDirectory,
             includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])) ?? []
-        for url in bundledURLs + imported where Self.allowedExtensions.contains(url.pathExtension.lowercased()) {
+        for url in bundledURLs + imported where Self.supportedExtensions.contains(url.pathExtension.lowercased()) {
             _ = try? register(url)
         }
         refreshFaces()
@@ -56,7 +57,7 @@ final class FontLibrary {
 
     @discardableResult
     func importFont(from source: URL) throws -> [FontFace] {
-        guard Self.allowedExtensions.contains(source.pathExtension.lowercased()) else { throw FontLibraryError.unsupported }
+        guard Self.supportedExtensions.contains(source.pathExtension.lowercased()) else { throw FontLibraryError.unsupported }
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let values = try source.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
@@ -92,8 +93,6 @@ final class FontLibrary {
     }
 
     func contains(_ postScriptName: String) -> Bool { NSFont(name: postScriptName, size: 12) != nil }
-
-    private static let allowedExtensions: Set<String> = ["otf", "ttf", "ttc"]
 
     private func register(_ url: URL) throws -> [FontFace] {
         let faces = try Self.faces(in: url)

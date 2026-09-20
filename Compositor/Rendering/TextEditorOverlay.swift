@@ -26,6 +26,7 @@ final class TextEditorOverlay: NSView, NSTextViewDelegate {
     func synchronize(documentSize: CGSize, viewport: CanvasViewport) {
         guard let draft = session.textDraft else {
             isHidden = true
+            displayedDraft?.layout.suppressesEditorGlyphs = false
             displayedDraft = nil
             if let editor { resetNativeFlips(on: editor) }
             editor?.removeFromSuperview()
@@ -45,6 +46,8 @@ final class TextEditorOverlay: NSView, NSTextViewDelegate {
             DispatchQueue.main.async { [weak self, weak view] in self?.window?.makeFirstResponder(view) }
         }
         guard let editor else { return }
+        draft.layout.suppressesEditorGlyphs = draft.layerID != nil && draft.previewImage != nil
+        editor.needsDisplay = true
         resetNativeFlips(on: editor)
         let natural = draft.layout.naturalSize()
         let transform = draft.transform
