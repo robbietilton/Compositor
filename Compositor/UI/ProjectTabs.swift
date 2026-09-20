@@ -21,6 +21,8 @@ struct ProjectTabStrip: View {
     @State private var dragging = false
     /// Scrolled away from the first tab, so the left edge fades too.
     @State private var scrolledFromStart = false
+    /// The tabs' own width, so the strip can claim only the room it uses.
+    @State private var contentWidth: CGFloat?
     @State private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private let dragTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     var body: some View {
@@ -33,7 +35,9 @@ struct ProjectTabStrip: View {
                 if dragging {
                     NewTabDropSlot(workspace: workspace).id("new-tab-drop")
                 }
-            }.frame(height: 34, alignment: .center)
+            }
+            .frame(height: 34, alignment: .center)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         }
         .frame(height: 34, alignment: .center)
         .scrollIndicators(.hidden)
