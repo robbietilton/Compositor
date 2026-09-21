@@ -35,6 +35,23 @@ struct LocalizationTests {
         defaults.removePersistentDomain(forName: suite)
     }
 
+    @Test func appLanguageStoreConfiguresNativeMenuLanguageForNextLaunch() {
+        let suite = "LocalizationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let store = AppLanguageStore(defaults: defaults, systemLocale: Locale(identifier: "ru_RU"))
+
+        store.selection = .english
+        #expect(defaults.stringArray(forKey: "AppleLanguages") == ["en"])
+
+        store.selection = .russian
+        #expect(defaults.stringArray(forKey: "AppleLanguages") == ["ru"])
+
+        store.selection = .system
+        #expect(defaults.persistentDomain(forName: suite)?["AppleLanguages"] == nil)
+        defaults.removePersistentDomain(forName: suite)
+    }
+
     @Test func appLanguageResolvesSupportedAndFallbackLocales() {
         #expect(AppLanguageStore(defaults: .standard, systemLocale: Locale(identifier: "ru_RU"), initial: .system).locale.identifier.hasPrefix("ru"))
         #expect(AppLanguageStore(defaults: .standard, systemLocale: Locale(identifier: "de_DE"), initial: .system).locale.identifier.hasPrefix("en"))

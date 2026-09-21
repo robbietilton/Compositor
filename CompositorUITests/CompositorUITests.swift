@@ -61,6 +61,8 @@ final class CompositorUITests: XCTestCase {
         app.terminate()
         app.launchArguments = []
         app.launch()
+        XCTAssertTrue(app.menuBars.menuBarItems["File"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.menuBars.menuBarItems["Файл"].waitForNonExistence(timeout: 2))
         app.menuBars.menuBarItems["Compositor"].click()
         XCTAssertTrue(app.menuItems["Settings…"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.menuItems["Настройки…"].waitForNonExistence(timeout: 2))
