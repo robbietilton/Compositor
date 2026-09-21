@@ -789,4 +789,12 @@ final class EditorSession: ObservableObject {
         guard let document else { return }
         viewport.setZoom(value, anchoredAt: anchor ?? viewport.center, documentSize: document.size)
     }
+
+    /// Photoshop-style keyboard zoom: move one stable zoom stop while keeping the current viewport center fixed.
+    func zoomKeyboard(by step: Int) {
+        guard let document, step != 0 else { return }
+        let target = viewport.keyboardZoomTarget(by: step)
+        guard target != viewport.zoom else { return }
+        viewport.setZoom(target, anchoredAt: viewport.center, documentSize: document.size)
+    }
 }

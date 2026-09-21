@@ -43,6 +43,103 @@ struct CompositorTests {
         #expect(abs(before.y - after.y) < 0.000001)
     }
 
+    @Test func keyboardZoomKeepsPannedViewportCenterFixed() {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 3000, height: 2000)
+        session.zoom(to: 1)
+        session.viewport.translate(by: CGSize(width: -620, height: 185))
+
+        let center = session.viewport.center
+        let canvas = CGSize(width: 3000, height: 2000)
+        let before = session.viewport.documentPoint(from: center, documentSize: canvas)
+        session.zoomKeyboard(by: 1)
+        let after = session.viewport.documentPoint(from: center, documentSize: canvas)
+
+        #expect(session.viewport.zoom == 1.25)
+        #expect(abs(before.x - after.x) < 0.000001)
+        #expect(abs(before.y - after.y) < 0.000001)
+        #expect(abs(session.viewport.viewPoint(from: after, documentSize: canvas).x - center.x) < 0.000001)
+        #expect(abs(session.viewport.viewPoint(from: after, documentSize: canvas).y - center.y) < 0.000001)
+    }
+
+    @Test func keyboardZoomUsesStableStopsAndClampsAtTheEnds() {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 3000, height: 2000)
+        session.zoom(to: 0.5)
+
+        session.zoomKeyboard(by: 1)
+        #expect(session.viewport.zoom == 2.0 / 3.0)
+        session.zoomKeyboard(by: 1)
+        #expect(session.viewport.zoom == 1)
+        session.zoomKeyboard(by: 1)
+        #expect(session.viewport.zoom == 1.25)
+
+        session.zoom(to: CanvasViewport.keyboardZoomLevels.first!)
+        session.zoomKeyboard(by: -1)
+        #expect(session.viewport.zoom == CanvasViewport.keyboardZoomLevels.first!)
+        session.zoom(to: CanvasViewport.keyboardZoomLevels.last!)
+        session.zoomKeyboard(by: 1)
+        #expect(session.viewport.zoom == CanvasViewport.keyboardZoomLevels.last!)
+    }
+
+    @Test func keyboardZoomRoundTripDoesNotDriftAfterTenSteps() {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1200, height: 900), backingScale: 2, documentSize: nil)
+        session.createDocument(width: 4000, height: 3000)
+        session.zoom(to: 0.5)
+        session.viewport.translate(by: CGSize(width: -430, height: 275))
+
+        let center = session.viewport.center
+        let canvas = CGSize(width: 4000, height: 3000)
+        let before = session.viewport.documentPoint(from: center, documentSize: canvas)
+        for _ in 0..<10 { session.zoomKeyboard(by: 1) }
+        for _ in 0..<10 { session.zoomKeyboard(by: -1) }
+        let after = session.viewport.documentPoint(from: center, documentSize: canvas)
+
+        #expect(session.viewport.zoom == 0.5)
+        #expect(abs(before.x - after.x) < 0.000001)
+        #expect(abs(before.y - after.y) < 0.000001)
+    }
+
+    @Test func keyboardZoomKeepsSmallCanvasCentered() {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1200, height: 900), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 200, height: 100)
+        session.zoom(to: 0.5)
+
+        let center = session.viewport.center
+        let canvas = CGSize(width: 200, height: 100)
+        let before = session.viewport.documentPoint(from: center, documentSize: canvas)
+        session.zoomKeyboard(by: 1)
+        let after = session.viewport.documentPoint(from: center, documentSize: canvas)
+
+        #expect(session.viewport.zoom == 2.0 / 3.0)
+        #expect(abs(before.x - 100) < 0.000001)
+        #expect(abs(before.y - 50) < 0.000001)
+        #expect(abs(before.x - after.x) < 0.000001)
+        #expect(abs(before.y - after.y) < 0.000001)
+    }
+
+    @Test func keyboardZoomFromFitUsesNextStopAndLeavesFitMode() {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 1500, height: 1000)
+        session.fit()
+
+        let center = session.viewport.center
+        let canvas = CGSize(width: 1500, height: 1000)
+        let before = session.viewport.documentPoint(from: center, documentSize: canvas)
+        session.zoomKeyboard(by: 1)
+        let after = session.viewport.documentPoint(from: center, documentSize: canvas)
+
+        #expect(session.viewport.zoom == 2.0 / 3.0)
+        #expect(!session.viewport.followsFit)
+        #expect(abs(before.x - after.x) < 0.000001)
+        #expect(abs(before.y - after.y) < 0.000001)
+    }
+
     @Test func fitAndResizeModes() {
         var viewport = CanvasViewport()
         viewport.resize(to: CGSize(width: 800, height: 600), backingScale: 2, documentSize: document)

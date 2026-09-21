@@ -637,8 +637,23 @@ final class CanvasView: NSView {
             let originalEvent = event
             guard let event = ShortcutSettings.shared.canvasEvent(event) else { return originalEvent }
             guard let self, let window = self.window, event.window === window, !(window.firstResponder is NSText),
-                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
                   let key = event.charactersIgnoringModifiers else { return originalEvent }
+            // Zoom shortcuts are window-wide so they also work with focus in the Layers panel or a toolbar control.
+            // The shifted form is explicit because a physical '+' is '=' with Shift on a Mac keyboard.
+            let zoomInIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom In" })
+                .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
+            let zoomOutIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom Out" })
+                .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
+            let modifiers = event.modifierFlags.intersection([.command, .shift])
+            if zoomInIsDefault, (modifiers == [.command] || modifiers == [.command, .shift]), event.keyCode == 24 {
+                self.session.zoomKeyboard(by: 1)
+                return nil
+            }
+            if zoomOutIsDefault, modifiers == [.command], event.keyCode == 27 {
+                self.session.zoomKeyboard(by: -1)
+                return nil
+            }
+            guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return originalEvent }
             // Shift-+ / Shift-− step the active layer's blend mode, in every tool.
             if event.modifierFlags.contains(.shift), key == "+" || key == "_" || event.keyCode == 24 || event.keyCode == 27 {
                 self.session.cycleBlendMode(forward: key == "+" || event.keyCode == 24)
