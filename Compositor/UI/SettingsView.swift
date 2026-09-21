@@ -22,3 +22,12 @@ struct SettingsView: View {
         .padding()
     }
 }
+
+struct SettingsWindowRoot: View {
+    @ObservedObject var languageStore: AppLanguageStore
+
+    var body: some View {
+        SettingsView(languageStore: languageStore)
+            .environment(\.locale, languageStore.locale)
+    }
+}

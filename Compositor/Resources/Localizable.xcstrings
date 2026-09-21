@@ -135,8 +135,8 @@
     },
     "dialog.languageRestart" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Some native panels may update after reopening." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые системные панели обновятся после повторного открытия." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Restart Compositor to apply the language change." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перезапустите Compositor, чтобы применить новый язык." } }
       }
     },
     "error.import.unreadable" : {
@@ -587,6 +587,12 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } },
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Язык" } }
+      }
+    },
+    "settings.open" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройки…" } }
       }
     },
     "settings.language.system" : {

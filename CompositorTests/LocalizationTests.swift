@@ -43,6 +43,8 @@ struct LocalizationTests {
 
     @Test func representativeCatalogKeysRenderInRussianAndEnglish() {
         #expect(L10n.text("settings.language", locale: Locale(identifier: "ru")) == "Язык")
+        #expect(L10n.text("settings.open", locale: Locale(identifier: "en")) == "Settings…")
+        #expect(L10n.text("settings.open", locale: Locale(identifier: "ru")) == "Настройки…")
         #expect(L10n.text("menu.edit.undo", locale: Locale(identifier: "ru")) == "Отменить")
         #expect(L10n.text("menu.edit.undo", locale: Locale(identifier: "en")) == "Undo")
         #expect(L10n.text("unknown.localization.key", locale: Locale(identifier: "ru")) == "unknown.localization.key")

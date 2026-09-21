@@ -77,6 +77,12 @@ struct CompositorApp: App {
                 }
                 // Grouped: a commands builder takes at most ten items.
                 Group {
+                    CommandGroup(replacing: .appSettings) {
+                        Button(L10n.text("settings.open", locale: selectedLocale)) {
+                            applicationDelegate.showSettings(languageStore: languageStore)
+                        }
+                            .configuredKeyboardShortcut(",", modifiers: .command)
+                    }
                     CommandGroup(after: .appInfo) {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates(nil) }
                     }
@@ -309,9 +315,5 @@ struct CompositorApp: App {
                 }
             }
 
-        Settings {
-            SettingsView(languageStore: languageStore)
-                .environment(\.locale, languageStore.locale)
-        }
     }
 }
