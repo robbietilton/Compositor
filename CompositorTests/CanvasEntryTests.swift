@@ -16,6 +16,33 @@ import UniformTypeIdentifiers
         #expect(NavigationTool.eyedropper.symbol == "eyedropper")
     }
 
+    @Test func commandZoomUpdatesWhileKeyIsDown() throws {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 3000, height: 2000)
+        session.zoom(to: 1)
+        let canvas = CanvasView(session: session)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [.command, .shift], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "+", charactersIgnoringModifiers: "=", isARepeat: false, keyCode: 24))
+
+        canvas.keyDown(with: event)
+
+        #expect(session.viewport.zoom == 1.25)
+
+        let repeatEvent = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [.command, .shift], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "+", charactersIgnoringModifiers: "=", isARepeat: true, keyCode: 24))
+        canvas.keyDown(with: repeatEvent)
+        #expect(session.viewport.zoom == 1.5)
+
+        let zoomOutEvent = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: .command, timestamp: 0, windowNumber: 0, context: nil,
+            characters: "-", charactersIgnoringModifiers: "-", isARepeat: false, keyCode: 27))
+        canvas.keyDown(with: zoomOutEvent)
+        #expect(session.viewport.zoom == 1.25)
+    }
+
     @Test func clipboardSuggestsImagePixelsAndIgnoresText() throws {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
