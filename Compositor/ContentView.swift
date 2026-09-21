@@ -178,10 +178,10 @@ struct ContentView: View {
                     .accessibilityIdentifier("actualPixels").disabled(session.document == nil)
             }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { session.zoom(to: session.viewport.zoom * 1.25) } label: {
+                Button { session.zoomKeyboard(by: 1) } label: {
                     Image(systemName: "plus.magnifyingglass")
                 }.help("Zoom in (⌘+)").disabled(session.document == nil)
-                Button { session.zoom(to: session.viewport.zoom / 1.25) } label: {
+                Button { session.zoomKeyboard(by: -1) } label: {
                     Image(systemName: "minus.magnifyingglass")
                 }.help("Zoom out (⌘−)").disabled(session.document == nil)
             }

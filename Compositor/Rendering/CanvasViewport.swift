@@ -9,6 +9,10 @@ struct CanvasViewport: Equatable {
     var pan: CGSize = .zero
     private(set) var followsFit = true
     static let zoomRange: ClosedRange<CGFloat> = 0.001...32
+    /// Stable keyboard zoom stops, expressed as document pixels per display pixel.
+    static let keyboardZoomLevels: [CGFloat] = [0.125, 1.0 / 6.0, 0.25, 1.0 / 3.0,
+                                                  0.5, 2.0 / 3.0, 1, 1.25, 1.5, 2,
+                                                  3, 4, 5, 6, 8, 12, 16]
     var pointsPerPixel: CGFloat { zoom / backingScale }
     var center: CGPoint { CGPoint(x: viewSize.width / 2, y: viewSize.height / 2) }
 
@@ -58,6 +62,15 @@ struct CanvasViewport: Equatable {
         pan.width += anchor.x - moved.x
         pan.height += anchor.y - moved.y
         followsFit = false
+    }
+
+    func keyboardZoomTarget(by step: Int) -> CGFloat {
+        guard step != 0 else { return zoom }
+        let tolerance = max(0.000000001, abs(zoom) * 0.000000001)
+        if step > 0 {
+            return Self.keyboardZoomLevels.first { $0 > zoom + tolerance } ?? zoom
+        }
+        return Self.keyboardZoomLevels.last { $0 < zoom - tolerance } ?? zoom
     }
 
     mutating func translate(by delta: CGSize) {

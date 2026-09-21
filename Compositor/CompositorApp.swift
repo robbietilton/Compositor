@@ -86,9 +86,15 @@ struct CompositorApp: App {
                     CommandGroup(after: .toolbar) {
                         Button("Fit Canvas") { session.fit() }.configuredKeyboardShortcut("0").disabled(session.document == nil)
                         Button("Actual Pixels") { session.zoom(to: 1) }.configuredKeyboardShortcut("1").disabled(session.document == nil)
-                        Button("Zoom In") { session.zoom(to: session.viewport.zoom * 1.25) }
+                        Button("Zoom In") {
+                            guard !(NSApp.keyWindow?.firstResponder is NSText) else { return }
+                            session.zoomKeyboard(by: 1)
+                        }
                             .configuredKeyboardShortcut("=").disabled(session.document == nil)
-                        Button("Zoom Out") { session.zoom(to: session.viewport.zoom / 1.25) }
+                        Button("Zoom Out") {
+                            guard !(NSApp.keyWindow?.firstResponder is NSText) else { return }
+                            session.zoomKeyboard(by: -1)
+                        }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
