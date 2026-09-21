@@ -160,11 +160,26 @@ extension EditorSession {
         return ClipboardImage.image(from: NSPasteboard.general) != nil
     }
 
+    /// A browser image can start the first document directly from the welcome canvas. Keep this separate from
+    /// `canPaste`: a text field must continue to receive ordinary text paste while no document exists.
+    var canPasteIntoNewCanvas: Bool {
+        guard document == nil, textDraft == nil, !isProjectBusy, !isImporting,
+              !showsNewDocument, !showsImporter, importError == nil else { return false }
+        return ClipboardImage.dimensions() != nil
+    }
+
     /// Cmd-V: pastes as a new layer above the active one. Pixels copied here go back exactly
     /// where they came from; images copied in other apps are centered.
     func paste() {
-        guard canPaste, let document else { return }
         let pasteboard = NSPasteboard.general
+        if document == nil {
+            guard canPasteIntoNewCanvas, let size = ClipboardImage.dimensions(pasteboard) else {
+                NSSound.beep()
+                return
+            }
+            createDocument(width: size.width, height: size.height)
+        }
+        guard canPaste, let document else { return }
         if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
             addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
         } else if let external = ClipboardImage.image(from: pasteboard),
