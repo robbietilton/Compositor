@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import ImageIO
 
 struct NewCanvasSheet: View {
     let session: EditorSession
@@ -57,20 +56,7 @@ struct NewCanvasSheet: View {
         }
     }
     static func clipboardDimensions(_ pasteboard: NSPasteboard = .general) -> (width: Int, height: Int)? {
-        for type in [NSPasteboard.PasteboardType.png, .tiff] {
-            guard let data = pasteboard.data(forType: type),
-                  let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                  var width = properties[kCGImagePropertyPixelWidth] as? Int,
-                  var height = properties[kCGImagePropertyPixelHeight] as? Int else { continue }
-            if let orientation = properties[kCGImagePropertyOrientation] as? Int, (5...8).contains(orientation) {
-                swap(&width, &height)
-            }
-            guard CanvasDocument.validDimension(String(width)) != nil,
-                  CanvasDocument.validDimension(String(height)) != nil else { continue }
-            return (width, height)
-        }
-        return nil
+        ClipboardImage.dimensions(pasteboard)
     }
     private func dimension(_ title: String, text: Binding<String>, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 8) {
