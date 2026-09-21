@@ -9,22 +9,26 @@ jobs:
     runs-on: macos-15-intel
 
     steps:
-      - name: Checkout Compositor PR #8
+      - name: Checkout macOS 15 compatibility PR
         uses: actions/checkout@v4
         with:
           repository: robbietilton/Compositor
-          ref: 648a586
+          ref: refs/pull/8/head
           fetch-depth: 1
 
-      - name: Select Xcode 26.3
+      - name: Show build environment
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app
+          echo "=== Host ==="
+          uname -a
+          uname -m
 
+          echo
           echo "=== Xcode ==="
           xcodebuild -version
 
-          echo "=== Host ==="
-          uname -m
+          echo
+          echo "=== Swift ==="
+          swift --version
 
       - name: Resolve Swift packages
         run: |
@@ -35,6 +39,8 @@ jobs:
 
       - name: Build Intel Release
         run: |
+          set -o pipefail
+
           xcodebuild \
             -project Compositor.xcodeproj \
             -scheme Compositor \
@@ -48,20 +54,28 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
-      - name: Verify architecture and deployment target
+      - name: Verify Intel architecture
         run: |
           APP="$GITHUB_WORKSPACE/build/Build/Products/Release/Compositor.app"
+          BINARY="$APP/Contents/MacOS/Compositor"
 
-          echo "=== Architecture ==="
-          file "$APP/Contents/MacOS/Compositor"
-          lipo -info "$APP/Contents/MacOS/Compositor"
+          echo "=== Executable ==="
+          file "$BINARY"
 
-          echo "=== Deployment target ==="
-          otool -l "$APP/Contents/MacOS/Compositor" \
-            | grep -A3 LC_BUILD_VERSION
+          echo
+          echo "=== Architectures ==="
+          lipo -info "$BINARY"
 
+          echo
           echo "=== App ==="
           ls -lah "$APP"
+
+      - name: Verify deployment target
+        run: |
+          APP="$GITHUB_WORKSPACE/build/Build/Products/Release/Compositor.app"
+          BINARY="$APP/Contents/MacOS/Compositor"
+
+          otool -l "$BINARY" | grep -A3 LC_BUILD_VERSION
 
       - name: Ad-hoc sign
         run: |
@@ -74,9 +88,14 @@ jobs:
             --sign - \
             "$APP"
 
-          codesign --verify --deep --strict --verbose "$APP"
+          codesign \
+            --verify \
+            --deep \
+            --strict \
+            --verbose \
+            "$APP"
 
-      - name: Create ZIP
+      - name: Package app
         run: |
           mkdir -p dist
 
@@ -87,12 +106,12 @@ jobs:
             "$GITHUB_WORKSPACE/build/Build/Products/Release/Compositor.app" \
             "dist/Compositor-macOS15-Intel.zip"
 
-      - name: Show artifact
+      - name: Generate checksum
         run: |
-          ls -lh dist/
-          shasum -a 256 dist/Compositor-macOS15-Intel.zip
+          shasum -a 256 \
+            dist/Compositor-macOS15-Intel.zip
 
-      - name: Upload Intel macOS 15 build
+      - name: Upload Intel build
         uses: actions/upload-artifact@v4
         with:
           name: Compositor-macOS15-Intel
