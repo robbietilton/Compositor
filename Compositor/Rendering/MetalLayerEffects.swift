@@ -27,8 +27,9 @@ final class MetalLayerEffects {
         var shadowColor: SIMD4<Float>
         var overlayColor: SIMD4<Float>
         var innerColor: SIMD4<Float>
+        var glowColor: SIMD4<Float>
         var flags: SIMD4<UInt32>        // has stroke, stroke inside, has shadow, has inner shadow
-        var more: SIMD4<UInt32>         // has color overlay, unused…
+        var more: SIMD4<UInt32>         // has color overlay, has outer glow, unused…
     }
 
     private init() throws {
@@ -132,6 +133,24 @@ final class MetalLayerEffects {
             innerBuffer = result
         }
         guard let inner = innerBuffer ?? device.makeBuffer(length: count * stride, options: .storageModeShared) else { throw ExportError.render }
+        let glow = effects.outerGlow.flatMap { $0.isEnabled && $0.size > 0 && $0.opacity > 0 ? $0 : nil }
+        var glowBuffer: MTLBuffer?
+        if let glow {
+            guard let blurredGlow = device.makeBuffer(length: count * stride, options: .storageModeShared),
+                  let scratch = device.makeBuffer(length: count * stride, options: .storageModeShared) else { throw ExportError.render }
+            let sigma = Float(glow.size / 2)
+            if sigma > 0.01 {
+                var blur = Blur(width: UInt32(width), height: UInt32(height), sigma: sigma,
+                                radius: UInt32(max(1, Int((sigma * 3).rounded()))))
+                run(blurRows, [(first, 0), (scratch, 1)], &blur, MemoryLayout<Blur>.stride)
+                run(blurColumns, [(scratch, 0), (blurredGlow, 1)], &blur, MemoryLayout<Blur>.stride)
+            } else {
+                var zeroShift = Shift(width: UInt32(width), height: UInt32(height), dx: 0, dy: 0)
+                run(shift, [(first, 0), (blurredGlow, 1)], &zeroShift, MemoryLayout<Shift>.stride)
+            }
+            glowBuffer = blurredGlow
+        }
+        guard let glowOutput = glowBuffer ?? device.makeBuffer(length: count * stride, options: .storageModeShared) else { throw ExportError.render }
         var settings = Compose(width: UInt32(width), height: UInt32(height),
             strokeColor: SIMD4(Float(stroke?.color.red ?? 0), Float(stroke?.color.green ?? 0),
                                Float(stroke?.color.blue ?? 0), Float(stroke?.opacity ?? 0)),
@@ -141,10 +160,12 @@ final class MetalLayerEffects {
                                 Float(overlay?.color.blue ?? 0), Float(overlay?.opacity ?? 0)),
             innerColor: SIMD4(Float(innerShadow?.color.red ?? 0), Float(innerShadow?.color.green ?? 0),
                               Float(innerShadow?.color.blue ?? 0), Float(innerShadow?.opacity ?? 0)),
+            glowColor: SIMD4(Float(glow?.color.red ?? 0), Float(glow?.color.green ?? 0),
+                             Float(glow?.color.blue ?? 0), Float(glow?.opacity ?? 0)),
             flags: SIMD4(stroke != nil ? 1 : 0, stroke?.inside == true ? 1 : 0, shadow != nil ? 1 : 0,
                          innerShadow != nil ? 1 : 0),
-            more: SIMD4(overlay != nil ? 1 : 0, 0, 0, 0))
-        run(compose, [(input, 0), (third, 1), (second, 2), (output, 3), (inner, 4), (first, 5)], &settings, MemoryLayout<Compose>.stride)
+            more: SIMD4(overlay != nil ? 1 : 0, glow != nil ? 1 : 0, 0, 0))
+        run(compose, [(input, 0), (third, 1), (second, 2), (output, 3), (inner, 4), (first, 5), (glowOutput, 6)], &settings, MemoryLayout<Compose>.stride)
         encoder.endEncoding()
         command.commit()
         command.waitUntilCompleted()
@@ -169,7 +190,7 @@ final class MetalLayerEffects {
     struct Shift { uint width; uint height; float dx; float dy; };
     struct Blur { uint width; uint height; float sigma; uint radius; };
     struct Compose { uint width; uint height; float4 strokeColor; float4 shadowColor; float4 overlayColor;
-                     float4 innerColor; uint4 flags; uint4 more; };
+                     float4 innerColor; float4 glowColor; uint4 flags; uint4 more; };
 
     kernel void effects_alpha(device const uchar4* pixels [[buffer(0)]],
                               device float* coverage [[buffer(1)]],
@@ -287,50 +308,56 @@ final class MetalLayerEffects {
         result[index] = clamp(shape[index] * (1.0 - moved[index]), 0.0, 1.0);
     }
 
-    // Shadow behind, outside stroke over it, the layer's pixels over that, then a color overlay, an inner shadow
-    // and an inside stroke on top.
+    // Shadow behind, outer glow over it, outside stroke over that, the layer's pixels over that, then a color overlay,
+    // an inner shadow and an inside stroke on top.
     kernel void effects_compose(device const uchar4* pixels [[buffer(0)]],
                                 device const float* ring [[buffer(1)]],
                                 device const float* shadow [[buffer(2)]],
                                 device uchar4* result [[buffer(3)]],
                                 device const float* inner [[buffer(4)]],
                                 device const float* shape [[buffer(5)]],
+                                device const float* glow [[buffer(6)]],
                                 constant Compose& settings [[buffer(9)]],
                                 uint2 gid [[thread_position_in_grid]]) {
         if (gid.x >= settings.width || gid.y >= settings.height) { return; }
         uint index = gid.y * settings.width + gid.x;
-        float3 colour = float3(0.0);
+        float3 color = float3(0.0);
         float alpha = 0.0;
         if (settings.flags.z == 1) {
             float coverage = clamp(shadow[index] * settings.shadowColor.w, 0.0, 1.0);
-            colour = settings.shadowColor.xyz * coverage;
+            color = settings.shadowColor.xyz * coverage;
             alpha = coverage;
+        }
+        if (settings.more.y == 1) {
+            float glowCoverage = clamp(glow[index] * (1.0 - shape[index]) * settings.glowColor.w, 0.0, 1.0);
+            color = settings.glowColor.xyz * glowCoverage + color * (1.0 - glowCoverage);
+            alpha = glowCoverage + alpha * (1.0 - glowCoverage);
         }
         float strokeCoverage = settings.flags.x == 1 ? clamp(ring[index] * settings.strokeColor.w, 0.0, 1.0) : 0.0;
         if (settings.flags.x == 1 && settings.flags.y == 0) {
-            colour = settings.strokeColor.xyz * strokeCoverage + colour * (1.0 - strokeCoverage);
+            color = settings.strokeColor.xyz * strokeCoverage + color * (1.0 - strokeCoverage);
             alpha = strokeCoverage + alpha * (1.0 - strokeCoverage);
         }
         float4 source = float4(pixels[index]) / 255.0;
-        colour = source.xyz + colour * (1.0 - source.w);
+        color = source.xyz + color * (1.0 - source.w);
         alpha = source.w + alpha * (1.0 - source.w);
         if (settings.more.x == 1) {
             float coverage = clamp(shape[index] * settings.overlayColor.w, 0.0, 1.0);
-            colour = settings.overlayColor.xyz * coverage + colour * (1.0 - coverage);
+            color = settings.overlayColor.xyz * coverage + color * (1.0 - coverage);
             alpha = coverage + alpha * (1.0 - coverage);
         }
         if (settings.flags.w == 1) {
             float coverage = clamp(inner[index] * settings.innerColor.w, 0.0, 1.0);
-            colour = settings.innerColor.xyz * coverage + colour * (1.0 - coverage);
+            color = settings.innerColor.xyz * coverage + color * (1.0 - coverage);
             alpha = coverage + alpha * (1.0 - coverage);
         }
         if (settings.flags.x == 1 && settings.flags.y == 1) {
-            colour = settings.strokeColor.xyz * strokeCoverage + colour * (1.0 - strokeCoverage);
+            color = settings.strokeColor.xyz * strokeCoverage + color * (1.0 - strokeCoverage);
             alpha = strokeCoverage + alpha * (1.0 - strokeCoverage);
         }
-        result[index] = uchar4(uchar(clamp(colour.x, 0.0, 1.0) * 255.0 + 0.5),
-                               uchar(clamp(colour.y, 0.0, 1.0) * 255.0 + 0.5),
-                               uchar(clamp(colour.z, 0.0, 1.0) * 255.0 + 0.5),
+        result[index] = uchar4(uchar(clamp(color.x, 0.0, 1.0) * 255.0 + 0.5),
+                               uchar(clamp(color.y, 0.0, 1.0) * 255.0 + 0.5),
+                               uchar(clamp(color.z, 0.0, 1.0) * 255.0 + 0.5),
                                uchar(clamp(alpha, 0.0, 1.0) * 255.0 + 0.5));
     }
     """

@@ -14,6 +14,9 @@ nonisolated struct BrushSettings: Sendable {
     var blue: CGFloat = 0
     /// Caps the whole stroke, as in Photoshop: overlapping dabs never exceed it.
     var opacity: CGFloat = 1
+    /// 0–100. The brush trails the pointer on a string of this length, so a shaky hand
+    /// draws a smooth line; 0 follows the pointer exactly.
+    var smoothing: CGFloat = 0
     /// Spot-healing uses nearby source pixels instead of the foreground color.
     /// Erase: the stroke clears the layer's pixels instead of painting color on them.
     var erasing = false

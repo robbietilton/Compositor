@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 
 extension UTType {
     static let compositorProject = UTType(exportedAs: "com.compositor.project", conformingTo: .package)
+    static let photoshopImage = UTType(importedAs: "com.adobe.photoshop-image")
+    static let importableImages: [UTType] = [.jpeg, .png, .heic, .tiff, .photoshopImage]
 }
 
 nonisolated struct ProjectManifest: Codable, Sendable {
@@ -198,9 +200,11 @@ actor ProjectStore {
                 layer.maskPlacement.map({ $0.isValid && layer.maskFile != nil }) ?? true else { throw ProjectError.invalid }
             let opacity = layer.opacity ?? 1
             let blend = layer.blendMode ?? .normal
+            // Folders took an opacity of their own in version 8, which multiplies into what is inside
+            // them; their blend mode is still pass-through, so it stays Normal.
             guard opacity.isFinite, (0...1).contains(opacity),
                   (manifest.version >= 3 || (opacity == 1 && blend == .normal)),
-                  (layer.isGroup != true || (opacity == 1 && blend == .normal)) else { throw ProjectError.invalid }
+                  (layer.isGroup != true || (blend == .normal && (manifest.version >= 8 || opacity == 1))) else { throw ProjectError.invalid }
         }
         try LayerHierarchy.validate(manifest.layers)
         try LiveMaskGraph.validate(manifest.layers)

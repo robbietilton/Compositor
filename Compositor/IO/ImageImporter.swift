@@ -60,4 +60,12 @@ actor ImageImporter {
             return ImportedImage(image: image, thumbnail: thumbnail, name: url.deletingPathExtension().lastPathComponent)
         }
     }
+
+    func loadPhotoshop(_ url: URL, remainingPixels: Int = 100_000_000) throws -> PSDDocument {
+        try PSDReader.read(from: url, remainingPixels: remainingPixels)
+    }
+
+    func photoshopAssets(_ document: PSDDocument) throws -> [UUID: ImportedImage] {
+        try PSDDocumentBuilder.assets(from: document)
+    }
 }

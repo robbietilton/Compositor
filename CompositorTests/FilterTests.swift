@@ -5,7 +5,7 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct FilterTests {
-    @Test func gaussianBlurSoftensAHardEdgeWithoutFadingTheBordersAsOneUndoStep() async throws {
+    @Test func gaussianBlurSoftensAHardEdgeAndSpreadsPastTheLayerEdgeAsOneUndoStep() async throws {
         let session = EditorSession()
         session.createDocument(width: 40, height: 20)
         // Left half opaque white, right half transparent.
@@ -27,31 +27,23 @@ struct FilterTests {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
         pixels.draw(result, in: CGRect(x: 0, y: 0, width: result.width, height: result.height))
         let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt8.self)
-        func alpha(_ x: Int) -> Int { Int(bytes[(10 * result.width + x) * 4 + 3]) }
-        #expect(alpha(0) == 255)                  // the layer's own border doesn't fade
-        #expect((0..<result.width).contains { (20..<235).contains(alpha($0)) }) // the hard edge is now soft
-        #expect(alpha(result.width - 1) < 20)      // transparent content remains transparent at the far edge
-    }
-
-    @Test func gaussianBlurKeepsAnOpaqueLayerEdgeAndSpreadsPastItsOriginalBounds() async throws {
-        let session = EditorSession()
-        session.createDocument(width: 40, height: 20)
-        let context = try BrushRaster.context(width: 40, height: 20, mask: false)
-        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
-        let image = try #require(context.makeImage())
-        session.insert(ImportedImage(image: image, thumbnail: image, name: "Opaque"))
-        session.beginFilter(.gaussianBlur)
-        session.updateFilter(FilterSettings(radius: 3), preview: true)
-        await session.commitFilter()
-        let result = try #require(session.activeLayer?.asset?.image)
-        #expect(result.width > 40 && result.height > 20)
-        let pixels = try #require(CGContext(data: nil, width: result.width, height: result.height, bitsPerComponent: 8,
-            bytesPerRow: result.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
-        pixels.draw(result, in: CGRect(x: 0, y: 0, width: result.width, height: result.height))
-        let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt8.self)
-        #expect(bytes[3] == 255 && bytes[(result.width - 1) * 4 + 3] == 255)
+        // The blur is not clamped at the layer's edge: the layer is given room, the blur spreads into it and
+        // whatever stays empty is cut away again (Filters.swift, `growForBlur` / `PixelFilter.trimmed`). The
+        // 40 x 20 layer, opaque across its full height for its left half, comes out 36 x 36 at (-8, -8). This
+        // used to read three fixed columns of a 40-wide result and assert that the border did not fade, from
+        // when the blur smeared outwards and stopped at the edge; the test's name said so too.
+        let origin = try #require(session.activeLayer?.transform.origin)
+        #expect(origin.x < 0 && origin.y < 0, "the layer grew on every side: origin \(origin)")
+        // The strongest evidence that the blur left the layer: it was 20 tall and opaque top to bottom, so it
+        // could not have grown vertically unless the blur went past the edge and the layer was given room.
+        #expect(result.height > 20, "the blur spread past the layer's edge: height \(result.height)")
+        #expect(result.width < 40, "and the half that stayed empty was trimmed away: width \(result.width)")
+        let middle = (0..<result.width).map { Int(bytes[(result.height / 2 * result.width + $0) * 4 + 3]) }
+        // 250 rather than 255: the block's centre is 10 px from its edges, which at this radius leaves it a
+        // fraction of a level below full opacity. What would break here is the inside fading, not rounding.
+        #expect(try #require(middle.max()) >= 250, "the block's inside is untouched: \(middle.max() ?? -1)")
+        #expect(middle.contains { $0 > 20 && $0 < 235 }, "the hard edge is now soft")
+        #expect(try #require(middle.last) < 20, "and it fades out on the far side")
     }
 
     @Test func motionBlurStreaksAlongItsAngleCounterclockwiseFromHorizontal() throws {

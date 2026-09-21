@@ -7,13 +7,22 @@
         <key>CFBundleTypeRole</key><string>Viewer</string>
         <key>LSHandlerRank</key><string>Alternate</string>
         <key>LSItemContentTypes</key>
-        <array><string>public.jpeg</string><string>public.png</string><string>public.heic</string><string>public.tiff</string></array>
+        <array><string>public.jpeg</string><string>public.png</string><string>public.heic</string><string>public.tiff</string><string>com.adobe.photoshop-image</string></array>
     </dict><dict>
         <key>CFBundleTypeName</key><string>Compositor Project</string>
         <key>CFBundleTypeRole</key><string>Editor</string>
         <key>LSHandlerRank</key><string>Owner</string>
         <key>LSTypeIsPackage</key><true/>
         <key>LSItemContentTypes</key><array><string>com.compositor.project</string></array>
+    </dict></array>
+    <key>UTImportedTypeDeclarations</key>
+    <array><dict>
+        <key>UTTypeIdentifier</key><string>com.adobe.photoshop-image</string>
+        <key>UTTypeDescription</key><string>Adobe Photoshop Document</string>
+        <key>UTTypeConformsTo</key><array><string>public.image</string></array>
+        <key>UTTypeTagSpecification</key><dict>
+            <key>public.filename-extension</key><array><string>psd</string></array>
+        </dict>
     </dict></array>
     <key>UTExportedTypeDeclarations</key>
     <array><dict>

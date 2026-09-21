@@ -25,6 +25,7 @@ import CoreImage
         var reach: CGFloat = 1
         if let stroke = effects.stroke, stroke.isEnabled { reach = max(reach, stroke.size + 2) }
         if let shadow = effects.shadow, shadow.isEnabled { reach = max(reach, shadow.distance + shadow.blur * 3 + 2) }
+        if let glow = effects.outerGlow, glow.isEnabled { reach = max(reach, glow.size * 3 + 2) }
         return ceil(reach)
     }
 
@@ -89,6 +90,10 @@ import CoreImage
         if let shadow = effects.shadow, shadow.isEnabled, shadow.opacity > 0,
            let coverage = try? LayerEffectsRenderer.shadowCoverage(pixels, in: outer.size, offset: shadow.offset, blur: shadow.blur) {
             fill(shadow.color, alpha: shadow.opacity, coverage: coverage, in: placed(outer))
+        }
+        if let glow = effects.outerGlow, glow.isEnabled, glow.opacity > 0,
+           let coverage = try? LayerEffectsRenderer.outerGlowCoverage(pixels, placed: CGRect(origin: .zero, size: outer.size), size: outer.size, glow: glow) {
+            fill(glow.color, alpha: glow.opacity, coverage: coverage, in: placed(outer))
         }
         let stroke = effects.stroke.flatMap { $0.isEnabled && $0.size > 0 && $0.opacity > 0 ? $0 : nil }
         if let stroke, !stroke.inside, let ring = try? LayerEffectsRenderer.ringCoverage(pixels, in: outer.size, stroke: stroke) {

@@ -56,6 +56,8 @@ extension EditorSession {
             stroke.isBlur = tool == .blur
             brushStroke = stroke
             try stroke.append(point)
+            brushAnchor = point
+            brushPointer = point
             lastBrushPoint = (point, layer.id, isMaskSelected)
             brushRevision += 1
         } catch { cancelBrush(); brushError = error.localizedDescription }
@@ -63,8 +65,25 @@ extension EditorSession {
     func continueBrush(at point: CGPoint) {
         if let warpStroke { warpStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1; return }
         guard let brushStroke else { return }
-        do { try brushStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1 }
+        brushPointer = point
+        guard let painted = smoothed(point) else { return }
+        do { try brushStroke.append(painted); lastBrushPoint?.point = painted; brushRevision += 1 }
         catch { cancelBrush(); brushError = error.localizedDescription }
+    }
+    /// Where the brush actually is, with Smoothing on: it trails the pointer on a string, and only
+    /// moves once the pointer pulls that string taut — the model Photoshop uses. The string's length
+    /// is in screen points, so it feels the same however far the canvas is zoomed in. Nil while the
+    /// string is still slack, which is the whole point: those jitters never reach the stroke.
+    private func smoothed(_ point: CGPoint) -> CGPoint? {
+        guard tool == .brush, brushSettings.smoothing > 0, let anchor = brushAnchor else { return point }
+        let radius = brushSettings.smoothing / max(0.01, viewport.zoom)
+        let delta = CGPoint(x: point.x - anchor.x, y: point.y - anchor.y)
+        let distance = hypot(delta.x, delta.y)
+        guard distance > radius else { return nil }
+        let step = (distance - radius) / distance
+        let moved = CGPoint(x: anchor.x + delta.x * step, y: anchor.y + delta.y * step)
+        brushAnchor = moved
+        return moved
     }
     /// Where a Shift-click paints a line from: the end of the last stroke, while the same layer (or mask) is the target.
     func shiftLineStart() -> CGPoint? {
@@ -74,6 +93,8 @@ extension EditorSession {
     func cancelBrush() {
         warpStroke = nil
         brushStroke = nil
+        brushAnchor = nil
+        brushPointer = nil
         brushRevision += 1
     }
     /// Called directly by mouse-up, before the next input event can be handled.
@@ -88,6 +109,11 @@ extension EditorSession {
         guard !isProjectBusy else { return false }
         defer { cancelBrush() }
         do {
+            // Smoothing leaves the brush short of the pointer; the stroke ends where the hand did.
+            if let pointer = brushPointer, let anchor = brushAnchor, pointer != anchor,
+               tool == .brush, brushSettings.smoothing > 0 {
+                try stroke.append(pointer)
+            }
             try stroke.flush()
             if stroke.settings.healing { try stroke.heal() }
             if !stroke.patches.isEmpty { try commitPaintSnapshot(stroke) }

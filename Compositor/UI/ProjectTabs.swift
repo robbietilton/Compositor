@@ -16,6 +16,7 @@ struct ProjectWorkspaceView: View {
         ContentView(session: workspace.current.session, applicationDelegate: applicationDelegate)
             .id(workspace.current.id)
             .disabled(workspace.isManaging)
+            .psdConversionSheet(workspace.current.session)
             .background {
                 ProjectWindowBridge(controller: workspace.current.controller).frame(width: 0, height: 0)
             }

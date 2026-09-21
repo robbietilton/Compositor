@@ -866,7 +866,7 @@ final class CanvasView: NSView {
             } else if let stroke, !stroke.isMask {
                 // The effects follow the paint: a surface kept at full resolution, redone only where the brush has
                 // just been (see LayerEffectsSurface). It already holds the wet pixels with the effects over them —
-                // a colour overlay and an inner shadow go over the layer, so drawing the paint again on top of it
+                // a color overlay and an inner shadow go over the layer, so drawing the paint again on top of it
                 // would cover them — so nothing more is drawn for this layer.
                 if let surface = strokeSurface(layer: layer, stroke: stroke, mask: mask), let built = surface.image {
                     let grown = LayerEffectsRenderer.placed(transform, image: built, inset: surface.margin)
@@ -1753,10 +1753,11 @@ final class CanvasView: NSView {
                 if event.modifierFlags.contains(.shift), session.tool == .shape { session.toggleShapeKind() }
                 else { session.selectTool(.shape) }
             case "i": session.selectTool(.eyedropper)
-            // M (Shift or not) chooses the Marquee, then switches Rectangle/Ellipse; holding it doesn't flicker.
+            // M chooses the Marquee in whichever shape it was last set to; the shape is switched in the tool
+            // bar. Ignoring a repeat keeps holding the key from doing anything odd.
             case "m": if !event.isARepeat { session.pressMarqueeKey(); refreshLassoCursor() }
             case "w": if !event.isARepeat { session.pressWandKey(); refreshLassoCursor() }
-            // L (Shift or not) chooses the Lasso, then switches Freehand/Polygonal; holding it doesn't flicker.
+            // L chooses the Lasso the same way; Freehand/Polygonal is switched in the tool bar.
             case "l": if !event.isARepeat { session.pressLassoKey(); refreshLassoCursor() }
             case let key? where Int(key) != nil && session.usesOpacityKeys:
                 session.typeOpacityDigit(Int(key) ?? 0)

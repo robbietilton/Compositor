@@ -88,6 +88,23 @@ nonisolated struct InnerShadowEffect: Codable, Equatable, Sendable {
     }
 }
 
+/// A soft glow drawn omnidirectionally around the outside of what the layer shows.
+nonisolated struct OuterGlowEffect: Codable, Equatable, Sendable {
+    var enabled: Bool? = nil
+    var isEnabled: Bool { enabled ?? true }
+    var size: CGFloat = 20
+    var red: CGFloat = 1
+    var green: CGFloat = 1
+    var blue: CGFloat = 1
+    var opacity: Double = 0.75
+    var color: PaletteColor { PaletteColor(red: red, green: green, blue: blue) }
+    var isValid: Bool {
+        size.isFinite && (0...500).contains(size)
+            && opacity.isFinite && (0...1).contains(opacity)
+            && [red, green, blue].allSatisfy { $0.isFinite && (0...1).contains($0) }
+    }
+}
+
 /// What a layer draws around itself. Kept with the layer, so it follows every edit and can be changed or removed
 /// at any time; the pixels themselves are never touched.
 nonisolated struct LayerEffects: Codable, Equatable, Sendable {
@@ -95,10 +112,12 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
     var shadow: ShadowEffect? = nil
     var colorOverlay: ColorOverlayEffect? = nil
     var innerShadow: InnerShadowEffect? = nil
-    var isEmpty: Bool { stroke == nil && shadow == nil && colorOverlay == nil && innerShadow == nil }
+    var outerGlow: OuterGlowEffect? = nil
+    var isEmpty: Bool { stroke == nil && shadow == nil && colorOverlay == nil && innerShadow == nil && outerGlow == nil }
     var isValid: Bool {
         (stroke?.isValid ?? true) && (shadow?.isValid ?? true)
             && (colorOverlay?.isValid ?? true) && (innerShadow?.isValid ?? true)
+            && (outerGlow?.isValid ?? true)
     }
     var kinds: [LayerEffectKind] { LayerEffectKind.allCases.filter { contains($0) } }
     func contains(_ kind: LayerEffectKind) -> Bool {
@@ -107,6 +126,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: return shadow != nil
         case .colorOverlay: return colorOverlay != nil
         case .innerShadow: return innerShadow != nil
+        case .outerGlow: return outerGlow != nil
         }
     }
     func isEnabled(_ kind: LayerEffectKind) -> Bool {
@@ -115,6 +135,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: return shadow?.isEnabled == true
         case .colorOverlay: return colorOverlay?.isEnabled == true
         case .innerShadow: return innerShadow?.isEnabled == true
+        case .outerGlow: return outerGlow?.isEnabled == true
         }
     }
     /// The effect's own color, and a way to put a new one back.
@@ -124,6 +145,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: return shadow?.color
         case .colorOverlay: return colorOverlay?.color
         case .innerShadow: return innerShadow?.color
+        case .outerGlow: return outerGlow?.color
         }
     }
     mutating func setColor(_ color: PaletteColor, for kind: LayerEffectKind) {
@@ -132,6 +154,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: shadow?.red = color.red; shadow?.green = color.green; shadow?.blue = color.blue
         case .colorOverlay: colorOverlay?.red = color.red; colorOverlay?.green = color.green; colorOverlay?.blue = color.blue
         case .innerShadow: innerShadow?.red = color.red; innerShadow?.green = color.green; innerShadow?.blue = color.blue
+        case .outerGlow: outerGlow?.red = color.red; outerGlow?.green = color.green; outerGlow?.blue = color.blue
         }
     }
     mutating func remove(_ kind: LayerEffectKind) {
@@ -140,6 +163,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: shadow = nil
         case .colorOverlay: colorOverlay = nil
         case .innerShadow: innerShadow = nil
+        case .outerGlow: outerGlow = nil
         }
     }
     mutating func setEnabled(_ enabled: Bool, for kind: LayerEffectKind) {
@@ -148,18 +172,20 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
         case .shadow: shadow?.enabled = enabled
         case .colorOverlay: colorOverlay?.enabled = enabled
         case .innerShadow: innerShadow?.enabled = enabled
+        case .outerGlow: outerGlow?.enabled = enabled
         }
     }
     var visible: LayerEffects {
         LayerEffects(stroke: stroke?.isEnabled == true ? stroke : nil,
                      shadow: shadow?.isEnabled == true ? shadow : nil,
                      colorOverlay: colorOverlay?.isEnabled == true ? colorOverlay : nil,
-                     innerShadow: innerShadow?.isEnabled == true ? innerShadow : nil)
+                     innerShadow: innerShadow?.isEnabled == true ? innerShadow : nil,
+                     outerGlow: outerGlow?.isEnabled == true ? outerGlow : nil)
     }
 }
 
 nonisolated enum LayerEffectKind: String, CaseIterable, Sendable {
-    case stroke = "Stroke", shadow = "Drop Shadow", colorOverlay = "Color Overlay", innerShadow = "Inner Shadow"
+    case stroke = "Stroke", shadow = "Drop Shadow", colorOverlay = "Color Overlay", innerShadow = "Inner Shadow", outerGlow = "Outer Glow"
 }
 
 struct LayerEffectSelection: Equatable {
@@ -199,6 +225,8 @@ extension EditorSession {
             effects.colorOverlay = new
         case .innerShadow where effects.innerShadow == nil:
             effects.innerShadow = InnerShadowEffect()
+        case .outerGlow where effects.outerGlow == nil:
+            effects.outerGlow = OuterGlowEffect()
         default: break
         }
         setEffects(effects, on: id, name: "Add " + kind.rawValue)
@@ -233,6 +261,7 @@ extension EditorSession {
             case .shadow: effects.shadow = original.shadow
             case .colorOverlay: effects.colorOverlay = original.colorOverlay
             case .innerShadow: effects.innerShadow = original.innerShadow
+            case .outerGlow: effects.outerGlow = original.outerGlow
             }
             setEffects(effects, on: editing.layerID, name: "Cancel " + editing.kind.rawValue)
         }
@@ -283,6 +312,7 @@ extension EditorSession {
         case .shadow: effects.shadow = original.shadow
         case .colorOverlay: effects.colorOverlay = original.colorOverlay
         case .innerShadow: effects.innerShadow = original.innerShadow
+        case .outerGlow: effects.outerGlow = original.outerGlow
         }
         setEffects(effects, on: target, name: "Copy " + kind.rawValue)
         selectEffect(kind, on: target)
@@ -366,6 +396,9 @@ nonisolated enum LayerEffectsRenderer {
         if let shadow = effects.shadow {
             margin = max(margin, shadow.distance + shadow.blur * 3)
         }
+        if let glow = effects.outerGlow {
+            margin = max(margin, glow.size * 3)
+        }
         return ceil(margin) + 2
     }
 
@@ -394,6 +427,10 @@ nonisolated enum LayerEffectsRenderer {
             let alpha = try coverage(shown, in: placed.offsetBy(dx: shadow.offset.width, dy: shadow.offset.height),
                                      size: CGSize(width: width, height: height), blur: shadow.blur)
             fill(shadow.color, alpha: shadow.opacity, coverage: alpha, in: full, context: context)
+        }
+        if let glow = effects.outerGlow, glow.opacity > 0 {
+            let alpha = try outerGlowCoverage(shown, placed: placed, size: CGSize(width: width, height: height), glow: glow)
+            fill(glow.color, alpha: glow.opacity, coverage: alpha, in: full, context: context)
         }
         // An outside stroke sits behind the layer's own pixels; an inside one is drawn over them, or the pixels
         // would simply cover it.
@@ -455,6 +492,19 @@ nonisolated enum LayerEffectsRenderer {
         let outside = try GuidedMatte.levels(of: moved, width: width, height: height)
         for i in inside.indices { inside[i] = max(0, min(1, inside[i] * (1 - outside[i]))) }
         return try GuidedMatte.image(inside, width: width, height: height)
+    }
+
+    /// An outer glow's coverage: the layer's shape softened omnidirectionally, with the shape interior excluded.
+    static func outerGlowCoverage(_ image: CGImage, placed: CGRect, size: CGSize, glow: OuterGlowEffect) throws -> CGImage {
+        let width = Int(size.width), height = Int(size.height)
+        let shape = try coverage(image, in: placed, size: size, blur: 0)
+        let soft = try coverage(image, in: placed, size: size, blur: glow.size)
+        var levels = try GuidedMatte.levels(of: soft, width: width, height: height)
+        let mask = try GuidedMatte.levels(of: shape, width: width, height: height)
+        for i in levels.indices {
+            levels[i] = max(0, min(1, levels[i] * (1 - mask[i])))
+        }
+        return try GuidedMatte.image(levels, width: width, height: height)
     }
 
     /// A stroke's ring for one piece of a layer.

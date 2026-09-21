@@ -88,12 +88,19 @@ nonisolated struct GradientMapSettings: Codable, Equatable, Sendable {
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
         let (dark, light) = ends
-        let table: [UInt8] = (0...255).flatMap { index -> [UInt8] in
-            let t = Double(index) / 255
-            let red = UInt8(min(255, max(0, (dark.red + (light.red - dark.red) * t) * 255).rounded()))
-            let green = UInt8(min(255, max(0, (dark.green + (light.green - dark.green) * t) * 255).rounded()))
-            let blue = UInt8(min(255, max(0, (dark.blue + (light.blue - dark.blue) * t) * 255).rounded()))
-            return [red, green, blue]
+        // Split into explicitly typed steps: as one expression the type checker times out (Xcode 26.1).
+        func channel(_ from: Double, _ to: Double, _ t: Double) -> UInt8 {
+            let value: Double = from + (to - from) * t
+            let scaled: Double = (value * 255).rounded()
+            return UInt8(min(255.0, max(0.0, scaled)))
+        }
+        var table = [UInt8]()
+        table.reserveCapacity(256 * 3)
+        for index in 0...255 {
+            let t: Double = Double(index) / 255
+            table.append(channel(dark.red, light.red, t))
+            table.append(channel(dark.green, light.green, t))
+            table.append(channel(dark.blue, light.blue, t))
         }
         return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
             adjust_gradient_map(pixels, width, height, stride, table)

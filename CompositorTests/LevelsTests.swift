@@ -54,7 +54,8 @@ struct LevelsTests {
         settings.current = LevelRange(outputBlack: 255, outputWhite: 0)
         let inverted = try bytes(LevelsFilter.run(job(source, settings)))
         #expect(inverted[0] == 255 && inverted[12] == 0)
-        #expect(inverted[16] == 64 && inverted[17] == 96 && inverted[18] == 128 && inverted[19] == 128)
+        #expect(inverted[16] == 64 && inverted[17] == 96 && inverted[18] == 128 && inverted[19] == 128,
+                "premultiplied [64,32,0,128] inverted: \(Array(inverted[16..<20]))")
     }
     @Test func channelsCoexistAndUseDocumentedOrder() throws {
         var settings = LevelsSettings()

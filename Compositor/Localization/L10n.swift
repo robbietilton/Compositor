@@ -144,6 +144,7 @@ extension LayerEffectKind {
         case .shadow: return L10n.text("Drop Shadow", locale: locale)
         case .colorOverlay: return L10n.text("Color Overlay", locale: locale)
         case .innerShadow: return L10n.text("Inner Shadow", locale: locale)
+        case .outerGlow: return L10n.text("Outer Glow", locale: locale)
         }
     }
 }

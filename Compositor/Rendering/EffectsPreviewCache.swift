@@ -88,10 +88,13 @@ final class EffectsPreviewCache {
         old?.request.cancel()
         // Keep effects visible during transforms and setting changes on the same pixels.
         // For an independently placed mask, retain the last preview until its updated
-        // coverage finishes rendering on the worker.
+        // coverage finishes rendering on the worker. Hiding one of several effects changes
+        // which kinds are visible but not the pixels underneath, and the effects still shown
+        // shouldn't blink off while the rest of them are rebuilt — so the last preview stands
+        // in for those few frames, one effect too many rather than none at all.
         let previous = old.flatMap { entry in
             entry.request.image === image && entry.request.maskSource === request.maskSource
-                && entry.request.effects.kinds == effects.kinds ? entry.result : nil
+                ? entry.result : nil
         } ?? seeds[layer.id]
         entries[layer.id] = Entry(request: request, result: previous)
         let layerID = layer.id

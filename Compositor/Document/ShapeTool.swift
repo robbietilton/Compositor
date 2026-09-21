@@ -65,7 +65,7 @@ struct ShapeDraft: Equatable {
 
 extension EditorSession {
     /// Pixels one shape layer may hold, the same budget as an import.
-    static let maxShapePixels = 100_000_000
+    nonisolated static let maxShapePixels = 100_000_000
 
     func beginShape(at point: CGPoint) {
         guard tool == .shape, canEditLayers, point.x.isFinite, point.y.isFinite else { return }
@@ -194,7 +194,7 @@ extension EditorSession {
     }
 
     /// The shape filling its box, anti-aliased where it curves.
-    static func shapeImage(_ kind: ShapeKind, size: CGSize, color: PaletteColor, cornerRadius: CGFloat = 0,
+    nonisolated static func shapeImage(_ kind: ShapeKind, size: CGSize, color: PaletteColor, cornerRadius: CGFloat = 0,
                            lineWidth: CGFloat = 0, start: CGPoint? = nil, end: CGPoint? = nil) throws -> CGImage {
         let context = try BrushRaster.context(width: Int(size.width), height: Int(size.height), mask: false)
         let bounds = CGRect(origin: .zero, size: size)

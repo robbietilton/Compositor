@@ -21,16 +21,99 @@ struct ContentView: View {
         guard let workspace = applicationDelegate?.workspace else { return true }
         return workspace.canReceiveDrag(into: workspace.current.id)
     }
-    var body: some View {
-        let content = AnyView(VStack(spacing: 0) {
-            editorToolHeader
-            editorCanvasArea
+    // Extracted from `body`: as one expression the type checker times out (Xcode 26.1).
+    @ViewBuilder private var toolHeaders: some View {
+        Group {
+            if session.tool == .move {
+                TransformInspector(session: session).id(session.activeLayerID)
+                Divider()
+            }
+            if session.tool.isBrushTool {
+                BrushControls(session: session)
+                Divider()
+            }
+            if session.tool.isSelectionTool {
+                LassoControls(session: session)
+                Divider()
+            }
+            if session.tool == .gradient {
+                GradientControls(session: session)
+                Divider()
+            }
+            if session.tool == .type {
+                TypeControls(session: session)
+                Divider()
+            }
+            if session.tool == .shape {
+                ShapeControls(session: session)
+                Divider()
+            }
+            if session.tool == .eyedropper {
+                HStack(spacing: 16) {
+                    Text("Eyedropper").font(ToolHeaderStyle.titleFont)
+                    Toggle("Sample Ring", isOn: $session.showsSampleRing).toggleStyle(.checkbox)
+                    Spacer()
+                }.padding(.horizontal, 18).toolHeaderBar()
+                Divider()
+            }
+            if session.tool == .hand || session.tool == .zoom {
+                NavigationToolHeader(session: session)
+                Divider()
+            }
+            if session.tool == .crop {
+                CropControls(session: session)
+                Divider()
+            }
+            // No tool (A) keeps the header, so the canvas doesn't jump.
+            if session.tool == .idle {
+                HStack(spacing: 16) {
+                    Text("Select a tool").font(ToolHeaderStyle.titleFont)
+                    Spacer()
+                }.padding(.horizontal, 18).toolHeaderBar()
+                Divider()
+            }
+        }
+    }
+
+    @ViewBuilder private var editorStack: some View {
+        VStack(spacing: 0) {
+            toolHeaders
+            HStack(spacing: 0) {
+                toolRail
+                Divider()
+                VStack(spacing: 0) {
+                    if session.showsRulers, session.document != nil {
+                        HStack(spacing: 0) {
+                            CanvasRulerCorner()
+                            CanvasRulerView(session: session, axis: .horizontal)
+                                .frame(height: CanvasRuler.thickness)
+                        }
+                    }
+                    HStack(spacing: 0) {
+                        if session.showsRulers, session.document != nil {
+                            CanvasRulerView(session: session, axis: .vertical)
+                                .frame(width: CanvasRuler.thickness)
+                        }
+                        ZStack {
+                            EditorCanvas(session: session)
+                            if session.document == nil { welcome }
+                        }
+                        .onGeometryChangeCompat(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
+                    }
+                }
+                PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
+                LayersPanel(session: session, width: layersPanelWidth)
+            }
             Divider()
             // Keeps its own height however short the window gets; the tools scroll instead.
             statusBar.fixedSize(horizontal: false, vertical: true)
                 .modifier(WidthReader(width: $windowWidth))
-        })
-        let layout = content
+        }
+    }
+
+    // Split again for 1.1: the chain outgrew the type checker once more.
+    @ViewBuilder private var editorChrome: some View {
+        editorStack
         .background(Color(white: 0.14))
         .background {
             if let applicationDelegate, applicationDelegate.projects.workspace == nil {
@@ -104,7 +187,10 @@ struct ContentView: View {
                 }.help("Zoom out (⌘−)").disabled(session.document == nil)
             }
         }
-        let panels = layout
+    }
+
+    var body: some View {
+        let panels = editorChrome
         .onValueChangeCompat(of: session.levels == nil) { _, closed in
             if closed { levelsPanel.close() }
             else {
@@ -152,7 +238,7 @@ struct ContentView: View {
         }
         let imported = panels
         .fileImporter(isPresented: $session.showsImporter,
-                      allowedContentTypes: [.jpeg, .png, .heic, .tiff], allowsMultipleSelection: true) { result in
+                      allowedContentTypes: UTType.importableImages, allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await session.importImages(urls) }
             case .failure(let error):
