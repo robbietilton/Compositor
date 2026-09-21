@@ -106,6 +106,28 @@ struct SelectionClipboardTests {
         #expect(pasted.transform.origin == .zero)
     }
 
+    @Test func pasteCreatesAnImageSizedCanvasWhenNewCanvasPanelIsOpen() throws {
+        let imageContext = try BrushRaster.context(width: 16, height: 8, mask: false)
+        imageContext.setFillColor(CGColor(srgbRed: 0.2, green: 0.8, blue: 0.4, alpha: 1))
+        imageContext.fill(CGRect(x: 0, y: 0, width: 16, height: 8))
+        let image = try #require(imageContext.makeImage())
+        let png = try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setData(png, forType: .png)
+
+        let session = EditorSession()
+        session.showsNewDocument = true // The state immediately after Cmd-N.
+        session.paste()
+
+        let document = try #require(session.document)
+        let pasted = try #require(session.activeLayer)
+        #expect(document.size == CGSize(width: 16, height: 8))
+        #expect(document.layers.count == 1)
+        #expect(pasted.size == CGSize(width: 16, height: 8))
+        #expect(pasted.transform.origin == .zero)
+    }
+
     @Test func cutLeavesAHoleAndPasteRestoresThePixels() async throws {
         let session = await makeSession()
         let source = try #require(session.activeLayerID)

@@ -164,7 +164,7 @@ extension EditorSession {
     /// `canPaste`: a text field must continue to receive ordinary text paste while no document exists.
     var canPasteIntoNewCanvas: Bool {
         guard document == nil, textDraft == nil, !isProjectBusy, !isImporting,
-              !showsNewDocument, !showsImporter, importError == nil else { return false }
+              !showsImporter, importError == nil else { return false }
         return ClipboardImage.dimensions() != nil
     }
 
