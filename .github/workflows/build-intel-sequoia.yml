@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     name: Intel macOS 15 / Xcode inspection
-    runs-on: macos-15-intel
+    runs-on: macos-15
 
     steps:
       - name: Checkout Compositor macOS 15 PR
@@ -16,26 +16,31 @@ jobs:
           ref: refs/pull/8/head
           fetch-depth: 1
 
-      - name: Select Xcode
+      - name: Select Xcode 26.3
         run: |
-          echo "=== Installed Xcodes ==="
-          ls -1 /Applications | grep '^Xcode' || true
-
-          echo
-          echo "=== Current developer directory ==="
-          xcode-select -p
-
-          echo
-          echo "=== Current Xcode ==="
+          sudo xcode-select -s /Applications/Xcode_26.3.app
+          
+          echo "=== Xcode ==="
           xcodebuild -version
 
           echo
-          echo "=== Swift version ==="
+          echo "=== SDK ==="
+          xcrun --sdk macosx --show-sdk-path
+
+          echo
+          echo "=== Swift ==="
           swift --version
 
           echo
           echo "=== Runner architecture ==="
           uname -m
+
+          echo
+          echo "=== Target architecture ==="
+          xcodebuild -project Compositor.xcodeproj \
+            -scheme Compositor \
+            -showBuildSettings | \
+            grep -E 'ARCHS|MACOSX_DEPLOYMENT_TARGET'
 
       - name: Resolve Swift packages
         run: |
