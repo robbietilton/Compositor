@@ -87,6 +87,31 @@ struct BrushTests {
         press("]")
         #expect(session.brushSettings.diameter == diameter)
     }
+    @Test func layerTableHandlesPhysicalBrushBracketsWithoutCanvasMonitor() throws {
+        let session = makeSession()
+        let host = NSHostingView(rootView: LayersPanel(session: session))
+        host.frame = CGRect(x: 0, y: 0, width: 252, height: 600)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        func table(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView { return table }
+            return view.subviews.lazy.compactMap { table(in: $0) }.first
+        }
+        let list = try #require(table(in: host))
+        #expect(window.makeFirstResponder(list))
+        func press(_ keyCode: CGKeyCode, shift: Bool) throws {
+            let source = try #require(CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true))
+            source.flags = shift ? .maskShift : []
+            list.keyDown(with: try #require(NSEvent(cgEvent: source)))
+        }
+        session.brushSettings.diameter = 20
+        session.brushSettings.hardness = 0.5
+        try press(30, shift: false)
+        #expect(session.brushSettings.diameter > 20)
+        try press(30, shift: true)
+        #expect(session.brushSettings.hardness == 0.75)
+    }
     /// Shift-[ and Shift-] reach the canvas as real key events (characters { and }) and step hardness.
     @Test func shiftBracketsStepHardnessFromTheCanvas() throws {
         #expect(BrushSettings().hardness == 1)

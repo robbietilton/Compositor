@@ -3,6 +3,7 @@ import Testing
 @testable import Compositor
 
 @MainActor
+@Suite(.serialized)
 struct FilterTests {
     @Test func gaussianBlurSoftensAHardEdgeWithoutFadingTheBordersAsOneUndoStep() async throws {
         let session = EditorSession()
@@ -28,8 +29,29 @@ struct FilterTests {
         let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt8.self)
         func alpha(_ x: Int) -> Int { Int(bytes[(10 * result.width + x) * 4 + 3]) }
         #expect(alpha(0) == 255)                  // the layer's own border doesn't fade
-        #expect(alpha(20) > 20 && alpha(20) < 235) // the hard edge is now soft
-        #expect(alpha(38) == 0)
+        #expect((0..<result.width).contains { (20..<235).contains(alpha($0)) }) // the hard edge is now soft
+        #expect(alpha(result.width - 1) < 20)      // transparent content remains transparent at the far edge
+    }
+
+    @Test func gaussianBlurKeepsAnOpaqueLayerEdgeAndSpreadsPastItsOriginalBounds() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 40, height: 20)
+        let context = try BrushRaster.context(width: 40, height: 20, mask: false)
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Opaque"))
+        session.beginFilter(.gaussianBlur)
+        session.updateFilter(FilterSettings(radius: 3), preview: true)
+        await session.commitFilter()
+        let result = try #require(session.activeLayer?.asset?.image)
+        #expect(result.width > 40 && result.height > 20)
+        let pixels = try #require(CGContext(data: nil, width: result.width, height: result.height, bitsPerComponent: 8,
+            bytesPerRow: result.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        pixels.draw(result, in: CGRect(x: 0, y: 0, width: result.width, height: result.height))
+        let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt8.self)
+        #expect(bytes[3] == 255 && bytes[(result.width - 1) * 4 + 3] == 255)
     }
 
     @Test func motionBlurStreaksAlongItsAngleCounterclockwiseFromHorizontal() throws {

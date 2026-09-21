@@ -17,11 +17,27 @@ nonisolated enum DistortWarp {
         guard corners.count == 4,
               corners.allSatisfy({ $0.x.isFinite && $0.y.isFinite && abs($0.x) <= 1_000_000 && abs($0.y) <= 1_000_000 }) else { return false }
         // Both halves need area, or one of them has nothing to draw.
-        return abs(area(corners[0], corners[1], corners[2])) > 0.01 && abs(area(corners[0], corners[2], corners[3])) > 0.01
+        guard abs(area(corners[0], corners[1], corners[2])) > 0.01,
+              abs(area(corners[0], corners[2], corners[3])) > 0.01 else { return false }
+        // A perspective map cannot represent a bow-tie: its non-adjacent edges would cross and the
+        // inside of the layer would have two different destinations. Concave, non-crossing shapes
+        // remain usable and are handled by the folded-warp path below.
+        return !segmentsIntersect(corners[0], corners[1], corners[2], corners[3])
+            && !segmentsIntersect(corners[1], corners[2], corners[3], corners[0])
     }
 
     private static func area(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGFloat {
         (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    }
+
+    private static func segmentsIntersect(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) -> Bool {
+        let abC = area(a, b, c), abD = area(a, b, d), cdA = area(c, d, a), cdB = area(c, d, b)
+        let epsilon: CGFloat = 0.01
+        if abs(abC) <= epsilon && abs(abD) <= epsilon && abs(cdA) <= epsilon && abs(cdB) <= epsilon {
+            return max(a.x, b.x) + epsilon >= min(c.x, d.x) && max(c.x, d.x) + epsilon >= min(a.x, b.x)
+                && max(a.y, b.y) + epsilon >= min(c.y, d.y) && max(c.y, d.y) + epsilon >= min(a.y, b.y)
+        }
+        return (abC > epsilon) != (abD > epsilon) && (cdA > epsilon) != (cdB > epsilon)
     }
 
     /// A shape a perspective warp can take: convex, wound consistently either way (so a mirrored one counts).

@@ -314,8 +314,10 @@ final class LayerTableView: NSTableView {
         let index = row(at: point)
         guard let session, session.layerRows.indices.contains(index) else { return nil }
         let layer = session.layerRows[index].layer
-        if let thumbnail = thumbnail(at: point), thumbnail.isMaskTarget, !thumbnail.isHidden {
-            return session.canEditLayers ? CanvasView.duplicateCursor : NSCursor.arrow
+        if let thumbnail = thumbnail(at: point), !thumbnail.isHidden {
+            // A layer thumbnail is its own control (Cmd-click selects its pixels), so Option over it must not
+            // advertise the row's duplicate drag. A mask thumbnail is the one exception: Option-drag copies it.
+            return thumbnail.isMaskTarget && session.canEditLayers ? CanvasView.duplicateCursor : NSCursor.arrow
         }
         guard isClippingZone(point, row: index) else {
             return session.canEditLayers ? CanvasView.duplicateCursor : NSCursor.arrow
@@ -340,13 +342,9 @@ final class LayerTableView: NSTableView {
     }
     /// The layer or mask thumbnail under a point in this view's coordinates, if any.
     private func thumbnail(at point: NSPoint) -> LayerThumbnailButton? {
-        guard let superview else { return nil }
-        var view = superview.hitTest(convert(point, to: superview))
-        while let current = view, current !== self {
-            if let thumbnail = current as? LayerThumbnailButton { return thumbnail }
-            view = current.superview
-        }
-        return nil
+        let index = row(at: point)
+        guard index >= 0, let cell = view(atColumn: 0, row: index, makeIfNecessary: false) as? LayerCell else { return nil }
+        return cell.thumbnail(containing: convert(point, to: nil))
     }
     override func mouseEntered(with event: NSEvent) { refreshClippingCursor(event.modifierFlags, at: event.locationInWindow) }
     override func mouseMoved(with event: NSEvent) { refreshClippingCursor(event.modifierFlags, at: event.locationInWindow) }
@@ -415,6 +413,13 @@ final class LayerTableView: NSTableView {
             session?.commitTransform()
         } else if plain, event.keyCode == 48 {
             session?.cycleToolMode()
+        } else if session?.tool.isBrushTool == true, (event.keyCode == 30 || event.keyCode == 33),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            if event.modifierFlags.contains(.shift) {
+                session?.changeBrushHardness(increase: event.keyCode == 30)
+            } else {
+                session?.changeBrushSize(increase: event.keyCode == 30)
+            }
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "x" {
             session?.swapPaletteColors()
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "d" {
@@ -752,6 +757,11 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     /// Whether a window point lands on one of the row's buttons rather than its name.
     func isOnControl(_ windowPoint: NSPoint) -> Bool {
         [eye, disclosure, thumbnail, linkButton, maskThumbnail].contains { !$0.isHidden && $0.bounds.contains($0.convert(windowPoint, from: nil)) }
+    }
+    /// Direct geometry hit-test for cursor decisions. It avoids asking AppKit's event-driven hit-test tree for a
+    /// synthetic mouse event, which can otherwise inherit modifier flags from an unrelated window.
+    func thumbnail(containing windowPoint: NSPoint) -> LayerThumbnailButton? {
+        [thumbnail, maskThumbnail].first { !$0.isHidden && $0.bounds.contains($0.convert(windowPoint, from: nil)) }
     }
     @objc func loadMaskSelection() {
         guard let layerID else { return }

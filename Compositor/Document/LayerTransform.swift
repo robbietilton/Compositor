@@ -125,8 +125,20 @@ struct TransformDrag {
     let original: LayerTransform
     let start: CGPoint
     let mode: Mode
+    /// A press outside the active layer keeps its exact pointer delta; snapping such a press would
+    /// make the layer jump away from the point the user started dragging.
+    let snapsMove: Bool
     /// The distortion's corners when the drag began; nil for an ordinary transform.
     var originalCorners: [CGPoint]? = nil
+
+    init(original: LayerTransform, start: CGPoint, mode: Mode, snapsMove: Bool = true,
+         originalCorners: [CGPoint]? = nil) {
+        self.original = original
+        self.start = start
+        self.mode = mode
+        self.snapsMove = snapsMove
+        self.originalCorners = originalCorners
+    }
 
     /// Corners after dragging to `point`: a corner handle moves its corner, an edge handle both of
     /// that edge's corners, and the body the whole shape. Nil when the drag isn't distorting.
@@ -233,7 +245,9 @@ nonisolated enum TransformSnap {
         for guideValue in guides {
             for target in targets {
                 let move = target - guideValue
-                guard abs(move) <= tolerance else { continue }
+                // Treat the threshold as the distance at which snapping starts; landing exactly
+                // on it should remain a deliberate, unsnapped drag rather than a surprising jump.
+                guard abs(move) < tolerance else { continue }
                 if let current = best, abs(current.move) <= abs(move) { continue }
                 best = (move, target)
             }

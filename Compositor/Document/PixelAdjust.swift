@@ -5,7 +5,6 @@ import CoreImage
 /// coverage on an image's own pixel grid, and blending a result back through a selection.
 nonisolated enum PixelAdjust {
     /// No color management: pixel values pass through unchanged.
-    static let ciContext = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
 
     /// An 8-bit bitmap with standard (bottom-left) coordinates and top-down memory rows.
     static func bitmap(width: Int, height: Int, mask: Bool) throws -> CGContext {
@@ -46,7 +45,10 @@ nonisolated enum PixelAdjust {
     }
 
     static func render(_ image: CIImage, width: Int, height: Int, isMask: Bool) throws -> CGImage {
-        guard let result = ciContext.createCGImage(image, from: CGRect(x: 0, y: 0, width: width, height: height),
+        // A render can run concurrently with another detached filter job. Keep the context local so
+        // an in-flight Core Image render cannot reuse another job's intermediate state.
+        let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
+        guard let result = context.createCGImage(image, from: CGRect(x: 0, y: 0, width: width, height: height),
                 format: isMask ? .L8 : .RGBA8,
                 colorSpace: isMask ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!)
         else { throw ExportError.render }

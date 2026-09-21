@@ -179,10 +179,10 @@ extension EditorSession {
 
     func cancelLasso() { lassoDraft = nil }
 
-    /// The M key chooses the Marquee in whichever shape it was last set to (switched only in the tool bar). The
-    /// shape stays as last set while this project is open.
+    /// The M key chooses the Marquee; pressing it again while active switches rectangle and ellipse.
     func pressMarqueeKey() {
-        selectTool(.marquee)
+        if tool == .marquee { toggleMarqueeKind() }
+        else { selectTool(.marquee) }
     }
 
     func toggleMarqueeKind() {
@@ -195,10 +195,10 @@ extension EditorSession {
         selectTool(.wand)
     }
 
-    /// The L key chooses the Lasso in whichever mode it was last set to (switched only in the tool bar). The mode
-    /// stays as last set while this project is open.
+    /// The L key chooses the Lasso; pressing it again while active switches freehand and polygonal mode.
     func pressLassoKey() {
-        selectTool(.lasso)
+        if tool == .lasso { toggleLassoKind() }
+        else { selectTool(.lasso) }
     }
 
     func toggleLassoKind() {

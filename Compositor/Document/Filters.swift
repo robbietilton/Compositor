@@ -84,6 +84,8 @@ nonisolated struct FilterJob: @unchecked Sendable {
     let scale: CGFloat
     let selection: SelectionClip?
     let mapping: CGAffineTransform
+    /// For a grown Gaussian blur, the original layer rectangle whose edge pixels should be extended into the padding.
+    var edgeClamp: CGRect? = nil
     /// Add Noise's random pattern: the same seed gives the same grain.
     var seed: UInt32 = 0
 }
@@ -122,9 +124,15 @@ nonisolated enum PixelFilter {
         let settings = job.settings.normalized
         let width = job.image.width, height = job.image.height
         let extent = CGRect(x: 0, y: 0, width: width, height: height)
-        // Not clamped: a blur softens the layer's edges and spreads into the room made for it, rather than
-        // smearing the border outwards and stopping at it.
+        // A grown blur has transparent padding around the original layer. Clamp only the original layer rectangle,
+        // not the padded image extent, so the layer edge stays opaque while the blur still has room to spread.
         let edges = CIImage(cgImage: job.image)
+        let gaussianEdges: CIImage
+        if let edgeClamp = job.edgeClamp, !edgeClamp.isNull, !edgeClamp.isEmpty {
+            gaussianEdges = edges.cropped(to: edgeClamp).clampedToExtent()
+        } else {
+            gaussianEdges = edges.clampedToExtent()
+        }
         let image: CGImage
         switch job.kind {
         case .curves: image = try settings.curves.apply(job.image)
@@ -137,7 +145,7 @@ nonisolated enum PixelFilter {
         case .contentAwareFill:
             image = try ContentFill.run(job)
         case .gaussianBlur:
-            let blurred = edges.applyingGaussianBlur(sigma: settings.radius * job.scale)
+            let blurred = gaussianEdges.applyingGaussianBlur(sigma: settings.radius * job.scale)
             image = try PixelAdjust.render(blurred.cropped(to: extent), width: width, height: height, isMask: false)
         case .motionBlur:
             // Core Image's y axis points up, so its counterclockwise angle matches Photoshop's.
@@ -185,6 +193,8 @@ final class FilterEdit: ObservableObject {
     /// works on the layer's pixels padded out, and on the transform placing that larger grid.
     @Published var grownImage: CGImage? = nil
     @Published var grownTransform: LayerTransform? = nil
+    /// The original layer rectangle inside `grownImage`, used to clamp a blur without clamping its padding.
+    var grownSourceRect: CGRect?
     /// How far the padding reaches beyond the layer on every side, in layer pixels.
     @Published var grownMargin: CGFloat = 0
     @Published var settings: FilterSettings
@@ -250,6 +260,7 @@ final class FilterEdit: ObservableObject {
         if let raster = original.raster { raster.draw(in: inside, context: context) }
         else { BrushRaster.draw(original.image, in: inside, mask: false, context: context) }
         guard let image = context.makeImage() else { throw ExportError.render }
+        grownSourceRect = inside
         let toDocument = BrushRaster.pixelToDocument(transform, width: original.image.width, height: original.image.height)
         var expanded = transform
         expanded.size = CGSize(width: target.width * transform.size.width / bounds.width,
@@ -290,7 +301,8 @@ final class FilterEdit: ObservableObject {
     func previewImage(for id: UUID) -> CGImage? { preview && id == layerID ? preparedPreview : nil }
     var previewJob: FilterJob {
         FilterJob(kind: kind, image: previewSource, settings: settings, scale: previewScale, selection: selection,
-                  mapping: previewMapping, seed: seed)
+                  mapping: previewMapping,
+                  edgeClamp: grownSourceRect?.applying(CGAffineTransform(scaleX: previewScale, y: previewScale)), seed: seed)
     }
 }
 
@@ -396,7 +408,7 @@ extension EditorSession {
         // by painting the mask, disabling it, or deleting it.
         if edit.kind == .removeBackground { await commitBackgroundMask(edit); return }
         let job = FilterJob(kind: edit.kind, image: edit.grownImage ?? edit.original.image, settings: edit.settings, scale: 1,
-                            selection: edit.selection, mapping: edit.mapping, seed: edit.seed)
+                            selection: edit.selection, mapping: edit.mapping, edgeClamp: edit.grownSourceRect, seed: edit.seed)
         let cached = edit.kind.isAutomatic && edit.preparedSettings == edit.settings ? edit.preparedPreview : nil
         do {
             let grown = edit.grownTransform

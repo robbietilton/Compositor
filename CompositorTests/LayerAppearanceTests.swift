@@ -3,6 +3,7 @@ import Testing
 @testable import Compositor
 
 @MainActor
+@Suite(.serialized)
 struct LayerAppearanceTests {
     @Test func hoverPreviewIsTemporaryAndNeverChangesSavedState() throws {
         let session = EditorSession()
@@ -52,11 +53,11 @@ struct LayerAppearanceTests {
         session.typeOpacityDigit(3, at: 30)
         #expect(session.document?.layers.first { $0.id == second }?.opacity == 0.5)
     }
-    private func asset(_ gray: CGFloat) throws -> ImportedImage {
+    private func asset(_ gray: CGFloat, alpha: CGFloat = 1) throws -> ImportedImage {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = try #require(CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8,
             bytesPerRow: 16, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(CGColor(colorSpace: space, components: [gray, gray, gray, 1])!)
+        context.setFillColor(CGColor(colorSpace: space, components: [gray, gray, gray, alpha])!)
         context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
         let image = try #require(context.makeImage())
         return ImportedImage(image: image, thumbnail: image, name: "Gray")
@@ -91,6 +92,19 @@ struct LayerAppearanceTests {
         session.setLayerOpacity(0)
         let hidden = try await ImageExporter.shared.render(try #require(session.projectSnapshot()))
         #expect(abs(try pixel(hidden.image).0 - 0.4) < 0.02)
+    }
+    @Test func translucentDodgeAndBurnMatchPdfEquations() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 4, height: 4)
+        session.insert(try asset(0.4))
+        session.insert(try asset(0.8, alpha: 0.5))
+        session.setLayerBlendMode(.colorDodge)
+        let dodge = try await ImageExporter.shared.render(try #require(session.projectSnapshot()))
+        #expect(abs(try pixel(dodge.image).0 - 0.7) < 0.02)
+        session.setLayerBlendMode(.colorBurn)
+        let burn = try await ImageExporter.shared.render(try #require(session.projectSnapshot()))
+        #expect(abs(try pixel(burn.image).0 - 0.325) < 0.02)
+        #expect(try pixel(burn.image).1 == 1)
     }
     @Test func opacityDragIsOneUndoAndKeepsSources() throws {
         let session = EditorSession()

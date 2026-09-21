@@ -1520,7 +1520,7 @@ final class CanvasView: NSView {
                                          option: event.modifierFlags.contains(.option)).rounded()
                 // Moving snaps to the canvas and the other layers; resizing and rotating are left alone, and
                 // Control drags freely.
-                if case .move = drag.mode, !event.modifierFlags.contains(.control) {
+                if case .move = drag.mode, drag.snapsMove, !event.modifierFlags.contains(.control) {
                     let moving = session.transformEdit?.group.map { Set($0.originals.keys) }
                         ?? Set([session.transformEdit?.layerID].compactMap { $0 })
                     draft = session.snappedMove(draft, moving: moving,
@@ -1717,6 +1717,13 @@ final class CanvasView: NSView {
             spaceHeld = true
             updateBrushCursor()
             window?.invalidateCursorRects(for: self)
+        } else if session.tool.isBrushTool, (event.keyCode == 30 || event.keyCode == 33),
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            if event.modifierFlags.contains(.shift) {
+                session.changeBrushHardness(increase: event.keyCode == 30)
+            } else {
+                session.changeBrushSize(increase: event.keyCode == 30)
+            }
         } else if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "x": session.swapPaletteColors()
@@ -2002,6 +2009,7 @@ final class CanvasView: NSView {
         guard session.canEditLayers || session.transformEdit != nil, let document = session.document else { return }
         let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
         var mode = transformOverlay.geometry?.hit(point)
+        var snapsMove = true
         if mode == nil, let target = transformPressLayer(at: pixel, flags: modifiers) {
             // Cmd-Shift-click adds the layer under the pointer to the selection (and takes it out again); Cmd-click
             // on its own selects just that one.
@@ -2010,6 +2018,7 @@ final class CanvasView: NSView {
             } else if target.picked {
                 session.selectLayer(target.id)
             }
+            snapsMove = target.picked
             mode = .move
         }
         guard var mode else { return }
@@ -2022,7 +2031,8 @@ final class CanvasView: NSView {
             if session.transformEdit?.corners != nil { mode = .distort(index) }
         }
         guard let transform = session.transformEdit?.draft else { return }
-        transformDrag = TransformDrag(original: transform, start: pixel, mode: mode, originalCorners: session.transformEdit?.corners)
+        transformDrag = TransformDrag(original: transform, start: pixel, mode: mode, snapsMove: snapsMove,
+                                      originalCorners: session.transformEdit?.corners)
         switch mode {
         case .resize(let index): dragCursor = transformOverlay.geometry?.resizeCursor(for: index) ?? .arrow
         case .rotate: dragCursor = Self.rotationCursor

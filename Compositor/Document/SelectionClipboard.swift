@@ -173,6 +173,7 @@ extension EditorSession {
     @discardableResult
     func duplicateLayer(_ id: UUID, in parent: UUID?, above target: UUID? = nil, atBottom: Bool = false) -> Bool {
         guard canEditLayers,
+              document?.layers.first(where: { $0.id == id })?.isGroup != true,
               canPlaceLayer(id, in: parent) else { return false }
         beginEdit("Duplicate Layer")
         defer { endEdit() }

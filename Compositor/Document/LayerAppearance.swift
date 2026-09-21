@@ -64,8 +64,11 @@ extension EditorSession {
     func setSelectedLayersOpacity(_ opacity: Double) {
         guard opacity.isFinite, canEditLayers, let document else { return }
         let value = min(1, max(0, opacity))
+        let selectedNonGroups = document.layers.filter { selectedLayerIDs.contains($0.id) && !$0.isGroup }
         let indices = document.layers.indices.filter {
-            selectedLayerIDs.contains(document.layers[$0].id) && document.layers[$0].opacity != value
+            selectedLayerIDs.contains(document.layers[$0].id)
+                && (selectedNonGroups.isEmpty || !document.layers[$0].isGroup)
+                && document.layers[$0].opacity != value
         }
         guard !indices.isEmpty else { return }
         finishOpacityEdit()
@@ -77,7 +80,8 @@ extension EditorSession {
     /// blend menu's order, wrapping around, as one undo step.
     func cycleBlendMode(forward: Bool) {
         guard canEditAppearance, let layer = activeLayer else { return }
-        let modes = LayerBlendMode.allCases
+        // HSL component modes remain available in the picker, but are not part of the quick keyboard cycle.
+        let modes = LayerBlendMode.allCases.filter { ![.hue, .saturation, .color, .luminosity].contains($0) }
         let index = modes.firstIndex(of: layer.blendMode) ?? 0
         setLayerBlendMode(modes[(index + (forward ? 1 : modes.count - 1)) % modes.count])
     }
