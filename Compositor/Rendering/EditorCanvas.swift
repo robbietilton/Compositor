@@ -636,23 +636,13 @@ final class CanvasView: NSView {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let originalEvent = event
             guard let event = ShortcutSettings.shared.canvasEvent(event) else { return originalEvent }
-            guard let self, let window = self.window, event.window === window, !(window.firstResponder is NSText),
-                  let key = event.charactersIgnoringModifiers else { return originalEvent }
+            guard let self, let window = self.window, event.windowNumber == window.windowNumber, !(window.firstResponder is NSText) else {
+                return originalEvent
+            }
             // Zoom shortcuts are window-wide so they also work with focus in the Layers panel or a toolbar control.
-            // The shifted form is explicit because a physical '+' is '=' with Shift on a Mac keyboard.
-            let zoomInIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom In" })
-                .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
-            let zoomOutIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom Out" })
-                .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
-            let modifiers = event.modifierFlags.intersection([.command, .shift])
-            if zoomInIsDefault, (modifiers == [.command] || modifiers == [.command, .shift]), event.keyCode == 24 {
-                self.session.zoomKeyboard(by: 1)
-                return nil
-            }
-            if zoomOutIsDefault, modifiers == [.command], event.keyCode == 27 {
-                self.session.zoomKeyboard(by: -1)
-                return nil
-            }
+            // Handle keyDown here instead of waiting for SwiftUI's menu key equivalent on keyUp.
+            if self.handleKeyboardZoom(event) { return nil }
+            guard let key = event.charactersIgnoringModifiers else { return originalEvent }
             guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return originalEvent }
             // Shift-+ / Shift-− step the active layer's blend mode, in every tool.
             if event.modifierFlags.contains(.shift), key == "+" || key == "_" || event.keyCode == 24 || event.keyCode == 27 {
@@ -666,6 +656,29 @@ final class CanvasView: NSView {
             else { self.session.changeBrushHardness(increase: key == "}") }
             return nil
         }
+    }
+
+    /// Applies the default Photoshop-style keyboard zoom at keyDown time.
+    /// Returning true means the event has been consumed and must not reach the menu command as well.
+    private func handleKeyboardZoom(_ event: NSEvent) -> Bool {
+        guard session.document != nil else { return false }
+        let hasCommand = event.modifierFlags.contains(.command)
+        let hasDisallowedModifier = !event.modifierFlags.intersection([.control, .option]).isEmpty
+        guard hasCommand, !hasDisallowedModifier else { return false }
+
+        let zoomInIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom In" })
+            .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
+        let zoomOutIsDefault = ShortcutDefinition.all.first(where: { $0.isMenu && $0.title == "Zoom Out" })
+            .map { ShortcutSettings.shared.chord($0) == $0.original } ?? true
+
+        // A physical '+' is '=' with Shift on a Mac keyboard. Accept both forms, as Photoshop does.
+        let isZoomIn = [24, 69].contains(event.keyCode)
+        let isZoomOut = [27, 78].contains(event.keyCode) && !event.modifierFlags.contains(.shift)
+        guard (isZoomIn && zoomInIsDefault) || (isZoomOut && zoomOutIsDefault) else { return false }
+
+        session.zoomKeyboard(by: isZoomIn ? 1 : -1)
+        synchronizeDisplay()
+        return true
     }
 
     private var lassoCursor: NSCursor { lassoCursor(flags: NSEvent.modifierFlags) }
@@ -1650,6 +1663,7 @@ final class CanvasView: NSView {
     override func keyDown(with event: NSEvent) {
         let physicalKey = event.keyCode
         guard let event = ShortcutSettings.shared.canvasEvent(event) else { return }
+        if handleKeyboardZoom(event) { return }
         if event.keyCode == 53, textBoxAnchor != nil { textBoxAnchor = nil; textBoxRect = nil; needsDisplay = true; return }
         if event.keyCode == 53, session.textDraft != nil { session.cancelText(); return }
         // A drag session swallows the flagsChanged that says Option was let go, which left the canvas thinking it
