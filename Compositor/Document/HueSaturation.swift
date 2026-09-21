@@ -413,7 +413,7 @@ extension EditorSession {
     /// if there is one; a pending gradient or transform is applied first.
     var canAdjustColors: Bool {
         _ = showsBusy
-        guard levels == nil, filterEdit == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
+        guard levels == nil, filterEdit == nil, generativeEdit == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
               pixelMove == nil, renamingLayerID == nil, !showsNewDocument, !showsImporter,
               selectedLayerIDs.count == 1, !layer.isGroup, !isMaskSelected, layer.asset != nil,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }

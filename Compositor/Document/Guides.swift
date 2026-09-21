@@ -72,7 +72,7 @@ extension EditorSession {
     var canEditGuides: Bool {
         _ = showsBusy
         return document != nil && !locksGuides && !isProjectBusy && !isImporting && !showsNewDocument
-            && levels == nil && hueSaturation == nil && filterEdit == nil && renamingLayerID == nil
+            && levels == nil && hueSaturation == nil && filterEdit == nil && generativeEdit == nil && renamingLayerID == nil
     }
 
     /// Guides as currently shown, including a drag in progress.

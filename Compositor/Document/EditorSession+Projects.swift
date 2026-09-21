@@ -21,6 +21,7 @@ extension EditorSession {
         collapsedGroupIDs = []
         isMaskSelected = false
         cancelCrop()
+        cancelGenerative()
         guideDrag = nil
         let manifest = snapshot.manifest
         transformEdit = nil
@@ -43,6 +44,7 @@ extension EditorSession {
         collapsedGroupIDs = []
         isMaskSelected = false
         cancelCrop()
+        cancelGenerative()
         transformEdit = nil
         guideDrag = nil
         document = nil

@@ -36,6 +36,8 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // An open generative panel holds nothing worth refusing to quit over: what it made is not in the document yet.
+        workspace.current.session.cancelGenerative()
         guard workspace.canSwitch else { return .terminateCancel }
         Task { sender.reply(toApplicationShouldTerminate: await workspace.confirmQuit()) }
         return .terminateLater

@@ -16,9 +16,13 @@ struct CropControls: View {
                 Text("\(Int(rect.width)) × \(Int(rect.height)) px").monospacedDigit()
             }
             Spacer()
+            // Offered once the frame reaches past the canvas: there is new area to fill.
+            Button("Generative Expand…") { session.beginGenerative(.expand) }
+                .disabled(!session.canBeginGenerative(.expand))
+                .help("Drag the crop frame past the canvas edge, then fill the new area with generated content")
             Button("Cancel") { session.cancelCrop() }.disabled(session.cropRect == nil)
             Button("Apply Crop") { Task { await session.commitCrop() } }
                 .disabled(session.cropRect == nil)
-        }.padding(.horizontal, 18).toolHeaderBar().disabled(session.showsBusy || session.document == nil)
+        }.padding(.horizontal, 18).toolHeaderBar().disabled(session.showsBusy || session.document == nil || session.generativeEdit != nil)
     }
 }

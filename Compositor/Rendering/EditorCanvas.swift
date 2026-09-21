@@ -703,8 +703,11 @@ final class CanvasView: NSView {
         defer { drawTextBoxDraft() }
         NSColor(white: 0.105, alpha: 1).setFill()
         dirtyRect.fill()
-        guard let document = session.document,
+        guard let stored = session.document,
               let context = NSGraphicsContext.current?.cgContext else { return }
+        // A generated result shows as the layer it would become, so folders, clipping and the layers above it
+        // treat it exactly as they will once it is kept.
+        let document = session.generativeEdit?.previewDocument(from: stored) ?? stored
         let pixels = renderBounds ?? CGRect(origin: .zero, size: document.size)
         let rect = CGRect(origin: session.viewport.viewPoint(from: pixels.origin, documentSize: document.size),
                           size: CGSize(width: pixels.width * session.viewport.pointsPerPixel,
@@ -1339,6 +1342,11 @@ final class CanvasView: NSView {
             return
         }
         if session.levels != nil, !spaceHeld, session.tool != .hand, session.tool != .zoom { return }
+        // An open generative panel holds the document, and for Expand the crop frame, as they were sampled.
+        if session.generativeEdit != nil, !spaceHeld, session.tool != .hand, session.tool != .zoom {
+            FloatingPanelController.refocus(NSUserInterfaceItemIdentifier("generativePanel"))
+            return
+        }
         if picking, !spaceHeld {
             if session.colorPicker != nil || (palettePicking && session.hueSampleMode == nil) {
                 samplingOriginal = session.colorPicker?.color ?? session.foregroundColor
@@ -1648,6 +1656,11 @@ final class CanvasView: NSView {
             }
             if event.keyCode != 49 { super.keyDown(with: event); return }
         }
+        if session.generativeEdit != nil {
+            if event.keyCode == 53 { session.cancelGenerative(); return }
+            if [36, 76].contains(event.keyCode) { session.keepGenerative(); return }
+            if event.keyCode != 49 { super.keyDown(with: event); return } // Space still pans.
+        }
         if session.brushStroke != nil || session.warpStroke != nil {
             if event.keyCode == 53 && !session.isProjectBusy { session.cancelBrush(); synchronizeDisplay() }
             return
@@ -1939,7 +1952,8 @@ final class CanvasView: NSView {
     private var renderBounds: CGRect? {
         guard let document = session.document else { return nil }
         let original = CGRect(origin: .zero, size: document.size)
-        return session.tool == .crop ? original.union(session.cropRect ?? original) : original
+        let shown = session.tool == .crop ? original.union(session.cropRect ?? original) : original
+        return session.generativeEdit.map { shown.union($0.bounds) } ?? shown
     }
 
     private func beginCropDrag(at point: CGPoint) {

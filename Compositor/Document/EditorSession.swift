@@ -149,7 +149,7 @@ final class EditorSession {
     private var fileRequestWaiters: [CheckedContinuation<Void, Never>] = []
     var canStartProjectOperation: Bool {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
+        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet && generativeEdit == nil
     }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
@@ -250,6 +250,11 @@ final class EditorSession {
     var hueSaturation: HueSaturationEdit?
     /// The open filter (Filter menu), and the settings the next one starts from.
     var filterEdit: FilterEdit?
+    /// The open Generative Fill, Remove or Generative Expand. While it is open the document stays as it is:
+    /// what has been generated belongs to the picture as it was sampled.
+    var generativeEdit: GenerativeEdit? { didSet { resumeFileRequests() } }
+    /// Tests put their own here, around a store and a provider that touch nothing real.
+    @ObservationIgnored lazy var generativeSettings = GenerativeSettings.shared
     var filterSettings = FilterSettings()
     @ObservationIgnored var hueSaturationTask: Task<Void, Never>?
     /// The newest preview request while one is already rendering.
@@ -325,13 +330,13 @@ final class EditorSession {
     func selectLayer(_ id: UUID?) {
         effectSelection = nil
         if id != activeLayerID, !finishText() { return }
-        guard brushStroke == nil, warpStroke == nil, levels == nil else { return }
+        guard brushStroke == nil, warpStroke == nil, levels == nil, generativeEdit == nil else { return }
         if id != activeLayerID { commitTransform(); resolveGradient() }
         activeLayerID = id
     }
     func selectTool(_ value: NavigationTool) {
         if tool != value, !finishText() { return }
-        guard !isProjectBusy, brushStroke == nil, warpStroke == nil, levels == nil else { return }
+        guard !isProjectBusy, brushStroke == nil, warpStroke == nil, levels == nil, generativeEdit == nil else { return }
         if tool != value { commitTransform(); cancelCrop(); resolveGradient(); cancelLasso(); cancelShape() }
         let from = Self.tipFamily(tool), to = Self.tipFamily(value)
         if from != to, let parked = parkedBrushTips[to] {
@@ -537,7 +542,7 @@ final class EditorSession {
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
+        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet && generativeEdit == nil
     }
     var canUndo: Bool { canUseHistory && (history.canUndo || gradientEdit != nil) }
     var canRedo: Bool { canUseHistory && history.canRedo }
@@ -572,9 +577,11 @@ final class EditorSession {
 
     func endEdit() { history.end(document: document, selection: activeLayerID) }
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
-    var canEditLayers: Bool {
+    var canEditLayers: Bool { cropRect == nil && canEditLayersIgnoringCrop }
+    /// Generative Expand starts from the Crop tool's frame, which otherwise rules layer edits out.
+    var canEditLayersIgnoringCrop: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+        return selectionAmountOperation == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil && generativeEdit == nil
     }
 
     func addBlankLayer() {

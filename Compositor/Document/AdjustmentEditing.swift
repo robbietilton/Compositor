@@ -5,7 +5,7 @@ extension EditorSession {
     /// The source is only for the histogram and sampling; it never replaces layer pixels.
     func beginAdjustmentEditing(_ id: UUID) async {
         guard adjustmentEditingID == id, adjustmentOriginal == nil,
-              levels == nil, hueSaturation == nil, filterEdit == nil,
+              levels == nil, hueSaturation == nil, filterEdit == nil, generativeEdit == nil,
               let snapshot = projectSnapshot(),
               let index = snapshot.manifest.layers.firstIndex(where: { $0.id == id }),
               let original = snapshot.manifest.layers[index].adjustment else { return }

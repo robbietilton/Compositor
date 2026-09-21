@@ -123,7 +123,7 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
-            guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
+            guard session.levels == nil, session.generativeEdit == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
             let point: CGPoint?
             if let document = session.document, canvasFrame.contains(location) {
                 point = session.viewport.documentPoint(
@@ -154,7 +154,7 @@ struct ContentView: View {
             ToolbarItem(placement: .navigation) {
                 Button { requestNewCanvas() } label: { Label("New canvas", systemImage: "plus") }
                     .help("New canvas (⌘N)").accessibilityIdentifier("newCanvasToolbar")
-                    .disabled(session.isImporting || session.showsBusy || session.levels != nil)
+                    .disabled(session.isImporting || session.showsBusy || session.levels != nil || session.generativeEdit != nil)
                     .modifier(NewProjectDropTarget(workspace: applicationDelegate?.workspace))
             }
             ToolbarSpacer(.fixed, placement: .navigation)
@@ -232,6 +232,7 @@ struct ContentView: View {
                 filterPanel.show(title: session.filterEdit?.kind.rawValue ?? "Filter", content: FilterSheet(session: session))
             }
         }
+        .modifier(GenerativePanelHost(session: session))
         .onChange(of: session.document == nil) { _, empty in
             if !empty { session.canvasFocusRequest += 1 }
         }
