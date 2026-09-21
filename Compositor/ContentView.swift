@@ -254,7 +254,17 @@ struct ContentView: View {
                           allowsMultipleSelection: true) { result in
                 switch result {
                 case .success(let urls):
-                    Task { await session.importImages(urls) }
+                    // Layered PSDs are documents (each artboard its own tab), not layers dropped
+                    // into the current one; everything else imports as before.
+                    let psd = urls.filter { PSDProbe.isPSD($0) }
+                    let images = urls.filter { !psd.contains($0) }
+                    Task {
+                        if !psd.isEmpty {
+                            if let workspace = applicationDelegate?.workspace { await workspace.receive(psd) }
+                            else { await session.importImages(psd) }
+                        }
+                        if !images.isEmpty { await session.importImages(images) }
+                    }
                 case .failure(let error):
                     if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
                 }
@@ -263,6 +273,10 @@ struct ContentView: View {
                 get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
                     Button("OK", role: .cancel) { session.importError = nil }
                 } message: { Text(session.importError ?? "") }
+            .alert("Import Notes", isPresented: Binding(
+                get: { session.importNotes != nil }, set: { if !$0 { session.importNotes = nil } })) {
+                    Button("OK", role: .cancel) { session.importNotes = nil }
+                } message: { Text(session.importNotes ?? "") }
             .alert("Couldn’t paint", isPresented: Binding(get: { session.brushError != nil },
                 set: { if !$0 { session.brushError = nil } })) {
                     Button("OK") { session.brushError = nil }

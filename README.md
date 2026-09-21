@@ -51,14 +51,25 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - Crop with snapping, and Option for symmetric cropping
 - Canvas Size and Image Size
 - Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
-- Import JPEG, PNG, HEIC, TIFF and PSD — including dropped screenshots and images from other apps
-- Export PNG (⇧⌘E), JPEG with a live preview (⇧⌥⌘S) and flattened Photoshop PSD (⇧⌥⌘E); Copy Merged
+- Import JPEG, PNG, HEIC, TIFF and layered PSD — including dropped screenshots and images from other apps
+- Layered Photoshop PSD import: artboards become separate documents, with pixel layers, smart objects, text and solid-fill layers rasterized; folders, layer masks, opacities, blend modes and clipping preserved
+- Export PNG (⇧⌘E), JPEG with a live preview (⇧⌥⌘S) and layered Photoshop PSD with folders, masks, blend modes and clipping (⇧⌥⌘E); Copy Merged
 - Photoshop-style keyboard shortcuts throughout
 
 ## Requirements
 
 - macOS 26
 - Xcode 26 (to build from source)
+
+## Photoshop PSD support
+
+PSD files import with their layer structure intact (8-bit RGB, PSD — not PSB):
+
+- **Artboards.** A file with artboards becomes one document per artboard, each named after it — the only mapping that fits files whose full canvas exceeds the 100-megapixel budget. Layers are positioned relative to their artboard and cropped to it; files without artboards import as a single document, with a clear error if the canvas itself is over budget.
+- **Layers.** Pixel layers, smart objects, text layers and solid-color fills all carry rendered pixels in the file and rasterize as pixel layers. Adjustment layers (Hue/Saturation and friends) hold no pixels and are skipped — the import summary tells you what was dropped.
+- **Structure.** Folders (including pass-through groups), layer masks, per-layer opacity, hidden state, Unicode names, and clipping stacks all carry over. Darker Color has no equivalent blend mode here and downgrades to Darken.
+- **Export** writes a layered PSD back out: folders as groups, masks as mask channels, the nine blend modes under their Photoshop keys, clipping flags, and a full flattened composite, as Photoshop requires. Adjustment layers keep their place in the stack as empty records; their effect lives on in the composite.
+- Files that store only a flattened composite (no layer records) still import the old way, as a single image.
 
 ## Building
 

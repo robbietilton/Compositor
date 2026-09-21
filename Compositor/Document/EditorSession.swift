@@ -510,6 +510,8 @@ final class EditorSession {
     var showsImporter = false { didSet { resumeFileRequests() } }
     var isImporting = false { didSet { resumeFileRequests() } }
     var importError: String? { didSet { resumeFileRequests() } }
+    /// Import succeeded, but with skips and downgrades worth telling the user about (a PSD summary).
+    var importNotes: String? = nil
     var opacityEditLayerID: UUID?
     var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
@@ -702,10 +704,19 @@ final class EditorSession {
         var failures: [String] = []
         while !pendingImports.isEmpty {
           let request = pendingImports.removeFirst()
+          // Layered PSDs become documents rather than layers, so they install outside the
+          // image-import undo transaction (like opening a project does).
+          let psd = request.files.filter { PSDProbe.isPSD($0.url) }
+          for (url, scoped) in psd {
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            await importPSDDocument(from: url)
+          }
+          let images = request.files.filter { !PSDProbe.isPSD($0.url) }
+          guard !images.isEmpty else { request.completion.resume(); continue }
           beginEdit("Import Images")
           // No document: the first successful image determines the canvas, regardless of drop point.
           let point = document == nil ? nil : request.point
-          for (url, scoped) in request.files {
+          for (url, scoped) in images {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 guard url.isFileURL else { throw ImageImportError.unsupported }
@@ -724,6 +735,42 @@ final class EditorSession {
         }
         isImporting = false
         if !failures.isEmpty { importError = failures.joined(separator: "\n\n") }
+    }
+
+    /// Imports a layered PSD as this session's document. Only the first artboard lands here:
+    /// the rest need their own tabs, which only the tabbed workspace can provide.
+    private func importPSDDocument(from url: URL) async {
+        do {
+            let result = try await PSDImporter.shared.importDocuments(at: url)
+            if let first = result.documents.first {
+                installImportedDocument(first.snapshot)
+                if result.documents.count > 1 {
+                    let rest = result.documents.count - 1
+                    importNotes = (result.summary.text.map { $0 + "\n\n" } ?? "")
+                        + "The PSD contained \(result.documents.count) artboards; this window shows “\(first.name)”. "
+                        + "The other \(rest) need their own tabs — reopen the file in a tabbed window to import them all."
+                } else if let text = result.summary.text {
+                    importNotes = text
+                }
+            }
+        } catch PSDImportError.nothingImported {
+            // No layer records (or nothing importable): fall back to the flattened composite,
+            // decoded like any other image. The fallback must not go through importImages:
+            // it would classify this same URL as a PSD again and queue behind the very drain
+            // that is suspended here — isImporting never clears and the import deadlocks.
+            do {
+                let usedPixels = document?.layers.reduce(0) { total, layer in
+                    guard let image = layer.asset?.image else { return total }
+                    return total + image.width * image.height
+                } ?? 0
+                let asset = try await ImageImporter.shared.decode(url, remainingPixels: 100_000_000 - usedPixels)
+                insert(asset, centeredAt: nil)
+            } catch {
+                importError = "\(url.lastPathComponent): \(error.localizedDescription)"
+            }
+        } catch {
+            importError = "\(url.lastPathComponent): \(error.localizedDescription)"
+        }
     }
 
     func insert(_ asset: ImportedImage, centeredAt point: CGPoint? = nil) {

@@ -17,25 +17,36 @@ extension EditorSession {
     }
 
     /// Called only after the entire package has successfully validated and loaded.
-    func installProject(_ snapshot: ProjectSnapshot, from url: URL) {
+    func installProject(_ snapshot: ProjectSnapshot, from url: URL?) {
         collapsedGroupIDs = []
         isMaskSelected = false
         cancelCrop()
         guideDrag = nil
         let manifest = snapshot.manifest
         transformEdit = nil
-        document = CanvasDocument(id: manifest.documentID, width: manifest.width, height: manifest.height,
+        document = makeDocument(from: snapshot)
+        activeLayerID = manifest.activeLayerID
+        projectURL = url
+        renamingLayerID = nil
+        history.reset()
+        viewport.fit(documentSize: document!.size)
+    }
+
+    /// Installs a document imported from another format (a layered PSD); it has no project
+    /// file behind it yet, so the first save asks where to go.
+    func installImportedDocument(_ snapshot: ProjectSnapshot) {
+        installProject(snapshot, from: nil)
+    }
+
+    private func makeDocument(from snapshot: ProjectSnapshot) -> CanvasDocument {
+        let manifest = snapshot.manifest
+        return CanvasDocument(id: manifest.documentID, width: manifest.width, height: manifest.height,
             layers: manifest.layers.map {
                 ImageLayer(id: $0.id, asset: snapshot.images[$0.id], name: $0.name,
                            isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
                            shape: LayerShape.loaded($0.shape, image: snapshot.images[$0.id]?.image),
                            text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image))
             }, resolution: manifest.resolution ?? 72, guides: manifest.guides ?? [])
-        activeLayerID = manifest.activeLayerID
-        projectURL = url
-        renamingLayerID = nil
-        history.reset()
-        viewport.fit(documentSize: document!.size)
     }
 
     func clearProject() {

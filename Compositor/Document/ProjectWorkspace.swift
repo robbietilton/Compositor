@@ -8,7 +8,9 @@ final class ProjectTab: Identifiable {
     let session: EditorSession
     let controller: ProjectController
     let defaultName: String
-    var title: String { session.projectURL?.deletingPathExtension().lastPathComponent ?? defaultName }
+    /// A name the document itself carries (an imported PSD artboard), shown until saved.
+    var importedTitle: String? = nil
+    var title: String { importedTitle ?? session.projectURL?.deletingPathExtension().lastPathComponent ?? defaultName }
     init(name: String) {
         defaultName = name
         session = EditorSession()
@@ -130,6 +132,7 @@ final class ProjectWorkspace {
         isManaging = true; defer { isManaging = false }
         for url in urls {
             if url.pathExtension.lowercased() == "comp" { _ = await loadProject(url); continue }
+            if PSDProbe.isPSD(url) { await importPSD(url); continue }
             let tab: ProjectTab
             if let destination {
                 guard let existing = tabs.first(where: { $0.id == destination }) else { continue }
@@ -137,6 +140,41 @@ final class ProjectWorkspace {
             } else { tab = addTab() }
             selectedID = tab.id
             await tab.session.importImages([url], at: point)
+        }
+    }
+
+    /// Opens a layered PSD: every artboard becomes its own document tab (the first may reuse
+    /// the lone empty tab), and skips or downgrades surface as an import note on the last one.
+    /// Only `receive` may call this: it already holds `isManaging`, so waiting on `canSwitch`
+    /// here would spin forever against our own guard (review finding B1).
+    private func importPSD(_ url: URL) async {
+        let busySession = current.session
+        busySession.isProjectBusy = true
+        defer { busySession.isProjectBusy = false }
+        do {
+            let result = try await PSDImporter.shared.importDocuments(at: url)
+            for (index, document) in result.documents.enumerated() {
+                let tab: ProjectTab
+                if index == 0, tabs.count == 1, current.session.document == nil {
+                    tab = current
+                } else {
+                    tab = ProjectTab(name: document.name)
+                    tab.controller.window = window
+                    tabs.append(tab)
+                }
+                tab.importedTitle = document.name
+                tab.controller.workspace = self
+                selectedID = tab.id
+                tab.session.installImportedDocument(document.snapshot)
+            }
+            if let text = result.summary.text { current.session.importNotes = text }
+        } catch PSDImportError.nothingImported {
+            // No layer records (or nothing importable): fall back to the flattened composite.
+            let tab = addTab()
+            selectedID = tab.id
+            await tab.session.importImages([url])
+        } catch {
+            current.session.importError = "\(url.lastPathComponent): \(error.localizedDescription)"
         }
     }
     func receiveProviders(_ providers: [NSItemProvider], into destination: UUID? = nil, at point: CGPoint? = nil) async {
