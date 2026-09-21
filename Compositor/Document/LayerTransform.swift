@@ -5,6 +5,15 @@ nonisolated enum LayerSampling: String, CaseIterable, Codable, Sendable {
     case nearest = "Nearest"
     case smooth = "Smooth"
     case high = "High quality"
+
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .nearest: String(localized: "Nearest")
+        case .smooth: String(localized: "Smooth")
+        case .high: String(localized: "High quality")
+        }
+    }
     var quality: CGInterpolationQuality {
         switch self {
         case .nearest: return .none

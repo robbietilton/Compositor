@@ -156,7 +156,7 @@ extension EditorSession {
             layers.append(child)
         }
         guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return }
-        beginEdit("Group Layers")
+        beginEdit(String(localized: "Group Layers"))
         self.document?.layers = layers
         activeLayerID = group.id
         if let parent { collapsedGroupIDs.remove(parent) }
@@ -186,7 +186,7 @@ extension EditorSession {
         let insertion = layers.firstIndex(where: { $0.id == activeLayerID }).map { $0 + 1 } ?? layers.count
         layers.insert(group, at: insertion)
         guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return }
-        beginEdit("New Folder")
+        beginEdit(String(localized: "New Folder"))
         self.document?.layers = layers
         activeLayerID = group.id
         if let parent = group.parentID { collapsedGroupIDs.remove(parent) }
@@ -221,7 +221,7 @@ extension EditorSession {
         Self.adoptClipping(id, in: &layers)
         Self.releaseDetachedClipping(in: &layers)
         guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return false }
-        beginEdit("Move Layer")
+        beginEdit(String(localized: "Move Layer"))
         document?.layers = layers
         activeLayerID = id
         if let parent { collapsedGroupIDs.remove(parent) }

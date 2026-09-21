@@ -3,6 +3,15 @@ import CoreGraphics
 
 nonisolated enum CanvasUnit: String, CaseIterable, Sendable {
     case pixels = "Pixels", percent = "Percent", inches = "Inches", centimeters = "Centimeters"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .pixels: String(localized: "Pixels")
+        case .percent: String(localized: "Percent")
+        case .inches: String(localized: "Inches")
+        case .centimeters: String(localized: "Centimeters")
+        }
+    }
 }
 
 nonisolated struct CanvasSizeDraft {

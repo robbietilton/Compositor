@@ -79,7 +79,7 @@ extension EditorSession {
         guard let traced = MaskTracing.darkPixels(in: mask) else { NSSound.beep(); return }
         var toDocument = BrushRaster.pixelToDocument(layer.maskTransform, width: mask.width, height: mask.height)
         guard let outline = traced.copy(using: &toDocument) else { return }
-        applySelection(outline, mode: mode, name: "Load Mask Selection")
+        applySelection(outline, mode: mode, name: String(localized: "Load Mask Selection"))
     }
 
     /// Cmd-click on a layer thumbnail: the layer's visible (≥ 50% opaque) pixels become
@@ -90,6 +90,6 @@ extension EditorSession {
         guard let traced = MaskTracing.opaquePixels(in: image) else { NSSound.beep(); return }
         var toDocument = BrushRaster.pixelToDocument(layer.transform, width: image.width, height: image.height)
         guard let outline = traced.copy(using: &toDocument) else { return }
-        applySelection(outline, mode: mode, name: "Load Layer Selection")
+        applySelection(outline, mode: mode, name: String(localized: "Load Layer Selection"))
     }
 }

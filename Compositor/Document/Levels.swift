@@ -3,6 +3,16 @@ import Observation
 
 nonisolated enum LevelsChannel: String, CaseIterable, Sendable, Codable {
     case rgb = "RGB", red = "Red", green = "Green", blue = "Blue"
+
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .rgb: String(localized: "RGB")
+        case .red: String(localized: "Red")
+        case .green: String(localized: "Green")
+        case .blue: String(localized: "Blue")
+        }
+    }
     var index: Int { Self.allCases.firstIndex(of: self)! }
 }
 nonisolated struct LevelRange: Equatable, Sendable, Codable {
@@ -218,7 +228,7 @@ extension EditorSession {
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index], current.asset?.image === edit.original.image,
                   current.transform == edit.transform else { return }
-            beginEdit("Levels")
+            beginEdit(String(localized: "Levels"))
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: current.transform, parentID: current.parentID, isGroup: false,
                 opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID)

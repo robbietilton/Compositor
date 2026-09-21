@@ -2,6 +2,13 @@ import Foundation
 import CoreGraphics
 
 nonisolated enum LayerBlendMode: String, Codable, CaseIterable, Sendable {
+    /// The localized menu title. `rawValue` doubles as the persistence form and the catalog
+    /// key, so files keep their English form while the popup shows the UI language.
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+    /// Reverse lookup for the localized popup titles.
+    static func blendMode(forLocalizedName title: String) -> LayerBlendMode? {
+        allCases.first { $0.localizedName == title }
+    }
     case normal = "Normal", multiply = "Multiply", screen = "Screen", overlay = "Overlay", softLight = "Soft Light"
     case darken = "Darken", lighten = "Lighten", difference = "Difference"
     case colorDodge = "Color Dodge", colorBurn = "Color Burn"
@@ -42,7 +49,7 @@ extension EditorSession {
     var canEditOpacity: Bool { canEditLayers && selectedLayerIDs.count == 1 && activeLayer != nil }
     func beginOpacityEdit() {
         guard canEditOpacity, opacityEditLayerID == nil, let id = activeLayerID else { return }
-        beginEdit("Layer Opacity")
+        beginEdit(String(localized: "Layer Opacity"))
         opacityEditLayerID = id
     }
     func finishOpacityEdit() {
@@ -55,7 +62,7 @@ extension EditorSession {
               let id = opacityEditLayerID ?? activeLayerID,
               let index = document?.layers.firstIndex(where: { $0.id == id }) else { return }
         let standalone = opacityEditLayerID == nil
-        if standalone { beginEdit("Layer Opacity") }
+        if standalone { beginEdit(String(localized: "Layer Opacity")) }
         document?.layers[index].opacity = min(1, max(0, opacity))
         if standalone { endEdit() }
     }
@@ -69,7 +76,7 @@ extension EditorSession {
         }
         guard !indices.isEmpty else { return }
         finishOpacityEdit()
-        beginEdit("Layer Opacity")
+        beginEdit(String(localized: "Layer Opacity"))
         for index in indices { self.document?.layers[index].opacity = value }
         endEdit()
     }
@@ -85,7 +92,7 @@ extension EditorSession {
         blendPreview = nil
         guard canEditAppearance, let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
         finishOpacityEdit()
-        beginEdit("Layer Blend Mode")
+        beginEdit(String(localized: "Layer Blend Mode"))
         document?.layers[index].blendMode = mode
         endEdit()
     }

@@ -657,11 +657,11 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         linkButton.isEnabled = thumbnail.isEnabled
         linkButton.toolTip = layer.mask?.isLinked == false ? "Link layer and mask so they move together"
             : "Unlink layer and mask to move or transform them separately"
-        linkButton.setAccessibilityLabel(layer.mask?.isLinked == false ? "Link mask: \(layer.name)" : "Unlink mask: \(layer.name)")
+        linkButton.setAccessibilityLabel(layer.mask?.isLinked == false ? String(localized: "Link mask: \(layer.name)") : String(localized: "Unlink mask: \(layer.name)"))
         thumbnail.toolTip = editableText ? "Editable text layer" : "Select image pixels"
         maskThumbnail.toolTip = "Select layer mask; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
-        thumbnail.setAccessibilityLabel("Select \(editableText ? "text" : "image"): \(layer.name)")
-        maskThumbnail.setAccessibilityLabel("Select mask: \(layer.name)")
+        thumbnail.setAccessibilityLabel(editableText ? String(localized: "Select text: \(layer.name)") : String(localized: "Select image: \(layer.name)"))
+        maskThumbnail.setAccessibilityLabel(String(localized: "Select mask: \(layer.name)"))
         updateTarget()
         layerName = layer.name
         // A reused cell must not carry another row's half-finished rename.
@@ -674,7 +674,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
             dimensions.toolTip = "Clipping mask based on \(sourceName). Option-click the bottom of its row to release."
         } else { dimensions.toolTip = nil }
         eye.image = NSImage(systemSymbolName: layer.isVisible ? "eye" : "eye.slash", accessibilityDescription: nil)
-        eye.setAccessibilityLabel("\(layer.isVisible ? "Hide" : "Show") \(layer.name)")
+        eye.setAccessibilityLabel(layer.isVisible ? String(localized: "Hide \(layer.name)") : String(localized: "Show \(layer.name)"))
         eye.isEnabled = enabled
         eye.layerID = layer.id
         eye.session = session
@@ -853,7 +853,7 @@ private final class LayerEffectRow: NSView, NSDraggingSource {
         eye.contentTintColor = .secondaryLabelColor
         eye.target = self; eye.action = #selector(toggle)
         eye.isEnabled = session.canEditLayers
-        eye.setAccessibilityLabel((enabled ? "Hide " : "Show ") + kind.rawValue)
+        eye.setAccessibilityLabel(String(format: String(localized: enabled ? "Hide %@" : "Show %@"), String(localized: String.LocalizationValue(kind.rawValue))))
         label.font = .systemFont(ofSize: 11)
         label.textColor = enabled ? .labelColor : .secondaryLabelColor
         label.lineBreakMode = .byTruncatingTail
@@ -869,7 +869,7 @@ private final class LayerEffectRow: NSView, NSDraggingSource {
         toolTip = "Click to select; double-click to edit; Option-drag to copy " + kind.rawValue.lowercased()
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel(kind.rawValue + " effect")
+        setAccessibilityLabel(String(format: String(localized: "%@ effect"), String(localized: String.LocalizationValue(kind.rawValue))))
         updateSelection()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

@@ -159,7 +159,7 @@ extension EditorSession {
                 mask: original.mask, maskSourceID: original.maskSourceID.map { mapping[$0] ?? $0 },
                 adjustment: original.adjustment, shape: original.shape, effects: original.effects, text: original.text)
         }
-        beginEdit("Duplicate Layer")
+        beginEdit(String(localized: "Duplicate Layer"))
         document?.layers.insert(contentsOf: copies, at: index + 1)
         for original in originals where collapsedGroupIDs.contains(original.id) {
             collapsedGroupIDs.insert(mapping[original.id]!)
@@ -174,7 +174,7 @@ extension EditorSession {
     func duplicateLayer(_ id: UUID, in parent: UUID?, above target: UUID? = nil, atBottom: Bool = false) -> Bool {
         guard canEditLayers,
               canPlaceLayer(id, in: parent) else { return false }
-        beginEdit("Duplicate Layer")
+        beginEdit(String(localized: "Duplicate Layer"))
         defer { endEdit() }
         selectLayer(id)
         duplicateActiveLayer()

@@ -13,21 +13,21 @@ extension EditorSession {
             let ordered = layers.filter { picked.contains($0.id) }
             guard ordered.contains(where: { !$0.isGroup }),
                   let top = ordered.last(where: { selectedLayerIDs.contains($0.id) }) else { return nil }
-            return (ordered.map(\.id), picked, top.name, top.parentID, top.id, "Merge Layers")
+            return (ordered.map(\.id), picked, top.name, top.parentID, top.id, String(localized: "Merge Layers"))
         }
         if active.isGroup {
             let inside = descendantIDs(of: active.id)
             guard layers.contains(where: { inside.contains($0.id) && !$0.isGroup }) else { return nil }
             let ids = layers.filter { inside.contains($0.id) || $0.id == active.id }.map(\.id)
-            return (ids, Set(ids), active.name, active.parentID, active.id, "Merge Group")
+            return (ids, Set(ids), active.name, active.parentID, active.id, String(localized: "Merge Group"))
         }
         guard let index = layers.firstIndex(where: { $0.id == active.id }),
               let below = layers[..<index].last(where: { $0.parentID == active.parentID }), !below.isGroup else { return nil }
-        return ([below.id, active.id], [below.id, active.id], below.name, active.parentID, active.id, "Merge Down")
+        return ([below.id, active.id], [below.id, active.id], below.name, active.parentID, active.id, String(localized: "Merge Down"))
     }
 
     var canMergeLayers: Bool { mergePlan() != nil }
-    var mergeTitle: String { mergePlan()?.action ?? "Merge Down" }
+    var mergeTitle: String { mergePlan()?.action ?? String(localized: "Merge Down") }
 
     /// ⌘E: the layers composited as the canvas shows them — blend modes, opacity, masks, clipping and adjustments
     /// baked in — into one pixel layer, trimmed to what is there, in their place, as one undo step.

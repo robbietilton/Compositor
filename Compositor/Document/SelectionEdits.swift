@@ -55,7 +55,7 @@ extension EditorSession {
         guard selection != nil, canEditPixels, let layer = activeLayer else { return }
         if isMaskSelected { await fillSelection(with: .background); return }
         guard layer.asset != nil else { return }
-        await applyPixelEdit(to: layer, name: "Clear") { try $0.clearPixels() }
+        await applyPixelEdit(to: layer, name: String(localized: "Clear")) { try $0.clearPixels() }
     }
 
     /// The Delete key: clears the selection when there is one; otherwise deletes the

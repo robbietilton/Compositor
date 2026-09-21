@@ -64,6 +64,16 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 
 Open `Compositor.xcodeproj` and run the **Compositor** scheme.
 
+## Interface language
+
+The app menu has a **Language** submenu: 跟随系统 (follow the system's language list), English and 简体中文. A choice is written to the `AppleLanguages` preference — macOS resolves an app's localization once at launch — so Compositor asks to restart before it takes effect. UI strings live in `Compositor/Localizable.xcstrings`; Xcode adds new keys to it when you build. Building from the command line extracts the strings but doesn't merge them into the catalog; after a build, merge them with:
+
+```sh
+BUILD_DIR="$(xcodebuild -project Compositor.xcodeproj -scheme Compositor -showBuildSettings 2>/dev/null | awk '/ BUILD_DIR = /{ print $3 }')"
+xcrun xcstringstool sync Compositor/Localizable.xcstrings \
+  --stringsdata "$BUILD_DIR"/../Intermediates.noindex/Compositor.build/Debug/Compositor.build/Objects-normal/arm64/*.stringsdata
+```
+
 ## Releasing
 
 `scripts/release.sh` builds a Release version, signs it with Developer ID, notarizes and staples it, and packages it into `dist/Compositor-<version>.dmg`.

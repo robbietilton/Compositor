@@ -18,6 +18,21 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     var isAutomatic: Bool { self == .contentAwareFill || self == .removeBackground }
     /// Color adjustments: in the Image menu (and editable as adjustment layers), not under Filter.
     var isImageAdjustment: Bool { self == .curves || self == .exposure || self == .gradientMap || self == .grain }
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .gaussianBlur: String(localized: "Gaussian Blur")
+        case .motionBlur: String(localized: "Motion Blur")
+        case .addNoise: String(localized: "Add Noise")
+        case .lensCorrection: String(localized: "Lens Correction")
+        case .removeBackground: String(localized: "Remove Background")
+        case .contentAwareFill: String(localized: "Content-Aware Fill")
+        case .curves: String(localized: "Curves")
+        case .exposure: String(localized: "Exposure")
+        case .gradientMap: String(localized: "Gradient Map")
+        case .grain: String(localized: "Grain")
+        }
+    }
 }
 
 /// Remove Background's two ways of working: Apple's own subject mask on its own, or that mask refined against the
@@ -25,6 +40,13 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
 nonisolated enum BackgroundQuality: String, CaseIterable, Sendable {
     case basic = "Basic"
     case advanced = "Advanced"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .basic: String(localized: "Basic")
+        case .advanced: String(localized: "Advanced")
+        }
+    }
 }
 
 /// Every filter's settings; each filter reads only its own.

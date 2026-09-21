@@ -2,7 +2,16 @@ import AppKit
 
 nonisolated enum TextAlignment: String, Codable, CaseIterable, Sendable {
     case left = "Left", center = "Center", right = "Right"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .left: String(localized: "Left")
+        case .center: String(localized: "Center")
+        case .right: String(localized: "Right")
+        }
+    }
 }
+
 
 nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
     var content = "Text"
@@ -124,7 +133,7 @@ extension EditorSession {
                     transform.origin.y += anchor.y - moved.y
                 }
                 guard transform.isValid else { throw ProjectError.tooLarge }
-                beginEdit("Edit Text")
+                beginEdit(String(localized: "Edit Text"))
                 if layer.mask?.placement == nil { document?.layers[index].mask?.placement = layer.maskTransform }
                 document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
                 document?.layers[index].text = text
@@ -173,7 +182,7 @@ extension EditorSession {
         style.red = color.red; style.green = color.green; style.blue = color.blue
         guard style.isValid, let image = try? Self.textImage(style), let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
         finishOpacityEdit()
-        beginEdit("Fill Text")
+        beginEdit(String(localized: "Fill Text"))
         document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
         document?.layers[index].text = LayerText(style: style, image: image)
         endEdit()

@@ -70,6 +70,13 @@ nonisolated struct SelectionClip: @unchecked Sendable {
 nonisolated enum WandMode: String, CaseIterable, Sendable {
     case wand = "Wand"
     case object = "Object"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .wand: String(localized: "Wand")
+        case .object: String(localized: "Object")
+        }
+    }
 }
 
 nonisolated enum LassoKind: String, CaseIterable, Sendable {
@@ -80,12 +87,29 @@ nonisolated enum LassoKind: String, CaseIterable, Sendable {
     case ellipse = "Ellipse"
     static let lassoChoices: [LassoKind] = [.freehand, .polygonal]
     static let marqueeChoices: [LassoKind] = [.rectangle, .ellipse]
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .freehand: String(localized: "Freehand")
+        case .polygonal: String(localized: "Polygonal")
+        case .rectangle: String(localized: "Rectangle")
+        case .ellipse: String(localized: "Ellipse")
+        }
+    }
 }
 
 nonisolated enum SelectionMode: String, CaseIterable, Sendable {
     case replace = "New"
     case add = "Add"
     case subtract = "Subtract"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .replace: String(localized: "New")
+        case .add: String(localized: "Add")
+        case .subtract: String(localized: "Subtract")
+        }
+    }
 }
 
 /// The box a drag from `anchor` to `point` spans, in whole pixels. `square` evens the sides;
@@ -262,7 +286,7 @@ extension EditorSession {
     /// Moves the outline only (never pixels). The whole drag is one undo step.
     func beginSelectionMove() -> Bool {
         guard selectionMoveOrigin == nil, let selection, !selection.isEmpty, canEditSelection else { return false }
-        beginEdit("Move Selection")
+        beginEdit(String(localized: "Move Selection"))
         selectionMoveOrigin = selection
         return true
     }
@@ -294,6 +318,14 @@ extension EditorSession {
 
     enum SelectionAmountOperation: String {
         case expand = "Expand", contract = "Contract", feather = "Feather"
+        /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+        var displayName: String {
+            switch self {
+            case .expand: String(localized: "Expand")
+            case .contract: String(localized: "Contract")
+            case .feather: String(localized: "Feather")
+            }
+        }
     }
 
     /// Menu commands ask for an amount; the tool header applies its input directly.
@@ -314,11 +346,11 @@ extension EditorSession {
     }
 
     /// Grows the outline by `amount` pixels with rounded corners (Photoshop's Expand), clipped to the canvas.
-    func expandSelection(by amount: Int) { resizeSelection(by: CGFloat(amount), name: "Expand Selection") }
+    func expandSelection(by amount: Int) { resizeSelection(by: CGFloat(amount), name: String(localized: "Expand Selection")) }
 
     /// Shrinks the outline by `amount` pixels, including away from the canvas edges.
     /// Contracting past the middle leaves an explicit empty selection.
-    func contractSelection(by amount: Int) { resizeSelection(by: -CGFloat(amount), name: "Contract Selection") }
+    func contractSelection(by amount: Int) { resizeSelection(by: -CGFloat(amount), name: String(localized: "Contract Selection")) }
 
     /// Softens the current selection's edge by `amount` pixels, as Select → Modify → Feather does. Applying it
     /// again softens further, the way Expand and Contract stack up.
@@ -327,7 +359,7 @@ extension EditorSession {
         // Two soft edges together spread a little less than their sum, as blurs do.
         let softened = (current.feather * current.feather + CGFloat(amount) * CGFloat(amount)).squareRoot()
         setSelection(DocumentSelection(path: current.path, antialiased: current.antialiased,
-                                       feather: min(250, softened)), name: "Feather Selection")
+                                       feather: min(250, softened)), name: String(localized: "Feather Selection"))
     }
 
     private func resizeSelection(by delta: CGFloat, name: String) {
@@ -343,18 +375,18 @@ extension EditorSession {
 
     func selectAll() {
         guard let document else { return }
-        setSelection(DocumentSelection(path: CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)), name: "Select All")
+        setSelection(DocumentSelection(path: CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)), name: String(localized: "Select All"))
     }
 
     func deselect() {
         guard selection != nil else { return }
-        setSelection(nil, name: "Deselect")
+        setSelection(nil, name: String(localized: "Deselect"))
     }
 
     func invertSelection() {
         guard let document, let current = selection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
         setSelection(DocumentSelection(path: canvas.subtracting(current.path, using: .winding), antialiased: current.antialiased, feather: current.feather),
-                     name: "Inverse")
+                     name: String(localized: "Inverse"))
     }
 }

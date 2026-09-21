@@ -5,7 +5,7 @@ import CoreImage
 nonisolated enum SubjectRemoval {
     enum Failure: LocalizedError {
         case noSubject
-        var errorDescription: String? { "No foreground subject was detected in this layer. Try an image with a more distinct subject." }
+        var errorDescription: String? { String(localized: "No foreground subject was detected in this layer. Try an image with a more distinct subject.") }
     }
     /// Vision's own mask for an image, kept while the panel is open so moving a slider only redoes the refining.
     private static let cache = MaskCache()
@@ -137,7 +137,7 @@ extension EditorSession {
             var toDocument = BrushRaster.pixelToDocument(LayerTransform(origin: .zero, size: document.size),
                                                          width: mask.width, height: mask.height)
             guard let outline = traced.copy(using: &toDocument) else { return }
-            applySelection(outline, mode: mode, name: "Select Subject")
+            applySelection(outline, mode: mode, name: String(localized: "Select Subject"))
         }
     }
 }

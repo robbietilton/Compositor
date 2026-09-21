@@ -31,7 +31,7 @@ extension EditorSession {
     @discardableResult func linkMask(source: UUID, target: UUID) -> Bool {
         guard canLinkMask(source: source, target: target), let index = document?.layers.firstIndex(where: { $0.id == target }) else { return false }
         guard document?.layers[index].maskSourceID != source else { return true }
-        beginEdit("Create Clipping Mask")
+        beginEdit(String(localized: "Create Clipping Mask"))
         document?.layers[index].maskSourceID = source
         endEdit()
         return true
@@ -61,7 +61,7 @@ extension EditorSession {
         let releases = siblings[(targetIndex...)]
             .prefix { $0.id == target || $0.maskSourceID == source }
             .map(\.id)
-        beginEdit("Release Clipping Mask")
+        beginEdit(String(localized: "Release Clipping Mask"))
         for id in releases {
             if let index = self.document?.layers.firstIndex(where: { $0.id == id }) {
                 self.document?.layers[index].maskSourceID = nil
@@ -106,11 +106,11 @@ extension EditorSession {
         let targets = (document?.layers ?? []).filter { !removed.contains($0.id) && $0.maskSourceID.map(removed.contains) == true }.map(\.id)
         guard !targets.isEmpty else { return false }
         let alert = NSAlert()
-        alert.messageText = ids.count == 1 ? "This layer supplies a live mask" : "These layers supply live masks"
-        alert.informativeText = "Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."
-        alert.addButton(withTitle: "Bake and Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Remove Links and Delete")
+        alert.messageText = ids.count == 1 ? String(localized: "This layer supplies a live mask") : String(localized: "These layers supply live masks")
+        alert.informativeText = String(localized: "Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice.")
+        alert.addButton(withTitle: String(localized: "Bake and Delete"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.addButton(withTitle: String(localized: "Remove Links and Delete"))
         let response = alert.runModal()
         if response == .alertThirdButtonReturn { finishDeletingLayers(ids, baked: [:]); return true }
         guard response == .alertFirstButtonReturn, let snapshot = projectSnapshot() else { return true }
@@ -131,7 +131,7 @@ extension EditorSession {
     func finishDeletingLayer(_ id: UUID, baked: [UUID: ImportedImage]) {
         guard let index = document?.layers.firstIndex(where: { $0.id == id }) else { return }
         let removed = descendantIDs(of: id).union([id])
-        beginEdit("Delete Layer")
+        beginEdit(String(localized: "Delete Layer"))
         document?.layers.removeAll { removed.contains($0.id) }
         for i in document?.layers.indices ?? 0..<0 {
             if let source = document?.layers[i].maskSourceID, removed.contains(source) {
@@ -148,7 +148,7 @@ extension EditorSession {
     /// Deletes several layers (a folder with its contents) as one undo step.
     func finishDeletingLayers(_ ids: [UUID], baked: [UUID: ImportedImage]) {
         guard ids.count > 1 else { if let id = ids.first { finishDeletingLayer(id, baked: baked) }; return }
-        beginEdit("Delete Layers")
+        beginEdit(String(localized: "Delete Layers"))
         for id in ids { finishDeletingLayer(id, baked: baked) }
         endEdit()
     }

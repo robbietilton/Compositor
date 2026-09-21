@@ -1,17 +1,33 @@
 import AppKit
 
-/// The Blur tool's modes. Smudge and Liquify push the active layer's pixels around under the brush.
 /// The Brush tool's modes.
 nonisolated enum BrushToolMode: String, CaseIterable, Sendable {
     case paint = "Paint"
     case erase = "Erase"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .paint: String(localized: "Paint")
+        case .erase: String(localized: "Erase")
+        }
+    }
 }
 
+/// The Blur tool's modes. Smudge and Liquify push the active layer's pixels around under the brush.
 nonisolated enum BlurToolMode: String, CaseIterable, Sendable {
     case liquify = "Liquify"
     case blur = "Blur"
     case smudge = "Smudge"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .liquify: String(localized: "Liquify")
+        case .blur: String(localized: "Blur")
+        case .smudge: String(localized: "Smudge")
+        }
+    }
 }
+
 
 /// A Smudge or Liquify stroke in progress. It works on the active layer as the canvas shows it, at document size,
 /// changing it dab by dab; the canvas shows that working copy in place of the layer. When the stroke ends, the result

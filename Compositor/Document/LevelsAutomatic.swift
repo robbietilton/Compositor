@@ -1,8 +1,27 @@
 import AppKit
 
-nonisolated enum LevelsSample: String, CaseIterable { case black = "Black", gray = "Gray", white = "White" }
+nonisolated enum LevelsSample: String, CaseIterable {
+    case black = "Black", gray = "Gray", white = "White"
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .black: String(localized: "Black")
+        case .gray: String(localized: "Gray")
+        case .white: String(localized: "White")
+        }
+    }
+}
 nonisolated enum LevelsAuto: String, CaseIterable {
     case contrast = "Contrast", color = "Color", neutral = "Color + neutral midtones"
+
+    /// The localized menu/picker title. The raw value stays English (it doubles as a stable identifier).
+    var displayName: String {
+        switch self {
+        case .contrast: String(localized: "Contrast")
+        case .color: String(localized: "Color")
+        case .neutral: String(localized: "Color + neutral midtones")
+        }
+    }
     func settings(histogram: [[Double]]) -> LevelsSettings {
         var result = LevelsSettings()
         func endpoints(_ bins: [Double]) -> (Double, Double)? {
