@@ -4,10 +4,12 @@ import Sparkle
 @main
 struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
+    @StateObject private var languageStore = AppLanguageStore()
     private var session: EditorSession { applicationDelegate.session }
     var body: some Scene {
         WindowGroup("Compositor") {
             ProjectWorkspaceView(applicationDelegate: applicationDelegate).roundedControls()
+                .environment(\.locale, languageStore.locale)
         }
             // Files opened from Finder or dropped on the Dock icon go to the app delegate, which imports them into
             // the open window. Left to SwiftUI, each one builds a throwaway window and fades the editor out and back.
@@ -305,5 +307,10 @@ struct CompositorApp: App {
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                 }
             }
+
+        Settings {
+            SettingsView(languageStore: languageStore)
+                .environment(\.locale, languageStore.locale)
+        }
     }
 }

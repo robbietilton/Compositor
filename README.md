@@ -64,6 +64,12 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 
 Open `Compositor.xcodeproj` and run the **Compositor** scheme.
 
+## Languages
+
+Compositor supports English, Russian, and System Default. Choose a language in
+`Compositor → Settings…` (`⌘,`). The choice is saved for future launches and
+the SwiftUI interface updates immediately.
+
 ## Releasing
 
 `scripts/release.sh` builds a Release version, signs it with Developer ID, notarizes and staples it, and packages it into `dist/Compositor-<version>.dmg`.
