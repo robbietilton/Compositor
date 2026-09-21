@@ -5,30 +5,37 @@ on:
 
 jobs:
   build:
-    name: Intel macOS 15 / Xcode 26.3
+    name: Intel macOS 15 / Xcode inspection
     runs-on: macos-15-intel
 
     steps:
-      - name: Checkout macOS 15 compatibility PR
+      - name: Checkout Compositor macOS 15 PR
         uses: actions/checkout@v4
         with:
           repository: robbietilton/Compositor
           ref: refs/pull/8/head
           fetch-depth: 1
 
-      - name: Show build environment
+      - name: Select Xcode
         run: |
-          echo "=== Host ==="
-          uname -a
-          uname -m
+          echo "=== Installed Xcodes ==="
+          ls -1 /Applications | grep '^Xcode' || true
 
           echo
-          echo "=== Xcode ==="
+          echo "=== Current developer directory ==="
+          xcode-select -p
+
+          echo
+          echo "=== Current Xcode ==="
           xcodebuild -version
 
           echo
-          echo "=== Swift ==="
+          echo "=== Swift version ==="
           swift --version
+
+          echo
+          echo "=== Runner architecture ==="
+          uname -m
 
       - name: Resolve Swift packages
         run: |
@@ -75,6 +82,7 @@ jobs:
           APP="$GITHUB_WORKSPACE/build/Build/Products/Release/Compositor.app"
           BINARY="$APP/Contents/MacOS/Compositor"
 
+          echo "=== LC_BUILD_VERSION ==="
           otool -l "$BINARY" | grep -A3 LC_BUILD_VERSION
 
       - name: Ad-hoc sign
@@ -108,10 +116,10 @@ jobs:
 
       - name: Generate checksum
         run: |
-          shasum -a 256 \
-            dist/Compositor-macOS15-Intel.zip
+          echo "=== SHA-256 ==="
+          shasum -a 256 dist/Compositor-macOS15-Intel.zip
 
-      - name: Upload Intel build
+      - name: Upload Intel macOS 15 build
         uses: actions/upload-artifact@v4
         with:
           name: Compositor-macOS15-Intel
