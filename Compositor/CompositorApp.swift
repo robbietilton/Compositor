@@ -157,7 +157,8 @@ struct CompositorApp: App {
                     Button("Copy Merged") { session.copyMergedSelection() }
                         .configuredKeyboardShortcut("c", modifiers: [.command, .shift]).disabled(!session.canCopyMerged)
                     Button("Paste") {
-                        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                        if session.canPasteIntoNewCanvas { session.paste() }
+                        else if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
                         else if session.canPaste { session.paste() }
                         else { NSSound.beep() }
                     }
