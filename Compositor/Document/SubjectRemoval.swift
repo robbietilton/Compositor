@@ -29,11 +29,21 @@ nonisolated enum SubjectRemoval {
     private static func vision(_ image: CGImage) throws -> CGImage {
         try cache.mask(for: image) {
             let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
-            let request = VNGenerateForegroundInstanceMaskRequest()
-            try handler.perform([request])
-            guard let result = request.results?.first, !result.allInstances.isEmpty else { throw Failure.noSubject }
-            let buffer = try result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler)
-            return try PixelAdjust.render(CIImage(cvPixelBuffer: buffer), width: image.width, height: image.height, isMask: true)
+            if #available(macOS 14.0, *) {
+                let request = VNGenerateForegroundInstanceMaskRequest()
+                try handler.perform([request])
+                guard let result = request.results?.first, !result.allInstances.isEmpty else { throw Failure.noSubject }
+                let buffer = try result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler)
+                return try PixelAdjust.render(CIImage(cvPixelBuffer: buffer), width: image.width, height: image.height, isMask: true)
+            } else {
+                // macOS 12/13 do not expose the general foreground-instance model. Person segmentation
+                // is the closest system-provided fallback and keeps Remove Background useful on those releases.
+                let request = VNGeneratePersonSegmentationRequest()
+                request.qualityLevel = .accurate
+                try handler.perform([request])
+                guard let buffer = request.results?.first?.pixelBuffer else { throw Failure.noSubject }
+                return try PixelAdjust.render(CIImage(cvPixelBuffer: buffer), width: image.width, height: image.height, isMask: true)
+            }
         }
     }
 

@@ -77,7 +77,7 @@ struct ImageSizeSheet: View {
             HStack {
                 Text("Resolution")
                 TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
-                    .onChange(of: resolution) { old, new in
+                    .onValueChangeCompat(of: resolution) { old, new in
                         if resample, unit == "Inches" || unit == "Centimeters",
                            old > 0, new > 0, new.isFinite {
                             width *= new / old
@@ -86,7 +86,7 @@ struct ImageSizeSheet: View {
                     }
                 Text("pixels/inch").foregroundStyle(.secondary)
             }
-            Toggle("Resample", isOn: $resample).onChange(of: resample) { _, enabled in
+            Toggle("Resample", isOn: $resample).onValueChangeCompat(of: resample) { _, enabled in
                 if !enabled {
                     width = Double(document.width)
                     height = Double(document.height)

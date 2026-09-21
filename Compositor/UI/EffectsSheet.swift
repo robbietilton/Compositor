@@ -2,7 +2,7 @@ import SwiftUI
 
 /// One effect's controls, bound to the layer that opened the panel. Changes preview on the canvas.
 struct EffectsSheet: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     let kind: LayerEffectKind
 
     var body: some View {
@@ -23,7 +23,7 @@ struct EffectsSheet: View {
         }
         .padding(20).frame(width: 340).fixedSize()
         // The picker previews its working color on the layer while it is open.
-        .onChange(of: session.colorPicker?.color) { _, _ in session.previewEffectColor() }
+        .onValueChangeCompat(of: session.colorPicker?.color) { _, _ in session.previewEffectColor() }
     }
 
     @ViewBuilder private var stroke: some View {

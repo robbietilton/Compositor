@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -98,24 +99,23 @@ enum NavigationTool: String, CaseIterable {
     var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
 }
 
-@Observable
-final class EditorSession {
+final class EditorSession: ObservableObject {
     var skipsInitialClipboardCanvasSize = false
-    var document: CanvasDocument?
-    var canvasFocusRequest = 0
-    var showsSampleRing = true
-    var adjustmentOriginal: LayerAdjustment?
-    var adjustmentEditingID: UUID? { didSet { resumeFileRequests() } }
+    @Published var document: CanvasDocument?
+    @Published var canvasFocusRequest = 0
+    @Published var showsSampleRing = true
+    @Published var adjustmentOriginal: LayerAdjustment?
+    @Published var adjustmentEditingID: UUID? { didSet { resumeFileRequests() } }
     /// The layer whose effects panel is open.
-    var effectsEditing: LayerEffectSelection?
-    var effectsEditingOriginal: LayerEffects?
-    var effectSelection: LayerEffectSelection?
-    @ObservationIgnored var effectsPreviews = EffectsPreviewCache()
-    var projectURL: URL?
+    @Published var effectsEditing: LayerEffectSelection?
+    @Published var effectsEditingOriginal: LayerEffects?
+    @Published var effectSelection: LayerEffectSelection?
+    var effectsPreviews = EffectsPreviewCache()
+    @Published var projectURL: URL?
     /// Blocks overlapping edits immediately. Not observed by the UI: controls only dim via
     /// `showsBusy`, after an operation has run long enough to be worth showing, so quick
     /// edits (invert, fills, stroke commits) never flash the interface.
-    @ObservationIgnored var isProjectBusy = false {
+    var isProjectBusy = false {
         didSet {
             if !isProjectBusy {
                 let waiters = projectWaiters
@@ -127,14 +127,14 @@ final class EditorSession {
         }
     }
     /// True once `isProjectBusy` has lasted longer than `busyIndicatorDelay`.
-    private(set) var showsBusy = false
-    static let busyIndicatorDelay: Duration = .milliseconds(250)
-    @ObservationIgnored private var busyIndicatorTask: Task<Void, Never>?
+    @Published private(set) var showsBusy = false
+    static let busyIndicatorDelay = LegacyDelay.milliseconds(250)
+    private var busyIndicatorTask: Task<Void, Never>?
     private func updateBusyIndicator() {
         if isProjectBusy {
             guard busyIndicatorTask == nil, !showsBusy else { return }
             busyIndicatorTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: Self.busyIndicatorDelay)
+                try? await Task.sleep(nanoseconds: Self.busyIndicatorDelay)
                 guard let self, !Task.isCancelled, self.isProjectBusy else { return }
                 self.showsBusy = true
                 self.busyIndicatorTask = nil
@@ -167,125 +167,125 @@ final class EditorSession {
             await withCheckedContinuation { projectWaiters.append($0) }
         }
     }
-    var viewport = CanvasViewport()
-    var tool: NavigationTool = .move
-    var collapsedGroupIDs: Set<UUID> = []
-    var cropRect: CGRect?
-    var cropRatioChoice = "Free"
-    var cropError: String?
-    var transformEdit: TransformEdit?
-    @ObservationIgnored var distortPreviewCache: [UUID: DistortPreviewCache] = [:]
-    @ObservationIgnored var distortEffectsCache: [UUID: DistortEffectsCache] = [:]
+    @Published var viewport = CanvasViewport()
+    @Published var tool: NavigationTool = .move
+    @Published var collapsedGroupIDs: Set<UUID> = []
+    @Published var cropRect: CGRect?
+    @Published var cropRatioChoice = "Free"
+    @Published var cropError: String?
+    @Published var transformEdit: TransformEdit?
+    var distortPreviewCache: [UUID: DistortPreviewCache] = [:]
+    var distortEffectsCache: [UUID: DistortEffectsCache] = [:]
     /// Document positions a move has just snapped to, drawn as guides while it lasts.
-    @ObservationIgnored var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
-    var snappingEnabled = true {
+    var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
+    @Published var snappingEnabled = true {
         didSet {
             if !snappingEnabled { snapGuides = ([], []) }
             refreshCanvasPreview?()
         }
     }
     /// Where the last brush stroke ended, so a Shift-click paints a straight line on from it.
-    @ObservationIgnored var lastBrushPoint: (point: CGPoint, layerID: UUID, mask: Bool)?
-    @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?
+    var lastBrushPoint: (point: CGPoint, layerID: UUID, mask: Bool)?
+    var maskDistortPreviewCache: MaskDistortPreviewCache?
     /// The last rounded rectangle drawn for a transform in progress, by layer, with the size it was drawn at.
-    @ObservationIgnored var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
-    var locksTransformRatio = true
+    var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
+    @Published var locksTransformRatio = true
     /// Off by default: a Move-tool press drags the active layer; hold Cmd (or turn this on) to pick the layer under the pointer.
-    var transformAutoSelect = false
+    @Published var transformAutoSelect = false
     /// The Move tool's transform box and handles (⌘H). Hidden, a drag anywhere just moves the layer;
     /// a pending ⌘T transform still shows its box.
-    var showsTransformControls = true
+    @Published var showsTransformControls = true
     /// The copies an Option-drag made, and what was selected before it, so Escape can take them away again.
-    @ObservationIgnored var transformDuplicate: (copies: [UUID], source: Set<UUID>, primary: UUID?)?
-    var brushSettings = BrushSettings() { didSet { refreshGradient() } }
-    var spotHealingMode: SpotHealingMode = .contentAware
-    var blurMode: BlurToolMode = .liquify
+    var transformDuplicate: (copies: [UUID], source: Set<UUID>, primary: UUID?)?
+    @Published var brushSettings = BrushSettings() { didSet { refreshGradient() } }
+    @Published var spotHealingMode: SpotHealingMode = .contentAware
+    @Published var blurMode: BlurToolMode = .liquify
     /// The Brush's two modes: Paint lays down the foreground color, Erase clears pixels away (B and E).
-    var brushMode: BrushToolMode = .paint
+    @Published var brushMode: BrushToolMode = .paint
     /// The tool rail's icon, which follows the mode a tool is in.
     func symbol(for tool: NavigationTool) -> String {
         tool == .brush && brushMode == .erase ? "eraser" : tool.symbol
     }
     /// The Magic tool's two modes: Wand selects by color, Object traces the object under the pointer (Tab).
-    var wandMode: WandMode = .wand
+    @Published var wandMode: WandMode = .wand
     /// Clone Stamp: the source Option-click set (document pixels), its options, and — once a
     /// stroke has started — the offset from brush to source that aligned strokes keep.
-    var cloneSource: CGPoint?
-    var cloneSettings = CloneSettings()
+    @Published var cloneSource: CGPoint?
+    @Published var cloneSettings = CloneSettings()
     /// The brush tip (size, hardness, opacity) of the side not in use: Clone Stamp keeps its own,
     /// soft by default, while Brush and Spot Healing share theirs.
     /// The tips of the brush families not in use: Clone Stamp and Smear each keep their own size, hardness and
     /// opacity (both starting soft); the other brushes share one.
-    @ObservationIgnored var parkedBrushTips: [Int: (diameter: CGFloat, hardness: CGFloat, opacity: CGFloat)] = [1: (40, 0, 1), 2: (40, 0, 1)]
+    var parkedBrushTips: [Int: (diameter: CGFloat, hardness: CGFloat, opacity: CGFloat)] = [1: (40, 0, 1), 2: (40, 0, 1)]
     private static func tipFamily(_ tool: NavigationTool) -> Int { tool == .cloneStamp ? 1 : tool == .blur ? 2 : 0 }
-    @ObservationIgnored var cloneOffset: CGSize?
-    var maskPaintWhite = false { didSet { refreshGradient() } }
-    var backgroundColor = PaletteColor.white { didSet { refreshGradient() } }
-    var gradientSettings = GradientSettings() { didSet { refreshGradient() } }
-    var gradientEdit: GradientEdit?
-    var lassoDraft: LassoDraft?
-    var lassoKind = LassoKind.freehand
-    var marqueeKind = LassoKind.rectangle
-    var textDraft: TextDraft? { didSet { if oldValue != nil && textDraft == nil { resumeFileRequests() } } }
-    var textDefaults = LayerTextStyle()
-    var shapeKind = ShapeKind.rectangle
+    var cloneOffset: CGSize?
+    @Published var maskPaintWhite = false { didSet { refreshGradient() } }
+    @Published var backgroundColor = PaletteColor.white { didSet { refreshGradient() } }
+    @Published var gradientSettings = GradientSettings() { didSet { refreshGradient() } }
+    @Published var gradientEdit: GradientEdit?
+    @Published var lassoDraft: LassoDraft?
+    @Published var lassoKind = LassoKind.freehand
+    @Published var marqueeKind = LassoKind.rectangle
+    @Published var textDraft: TextDraft? { didSet { if oldValue != nil && textDraft == nil { resumeFileRequests() } } }
+    @Published var textDefaults = LayerTextStyle()
+    @Published var shapeKind = ShapeKind.rectangle
     /// Corner radius in pixels for rectangles the Shape tool draws; 0 keeps the corners square.
-    var shapeCornerRadius: Double = 0
+    @Published var shapeCornerRadius: Double = 0
     /// A Line shape's thickness in document pixels.
-    var shapeLineWidth: Double = 4
+    @Published var shapeLineWidth: Double = 4
     /// The shape being dragged out with the Shape tool, before it becomes a layer.
-    var shapeDraft: ShapeDraft?
-    var selectionModeChoice = SelectionMode.replace
+    @Published var shapeDraft: ShapeDraft?
+    @Published var selectionModeChoice = SelectionMode.replace
     /// Mode implied by the Shift/Option keys currently held, nil when neither is.
-    var heldSelectionMode: SelectionMode?
+    @Published var heldSelectionMode: SelectionMode?
     /// The selection as it was when a drag-move began; the drag is one undo step.
-    @ObservationIgnored var selectionMoveOrigin: DocumentSelection?
-    var pixelMove: PixelMove?
-    @ObservationIgnored var pixelClipboard: PixelClipboard?
-    var levels: LevelsEdit? { didSet { resumeFileRequests() } }
-    var hueSaturation: HueSaturationEdit?
+    var selectionMoveOrigin: DocumentSelection?
+    @Published var pixelMove: PixelMove?
+    var pixelClipboard: PixelClipboard?
+    @Published var levels: LevelsEdit? { didSet { resumeFileRequests() } }
+    @Published var hueSaturation: HueSaturationEdit?
     /// The open filter (Filter menu), and the settings the next one starts from.
-    var filterEdit: FilterEdit?
-    var filterSettings = FilterSettings()
-    @ObservationIgnored var hueSaturationTask: Task<Void, Never>?
+    @Published var filterEdit: FilterEdit?
+    @Published var filterSettings = FilterSettings()
+    var hueSaturationTask: Task<Void, Never>?
     /// The newest preview request while one is already rendering.
-    @ObservationIgnored var hueSaturationPending: HueSaturationJob?
+    var hueSaturationPending: HueSaturationJob?
     /// The armed eyedropper and the targeted-adjustment tool, while the panel is open.
-    var hueSampleMode: HueSampleMode?
-    var hueTargeting = false
-    @ObservationIgnored var hueTargetDrag: HueTargetDrag?
-    var selectionAntialiased = true
+    @Published var hueSampleMode: HueSampleMode?
+    @Published var hueTargeting = false
+    var hueTargetDrag: HueTargetDrag?
+    @Published var selectionAntialiased = true
     /// How far Feather softens the selection's edge each time it is applied, in document pixels.
-    var selectionAmountOperation: SelectionAmountOperation? { didSet { resumeFileRequests() } }
-    var selectionFeatherAmount = 2
-    var wandSettings = WandSettings()
-    var objectSelectionSettings = ObjectSelectionSettings()
-    var showsPixelGrid = true
+    @Published var selectionAmountOperation: SelectionAmountOperation? { didSet { resumeFileRequests() } }
+    @Published var selectionFeatherAmount = 2
+    @Published var wandSettings = WandSettings()
+    @Published var objectSelectionSettings = ObjectSelectionSettings()
+    @Published var showsPixelGrid = true
     /// Layout grid (View > Show > Grid). Off until turned on; independent of the 800% pixel grid.
-    var showsGrid = false
+    @Published var showsGrid = false
     /// User guides. Hidden extras do not snap.
-    var showsGuides = true
-    var showsRulers = false
+    @Published var showsGuides = true
+    @Published var showsRulers = false
     /// Master snap switch (View > Snap). On so today's layer/canvas snap keeps working.
-    var snapEnabled = true
-    var snapToGuides = true
-    var snapToGrid = false
-    var snapToLayers = true
-    var snapToDocumentBounds = true
-    var locksGuides = false
-    var guideDrag: GuideDrag?
+    @Published var snapEnabled = true
+    @Published var snapToGuides = true
+    @Published var snapToGrid = false
+    @Published var snapToLayers = true
+    @Published var snapToDocumentBounds = true
+    @Published var locksGuides = false
+    @Published var guideDrag: GuideDrag?
     /// Pixels the Expand / Contract buttons grow or shrink the selection by.
-    var selectionExpandAmount = 1
-    var selectionContractAmount = 1
-    @ObservationIgnored var pendingOpacityDigit: (digit: Int, time: TimeInterval)?
-    var colorPicker: ColorPickerState?
-    var brushError: String?
-    var brushRevision = 0
+    @Published var selectionExpandAmount = 1
+    @Published var selectionContractAmount = 1
+    var pendingOpacityDigit: (digit: Int, time: TimeInterval)?
+    @Published var colorPicker: ColorPickerState?
+    @Published var brushError: String?
+    @Published var brushRevision = 0
     /// Not observed by the UI, so controls don't dim for the length of every stroke;
     /// a stroke keeps the settings it started with, so edits made mid-stroke are harmless.
-    @ObservationIgnored var brushStroke: BrushStroke? { didSet { resumeFileRequests() } }
+    var brushStroke: BrushStroke? { didSet { resumeFileRequests() } }
     /// A Smudge or Liquify stroke in progress.
-    @ObservationIgnored var warpStroke: WarpStroke? { didSet { resumeFileRequests() } }
+    var warpStroke: WarpStroke? { didSet { resumeFileRequests() } }
 
     var canTransform: Bool {
         guard canEditLayers else { return false }
@@ -506,23 +506,43 @@ final class EditorSession {
         if let corners = transformEdit?.corners { previewCorners(corners.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }) }
         if !alreadyEditing { commitTransform() }
     }
-    var showsNewDocument = false { didSet { resumeFileRequests() } }
-    var showsImporter = false { didSet { resumeFileRequests() } }
-    var isImporting = false { didSet { resumeFileRequests() } }
-    var importError: String? { didSet { resumeFileRequests() } }
-    var opacityEditLayerID: UUID?
-    var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
-    @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
-    var isMaskSelected = false
-    var selectedLayerIDs: Set<UUID> = []
-    var activeLayerID: UUID? {
+    @Published var showsNewDocument = false { didSet { resumeFileRequests() } }
+    @Published var showsImporter = false { didSet { resumeFileRequests() } }
+    @Published var isImporting = false { didSet { resumeFileRequests() } }
+    @Published var importError: String? { didSet { resumeFileRequests() } }
+    @Published var opacityEditLayerID: UUID?
+    @Published var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
+    var refreshCanvasPreview: (() -> Void)?
+    @Published var isMaskSelected = false
+    @Published var selectedLayerIDs: Set<UUID> = []
+    @Published var activeLayerID: UUID? {
         didSet {
             if activeLayerID != oldValue { isMaskSelected = false }
             selectedLayerIDs = activeLayerID.map { [$0] } ?? []
         }
     }
-    var renamingLayerID: UUID? { didSet { resumeFileRequests() } }
+    @Published var renamingLayerID: UUID? { didSet { resumeFileRequests() } }
     let history = DocumentHistory()
+    private var childCancellables = Set<AnyCancellable>()
+
+    init() {
+        history.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &childCancellables)
+        forward($colorPicker)
+        forward($levels)
+        forward($hueSaturation)
+        forward($filterEdit)
+    }
+
+    private func forward<Object: ObservableObject>(_ publisher: Published<Object?>.Publisher) {
+        publisher
+            .compactMap { $0 }
+            .flatMap { $0.objectWillChange }
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &childCancellables)
+    }
+
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy

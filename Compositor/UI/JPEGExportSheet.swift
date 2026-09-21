@@ -42,7 +42,7 @@ struct JPEGExportSheet: View {
                     .monospacedDigit().frame(width: 45, alignment: .trailing)
             }
             ColorPicker("Background for transparency", selection: $matte, supportsOpacity: false)
-                .onChange(of: matte) { _, color in
+                .onValueChangeCompat(of: matte) { _, color in
                     guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return }
                     options.red = rgb.redComponent
                     options.green = rgb.greenComponent
@@ -71,7 +71,7 @@ struct JPEGExportSheet: View {
             let requested = options
             error = nil
             do {
-                try await Task.sleep(for: .milliseconds(200))
+                try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(200))
                 let encoded = try await ImageExporter.shared.jpeg(raster, options: requested)
                 try Task.checkCancellation()
                 result = encoded

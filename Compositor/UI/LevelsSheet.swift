@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LevelsSheet: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     private var edit: LevelsEdit? { session.levels }
     private var settings: LevelsSettings { edit?.settings ?? LevelsSettings() }
     private var current: LevelRange { settings.current }

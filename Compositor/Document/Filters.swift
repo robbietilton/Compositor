@@ -1,6 +1,6 @@
 import AppKit
 import CoreImage
-import Observation
+import Combine
 
 /// Filters from the Filter menu. Each runs on the active image layer, inside the selection if
 /// there is one, with a live preview and one undo step on OK.
@@ -171,35 +171,34 @@ nonisolated enum PixelFilter {
     }
 }
 
-@Observable
-final class FilterEdit {
+final class FilterEdit: ObservableObject {
     let kind: FilterKind
     let layerID: UUID
     let original: ImportedImage
     let transform: LayerTransform
     let selection: SelectionClip?
-    var mapping: CGAffineTransform
+    @Published var mapping: CGAffineTransform
     var previewSource: CGImage
     var previewScale: CGFloat
     var previewMapping: CGAffineTransform
     /// A filter reaching past the layer's edge — Content-Aware Fill over a selection, a blur spreading outwards —
     /// works on the layer's pixels padded out, and on the transform placing that larger grid.
-    var grownImage: CGImage? = nil
-    var grownTransform: LayerTransform? = nil
+    @Published var grownImage: CGImage? = nil
+    @Published var grownTransform: LayerTransform? = nil
     /// How far the padding reaches beyond the layer on every side, in layer pixels.
-    var grownMargin: CGFloat = 0
-    var settings: FilterSettings
-    var preview = true
-    var committing = false
-    var previewError: String?
-    var preparing = false
+    @Published var grownMargin: CGFloat = 0
+    @Published var settings: FilterSettings
+    @Published var preview = true
+    @Published var committing = false
+    @Published var previewError: String?
+    @Published var preparing = false
     /// Add Noise's grain, fixed while the panel is open so changing Amount doesn't reshuffle it.
     let seed = UInt32.random(in: .min ... .max)
-    @ObservationIgnored var preparedPreview: CGImage?
+    var preparedPreview: CGImage?
     /// The settings `preparedPreview` was made with, for the automatic filters that have settings of their own.
-    @ObservationIgnored var preparedSettings: FilterSettings?
-    @ObservationIgnored var pending: FilterJob?
-    @ObservationIgnored var previewTask: Task<Void, Never>?
+    var preparedSettings: FilterSettings?
+    var pending: FilterJob?
+    var previewTask: Task<Void, Never>?
     /// Previews render from a copy no larger than this on its longest side.
     static let previewLimit: CGFloat = 2048
 

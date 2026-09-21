@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct GradientControls: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
 
     var body: some View {
         HStack(spacing: 12) {

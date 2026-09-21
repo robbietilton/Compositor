@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The open filter's panel: its settings, Preview, and Cancel / OK.
 struct FilterSheet: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     private var edit: FilterEdit? { session.filterEdit }
     private var settings: FilterSettings { edit?.settings ?? FilterSettings() }
     private func update(_ change: (inout FilterSettings) -> Void) {
@@ -93,7 +93,7 @@ struct FilterSheet: View {
 
         .disabled(edit?.committing == true)
         // The app's color picker, open on a Gradient Map end, previews its working color live.
-        .onChange(of: session.colorPicker?.color) { _, _ in session.previewGradientMapColor() }
+        .onValueChangeCompat(of: session.colorPicker?.color) { _, _ in session.previewGradientMapColor() }
     }
 
     private func flag(_ key: WritableKeyPath<FilterSettings, Bool>) -> Binding<Bool> {

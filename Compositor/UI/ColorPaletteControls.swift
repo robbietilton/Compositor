@@ -46,11 +46,11 @@ struct ColorPaletteControls: View {
                 }
             }.padding(16)
         }
-        .onChange(of: session.colorPicker.map(ObjectIdentifier.init)) { _, _ in
+        .onValueChangeCompat(of: session.colorPicker.map(ObjectIdentifier.init)) { _, _ in
             if let picker = session.colorPicker { pickerPanel.show(picker, session: session) }
             else { pickerPanel.close() }
         }
-        .onChange(of: session.isMaskSelected) { _, masked in
+        .onValueChangeCompat(of: session.isMaskSelected) { _, masked in
             choosingMaskBackground = nil
             if masked { session.closeColorPicker(commit: false) }
         }

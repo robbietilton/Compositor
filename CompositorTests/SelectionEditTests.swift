@@ -350,11 +350,14 @@ struct SelectionEditTests {
         context.fill(CGRect(x: 0, y: 0, width: 4000, height: 3000))
         let image = try #require(context.makeImage())
         session.insert(ImportedImage(image: image, thumbnail: image, name: "Big"))
-        let clock = ContinuousClock()
-        let whole = try await clock.measure { await session.invertPixels() }
+        let wholeStart = DispatchTime.now().uptimeNanoseconds
+        await session.invertPixels()
+        let whole = DispatchTime.now().uptimeNanoseconds - wholeStart
         select(session, CGRect(x: 0, y: 0, width: 2000, height: 3000))
-        let selected = try await clock.measure { await session.invertPixels() }
-        #expect(whole < .milliseconds(1500) && selected < .milliseconds(1500), "whole \(whole), selected \(selected)")
+        let selectedStart = DispatchTime.now().uptimeNanoseconds
+        await session.invertPixels()
+        let selected = DispatchTime.now().uptimeNanoseconds - selectedStart
+        #expect(whole < 1_500_000_000 && selected < 1_500_000_000, "whole \(whole), selected \(selected)")
         let result = try await render(session)
         #expect(try pixel(result, x: 100, y: 100) == [255, 0, 0, 255])   // Inverted twice.
         #expect(try pixel(result, x: 3000, y: 100) == [0, 255, 255, 255]) // Inverted once.
@@ -368,17 +371,17 @@ struct SelectionEditTests {
     @Test func quickOperationsNeverDimTheInterface() async throws {
         let session = makeSession()
         session.isProjectBusy = true
-        try await Task.sleep(for: .milliseconds(60))
+        try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(60))
         session.isProjectBusy = false
         #expect(!session.showsBusy)
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(300))
         #expect(!session.showsBusy) // The short busy period never surfaced.
         // Long operations still dim. Polled rather than timed once: the suite runs in
         // parallel, so a fixed window is flaky on a loaded machine.
         session.isProjectBusy = true
         var dimmed = false
         for _ in 0..<40 where !dimmed {
-            try await Task.sleep(for: .milliseconds(50))
+            try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(50))
             dimmed = session.showsBusy
         }
         #expect(dimmed)

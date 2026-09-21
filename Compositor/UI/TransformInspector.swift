@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TransformInspector: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     private var value: LayerTransform {
         session.transformEdit?.draft ?? session.activeLayer.map { session.editedTransform(for: $0) }
             ?? LayerTransform(origin: .zero, size: CGSize(width: 1, height: 1))
@@ -41,7 +41,7 @@ struct TransformInspector: View {
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.
             }.disabled((!session.canTransform && session.transformEdit == nil) || session.transformEdit?.corners != nil)
                 .padding(.horizontal, 18)
-          }.scrollIndicators(.hidden)
+          }.legacyScrollIndicatorsHidden()
           Button("Cancel") { session.cancelTransform() }.configuredNativeShortcut(.escape)
               .disabled(session.transformEdit == nil)
           Button("Apply") { session.commitTransform() }.configuredNativeShortcut(.return)
@@ -89,9 +89,9 @@ private struct TransformValueField: View {
                 .textFieldStyle(.roundedBorder).focused($focused)
                 .accessibilityIdentifier("transform\(label)")
                 .onAppear { sync() }
-                .onChange(of: value) { if !focused { sync() } }
-                .onChange(of: focused) { if !focused { sync() } }
-                .onChange(of: text) {
+                .onValueChangeCompat(of: value) { _, _ in if !focused { sync() } }
+                .onValueChangeCompat(of: focused) { _, _ in if !focused { sync() } }
+                .onValueChangeCompat(of: text) { _, _ in
                     if focused, let number = Double(text), number.isFinite { change(CGFloat(number)) }
                 }
                 // The field holds off syncing while it has focus, so as not to fight what is being typed; a step

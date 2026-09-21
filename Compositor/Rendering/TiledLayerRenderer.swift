@@ -168,7 +168,8 @@ nonisolated enum TiledLayerRenderer {
         context.saveGState()
         context.setShouldAntialias(false)
         let outline = CGPath(rect: visible.insetBy(dx: -64, dy: -64), transform: nil)
-        context.addPath(outline.subtracting(CGPath(rect: device.insetBy(dx: -0.001, dy: -0.001), transform: [toUser]), using: .winding))
+        let replacement = CGPath(rect: device.insetBy(dx: -0.001, dy: -0.001), transform: [toUser])
+        context.addPath(LegacyCGPath.subtracting(outline, replacement, in: outline.boundingBoxOfPath))
         context.clip()
         unchanged()
         context.restoreGState()
@@ -261,7 +262,7 @@ nonisolated enum TiledLayerRenderer {
         let outline = CGPath(rect: snapped(frame.mapped(area), in: context), transform: nil)
         let cut = CGMutablePath()
         for hole in holes where hole.intersects(area) { cut.addRect(snapped(frame.mapped(hole), in: context)) }
-        context.addPath(cut.isEmpty ? outline : outline.subtracting(cut, using: .winding))
+        context.addPath(cut.isEmpty ? outline : LegacyCGPath.subtracting(outline, cut, in: outline.boundingBoxOfPath))
         context.clip()
     }
 

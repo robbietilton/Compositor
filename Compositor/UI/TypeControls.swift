@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct TypeControls: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     private func value<T>(_ key: WritableKeyPath<LayerTextStyle, T>) -> Binding<T> {
         Binding(get: { session.currentTextStyle[keyPath: key] }, set: { value in
             session.changeTextStyle { $0[keyPath: key] = value }
@@ -68,7 +68,7 @@ struct TypeControls: View {
                                     change: { stepped in session.changeTextStyle { $0.leading = CGFloat(max(0, stepped)) } })
                         .help("Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size.")
                 }
-            }.scrollIndicators(.hidden)
+            }.legacyScrollIndicatorsHidden()
             if session.textDraft != nil {
                 Button("Cancel") { session.cancelText() }
                 Button("Done") { _ = session.finishText() }
@@ -92,7 +92,6 @@ private struct TypeFontPicker: NSViewRepresentable {
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = FixedWidthPopUpButton(frame: .zero, pullsDown: false)
         button.addItem(withTitle: fontName)
-        button.borderShape = .capsule
         // A long font name is cut off at its end rather than widening the control or scrolling its start away.
         button.cell?.lineBreakMode = .byTruncatingTail
         button.cell?.usesSingleLineMode = true

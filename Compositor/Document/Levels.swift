@@ -1,5 +1,5 @@
 import AppKit
-import Observation
+import Combine
 
 nonisolated enum LevelsChannel: String, CaseIterable, Sendable, Codable {
     case rgb = "RGB", red = "Red", green = "Green", blue = "Blue"
@@ -110,8 +110,7 @@ nonisolated enum LevelsFilter {
     }
 }
 
-@Observable
-final class LevelsEdit {
+final class LevelsEdit: ObservableObject {
     let layerID: UUID
     let original: ImportedImage
     let transform: LayerTransform
@@ -119,16 +118,16 @@ final class LevelsEdit {
     let mapping: CGAffineTransform
     let previewSource: CGImage
     let previewMapping: CGAffineTransform
-    var sampleMode: LevelsSample?
-    var settings = LevelsSettings()
-    var preview = true
-    var committing = false
-    var histogram: [[Double]] = Array(repeating: Array(repeating: 0, count: 256), count: 4)
-    var histogramReady = false
-    @ObservationIgnored var preparedPreview: CGImage?
-    @ObservationIgnored var pending: LevelsJob?
-    @ObservationIgnored var previewTask: Task<Void, Never>?
-    @ObservationIgnored var histogramTask: Task<Void, Never>?
+    @Published var sampleMode: LevelsSample?
+    @Published var settings = LevelsSettings()
+    @Published var preview = true
+    @Published var committing = false
+    @Published var histogram: [[Double]] = Array(repeating: Array(repeating: 0, count: 256), count: 4)
+    @Published var histogramReady = false
+    var preparedPreview: CGImage?
+    var pending: LevelsJob?
+    var previewTask: Task<Void, Never>?
+    var histogramTask: Task<Void, Never>?
 
     init(layer: ImageLayer, selection: SelectionClip?) throws {
         layerID = layer.id; original = layer.asset!; transform = layer.transform; self.selection = selection

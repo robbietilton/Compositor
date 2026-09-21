@@ -1,10 +1,9 @@
 import Foundation
 import CoreGraphics
-import Observation
+import Combine
 
 /// Value snapshots share immutable CGImages; no pixel copies for layer edits.
-@Observable
-final class DocumentHistory {
+final class DocumentHistory: ObservableObject {
     struct Snapshot {
         let document: CanvasDocument?
         let activeLayerID: UUID?
@@ -15,13 +14,13 @@ final class DocumentHistory {
         let before: Snapshot
         let after: Snapshot
     }
-    private var past: [Entry] = []
-    private var future: [Entry] = []
-    private var revision = UUID()
-    private var savedRevision: UUID?
-    private var pending: Snapshot?
-    private var pendingName = "Edit"
-    private var depth = 0
+    @Published private var past: [Entry] = []
+    @Published private var future: [Entry] = []
+    @Published private var revision = UUID()
+    @Published private var savedRevision: UUID?
+    @Published private var pending: Snapshot?
+    @Published private var pendingName = "Edit"
+    @Published private var depth = 0
     let entryLimit: Int
     let retainedByteLimit: Int
 

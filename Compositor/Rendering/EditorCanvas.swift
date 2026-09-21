@@ -1095,11 +1095,15 @@ final class CanvasView: NSView {
             : .crosshair
         addCursorRect(bounds, cursor: cursor)
         guard session.tool == .crop, !spaceHeld else { return }
-        let positions: [NSCursor.FrameResizePosition] = [.topLeft, .top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left]
         for region in transformOverlay.cropResizeRegions.reversed() {
             let rect = region.rect.intersection(bounds)
             if !rect.isEmpty && !rect.isNull {
-                addCursorRect(rect, cursor: .frameResize(position: positions[region.index], directions: [.inward, .outward]))
+                if #available(macOS 15.0, *) {
+                    let positions: [NSCursor.FrameResizePosition] = [.topLeft, .top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left]
+                    addCursorRect(rect, cursor: .frameResize(position: positions[region.index], directions: [.inward, .outward]))
+                } else {
+                    addCursorRect(rect, cursor: .crosshair)
+                }
             }
         }
     }

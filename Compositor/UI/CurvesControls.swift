@@ -9,7 +9,7 @@ struct CurvesControls: View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Channel", selection: $settings.channel) {
                 ForEach(LevelsChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }.onChange(of: settings.channel) { _, _ in selected = nil; dragging = nil }
+            }.onValueChangeCompat(of: settings.channel) { _, _ in selected = nil; dragging = nil }
             Canvas { context, size in
                 func position(_ p: CurvePoint) -> CGPoint { CGPoint(x: p.x/255*size.width, y: (1-p.y/255)*size.height) }
                 var grid = Path()

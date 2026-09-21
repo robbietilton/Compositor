@@ -6,6 +6,18 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     var session: EditorSession { workspace.current.session }
     var projects: ProjectController { workspace.current.controller }
     var showEditor: (() -> Void)?
+    private var editorWindow: NSWindow? {
+        NSApp.windows.first { window in
+            window.level == .normal && window.styleMask.contains(.titled)
+        }
+    }
+
+    func showEditorWindow() {
+        if let window = editorWindow {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
     /// Checks the update feed and installs new versions (Sparkle). Started only after launch: its first-run prompt,
     /// shown during launch, kept the editor window from ever opening.
     let updater = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
@@ -14,10 +26,10 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         // Reopening a window that's already showing makes SwiftUI rebuild it, so the app blinks out and back:
         // only a closed editor is reopened.
-        if !application.windows.contains(where: { $0.isVisible && $0.identifier?.rawValue.hasPrefix("editor") == true }) {
+        if editorWindow?.isVisible != true {
             showEditor?()
         }
-        application.activate()
+        application.activate(ignoringOtherApps: true)
         Task { await workspace.receive(urls) }
     }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct BrushControls: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     var body: some View {
         HStack(spacing: 12) {
             Text(session.tool == .spotHealing ? "Spot Healing" : session.tool == .cloneStamp ? "Clone Stamp" : session.tool == .blur ? "Smear" : session.brushMode == .erase ? "Eraser" : "Brush").font(ToolHeaderStyle.titleFont)
@@ -44,7 +44,7 @@ struct BrushControls: View {
                 .frame(width: 48).textFieldStyle(.roundedBorder)
                 .arrowSteps(value: { Double(session.brushSettings.diameter) },
                             change: { session.brushSettings.diameter = CGFloat(min(2000, max(1, $0))) })
-                .onChange(of: session.brushSettings.diameter) { _, value in
+                .onValueChangeCompat(of: session.brushSettings.diameter) { _, value in
                     session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                 }
                 .unitSuffix("px")

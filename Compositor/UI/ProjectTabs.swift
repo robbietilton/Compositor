@@ -5,7 +5,13 @@ import Combine
 
 struct ProjectWorkspaceView: View {
     let applicationDelegate: CompositorApplicationDelegate
-    private var workspace: ProjectWorkspace { applicationDelegate.workspace }
+    @ObservedObject private var workspace: ProjectWorkspace
+
+    init(applicationDelegate: CompositorApplicationDelegate) {
+        self.applicationDelegate = applicationDelegate
+        _workspace = ObservedObject(wrappedValue: applicationDelegate.workspace)
+    }
+
     var body: some View {
         ContentView(session: workspace.current.session, applicationDelegate: applicationDelegate)
             .id(workspace.current.id)
@@ -17,7 +23,7 @@ struct ProjectWorkspaceView: View {
 }
 
 struct ProjectTabStrip: View {
-    let workspace: ProjectWorkspace
+    @ObservedObject var workspace: ProjectWorkspace
     @State private var dragging = false
     /// Scrolled away from the first tab, so the left edge fades too.
     @State private var scrolledFromStart = false
@@ -33,13 +39,15 @@ struct ProjectTabStrip: View {
                 if dragging {
                     NewTabDropSlot(workspace: workspace).id("new-tab-drop")
                 }
-            }.frame(height: 34, alignment: .center)
+            }
+            .frame(height: 34, alignment: .center)
+            .onGeometryChangeCompat(for: CGFloat.self) { $0.frame(in: .named("projectTabsScroll")).minX } action: { offset in
+                scrolledFromStart = offset < -1
+            }
         }
         .frame(height: 34, alignment: .center)
-        .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x > 1 } action: { _, scrolled in
-            scrolledFromStart = scrolled
-        }
+        .coordinateSpace(name: "projectTabsScroll")
+        .legacyScrollIndicatorsHidden()
         // Tabs fade out where they scroll under an edge instead of being cut off — the right edge always, the left
         // once scrolled away from the first tab. A mask rather than a painted gradient, so whatever the toolbar shows
         // behind them shows through.
@@ -53,8 +61,8 @@ struct ProjectTabStrip: View {
             .animation(.easeOut(duration: 0.15), value: scrolledFromStart)
         }
         .accessibilityLabel("Project tabs")
-        .onChange(of: workspace.selectedID) { _, id in reader.scrollTo(id) }
-        .onChange(of: dragging) { _, active in
+        .onValueChangeCompat(of: workspace.selectedID) { _, id in reader.scrollTo(id) }
+        .onValueChangeCompat(of: dragging) { _, active in
             if active { reader.scrollTo("new-tab-drop", anchor: .trailing) }
             else { reader.scrollTo(workspace.selectedID) }
         }

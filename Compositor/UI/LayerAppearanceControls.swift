@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LayerAppearanceControls: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     let layerID: UUID?
     @State private var percentage = "100"
     @State private var stepper = ArrowStepper()
@@ -22,7 +22,7 @@ struct LayerAppearanceControls: View {
                         .textFieldStyle(.roundedBorder).frame(width: 44).focused($focused)
                         .onSubmit { releaseFocus() }
                         .onExitCommand { releaseFocus() }
-                        .onChange(of: focused) { _, isFocused in if !isFocused { applyPercentage() } }
+                        .onValueChangeCompat(of: focused) { _, isFocused in if !isFocused { applyPercentage() } }
                         .arrowSteps(editing: focused, stepper: stepper,
                                     value: { ((session.activeLayer?.opacity ?? 1) * 100).rounded() },
                                     change: { step($0) })
@@ -31,7 +31,7 @@ struct LayerAppearanceControls: View {
             }
         }.padding(12).disabled(!session.canEditOpacity)
             .onAppear { sync() }
-            .onChange(of: session.activeLayer?.opacity) { _, _ in if !focused { sync() } }
+            .onValueChangeCompat(of: session.activeLayer?.opacity) { _, _ in if !focused { sync() } }
             .onDisappear { session.finishOpacityEdit() }
     }
     /// Up and Down nudge the opacity by one percent, or ten with Shift.

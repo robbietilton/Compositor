@@ -1,5 +1,5 @@
 import AppKit
-import Observation
+import Combine
 
 nonisolated struct PaletteColor: Equatable, Sendable {
     var red: CGFloat
@@ -176,12 +176,11 @@ enum ColorPickerTarget: Equatable {
 }
 
 /// The open color picker's working color. Nothing is written to the palette until OK.
-@Observable
-final class ColorPickerState {
+final class ColorPickerState: ObservableObject {
     let target: ColorPickerTarget
     var background: Bool { target == .palette(background: true) }
     let original: PaletteColor
-    var hsb: PickerHSB
+    @Published var hsb: PickerHSB
     var color: PaletteColor { hsb.rgb.quantized }
     init(target: ColorPickerTarget, original: PaletteColor) {
         self.target = target

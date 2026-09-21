@@ -3,7 +3,7 @@ import SwiftUI
 /// Reads and writes the open edit's settings, so sampling from the canvas and the panel's
 /// own controls always agree.
 struct HueSaturationSheet: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
 
     private var edit: HueSaturationEdit? { session.hueSaturation }
     private var current: HueSaturationSettings { edit?.settings ?? HueSaturationSettings() }

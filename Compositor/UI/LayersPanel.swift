@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LayersPanel: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     /// Dragging the panel's left edge sets it, within `widths`.
     var width: CGFloat = 252
     static let widths: ClosedRange<Double> = 202...352
@@ -81,4 +81,3 @@ extension View {
             .contentShape(Rectangle())
     }
 }
-

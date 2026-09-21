@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct ShortcutChord: Codable, Equatable, Hashable {
@@ -126,11 +127,11 @@ struct ShortcutDefinition: Identifiable {
     }()
 }
 
-@MainActor @Observable
-final class ShortcutSettings {
+@MainActor
+final class ShortcutSettings: ObservableObject {
     static let shared = ShortcutSettings()
-    private(set) var overrides: [String: ShortcutChord] = [:]
-    @ObservationIgnored private let panel = FloatingPanelController(name: "keyboardShortcuts")
+    @Published private(set) var overrides: [String: ShortcutChord] = [:]
+    private let panel = FloatingPanelController(name: "keyboardShortcuts")
     private static let storageKey = "keyboardShortcuts.v1"
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.storageKey),

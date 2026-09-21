@@ -58,7 +58,7 @@ struct CanvasSizeSheet: View {
             }
             Toggle("Relative to current dimensions", isOn: $draft.relative)
             Toggle("Lock original aspect ratio", isOn: $draft.locked)
-                .onChange(of: draft.locked) { _, locked in
+                .onValueChangeCompat(of: draft.locked) { _, locked in
                     if locked { draft.set(draft.displayed(widthAxis: true), widthAxis: true) }
                 }
             if draft.valid {
@@ -71,9 +71,9 @@ struct CanvasSizeSheet: View {
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Anchor")
-                    Grid(horizontalSpacing: 3, verticalSpacing: 3) {
+                    VStack(spacing: 3) {
                         ForEach(0..<3) { row in
-                            GridRow {
+                            HStack(spacing: 3) {
                                 ForEach(0..<3) { column in
                                     let index = row * 3 + column
                                     Button { anchor = index } label: {

@@ -5,7 +5,7 @@ import AppKit
 /// new/current preview, RGB and hex entry. Lives in a movable floating panel so
 /// the canvas stays visible and can be clicked to sample a color.
 struct ColorPickerSheet: View {
-    @Bindable var state: ColorPickerState
+    @ObservedObject var state: ColorPickerState
     let finish: (Bool) -> Void
     @State private var hexDraft = ""
     @FocusState private var hexFocused: Bool
@@ -42,8 +42,8 @@ struct ColorPickerSheet: View {
         .padding(20)
         .fixedSize()
         .onAppear { hexDraft = color.hex }
-        .onChange(of: color) { _, new in if !hexFocused { hexDraft = new.hex } }
-        .onChange(of: hexFocused) { _, focused in if !focused { commitHex() } }
+        .onValueChangeCompat(of: color) { _, new in if !hexFocused { hexDraft = new.hex } }
+        .onValueChangeCompat(of: hexFocused) { _, focused in if !focused { commitHex() } }
     }
 
     private var saturationBrightnessField: some View {
@@ -102,11 +102,11 @@ struct ColorPickerSheet: View {
     }
 
     private var fields: some View {
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             channelRow("R", \.red)
             channelRow("G", \.green)
             channelRow("B", \.blue)
-            GridRow {
+            HStack(spacing: 8) {
                 Text("#").frame(width: 14, alignment: .leading)
                 TextField("Hex", text: $hexDraft)
                     .font(.system(.body, design: .monospaced))
@@ -119,7 +119,7 @@ struct ColorPickerSheet: View {
     }
 
     private func channelRow(_ label: String, _ channel: WritableKeyPath<PaletteColor, CGFloat>) -> some View {
-        GridRow {
+        HStack(spacing: 8) {
             Text(label).frame(width: 14, alignment: .leading)
             TextField(label, value: Binding(
                 get: { Int((color[keyPath: channel] * 255).rounded()) },

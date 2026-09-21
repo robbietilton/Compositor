@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct NavigationToolHeader: View {
-    @Bindable var session: EditorSession
+    @ObservedObject var session: EditorSession
     @State private var zoomText = ""
     @State private var displayedZoomText = ""
     @State private var stepper = ArrowStepper()
@@ -18,7 +18,7 @@ struct NavigationToolHeader: View {
                     .focused($editingZoom)
                     .onSubmit { releaseFocus() }
                     .onExitCommand { releaseFocus() }
-                    .onChange(of: editingZoom) { _, focused in if !focused { applyZoom() } }
+                    .onValueChangeCompat(of: editingZoom) { _, focused in if !focused { applyZoom() } }
                     .arrowSteps(editing: editingZoom, stepper: stepper,
                                 value: { Double(zoomText.filter { $0.isNumber || $0 == "." }) ?? Double(session.viewport.zoom * 100) },
                                 change: { step($0) })
@@ -31,7 +31,7 @@ struct NavigationToolHeader: View {
         }
         .padding(.horizontal, 18).toolHeaderBar()
         .onAppear { syncZoom() }
-        .onChange(of: session.viewport.zoom) { _, _ in
+        .onValueChangeCompat(of: session.viewport.zoom) { _, _ in
             if !editingZoom { syncZoom() }
         }
     }

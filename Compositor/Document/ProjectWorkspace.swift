@@ -1,5 +1,5 @@
 import AppKit
-import Observation
+import Combine
 import UniformTypeIdentifiers
 
 @MainActor
@@ -16,13 +16,14 @@ final class ProjectTab: Identifiable {
     }
 }
 
-@MainActor @Observable
-final class ProjectWorkspace {
-    private(set) var tabs: [ProjectTab] = []
-    private(set) var selectedID: UUID
-    var isManaging = false
-    @ObservationIgnored weak var window: NSWindow?
-    @ObservationIgnored private var nextNumber = 2
+@MainActor
+final class ProjectWorkspace: ObservableObject {
+    @Published private(set) var tabs: [ProjectTab] = []
+    @Published private(set) var selectedID: UUID
+    @Published var isManaging = false
+    weak var window: NSWindow?
+    private var nextNumber = 2
+    private var childCancellables = Set<AnyCancellable>()
     var current: ProjectTab { tabs.first { $0.id == selectedID } ?? tabs[0] }
     var canSwitch: Bool {
         let s = current.session
@@ -34,13 +35,22 @@ final class ProjectWorkspace {
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
         first.controller.workspace = self
+        observe(first)
     }
+
+    private func observe(_ tab: ProjectTab) {
+        tab.session.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &childCancellables)
+    }
+
     @discardableResult
     func addTab(reuseEmpty: Bool = true) -> ProjectTab {
         if reuseEmpty, tabs.count == 1, current.session.document == nil { return current }
         let tab = ProjectTab(name: "Untitled \(nextNumber)")
         nextNumber += 1
         tab.controller.workspace = self; tab.controller.window = window
+        observe(tab)
         tabs.append(tab); selectedID = tab.id
         return tab
     }
@@ -82,6 +92,7 @@ final class ProjectWorkspace {
         let tab = ProjectTab(name: url.deletingPathExtension().lastPathComponent)
         tab.controller.window = window
         guard await tab.controller.open(url) else { return false }
+        observe(tab)
         if tabs.count == 1, current.session.document == nil { tabs.removeAll() }
         tab.controller.workspace = self; tabs.append(tab); selectedID = tab.id
         return true
@@ -125,7 +136,7 @@ final class ProjectWorkspace {
         defer { for (url, scoped) in files where scoped { url.stopAccessingSecurityScopedResource() } }
         while !canSwitch {
             if Task.isCancelled { return }
-            try? await Task.sleep(for: .milliseconds(30))
+            try? await Task.sleep(nanoseconds: LegacyDelay.milliseconds(30))
         }
         isManaging = true; defer { isManaging = false }
         for url in urls {

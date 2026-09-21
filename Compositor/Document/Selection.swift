@@ -233,15 +233,16 @@ extension EditorSession {
     func applySelection(_ shape: CGPath, mode: SelectionMode, name: String) {
         guard let document, canEditSelection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
-        let clipped = shape.intersection(canvas, using: .winding)
+        let bounds = CGRect(origin: .zero, size: document.size)
+        let clipped = LegacyCGPath.intersection(shape, canvas, in: bounds)
         let result: CGPath
         switch mode {
         case .replace: result = clipped
-        case .add: result = selection.map { $0.path.union(clipped, using: .winding) } ?? clipped
+        case .add: result = selection.map { LegacyCGPath.union($0.path, clipped, in: bounds) } ?? clipped
         case .subtract:
             // Subtracting from no selection selects nothing new, so nothing changes.
             guard let current = selection else { return }
-            result = current.path.subtracting(clipped, using: .winding)
+            result = LegacyCGPath.subtracting(current.path, clipped, in: bounds)
         }
         setSelection(DocumentSelection(path: result, antialiased: selectionAntialiased), name: name)
     }
@@ -334,10 +335,11 @@ extension EditorSession {
         guard let document, let current = selection, canModifySelection, delta != 0, abs(delta) <= 500 else { return }
         // A band `|delta|` wide on each side of the outline, added or removed.
         let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        let bounds = CGRect(origin: .zero, size: document.size)
+        let canvas = CGPath(rect: bounds, transform: nil)
         let result = delta > 0
-            ? current.path.union(band, using: .winding)
-                .intersection(CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil), using: .winding)
-            : current.path.subtracting(band, using: .winding)
+            ? LegacyCGPath.intersection(LegacyCGPath.union(current.path, band, in: bounds), canvas, in: bounds)
+            : LegacyCGPath.subtracting(current.path, band, in: bounds)
         setSelection(DocumentSelection(path: result, antialiased: current.antialiased, feather: current.feather), name: name)
     }
 
@@ -354,7 +356,7 @@ extension EditorSession {
     func invertSelection() {
         guard let document, let current = selection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
-        setSelection(DocumentSelection(path: canvas.subtracting(current.path, using: .winding), antialiased: current.antialiased, feather: current.feather),
+        setSelection(DocumentSelection(path: LegacyCGPath.subtracting(canvas, current.path, in: CGRect(origin: .zero, size: document.size)), antialiased: current.antialiased, feather: current.feather),
                      name: "Inverse")
     }
 }

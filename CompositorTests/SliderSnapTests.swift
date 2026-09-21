@@ -45,7 +45,7 @@ struct SliderSnapTests {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         defer { window.orderOut(nil) }
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(300))
         func sliders(_ view: NSView) -> [NSSlider] { (view as? NSSlider).map { [$0] } ?? view.subviews.flatMap(sliders) }
         let slider = try #require(sliders(hosting).first)
         let start = try #require(drawnKnobX(in: slider))
@@ -57,9 +57,9 @@ struct SliderSnapTests {
         #expect(abs(model.value - 0.94) < 0.02, "value \(model.value)")
         #expect(model.log.first == "began" && model.log.last == "ended" && model.log.contains("set"), "\(model.log)")
 
-        try await Task.sleep(for: .milliseconds(50))
+        try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(50))
         let early = try #require(drawnKnobX(in: slider))
-        try await Task.sleep(for: .milliseconds(400))
+        try await Task.sleep(nanoseconds: LegacyDelay.milliseconds(400))
         let settled = try #require(drawnKnobX(in: slider))
         #expect(settled - start > 100, "the knob never moved: \(start) → \(settled)")
         #expect(abs(early - settled) <= 2, "the knob glided: \(early) after 50 ms, \(settled) once settled")
