@@ -1,0 +1,270 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "accessibility.tool.zoom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom tool" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инструмент масштаба" } }
+      }
+    },
+    "adjustment.curves" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Curves" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кривые" } }
+      }
+    },
+    "adjustment.exposure" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exposure" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспозиция" } }
+      }
+    },
+    "adjustment.gradientMap" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient Map" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Карта градиента" } }
+      }
+    },
+    "adjustment.grain" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grain" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зернистость" } }
+      }
+    },
+    "adjustment.hueSaturation" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hue/Saturation" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовой тон/Насыщенность" } }
+      }
+    },
+    "adjustment.levels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Levels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровни" } }
+      }
+    },
+    "blend.color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет" } }
+      }
+    },
+    "blend.colorBurn" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color Burn" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Затемнение основы" } }
+      }
+    },
+    "blend.colorDodge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color Dodge" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Осветление основы" } }
+      }
+    },
+    "blend.darkening" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Darken" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Затемнение" } }
+      }
+    },
+    "blend.difference" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Difference" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разница" } }
+      }
+    },
+    "blend.hue" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hue" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовой тон" } }
+      }
+    },
+    "blend.lightening" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lighten" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Осветление" } }
+      }
+    },
+    "blend.luminosity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Luminosity" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свечение" } }
+      }
+    },
+    "blend.multiply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Multiply" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Умножение" } }
+      }
+    },
+    "blend.normal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Normal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обычный" } }
+      }
+    },
+    "blend.overlay" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Overlay" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перекрытие" } }
+      }
+    },
+    "blend.saturation" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saturation" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Насыщенность" } }
+      }
+    },
+    "blend.screen" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Screen" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экран" } }
+      }
+    },
+    "blend.softLight" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft Light" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Мягкий свет" } }
+      }
+    },
+    "blend.colorLuminosity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Luminosity" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свечение" } }
+      }
+    },
+    "dialog.languageRestart" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Some native panels may update after reopening." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые системные панели обновятся после повторного открытия." } }
+      }
+    },
+    "filter.contentAwareFill" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Content-Aware Fill" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка с учетом содержимого" } }
+      }
+    },
+    "filter.gaussianBlur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gaussian Blur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие по Гауссу" } }
+      }
+    },
+    "filter.motionBlur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Motion Blur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие в движении" } }
+      }
+    },
+    "filter.addNoise" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Noise" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить шум" } }
+      }
+    },
+    "filter.lensCorrection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lens Correction" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Коррекция дисторсии" } }
+      }
+    },
+    "filter.removeBackground" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить фон" } }
+      }
+    },
+    "filter.curves" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Curves" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кривые" } }
+      }
+    },
+    "filter.exposure" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exposure" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспозиция" } }
+      }
+    },
+    "filter.gradientMap" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient Map" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Карта градиента" } }
+      }
+    },
+    "filter.grain" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grain" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зернистость" } }
+      }
+    },
+    "menu.edit.undo" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Undo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отменить" } }
+      }
+    },
+    "menu.edit.redo" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Redo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторить" } }
+      }
+    },
+    "menu.view.actualPixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Actual Pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Реальный размер" } }
+      }
+    },
+    "menu.view.fitCanvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fit Canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По размеру экрана" } }
+      }
+    },
+    "settings.language" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Язык" } }
+      }
+    },
+    "settings.language.system" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Default" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Системный" } }
+      }
+    },
+    "settings.language.english" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "English" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "English" } }
+      }
+    },
+    "settings.language.russian" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Russian" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Русский" } }
+      }
+    },
+    "tool.move" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещение" } }
+      }
+    },
+    "tool.transform" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформирование" } }
+      }
+    },
+    "tool.zoom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштаб" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
