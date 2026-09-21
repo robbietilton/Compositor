@@ -35,8 +35,8 @@ struct ShapeToolTests {
         let count = session.history.undoCount
         drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 40, y: 30))
         let document = try #require(session.document)
-        #expect(document.layers.map(\.name) == ["Layer 1", "Rectangle 1"])
-        #expect(session.activeLayer?.name == "Rectangle 1" && session.history.undoCount == count + 1)
+        #expect(document.layers.map(\.name) == [L10n.numbered("Layer", number: 1), L10n.numbered("Rectangle", number: 1)])
+        #expect(session.activeLayer?.name == L10n.numbered("Rectangle", number: 1) && session.history.undoCount == count + 1)
         #expect(session.activeLayer?.transform.origin == CGPoint(x: 10, y: 10)
                 && session.activeLayer?.transform.size == CGSize(width: 30, height: 20))
         #expect(session.selection != nil) // unlike Paste, drawing a shape keeps the selection
@@ -45,10 +45,10 @@ struct ShapeToolTests {
         #expect(pixel(9, 20).alpha == 0 && pixel(40, 20).alpha == 0 && pixel(25, 30).alpha == 0)
 
         drag(session, from: CGPoint(x: 60, y: 10), to: CGPoint(x: 70, y: 20))
-        #expect(session.activeLayer?.name == "Rectangle 2")
+        #expect(session.activeLayer?.name == L10n.numbered("Rectangle", number: 2))
         session.undo()
         session.undo()
-        #expect(session.document?.layers.map(\.name) == ["Layer 1"])
+        #expect(session.document?.layers.map(\.name) == [L10n.numbered("Layer", number: 1)])
     }
 
     @Test func ellipseLeavesItsCornersClearWithShiftCircleAndOptionFromCenter() async throws {
@@ -56,7 +56,7 @@ struct ShapeToolTests {
         session.toggleShapeKind()
         #expect(session.shapeKind == .ellipse)
         drag(session, from: CGPoint(x: 50, y: 40), to: CGPoint(x: 60, y: 45), square: true, fromCenter: true)
-        #expect(session.activeLayer?.name == "Ellipse 1")
+        #expect(session.activeLayer?.name == L10n.numbered("Ellipse", number: 1))
         #expect(session.activeLayer?.transform.origin == CGPoint(x: 40, y: 30)
                 && session.activeLayer?.transform.size == CGSize(width: 20, height: 20))
         let pixel = try await pixels(session)

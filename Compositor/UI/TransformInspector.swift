@@ -8,7 +8,7 @@ struct TransformInspector: View {
     }
     var body: some View {
         HStack(spacing: 12) {
-          Text(session.transformTargetsMask ? "Transform Mask" : "Transform").font(ToolHeaderStyle.titleFont)
+          Text(L10n.text(session.transformTargetsMask ? "Transform Mask" : "Transform")).font(ToolHeaderStyle.titleFont)
               .padding(.leading, 18)
           Toggle("Auto Select", isOn: $session.transformAutoSelect)
               .help("Select layers by clicking the canvas. When off, hold Command to select a layer.")
@@ -28,12 +28,12 @@ struct TransformInspector: View {
                         guard number > 0 else { return }
                         value = value.scaled(toPercent: number, pixelSize: pixelSize)
                     }
-                }.frame(width: 110).help("Scale width and height together, about the center")
+                }.frame(width: 110).help(L10n.text("Scale width and height together, about the center"))
                 field("°", value: value.rotation) { $0.rotation = $1.truncatingRemainder(dividingBy: 360) }.frame(width: 75)
                 Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
                 }.frame(width: 170)
                 Button("Flip H") { change { $0.flipX.toggle() } }
                 Button("Flip V") { change { $0.flipY.toggle() } }

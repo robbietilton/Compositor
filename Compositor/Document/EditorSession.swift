@@ -590,8 +590,8 @@ final class EditorSession: ObservableObject {
         guard canEditLayers, let document else { return }
         let names = Set(document.layers.map(\.name))
         var number = 1
-        while names.contains("Layer \(number)") { number += 1 }
-        var layer = ImageLayer(name: "Layer \(number)", blankSize: document.size)
+        while names.contains(L10n.numbered("Layer", number: number)) || names.contains("Layer \(number)") { number += 1 }
+        var layer = ImageLayer(name: L10n.numbered("Layer", number: number), blankSize: document.size)
         layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
         if let parent = layer.parentID { collapsedGroupIDs.remove(parent) }
         var insertion = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
@@ -771,7 +771,7 @@ final class EditorSession: ObservableObject {
         beginEdit("New Canvas")
         defer { endEdit() }
         var document = CanvasDocument(width: width, height: height)
-        let layer = emptyLayer ? ImageLayer(name: "Layer 1", blankSize: document.size) : nil
+        let layer = emptyLayer ? ImageLayer(name: L10n.numbered("Layer", number: 1), blankSize: document.size) : nil
         if let layer { document.layers = [layer] }
         self.document = document
         activeLayerID = layer?.id

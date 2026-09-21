@@ -16,9 +16,9 @@ nonisolated enum ImageImportError: LocalizedError {
     case unreadable, unsupported, tooLarge
     var errorDescription: String? {
         switch self {
-        case .unreadable: "The image could not be read. It may be damaged or unavailable."
-        case .unsupported: "Choose a JPEG, PNG, HEIC, or TIFF image."
-        case .tooLarge: "This import exceeds the current 100-megapixel document budget or 30,000-pixel side limit."
+        case .unreadable: L10n.text("error.import.unreadable")
+        case .unsupported: L10n.text("error.import.unsupported")
+        case .tooLarge: L10n.text("error.import.tooLarge")
         }
     }
 }

@@ -32,7 +32,7 @@ struct FilterSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Picker("Quality", selection: Binding(get: { settings.backgroundQuality },
                                                      set: { new in update { $0.backgroundQuality = new } })) {
-                    ForEach(BackgroundQuality.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(BackgroundQuality.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .help("Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur")
@@ -81,7 +81,7 @@ struct FilterSheet: View {
                 // the panel says what it is waiting for rather than showing a disabled button and nothing else.
                 if edit?.committing == true || edit?.preparing == true {
                     ProgressView().controlSize(.small)
-                    Text(edit?.committing == true ? "Applying…" : "Working…")
+                    Text(L10n.text(edit?.committing == true ? "Applying…" : "Working…"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Button("OK") { Task { await session.commitFilter() } }
@@ -155,8 +155,8 @@ struct GradientMapControls: View {
                     .contentShape(shape)
             }
             .buttonStyle(.plain)
-            .help("Choose the \(title.lowercased()) color")
-            .accessibilityLabel("\(title) color")
+            .help(String(format: L10n.text("filter.chooseColor"), title.lowercased()))
+            .accessibilityLabel(String(format: L10n.text("filter.colorAccessibility"), title))
             Text(title)
         }
     }

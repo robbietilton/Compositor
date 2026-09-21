@@ -5,24 +5,24 @@ struct BrushControls: View {
     @ObservedObject var session: EditorSession
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .spotHealing ? "Spot Healing" : session.tool == .cloneStamp ? "Clone Stamp" : session.tool == .blur ? "Smear" : session.brushMode == .erase ? "Eraser" : "Brush").font(ToolHeaderStyle.titleFont)
+            Text(L10n.text(session.tool == .spotHealing ? "Spot Healing" : session.tool == .cloneStamp ? "Clone Stamp" : session.tool == .blur ? "Smear" : session.brushMode == .erase ? "Eraser" : "Brush")).font(ToolHeaderStyle.titleFont)
             if session.tool == .brush {
                 Picker("Mode", selection: $session.brushMode) {
-                    ForEach(BrushToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(BrushToolMode.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .help("Paint with the foreground color (B), or erase pixels away (E)")
             }
             if session.tool == .blur {
                 Picker("Mode", selection: $session.blurMode) {
-                    ForEach(BlurToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(BlurToolMode.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .help("Liquify pushes pixels · Blur softens · Smudge drags color along")
             }
             if session.tool == .spotHealing {
                 Picker("Type", selection: $session.spotHealingMode) {
-                    ForEach(SpotHealingMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(SpotHealingMode.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .accessibilityIdentifier("spotHealingType")
@@ -57,7 +57,7 @@ struct BrushControls: View {
                 .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
                             change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
                 .unitSuffix("%")
-            Text(session.tool == .blur ? "Strength" : "Opacity")
+            Text(L10n.text(session.tool == .blur ? "Strength" : "Opacity"))
             Slider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
             TextField("Opacity", value: Binding<Double>(get: { Double(session.brushSettings.opacity * 100) },
                 set: { session.brushSettings.opacity = $0.isFinite ? CGFloat(min(100, max(1, $0)) / 100) : 1 }),

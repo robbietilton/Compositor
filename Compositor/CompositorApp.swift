@@ -6,6 +6,7 @@ struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
     @StateObject private var languageStore = AppLanguageStore()
     private var session: EditorSession { applicationDelegate.session }
+    private var selectedLocale: Locale { languageStore.locale }
     var body: some Scene {
         WindowGroup("Compositor") {
             ProjectWorkspaceView(applicationDelegate: applicationDelegate).roundedControls()
@@ -34,9 +35,9 @@ struct CompositorApp: App {
                         }
                             .configuredKeyboardShortcut("z", modifiers: [.command, .shift])
                     } else {
-                        Button(session.history.canUndo ? "Undo \(session.history.undoName)" : "Undo") { session.undo() }
+                        Button(session.history.canUndo ? L10n.text("Undo", locale: selectedLocale) + " " + session.history.undoName : L10n.text("Undo", locale: selectedLocale)) { session.undo() }
                             .configuredKeyboardShortcut("z").disabled(!session.canUndo)
-                        Button(session.history.canRedo ? "Redo \(session.history.redoName)" : "Redo") { session.redo() }
+                        Button(session.history.canRedo ? L10n.text("Redo", locale: selectedLocale) + " " + session.history.redoName : L10n.text("Redo", locale: selectedLocale)) { session.redo() }
                             .configuredKeyboardShortcut("z", modifiers: [.command, .shift]).disabled(!session.canRedo)
                     }
                 }
@@ -227,10 +228,10 @@ struct CompositorApp: App {
                     Button("Hue/Saturation…") { session.beginHueSaturation() }
                         .configuredKeyboardShortcut("u").disabled(!session.canAdjustColors)
                     ForEach([FilterKind.exposure, .gradientMap, .grain], id: \.self) { kind in
-                        Button("\(kind.rawValue)…") { session.beginFilter(kind) }
+                        Button(kind.localizedName(locale: selectedLocale) + "…") { session.beginFilter(kind) }
                             .disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     }
-                    Button(session.isMaskSelected ? "Invert Mask" : "Invert") { Task { await session.invertPixels() } }
+                    Button(L10n.text(session.isMaskSelected ? "Invert Mask" : "Invert", locale: selectedLocale)) { Task { await session.invertPixels() } }
                         .configuredKeyboardShortcut("i")
                         .disabled(!session.canInvert)
                     Divider()
@@ -250,26 +251,26 @@ struct CompositorApp: App {
                 }
                 CommandMenu("Filter") {
                     ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }, id: \.self) { kind in
-                        Button("\(kind.rawValue)…") { session.beginFilter(kind) }
+                        Button(kind.localizedName(locale: selectedLocale) + "…") { session.beginFilter(kind) }
                             .disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     }
                 }
                 CommandMenu("Layer") {
                     Menu("New Adjustment Layer") {
                         ForEach(AdjustmentKind.allCases, id: \.self) { kind in
-                            Button(kind.rawValue + "…") { session.addAdjustment(kind) }
+                            Button(kind.localizedName(locale: selectedLocale) + "…") { session.addAdjustment(kind) }
                         }
                     }.disabled(!session.canEditLayers || session.document == nil)
                     Button("Edit Adjustment…") {
                         session.adjustmentEditingID = session.activeLayerID
                     }.disabled(!session.canEditLayers || session.activeLayer?.adjustment == nil)
                     Divider()
-                    Button(session.canTransformSelection ? "Transform Selection" : "Transform Layer") { session.transformCommand() }
+                    Button(L10n.text(session.canTransformSelection ? "Transform Selection" : "Transform Layer", locale: selectedLocale)) { session.transformCommand() }
                         .configuredKeyboardShortcut("t").disabled(!session.canTransform && !session.canTransformSelection)
-                    Button(session.selection == nil ? "Duplicate Layer" : "Layer via Copy") { session.layerViaCopy() }
+                    Button(L10n.text(session.selection == nil ? "Duplicate Layer" : "Layer via Copy", locale: selectedLocale)) { session.layerViaCopy() }
                         .configuredKeyboardShortcut("j").disabled(!session.canCopyPixels && !(session.selection == nil && session.canEditLayers && session.activeLayer?.isGroup == false))
                     Divider()
-                    Button(session.activeLayer?.maskSourceID == nil ? "Create Clipping Mask" : "Release Clipping Mask") {
+                    Button(L10n.text(session.activeLayer?.maskSourceID == nil ? "Create Clipping Mask" : "Release Clipping Mask", locale: selectedLocale)) {
                         if let id = session.activeLayerID { session.toggleClippingMask(id) }
                     }
                     .configuredKeyboardShortcut("g", modifiers: [.command, .option])
@@ -283,7 +284,7 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("n", modifiers: [.command, .shift]).disabled(!session.canEditLayers)
                     Button("Rename Layer…") { session.renamingLayerID = session.activeLayerID }
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
-                    Button(session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer") {
+                    Button(L10n.text(session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer", locale: selectedLocale)) {
                         if let id = session.activeLayerID { session.toggleLayerVisibility(id) }
                     }.disabled(!session.canEditLayers || session.activeLayer == nil)
                     Divider()
@@ -301,7 +302,7 @@ struct CompositorApp: App {
                             .disabled(!session.canTransform)
                     }
                     Divider()
-                    Button(session.selectedEffect != nil ? "Delete " + session.selectedEffect!.kind.rawValue : session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {
+                    Button(session.selectedEffect != nil ? L10n.text("Delete", locale: selectedLocale) + " " + session.selectedEffect!.kind.localizedName(locale: selectedLocale) : session.isMaskSelected && session.activeLayer?.mask != nil ? L10n.text("Delete Layer Mask", locale: selectedLocale) : session.selectedLayerIDs.count > 1 ? L10n.text("Delete Layers", locale: selectedLocale) : L10n.text("Delete Layer", locale: selectedLocale)) {
                         session.deleteLayerOrMask()
                     }
                         .disabled(!session.canEditLayers || session.activeLayer == nil)

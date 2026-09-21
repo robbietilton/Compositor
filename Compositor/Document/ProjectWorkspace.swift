@@ -31,7 +31,7 @@ final class ProjectWorkspace: ObservableObject {
             && s.gradientEdit == nil && s.pixelMove == nil && s.colorPicker == nil
     }
     init() {
-        let first = ProjectTab(name: "Untitled")
+        let first = ProjectTab(name: L10n.text("Untitled"))
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
         first.controller.workspace = self
@@ -47,7 +47,7 @@ final class ProjectWorkspace: ObservableObject {
     @discardableResult
     func addTab(reuseEmpty: Bool = true) -> ProjectTab {
         if reuseEmpty, tabs.count == 1, current.session.document == nil { return current }
-        let tab = ProjectTab(name: "Untitled \(nextNumber)")
+        let tab = ProjectTab(name: L10n.numbered("Untitled", number: nextNumber))
         nextNumber += 1
         tab.controller.workspace = self; tab.controller.window = window
         observe(tab)

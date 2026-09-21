@@ -36,7 +36,7 @@ final class ProjectController {
         panel.allowedContentTypes = [.png]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export PNG"
+        panel.title = L10n.text("title.exportPNG")
         panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".png"
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
@@ -45,7 +45,7 @@ final class ProjectController {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try await ImageExporter.shared.exportPNG(snapshot, to: url) }
-        catch { await showError("Couldn’t export PNG", error: error) }
+        catch { await showError(L10n.text("errorTitle.exportPNG"), error: error) }
     }
 
     func canvasSize() async {
@@ -54,7 +54,7 @@ final class ProjectController {
         let options: CanvasSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Canvas Size"
+            sheet.title = L10n.text("Canvas Size")
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, foreground: session.foregroundColor, background: session.backgroundColor) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -66,8 +66,8 @@ final class ProjectController {
         guard let options, let snapshot = session.projectSnapshot() else { return }
         do {
             let resized = try await CanvasResizer.shared.resize(snapshot, to: options)
-            session.applyDocumentSize(resized, actionName: "Canvas Size")
-        } catch { await showError("Couldn’t change canvas size", error: error) }
+            session.applyDocumentSize(resized, actionName: L10n.text("Canvas Size"))
+        } catch { await showError(L10n.text("errorTitle.canvasSize"), error: error) }
     }
 
     func imageSize() async {
@@ -76,7 +76,7 @@ final class ProjectController {
         let options: ImageSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Image Size"
+            sheet.title = L10n.text("Image Size")
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -89,7 +89,7 @@ final class ProjectController {
         do {
             let resized = try await ImageResizer.shared.resize(snapshot, to: options)
             session.applyImageSize(resized)
-        } catch { await showError("Couldn’t resize the image", error: error) }
+        } catch { await showError(L10n.text("errorTitle.imageSize"), error: error) }
     }
 
     func exportJPEG() async {
@@ -101,7 +101,7 @@ final class ProjectController {
             let data: Data? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export JPEG"
+                sheet.title = L10n.text("Export JPEG")
                 sheet.contentViewController = NSHostingController(rootView: JPEGExportSheet(raster: raster) { data in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
@@ -116,13 +116,13 @@ final class ProjectController {
             panel.allowedContentTypes = [.jpeg]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.title = "Export JPEG"
+            panel.title = L10n.text("Export JPEG")
             panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".jpg"
             guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             try await ImageExporter.shared.write(data, to: url)
-        } catch { await showError("Couldn’t export JPEG", error: error) }
+        } catch { await showError(L10n.text("errorTitle.exportJPEG"), error: error) }
     }
 
     private func saveCurrent(asNew: Bool = false) async -> Bool {
@@ -134,7 +134,7 @@ final class ProjectController {
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
             panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
-            panel.title = asNew ? "Save Project As" : "Save Project"
+            panel.title = asNew ? L10n.text("title.saveProjectAs") : L10n.text("title.saveProject")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -152,7 +152,7 @@ final class ProjectController {
             NSDocumentController.shared.noteNewRecentDocumentURL(destination)
             return true
         } catch {
-            await showError("Couldn’t save the project", error: error)
+            await showError(L10n.text("errorTitle.saveProject"), error: error)
             return false
         }
     }
@@ -169,7 +169,7 @@ final class ProjectController {
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
+            panel.title = L10n.text("Open Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -193,7 +193,7 @@ final class ProjectController {
             NSDocumentController.shared.noteNewRecentDocumentURL(source)
             return true
         } catch {
-            await showError("Couldn’t open the project", error: error)
+            await showError(L10n.text("errorTitle.openProject"), error: error)
             return false
         }
     }
@@ -228,11 +228,12 @@ final class ProjectController {
     private func confirmReplacement() async -> Bool {
         guard session.isModified, session.document != nil else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? "Untitled")?"
-        alert.informativeText = "Your changes will be lost if you don’t save them."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Don’t Save")
+        let name = session.projectURL?.lastPathComponent ?? L10n.text("Untitled")
+        alert.messageText = String(format: L10n.text("alert.saveChanges"), name)
+        alert.informativeText = L10n.text("alert.unsavedChangesWillBeLost")
+        alert.addButton(withTitle: L10n.text("Save"))
+        alert.addButton(withTitle: L10n.text("Cancel"))
+        alert.addButton(withTitle: L10n.text("Don’t Save"))
         let response = await show(alert)
         if response == .alertFirstButtonReturn { return await saveCurrent() }
         return response == .alertThirdButtonReturn
@@ -243,7 +244,7 @@ final class ProjectController {
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.text("OK"))
         _ = await show(alert)
     }
 

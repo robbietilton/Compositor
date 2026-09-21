@@ -46,7 +46,7 @@ struct HistoryTests {
         #expect(!session.isModified)
         let count = session.history.undoCount
         session.zoom(to: 2)
-        session.renameLayer(id, to: "Layer 1")
+        session.renameLayer(id, to: L10n.numbered("Layer", number: 1))
         session.renameLayer(id, to: "   ")
         session.reorderLayers(from: IndexSet(integer: 0), to: 1)
         #expect(session.history.undoCount == count)

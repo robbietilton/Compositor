@@ -13,7 +13,7 @@ struct CropControls: View {
             }.frame(width: 170)
                 .onValueChangeCompat(of: session.cropRatioChoice) { _, _ in session.changeCropRatio() }
             if let rect = session.cropRect {
-                Text("\(Int(rect.width)) × \(Int(rect.height)) px").monospacedDigit()
+                Text(String(format: L10n.text("crop.dimensions"), Int(rect.width), Int(rect.height))).monospacedDigit()
             }
             Spacer()
             Button("Cancel") { session.cancelCrop() }.disabled(session.cropRect == nil)

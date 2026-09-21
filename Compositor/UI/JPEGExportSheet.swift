@@ -38,7 +38,7 @@ struct JPEGExportSheet: View {
             HStack {
                 Text("Quality")
                 Slider(value: $options.quality, in: 0...1, step: 0.01)
-                Text("\(Int((options.quality * 100).rounded()))%")
+                Text(String(format: L10n.text("jpeg.quality"), Int((options.quality * 100).rounded())))
                     .monospacedDigit().frame(width: 45, alignment: .trailing)
             }
             ColorPicker("Background for transparency", selection: $matte, supportsOpacity: false)
@@ -48,13 +48,13 @@ struct JPEGExportSheet: View {
                     options.green = rgb.greenComponent
                     options.blue = rgb.blueComponent
                 }
-            Text("\(raster.image.width) × \(raster.image.height) px · sRGB")
+            Text(String(format: L10n.text("jpeg.dimensions"), raster.image.width, raster.image.height))
                 .foregroundStyle(.secondary)
             HStack {
                 if let error { Text(error).foregroundStyle(.red) }
                 else if readyOptions == options, let result {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(result.data.count), countStyle: .file))
-                    Text("· encoded preview, fitted to window").foregroundStyle(.secondary)
+                    Text(L10n.text("· encoded preview, fitted to window")).foregroundStyle(.secondary)
                 } else { Text("Updating preview…").foregroundStyle(.secondary) }
                 Spacer()
                 Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)

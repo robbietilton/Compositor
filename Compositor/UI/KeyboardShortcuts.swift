@@ -154,7 +154,7 @@ final class ShortcutSettings: ObservableObject {
         return chord(definition)
     }
     func show() {
-        panel.show(title: "Keyboard Shortcuts", content: KeyboardShortcutsSheet(settings: self))
+        panel.show(title: L10n.text("Keyboard Shortcuts"), content: KeyboardShortcutsSheet(settings: self))
     }
     func close() { panel.close() }
     func save(_ values: [String: ShortcutChord]) {
@@ -167,14 +167,17 @@ final class ShortcutSettings: ObservableObject {
         var assigned: [ShortcutChord: String] = [:]
         for definition in ShortcutDefinition.all {
             let chord = values[definition.id] ?? definition.original
-            guard chord.key.count == 1, (0...15).contains(chord.modifiers) else { return "Choose a single key with optional modifiers." }
+            guard chord.key.count == 1, (0...15).contains(chord.modifiers) else { return L10n.text("shortcuts.error.singleKey") }
             if definition.group == "Text Editing", chord.modifiers & 7 == 0 {
-                return "Text-editing shortcuts need Command, Option, or Control so they do not replace normal typing."
+                return L10n.text("shortcuts.error.textEditing")
             }
             if [ShortcutChord("q", 1), ShortcutChord(",", 1), ShortcutChord("m", 3)].contains(chord) {
-                return "\(chord.label) is reserved by macOS."
+                return String(format: L10n.text("shortcuts.error.reserved"), chord.label)
             }
-            if let other = assigned[chord] { return "\(chord.label) is assigned to both \(other) and \(definition.title)." }
+            if let other = assigned[chord] {
+                return String(format: L10n.text("shortcuts.error.conflict"), chord.label,
+                              L10n.text(other), definition.localizedTitle)
+            }
             assigned[chord] = definition.title
         }
         return nil
@@ -234,16 +237,16 @@ private struct KeyboardShortcutsSheet: View {
     init(settings: ShortcutSettings) { self.settings = settings; _draft = State(initialValue: settings.overrides) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Click a shortcut, then press its new key combination. Changes apply when you save.")
+            Text(L10n.text("Click a shortcut, then press its new key combination. Changes apply when you save."))
                 .foregroundStyle(.secondary)
-            TextField("Search shortcuts", text: $search).textFieldStyle(.roundedBorder)
+            TextField(L10n.text("Search shortcuts"), text: $search).textFieldStyle(.roundedBorder)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(["Menus", "Canvas & Layers", "Text Editing"], id: \.self) { group in
-                        Text(group).font(.headline).padding(.top, 8)
+                        Text(L10n.text(group)).font(.headline).padding(.top, 8)
                         ForEach(ShortcutDefinition.all.filter { $0.group == group && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)) }) { definition in
                             HStack {
-                                Text(definition.title)
+                                Text(definition.localizedTitle)
                                 Spacer()
                                 ShortcutRecorder(chord: draft[definition.id] ?? definition.original,
                                     recording: recording == definition.id,
@@ -257,9 +260,9 @@ private struct KeyboardShortcutsSheet: View {
                         }
                     }
                     Divider().padding(.vertical, 8)
-                    Text("Contextual keys & mouse gestures").font(.headline)
-                    Text("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording.")
-                    Text("Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed.")
+                    Text(L10n.text("Contextual keys & mouse gestures")).font(.headline)
+                    Text(L10n.text("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording."))
+                    Text(L10n.text("Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed."))
                 }.padding(.trailing, 8)
             }.frame(height: 465)
             // Only a conflict takes room here; an empty line left a wide gap above the buttons.
@@ -289,8 +292,8 @@ private struct ShortcutRecorder: NSViewRepresentable {
     func makeNSView(context: Context) -> RecorderButton { RecorderButton() }
     func updateNSView(_ button: RecorderButton, context: Context) {
         button.start = start; button.finish = finish; button.recording = recording
-        button.title = recording ? "Press keys…" : chord.label
-        button.setAccessibilityLabel(recording ? "Press a shortcut" : chord.label)
+        button.title = recording ? L10n.text("Press keys…") : chord.label
+        button.setAccessibilityLabel(recording ? L10n.text("Press a shortcut") : chord.label)
         if recording, button.window?.firstResponder !== button { button.window?.makeFirstResponder(button) }
     }
     final class RecorderButton: NSButton {

@@ -121,8 +121,8 @@ private struct ProjectTabButton: View {
                     .frame(width: 16, height: 28)
                     .padding(.trailing, 5)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain).help("Close \(tab.title)").disabled(!workspace.canSwitch)
-                .accessibilityLabel("Close \(tab.title)")
+            }.buttonStyle(.plain).help(String(format: L10n.text("projectTabs.close"), tab.title)).disabled(!workspace.canSwitch)
+                .accessibilityLabel(String(format: L10n.text("projectTabs.close"), tab.title))
         }
         .frame(height: 28)
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())

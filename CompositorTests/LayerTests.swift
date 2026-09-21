@@ -17,7 +17,7 @@ struct LayerTests {
         session.activeLayerID = first.id
         session.addBlankLayer()
         let layers = try #require(session.document?.layers)
-        #expect(layers.map(\.name) == ["Layer 1", "Layer 4", "Layer 2", "Layer 3"])
+        #expect(layers.map(\.name) == [1, 4, 2, 3].map { L10n.numbered("Layer", number: $0) })
         #expect(layers[1].id == session.activeLayerID)
         #expect(layers[1].asset == nil)
         #expect(layers[1].size == CGSize(width: 800, height: 600))
@@ -57,11 +57,11 @@ struct LayerTests {
         let session = sessionWithThreeLayers()
         let active = session.activeLayerID
         session.reorderLayers(from: IndexSet(integer: 0), to: 3)
-        #expect(session.document?.layers.map(\.name) == ["Layer 3", "Layer 1", "Layer 2"])
+        #expect(session.document?.layers.map(\.name) == [3, 1, 2].map { L10n.numbered("Layer", number: $0) })
         #expect(session.activeLayerID == active)
         #expect(!session.canMoveActiveLayer(by: -1))
         session.moveActiveLayer(by: 1)
-        #expect(session.document?.layers.map(\.name) == ["Layer 1", "Layer 3", "Layer 2"])
+        #expect(session.document?.layers.map(\.name) == [1, 3, 2].map { L10n.numbered("Layer", number: $0) })
         session.reorderLayers(from: IndexSet(integer: 99), to: 0)
         #expect(session.document?.layers.count == 3)
     }
@@ -183,7 +183,7 @@ struct LayerTests {
         let session = EditorSession()
         session.createNewProject(width: 640, height: 480)
         #expect(session.document?.layers.count == 1)
-        #expect(session.activeLayer?.name == "Layer 1" && session.activeLayer?.asset == nil)
+        #expect(session.activeLayer?.name == L10n.numbered("Layer", number: 1) && session.activeLayer?.asset == nil)
         #expect(session.activeLayer?.size == CGSize(width: 640, height: 480))
         #expect(session.canPaint)
     }

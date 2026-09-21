@@ -186,7 +186,7 @@ struct CursorTests {
         #expect(NSCursor.current === CanvasView.duplicateCursor, "Option over a layer's name offers to duplicate it")
         let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: false))
         let thumbnail = try #require(descendants(row).first {
-            $0 is NSButton && !$0.isHiddenOrHasHiddenAncestor && $0.accessibilityLabel()?.hasPrefix("Select image") == true
+            $0 is NSButton && !$0.isHiddenOrHasHiddenAncestor && $0.accessibilityLabel()?.hasPrefix(L10n.text("Select image")) == true
         })
         row.layoutSubtreeIfNeeded()
         #expect(thumbnail.frame.size == CGSize(width: 36, height: 27), "the thumbnail takes the 400 × 300 canvas's shape")

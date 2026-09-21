@@ -139,6 +139,366 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые системные панели обновятся после повторного открытия." } }
       }
     },
+    "error.import.unreadable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The image could not be read. It may be damaged or unavailable." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось прочитать изображение. Возможно, оно повреждено или недоступно." } }
+      }
+    },
+    "error.import.unsupported" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a JPEG, PNG, HEIC, or TIFF image." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите изображение JPEG, PNG, HEIC или TIFF." } }
+      }
+    },
+    "error.import.tooLarge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This import exceeds the current 100-megapixel document budget or 30,000-pixel side limit." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Импорт превышает текущий лимит документа в 100 мегапикселей или 30 000 пикселей по стороне." } }
+      }
+    },
+    "error.export.tooLarge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image export supports canvases up to 100 megapixels and 30,000 pixels per side." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт поддерживает холсты до 100 мегапикселей и 30 000 пикселей по стороне." } }
+      }
+    },
+    "error.export.render" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The canvas could not be rendered. Try a smaller canvas." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отрисовать холст. Попробуйте холст меньшего размера." } }
+      }
+    },
+    "error.export.encode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The image could not be encoded." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось закодировать изображение." } }
+      }
+    },
+    "error.project.invalid" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This is not a valid Compositor project, or its metadata is damaged." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это недопустимый проект Compositor или его метаданные повреждены." } }
+      }
+    },
+    "error.project.version" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This project uses format version %d. This app supports versions 1–8." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Этот проект использует формат версии %d. Приложение поддерживает версии 1–8." } }
+      }
+    },
+    "error.project.missingImage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An image inside the project is missing or damaged. The current document has not been replaced." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изображение внутри проекта отсутствует или повреждено. Текущий документ не заменен." } }
+      }
+    },
+    "error.project.tooLarge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This project exceeds the supported canvas, layer, file-size, or 100-megapixel image limit." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проект превышает поддерживаемый лимит холста, слоев, размера файла или изображения в 100 мегапикселей." } }
+      }
+    },
+    "error.project.encode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "An image could not be saved. The previous project has not been replaced." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось сохранить изображение. Предыдущий проект не заменен." } }
+      }
+    },
+    "error.wand.tooDetailed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "That selection is too detailed to outline. Try a different Tolerance, or turn on Contiguous." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это выделение слишком детализировано для построения контура. Измените допуск или включите режим «Смежные»." } }
+      }
+    },
+    "error.wand.memory" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "There isn’t enough memory to make that selection." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Недостаточно памяти для создания этого выделения." } }
+      }
+    },
+    "error.objectSelection.unsupported" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Object Selection requires macOS 14 or later." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для выделения объекта требуется macOS 14 или новее." } }
+      }
+    },
+    "error.objectSelection.render" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The object mask could not be rendered." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отрисовать маску объекта." } }
+      }
+    },
+    "error.subjectRemoval.noSubject" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No foreground subject was detected in this layer. Try an image with a more distinct subject." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "На этом слое не найден объект переднего плана. Попробуйте изображение с более четко выраженным объектом." } }
+      }
+    },
+    "error.contentFill.noSource" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Недостаточно непрозрачных невыделенных пикселей для создания заливки. Используйте меньшее выделение с окружающим изображением." } }
+      }
+    },
+    "title.exportPNG" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export PNG" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт PNG" } }
+      }
+    },
+    "title.saveProjectAs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save Project As" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить проект как" } }
+      }
+    },
+    "title.saveProject" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save Project" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить проект" } }
+      }
+    },
+    "errorTitle.exportPNG" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t export PNG" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось экспортировать PNG" } }
+      }
+    },
+    "errorTitle.canvasSize" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t change canvas size" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось изменить размер холста" } }
+      }
+    },
+    "errorTitle.imageSize" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t resize the image" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось изменить размер изображения" } }
+      }
+    },
+    "errorTitle.exportJPEG" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t export JPEG" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось экспортировать JPEG" } }
+      }
+    },
+    "errorTitle.saveProject" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t save the project" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось сохранить проект" } }
+      }
+    },
+    "errorTitle.openProject" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t open the project" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось открыть проект" } }
+      }
+    },
+    "Untitled" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Untitled" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Безымянный" } }
+      }
+    },
+    "Don’t Save" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Don’t Save" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не сохранять" } }
+      }
+    },
+    "alert.saveChanges" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save changes to %@?" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить изменения в %@?" } }
+      }
+    },
+    "alert.unsavedChangesWillBeLost" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your changes will be lost if you don’t save them." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменения будут потеряны, если их не сохранить." } }
+      }
+    },
+    "Rename…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rename…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переименовать…" } }
+      }
+    },
+    "Hide/Show Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide/Show Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть/показать слой" } }
+      }
+    },
+    "Add White Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add White Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить белую маску" } }
+      }
+    },
+    "Add Black Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Black Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить черную маску" } }
+      }
+    },
+    "Enable/Disable Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable/Disable Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включить/выключить маску" } }
+      }
+    },
+    "Delete Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить маску" } }
+      }
+    },
+    "Release Clipping Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Release Clipping Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Освободить обтравочную маску" } }
+      }
+    },
+    "Delete Layer / Folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Layer / Folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить слой / группу" } }
+      }
+    },
+    "Linked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Linked" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Связано" } }
+      }
+    },
+    "Expand or collapse folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Expand or collapse folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Развернуть или свернуть группу" } }
+      }
+    },
+    "tooltip.selectLayer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select layer; Cmd-click to select its pixels (Cmd-Shift adds, Cmd-Option subtracts)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать слой; Cmd-щелчок выбирает его пиксели (Cmd-Shift добавляет, Cmd-Option вычитает)" } }
+      }
+    },
+    "tooltip.linkMask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Link layer and mask so they move together" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Связать слой и маску, чтобы перемещать их вместе" } }
+      }
+    },
+    "tooltip.unlinkMask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlink layer and mask to move or transform them separately" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отвязать слой и маску, чтобы перемещать и трансформировать их отдельно" } }
+      }
+    },
+    "Link mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Link mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Связать маску" } }
+      }
+    },
+    "Unlink mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlink mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отвязать маску" } }
+      }
+    },
+    "Editable text" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Editable text" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Редактируемый текст" } }
+      }
+    },
+    "Editable text layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Editable text layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Редактируемый текстовый слой" } }
+      }
+    },
+    "Select image pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select image pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать пиксели изображения" } }
+      }
+    },
+    "Select text" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select text" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать текст" } }
+      }
+    },
+    "Select image" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select image" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать изображение" } }
+      }
+    },
+    "Select mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать маску" } }
+      }
+    },
+    "Adjustment" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adjustment" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Коррекция" } }
+      }
+    },
+    "Double-click to edit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Double-click to edit" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дважды щелкните для изменения" } }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Группа" } }
+      }
+    },
+    "Missing source" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Missing source" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Источник не найден" } }
+      }
+    },
+    "Clipped to" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clipped to" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обтравка по" } }
+      }
+    },
+    "tooltip.clippingMask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clipping mask based on %@. Option-click the bottom of its row to release." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обтравочная маска на основе %@. Option-щелчок внизу строки освобождает ее." } }
+      }
+    },
+    "Hide" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть" } }
+      }
+    },
+    "effect" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "effect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "эффект" } }
+      }
+    },
+    "tooltip.effectRow" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click to select; double-click to edit; Option-drag to copy" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните для выбора; двойной щелчок изменяет; Option-перетаскивание копирует" } }
+      }
+    },
     "filter.contentAwareFill" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Content-Aware Fill" } },
@@ -247,6 +607,2712 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Русский" } }
       }
     },
+    "A blank space for your next composition." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A blank space for your next composition." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пустое пространство для вашей следующей композиции." } }
+      }
+    },
+    "All Layers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All Layers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все слои" } }
+      }
+    },
+    "Amount" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Amount" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Величина" } }
+      }
+    },
+    "Anchor" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Anchor" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Опорная точка" } }
+      }
+    },
+    "Auto" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Авто" } }
+      }
+    },
+    "Black · Hide" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Black · Hide" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Черный · Скрыть" } }
+      }
+    },
+    "Blend" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blend" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Наложение" } }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отмена" } }
+      }
+    },
+    "Canvas Size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas Size" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер холста" } }
+      }
+    },
+    "Color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет" } }
+      }
+    },
+    "Color Overlay" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color Overlay" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Наложение цвета" } }
+      }
+    },
+    "Crop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Crop" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кадрирование" } }
+      }
+    },
+    "Drop Shadow" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop Shadow" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Внешняя тень" } }
+      }
+    },
+    "Edge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edge" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Край" } }
+      }
+    },
+    "Empty selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Empty selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пустое выделение" } }
+      }
+    },
+    "Export JPEG" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export JPEG" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт JPEG" } }
+      }
+    },
+    "Eyedropper" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Eyedropper" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пипетка" } }
+      }
+    },
+    "Fill" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fill" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка" } }
+      }
+    },
+    "Gaussian" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gaussian" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Гауссов" } }
+      }
+    },
+    "Gradient" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Градиент" } }
+      }
+    },
+    "Hardness" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hardness" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Жесткость" } }
+      }
+    },
+    "Height" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Height" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Высота" } }
+      }
+    },
+    "Image Size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image Size" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер изображения" } }
+      }
+    },
+    "Importing images…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Importing images…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Импорт изображений…" } }
+      }
+    },
+    "Inner Shadow" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inner Shadow" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Внутренняя тень" } }
+      }
+    },
+    "Inside" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inside" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Внутри" } }
+      }
+    },
+    "Layers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слои" } }
+      }
+    },
+    "Leading" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Leading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Интерлиньяж" } }
+      }
+    },
+    "Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Маска" } }
+      }
+    },
+    "New canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый холст" } }
+      }
+    },
+    "No layers yet" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No layers yet" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слоев пока нет" } }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ОК" } }
+      }
+    },
+    "Opacity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opacity" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Непрозрачность" } }
+      }
+    },
+    "Outside" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Outside" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снаружи" } }
+      }
+    },
+    "Quality" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quality" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Качество" } }
+      }
+    },
+    "Radius" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Radius" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Радиус" } }
+      }
+    },
+    "Ready when you are" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready when you are" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово к работе" } }
+      }
+    },
+    "Resolution" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resolution" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разрешение" } }
+      }
+    },
+    "Sample" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sample" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Образец" } }
+      }
+    },
+    "Select a tool" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select a tool" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите инструмент" } }
+      }
+    },
+    "Shape" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shape" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фигура" } }
+      }
+    },
+    "Size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Size" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер" } }
+      }
+    },
+    "Stroke" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stroke" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обводка" } }
+      }
+    },
+    "This Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Этот слой" } }
+      }
+    },
+    "Tolerance" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tolerance" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Допуск" } }
+      }
+    },
+    "Tracking" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tracking" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трекинг" } }
+      }
+    },
+    "Type" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Type" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текст" } }
+      }
+    },
+    "Uniform" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Uniform" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Равномерный" } }
+      }
+    },
+    "Updating preview…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updating preview…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обновление предпросмотра…" } }
+      }
+    },
+    "White · Reveal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "White · Reveal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Белый · Показать" } }
+      }
+    },
+    "Width" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Width" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ширина" } }
+      }
+    },
+    "Working…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Working…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выполняется…" } }
+      }
+    },
+    "pixels/inch" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "pixels/inch" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "пикселей/дюйм" } }
+      }
+    },
+    "px" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "px" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "пикс." } }
+      }
+    },
+    "sRGB · Transparent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "sRGB · Transparent" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "sRGB · Прозрачность" } }
+      }
+    },
+    "Actual Pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Actual Pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Реальный размер" } }
+      }
+    },
+    "All" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все" } }
+      }
+    },
+    "Apply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить" } }
+      }
+    },
+    "Apply Crop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply Crop" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить кадрирование" } }
+      }
+    },
+    "Canvas Size…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas Size…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер холста…" } }
+      }
+    },
+    "Check for Updates…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Check for Updates…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверить обновления…" } }
+      }
+    },
+    "Clear Guides" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Guides" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить направляющие" } }
+      }
+    },
+    "Clear Selection Pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear Selection Pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очистить пиксели выделения" } }
+      }
+    },
+    "Close Project" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close Project" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закрыть проект" } }
+      }
+    },
+    "Content-Aware Fill…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Content-Aware Fill…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка с учетом содержимого…" } }
+      }
+    },
+    "Contract…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contract…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сжать…" } }
+      }
+    },
+    "Copy" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать" } }
+      }
+    },
+    "Copy Merged" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Merged" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать объединенные" } }
+      }
+    },
+    "Create canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать холст" } }
+      }
+    },
+    "Curves…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Curves…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кривые…" } }
+      }
+    },
+    "Cut" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cut" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вырезать" } }
+      }
+    },
+    "Deselect" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снять выделение" } }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово" } }
+      }
+    },
+    "Edit Text" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Text" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Редактировать текст" } }
+      }
+    },
+    "Expand…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Expand…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширить…" } }
+      }
+    },
+    "Export PNG…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export PNG…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт PNG…" } }
+      }
+    },
+    "Fit Canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fit Canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По размеру экрана" } }
+      }
+    },
+    "Hide Compositor" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Compositor" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть Compositor" } }
+      }
+    },
+    "Hue/Saturation…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hue/Saturation…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовой тон/Насыщенность…" } }
+      }
+    },
+    "Image Size…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image Size…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер изображения…" } }
+      }
+    },
+    "Import Images…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import Images…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Импорт изображений…" } }
+      }
+    },
+    "Import image" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import image" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Импортировать изображение" } }
+      }
+    },
+    "Inverse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inverse" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инверсия" } }
+      }
+    },
+    "Keyboard Shortcuts…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keyboard Shortcuts…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Клавиатурные сокращения…" } }
+      }
+    },
+    "Layer's Pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer's Pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пиксели слоя" } }
+      }
+    },
+    "Levels…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Levels…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровни…" } }
+      }
+    },
+    "Mask's Black Areas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mask's Black Areas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Черные области маски" } }
+      }
+    },
+    "New Blank Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Blank Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый пустой слой" } }
+      }
+    },
+    "New Canvas…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Canvas…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый холст…" } }
+      }
+    },
+    "Open Project…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Project…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть проект…" } }
+      }
+    },
+    "Paste" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставить" } }
+      }
+    },
+    "Redo" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Redo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторить" } }
+      }
+    },
+    "Rename Layer…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rename Layer…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переименовать слой…" } }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить" } }
+      }
+    },
+    "Save As…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save As…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить как…" } }
+      }
+    },
+    "Show All" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show All" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать все" } }
+      }
+    },
+    "Subject" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subject" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объект" } }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Undo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отменить" } }
+      }
+    },
+    "Zoom In" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom In" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Увеличить" } }
+      }
+    },
+    "Zoom Out" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom Out" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уменьшить" } }
+      }
+    },
+    "Add layer mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add layer mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить слой-маску" } }
+      }
+    },
+    "Align " : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Align " } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выровнять " } }
+      }
+    },
+    "Blend mode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blend mode" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим наложения" } }
+      }
+    },
+    "Canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Холст" } }
+      }
+    },
+    "Default colors" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default colors" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Основные цвета" } }
+      }
+    },
+    "Drop into new canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop into new canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащить в новый холст" } }
+      }
+    },
+    "Font" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Font" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Шрифт" } }
+      }
+    },
+    "Foreground color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foreground color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Основной цвет" } }
+      }
+    },
+    "Hex color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hex color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет HEX" } }
+      }
+    },
+    "Hue" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hue" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовой тон" } }
+      }
+    },
+    "Layer effects" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer effects" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эффекты слоя" } }
+      }
+    },
+    "New" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый" } }
+      }
+    },
+    "New blank layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New blank layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый пустой слой" } }
+      }
+    },
+    "New color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый цвет" } }
+      }
+    },
+    "New folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новая группа" } }
+      }
+    },
+    "Saturation and brightness" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saturation and brightness" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Насыщенность и яркость" } }
+      }
+    },
+    "Swap colors" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swap colors" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поменять цвета" } }
+      }
+    },
+    "Targeted adjustment" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Targeted adjustment" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевая коррекция" } }
+      }
+    },
+    "Text color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет текста" } }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить" } }
+      }
+    },
+    "Add Noise" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add Noise" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить шум" } }
+      }
+    },
+    "Advanced" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Advanced" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширенный" } }
+      }
+    },
+    "Basic" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Basic" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Базовый" } }
+      }
+    },
+    "Black" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Black" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Черный" } }
+      }
+    },
+    "Blue" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blue" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Синий" } }
+      }
+    },
+    "Blues" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blues" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Синие" } }
+      }
+    },
+    "Blur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Blur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие" } }
+      }
+    },
+    "Center" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Center" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Центр" } }
+      }
+    },
+    "Centimeters" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Centimeters" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сантиметры" } }
+      }
+    },
+    "Color + neutral midtones" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color + neutral midtones" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет + нейтральные средние тона" } }
+      }
+    },
+    "Content-Aware" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Content-Aware" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "С учетом содержимого" } }
+      }
+    },
+    "Content-Aware Fill" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Content-Aware Fill" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка с учетом содержимого" } }
+      }
+    },
+    "Contract" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contract" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сжать" } }
+      }
+    },
+    "Contrast" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contrast" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Контраст" } }
+      }
+    },
+    "Create Texture" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Texture" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать текстуру" } }
+      }
+    },
+    "Curves" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Curves" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кривые" } }
+      }
+    },
+    "Cyans" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cyans" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Голубые" } }
+      }
+    },
+    "Darken" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Darken" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Затемнение" } }
+      }
+    },
+    "Difference" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Difference" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разница" } }
+      }
+    },
+    "Edit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Редактировать" } }
+      }
+    },
+    "Ellipse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ellipse" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эллипс" } }
+      }
+    },
+    "Erase" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Erase" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ластик" } }
+      }
+    },
+    "Expand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Expand" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширить" } }
+      }
+    },
+    "Exposure" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exposure" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспозиция" } }
+      }
+    },
+    "Feather" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feather" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Растушевка" } }
+      }
+    },
+    "Floating Selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Floating Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Плавающее выделение" } }
+      }
+    },
+    "Foreground to Background" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foreground to Background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "От основного к фоновому" } }
+      }
+    },
+    "Foreground to Transparent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foreground to Transparent" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "От основного к прозрачному" } }
+      }
+    },
+    "Freehand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Freehand" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Произвольное" } }
+      }
+    },
+    "Gaussian Blur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gaussian Blur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие по Гауссу" } }
+      }
+    },
+    "Gradient Map" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient Map" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Карта градиента" } }
+      }
+    },
+    "Grain" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grain" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зернистость" } }
+      }
+    },
+    "Gray" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gray" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Серый" } }
+      }
+    },
+    "Green" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Green" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зеленый" } }
+      }
+    },
+    "Greens" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Greens" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зеленые" } }
+      }
+    },
+    "High quality" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "High quality" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Высокое качество" } }
+      }
+    },
+    "Inches" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inches" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дюймы" } }
+      }
+    },
+    "Layer Effects" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer Effects" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эффекты слоя" } }
+      }
+    },
+    "Left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Left" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слева" } }
+      }
+    },
+    "Levels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Levels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уровни" } }
+      }
+    },
+    "Lighten" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lighten" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Осветление" } }
+      }
+    },
+    "Line" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Line" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Линия" } }
+      }
+    },
+    "Linear" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Linear" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Линейный" } }
+      }
+    },
+    "Liquify" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Liquify" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пластика" } }
+      }
+    },
+    "Magentas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Magentas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пурпурные" } }
+      }
+    },
+    "Motion Blur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Motion Blur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие в движении" } }
+      }
+    },
+    "Multiply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Multiply" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Умножение" } }
+      }
+    },
+    "Nearest" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nearest" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ближайший" } }
+      }
+    },
+    "Normal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Normal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обычный" } }
+      }
+    },
+    "Object" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Object" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объект" } }
+      }
+    },
+    "Overlay" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Overlay" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перекрытие" } }
+      }
+    },
+    "Paint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paint" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кисть" } }
+      }
+    },
+    "Percent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Percent" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Процент" } }
+      }
+    },
+    "Pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пиксели" } }
+      }
+    },
+    "Polygonal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Polygonal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Многоугольное" } }
+      }
+    },
+    "Proximity Match" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Proximity Match" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск по образцу" } }
+      }
+    },
+    "RGB" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "RGB" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "RGB" } }
+      }
+    },
+    "Radial" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Radial" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Радиальный" } }
+      }
+    },
+    "Rectangle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rectangle" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прямоугольник" } }
+      }
+    },
+    "Red" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Red" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Красный" } }
+      }
+    },
+    "Reds" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reds" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Красные" } }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить" } }
+      }
+    },
+    "Remove Background" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить фон" } }
+      }
+    },
+    "Saturation" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saturation" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Насыщенность" } }
+      }
+    },
+    "Screen" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Screen" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экран" } }
+      }
+    },
+    "Smooth" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smooth" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сглаживание" } }
+      }
+    },
+    "Smudge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smudge" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Палец" } }
+      }
+    },
+    "Soft Light" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Soft Light" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Мягкий свет" } }
+      }
+    },
+    "Subtract" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subtract" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вычитание" } }
+      }
+    },
+    "Wand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wand" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Волшебная палочка" } }
+      }
+    },
+    "Yellows" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Yellows" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Желтые" } }
+      }
+    },
+    "Unsaved changes" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unsaved changes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Несохраненные изменения" } }
+      }
+    },
+    "Zoom percentage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom percentage" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Процент масштаба" } }
+      }
+    },
+    "Aligned" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Aligned" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "С выравниванием" } }
+      }
+    },
+    "Analyze the active layer only, or every visible layer as shown" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Analyze the active layer only, or every visible layer as shown" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Анализировать только активный слой или все видимые слои, как показано" } }
+      }
+    },
+    "Anti-alias" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Anti-alias" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сглаживание" } }
+      }
+    },
+    "Apply outside this range instead" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply outside this range instead" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применить вместо этого за пределами диапазона" } }
+      }
+    },
+    "Auto Select" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto Select" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автовыбор" } }
+      }
+    },
+    "Background for transparency" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Background for transparency" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фон для прозрачности" } }
+      }
+    },
+    "Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Базовый режим работает быстро; расширенный уточняет маску по деталям слоя, включая волосы и мех" } }
+      }
+    },
+    "Canvas extension" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas extension" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширение холста" } }
+      }
+    },
+    "Canvas text" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas text" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текст на холсте" } }
+      }
+    },
+    "Channel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Channel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Канал" } }
+      }
+    },
+    "Click the canvas to sample" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click the canvas to sample" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по холсту, чтобы выбрать образец" } }
+      }
+    },
+    "Click a shortcut, then press its new key combination. Changes apply when you save." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click a shortcut, then press its new key combination. Changes apply when you save." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по сочетанию, затем нажмите новую комбинацию. Изменения применяются после сохранения." } }
+      }
+    },
+    "Click to add a point. Drag to adjust." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click to add a point. Drag to adjust." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните, чтобы добавить точку. Перетащите ее для настройки." } }
+      }
+    },
+    "Colorize" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Colorize" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Тонирование" } }
+      }
+    },
+    "Colors" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Colors" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвета" } }
+      }
+    },
+    "Contextual keys & mouse gestures" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contextual keys & mouse gestures" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Контекстные клавиши и жесты мышью" } }
+      }
+    },
+    "Contiguous" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contiguous" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Смежные" } }
+      }
+    },
+    "Copy from the active layer only, or from every visible layer as shown" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy from the active layer only, or from every visible layer as shown" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать только из активного слоя или из всех видимых слоев, как показано" } }
+      }
+    },
+    "Distribution" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Distribution" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Распределение" } }
+      }
+    },
+    "Document Bounds" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Document Bounds" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Границы документа" } }
+      }
+    },
+    "Drag to resize the panel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to resize the panel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите, чтобы изменить размер панели" } }
+      }
+    },
+    "Drop to open in a new canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop to open in a new canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите, чтобы открыть в новом холсте" } }
+      }
+    },
+    "Edit Adjustment…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Adjustment…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменить коррекцию…" } }
+      }
+    },
+    "Export JPEG…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export JPEG…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт JPEG…" } }
+      }
+    },
+    "Export…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт…" } }
+      }
+    },
+    "Extension color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extension color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет расширения" } }
+      }
+    },
+    "Fade the edge of the selection by this many pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fade the edge of the selection by this many pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Растушевать край выделения на указанное число пикселей" } }
+      }
+    },
+    "Feather…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Feather…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Растушевка…" } }
+      }
+    },
+    "Fill the selection using surrounding pixels from this layer." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fill the selection using surrounding pixels from this layer." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заполнить выделение окружающими пикселями этого слоя." } }
+      }
+    },
+    "Fill with Background Color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fill with Background Color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка цветом фона" } }
+      }
+    },
+    "Fill with Foreground Color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fill with Foreground Color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка цветом переднего плана" } }
+      }
+    },
+    "Filter" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Filter" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фильтр" } }
+      }
+    },
+    "Final dimensions must be 1–30,000 pixels per side." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Final dimensions must be 1–30,000 pixels per side." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Итоговый размер каждой стороны должен быть от 1 до 30 000 пикселей." } }
+      }
+    },
+    "Fit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fit" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По размеру" } }
+      }
+    },
+    "Flip Canvas Horizontal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip Canvas Horizontal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить холст по горизонтали" } }
+      }
+    },
+    "Flip Canvas Vertical" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip Canvas Vertical" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить холст по вертикали" } }
+      }
+    },
+    "Flip H" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip H" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить по горизонтали" } }
+      }
+    },
+    "Flip Layer Horizontal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip Layer Horizontal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить слой по горизонтали" } }
+      }
+    },
+    "Flip Layer Vertical" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip Layer Vertical" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить слой по вертикали" } }
+      }
+    },
+    "Font face, including bold and italic variants" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Font face, including bold and italic variants" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Шрифт, включая варианты полужирного и курсивного начертания" } }
+      }
+    },
+    "Group Selected Layers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Group Selected Layers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сгруппировать выбранные слои" } }
+      }
+    },
+    "Group selected layers (⌘G)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Group selected layers (⌘G)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сгруппировать выбранные слои (⌘G)" } }
+      }
+    },
+    "Hide Others" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Others" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть остальные" } }
+      }
+    },
+    "Keep the source moving with the brush between strokes; off starts every stroke at the source point" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep the source moving with the brush between strokes; off starts every stroke at the source point" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещать источник вместе с кистью между мазками; при выключении каждый мазок начинается из исходной точки" } }
+      }
+    },
+    "Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эта точка остается неподвижной. Рисунок не масштабируется, обрезанное содержимое остается за пределами холста." } }
+      }
+    },
+    "Layer effects: stroke and drop shadow" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer effects: stroke and drop shadow" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эффекты слоя: обводка и внешняя тень" } }
+      }
+    },
+    "Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Интерлиньяж от базовой линии до базовой линии. Пустое значение или 0 — авто: 120% размера шрифта." } }
+      }
+    },
+    "Linear histogram with automatic vertical scaling. Tall spikes may extend beyond the graph; all tones from 0 to 255 remain included." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Linear histogram with automatic vertical scaling. Tall spikes may extend beyond the graph; all tones from 0 to 255 remain included." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Линейная гистограмма с автоматическим масштабированием по вертикали. Высокие пики могут выходить за график; все тона от 0 до 255 сохраняются." } }
+      }
+    },
+    "Linear runs along the line; Radial spreads out from the start point" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Linear runs along the line; Radial spreads out from the start point" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Линейный идет вдоль линии; радиальный расходится от начальной точки" } }
+      }
+    },
+    "Liquify pushes pixels · Blur softens · Smudge drags color along" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Liquify pushes pixels · Blur softens · Smudge drags color along" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пластика перемещает пиксели · размытие смягчает · палец растягивает цвет" } }
+      }
+    },
+    "Loading histogram…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading histogram…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Загрузка гистограммы…" } }
+      }
+    },
+    "Match the clicked pixel, or the average of the pixels around it" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Match the clicked pixel, or the average of the pixels around it" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сопоставлять нажатый пиксель или среднее значение окружающих пикселей" } }
+      }
+    },
+    "Monochromatic" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Monochromatic" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Монохромный" } }
+      }
+    },
+    "Move Layer Down" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move Layer Down" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить слой вниз" } }
+      }
+    },
+    "Move Layer Up" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move Layer Up" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить слой вверх" } }
+      }
+    },
+    "Move Out of Folder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move Out of Folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить из группы" } }
+      }
+    },
+    "New Adjustment Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Adjustment Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый корректирующий слой" } }
+      }
+    },
+    "New adjustment layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New adjustment layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый корректирующий слой" } }
+      }
+    },
+    "New blank layer (⇧⌘N)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New blank layer (⇧⌘N)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый пустой слой (⇧⌘N)" } }
+      }
+    },
+    "New canvas (⌘N)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New canvas (⌘N)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый холст (⌘N)" } }
+      }
+    },
+    "Only print dimensions and resolution change. Pixels stay unchanged." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Only print dimensions and resolution change. Pixels stay unchanged." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Меняются только печатные размеры и разрешение. Пиксели остаются без изменений." } }
+      }
+    },
+    "Open project" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open project" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть проект" } }
+      }
+    },
+    "Option-click to set the source" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Option-click to set the source" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Option-щелчок задает источник" } }
+      }
+    },
+    "Paint with the foreground color (B), or erase pixels away (E)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paint with the foreground color (B), or erase pixels away (E)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Рисуйте цветом переднего плана (B) или стирайте пиксели (E)" } }
+      }
+    },
+    "Pixel Grid (800% and above)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pixel Grid (800% and above)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пиксельная сетка (от 800%)" } }
+      }
+    },
+    "Position" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Position" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Положение" } }
+      }
+    },
+    "Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Положительные значения выпрямляют линии, выгнутые наружу (бочкообразная дисторсия); отрицательные — выгнутые внутрь (подушкообразная)." } }
+      }
+    },
+    "Positive values tighten the detected mask inward; negative values expand it outward" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Positive values tighten the detected mask inward; negative values expand it outward" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Положительные значения сжимают найденную маску внутрь; отрицательные расширяют ее наружу" } }
+      }
+    },
+    "Press L to switch between Freehand and Polygonal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press L to switch between Freehand and Polygonal" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите L для переключения между произвольным и многоугольным выделением" } }
+      }
+    },
+    "Press M to switch between Rectangle and Ellipse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press M to switch between Rectangle and Ellipse" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите M для переключения между прямоугольником и эллипсом" } }
+      }
+    },
+    "Press Tab to switch between Wand and Object" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press Tab to switch between Wand and Object" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите Tab для переключения между волшебной палочкой и объектом" } }
+      }
+    },
+    "Pull the mask onto the image's own edges, which recovers hair and fur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull the mask onto the image's own edges, which recovers hair and fur" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подтянуть маску к краям изображения, чтобы сохранить волосы и мех" } }
+      }
+    },
+    "Range" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Range" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Диапазон" } }
+      }
+    },
+    "Ratio" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ratio" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Соотношение" } }
+      }
+    },
+    "Read colors from the active layer only, or from every visible layer as shown" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read colors from the active layer only, or from every visible layer as shown" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Считывать цвета только с активного слоя или со всех видимых слоев, как показано" } }
+      }
+    },
+    "Relative to current dimensions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Relative to current dimensions" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Относительно текущих размеров" } }
+      }
+    },
+    "Remove point" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove point" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить точку" } }
+      }
+    },
+    "Resample" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resample" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ресамплинг" } }
+      }
+    },
+    "Reset" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сбросить" } }
+      }
+    },
+    "Reset curve" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset curve" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сбросить кривую" } }
+      }
+    },
+    "Resize" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resize" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменить размер" } }
+      }
+    },
+    "Resizes layer pixels and applies existing transforms. Undo restores the originals." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resizes layer pixels and applies existing transforms. Undo restores the originals." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменяет размер пикселей слоя и применяет существующие трансформации. Отмена восстанавливает оригиналы." } }
+      }
+    },
+    "Restore Defaults" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Restore Defaults" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстановить значения по умолчанию" } }
+      }
+    },
+    "Reverse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reverse" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инвертировать" } }
+      }
+    },
+    "Round the rectangle's corners by this many pixels; 0 keeps them square" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Round the rectangle's corners by this many pixels; 0 keeps them square" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закруглить углы прямоугольника на указанное число пикселей; 0 оставляет их прямыми" } }
+      }
+    },
+    "Sample Ring" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sample Ring" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кольцо образца" } }
+      }
+    },
+    "Sample Size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sample Size" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размер образца" } }
+      }
+    },
+    "Scale width and height together, about the center" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scale width and height together, about the center" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштабировать ширину и высоту вместе относительно центра" } }
+      }
+    },
+    "Select layers by clicking the canvas. When off, hold Command to select a layer." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select layers by clicking the canvas. When off, hold Command to select a layer." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбирайте слои щелчком по холсту. Когда выключено, удерживайте Command, чтобы выбрать слой." } }
+      }
+    },
+    "Select only similar pixels connected to the one you click; off selects them everywhere" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select only similar pixels connected to the one you click; off selects them everywhere" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбирать только похожие пиксели, соединенные с нажатым; при выключении они выбираются везде" } }
+      }
+    },
+    "Shapes fill with the foreground color; click to change it" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shapes fill with the foreground color; click to change it" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фигуры заполняются цветом переднего плана; щелкните, чтобы изменить его" } }
+      }
+    },
+    "Shift-U (or Tab) steps through Rectangle, Ellipse and Line" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shift-U (or Tab) steps through Rectangle, Ellipse and Line" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Shift-U (или Tab) переключает прямоугольник, эллипс и линию" } }
+      }
+    },
+    "Swap foreground and background (X)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swap foreground and background (X)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поменять местами основной и фоновый цвета (X)" } }
+      }
+    },
+    "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевая коррекция: перетащите по изображению, чтобы изменить насыщенность цвета, или удерживайте Command для изменения оттенка" } }
+      }
+    },
+    "Units" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Units" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Единицы" } }
+      }
+    },
+    "Zoom in (⌘+)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom in (⌘+)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Увеличить (⌘+)" } }
+      }
+    },
+    "Zoom out (⌘−)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom out (⌘−)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уменьшить (⌘−)" } }
+      }
+    },
+    "Actual pixels (⌘1)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Actual pixels (⌘1)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Реальный размер (⌘1)" } }
+      }
+    },
+    "Default colors (D)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default colors (D)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Основные цвета (D)" } }
+      }
+    },
+    "Fit canvas in window (⌘0)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fit canvas in window (⌘0)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вписать холст в окно (⌘0)" } }
+      }
+    },
+    "Flip V" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Flip V" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отразить по вертикали" } }
+      }
+    },
+    "Grid" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grid" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сетка" } }
+      }
+    },
+    "Guides" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Guides" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Направляющие" } }
+      }
+    },
+    "How far each color channel (0–255) can differ from the clicked color and still be selected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "How far each color channel (0–255) can differ from the clicked color and still be selected" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Насколько каждый цветовой канал (0–255) может отличаться от нажатого цвета и все еще оставаться выбранным" } }
+      }
+    },
+    "Hold Shift to add or Option to subtract for one outline" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hold Shift to add or Option to subtract for one outline" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удерживайте Shift, чтобы добавить, или Option, чтобы вычесть один контур" } }
+      }
+    },
+    "Hide the background behind a layer mask, keeping the foreground subjects. The pixels stay, so the background can be painted back at any time." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide the background behind a layer mask, keeping the foreground subjects. The pixels stay, so the background can be painted back at any time." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть фон маской слоя, сохранив объекты переднего плана. Пиксели остаются, поэтому фон можно в любой момент восстановить кистью." } }
+      }
+    },
+    "Image" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Image" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изображение" } }
+      }
+    },
+    "Lasso" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lasso" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Лассо" } }
+      }
+    },
+    "Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слой" } }
+      }
+    },
+    "Limited to the selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Limited to the selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ограничено выделением" } }
+      }
+    },
+    "Lock Guides" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lock Guides" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заблокировать направляющие" } }
+      }
+    },
+    "Lock aspect ratio" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lock aspect ratio" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить пропорции" } }
+      }
+    },
+    "Lock original aspect ratio" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lock original aspect ratio" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить исходные пропорции" } }
+      }
+    },
+    "Mode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mode" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим" } }
+      }
+    },
+    "Preview" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпросмотр" } }
+      }
+    },
+    "Project tabs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Project tabs" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вкладки проектов" } }
+      }
+    },
+    "Rulers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rulers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Линейки" } }
+      }
+    },
+    "Sampling" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sampling" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Интерполяция" } }
+      }
+    },
+    "Select" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выделение" } }
+      }
+    },
+    "Show" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать" } }
+      }
+    },
+    "Show Controls" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Controls" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать элементы управления" } }
+      }
+    },
+    "Show Transform Controls" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Transform Controls" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать элементы трансформирования" } }
+      }
+    },
+    "Shrink the mask to drop the rim of background color around the subject, or grow it" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shrink the mask to drop the rim of background color around the subject, or grow it" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сжать маску, чтобы убрать ореол цвета фона вокруг объекта, или расширить ее" } }
+      }
+    },
+    "Snap" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Snap" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Привязка" } }
+      }
+    },
+    "Snap To" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Snap To" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Привязать к" } }
+      }
+    },
+    "Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В текстовых полях работают стандартные клавиши редактирования macOS. Для диалогов действуют указанные выше клавиши применения и отмены. В числовых полях используйте стрелки вверх/вниз, а Shift — для больших шагов. Стандартные команды macOS включают ⌘Q для выхода и ⌃⌘F для полноэкранного режима. В редакторе сочетаний клавиша Return сохраняет, а Esc отменяет запись." } }
+      }
+    },
+    "Zoom percentage (0.1–3200%). Press Return to apply." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom percentage (0.1–3200%). Press Return to apply." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштаб в процентах (0,1–3200%). Нажмите Return для применения." } }
+      }
+    },
+    "Hue/Saturation" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hue/Saturation" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цветовой тон/Насыщенность" } }
+      }
+    },
+    "Selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выделение" } }
+      }
+    },
+    "toolLabel.type" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Type (T)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текст (T)" } }
+      }
+    },
+    "toolLabel.eyedropper" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Eyedropper (I)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пипетка (I)" } }
+      }
+    },
+    "toolLabel.marquee" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Marquee (M)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прямоугольное выделение (M)" } }
+      }
+    },
+    "toolLabel.lasso" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lasso (L)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Лассо (L)" } }
+      }
+    },
+    "toolLabel.wand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Magic (W) · Tab switches Wand and Object" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Волшебная палочка (W) · Tab переключает палочку и объект" } }
+      }
+    },
+    "toolLabel.brush" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brush (B) · Eraser (E)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кисть (B) · Ластик (E)" } }
+      }
+    },
+    "toolLabel.spotHealing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spot Healing Brush (J)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Точечная восстанавливающая кисть (J)" } }
+      }
+    },
+    "toolLabel.cloneStamp" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clone Stamp (S) · Option-click sets the source" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Штамп (S) · Option-щелчок задает источник" } }
+      }
+    },
+    "toolLabel.blur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smear (R)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размытие (R)" } }
+      }
+    },
+    "toolLabel.gradient" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient (G)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Градиент (G)" } }
+      }
+    },
+    "toolLabel.shape" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shape (U) · Shift-U switches Rectangle/Ellipse" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фигура (U) · Shift-U переключает прямоугольник и эллипс" } }
+      }
+    },
+    "toolLabel.crop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Crop (C)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кадрирование (C)" } }
+      }
+    },
+    "toolLabel.move" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move / Transform (V)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещение / трансформирование (V)" } }
+      }
+    },
+    "toolLabel.hand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hand (H)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Рука (H)" } }
+      }
+    },
+    "toolLabel.zoom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom (Z)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштаб (Z)" } }
+      }
+    },
+    "toolLabel.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No tool" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет инструмента" } }
+      }
+    },
+    "status.marquee.ellipse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите эллипс · Shift добавляет · Option вычитает · повторный Shift во время перетаскивания создает круг · перетаскивание внутри перемещает · Delete очищает · ⌘D снимает выделение" } }
+      }
+    },
+    "status.marquee.rectangle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите прямоугольник · Shift добавляет · Option вычитает · повторный Shift во время перетаскивания создает квадрат · перетаскивание внутри перемещает · ⌘-перетаскивание перемещает пиксели · Delete очищает · ⌘D снимает выделение" } }
+      }
+    },
+    "status.wand.object" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click an object to select its outline · Tab for Wand · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните объект, чтобы выбрать его контур · Tab включает волшебную палочку · Shift добавляет · Option вычитает · перетаскивание внутри перемещает · ⌘-перетаскивание перемещает пиксели · Delete очищает · ⌘D снимает выделение" } }
+      }
+    },
+    "status.wand.wand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click to select similar colors · Tab for Object · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните, чтобы выбрать похожие цвета · Tab включает объект · Shift добавляет · Option вычитает · перетаскивание внутри перемещает · ⌘-перетаскивание перемещает пиксели · Delete очищает · ⌘D снимает выделение" } }
+      }
+    },
+    "status.lasso.freehand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to select · Drag inside to move · Shift add · Option subtract · Delete clears · ⌥⌫/⌘⌫ fill · ⌘D deselect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для выделения · перетаскивание внутри перемещает · Shift добавляет · Option вычитает · Delete очищает · ⌥⌫/⌘⌫ заполняет · ⌘D снимает выделение" } }
+      }
+    },
+    "status.lasso.polygonal" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click corners · Click start, double-click or Enter to close · Delete removes corner · Escape cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкайте по углам · щелкните по началу, дважды щелкните или нажмите Enter для замыкания · Delete удаляет угол · Escape отменяет" } }
+      }
+    },
+    "status.brush.erase" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to erase · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для стирания · [ ] размер · Shift-[ ] жесткость · 1–0 непрозрачность · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.brush.paint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to paint · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для рисования · [ ] размер · Shift-[ ] жесткость · 1–0 непрозрачность · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.blur.blur" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to soften · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для смягчения · [ ] размер · Shift-[ ] жесткость · 1–0 сила · Space панорамирование" } }
+      }
+    },
+    "status.blur.smudge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to smudge · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для размазывания · [ ] размер · Shift-[ ] жесткость · 1–0 сила · Space панорамирование" } }
+      }
+    },
+    "status.blur.liquify" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to push pixels · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для перемещения пикселей · [ ] размер · Shift-[ ] жесткость · 1–0 сила · Space панорамирование" } }
+      }
+    },
+    "status.cloneStamp" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Option-click to set the source · Drag to clone · [ ] size · Shift-[ ] hardness · 1–0 opacity · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Option-щелчок задает источник · перетащите для клонирования · [ ] размер · Shift-[ ] жесткость · 1–0 непрозрачность · Space панорамирование" } }
+      }
+    },
+    "status.spotHealing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag over blemishes to heal · [ ] size · Shift-[ ] hardness · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проведите по дефектам для восстановления · [ ] размер · Shift-[ ] жесткость · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.type" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите текстовую область · щелкните текст для редактирования · перетаскивайте маркеры для изменения размера · ⌘Return завершить · Escape отмена" } }
+      }
+    },
+    "status.shape.line" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to draw a shape on a new layer · Shift 45° · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите, чтобы создать фигуру на новом слое · Shift 45° · Option из центра · Shift-U или Tab для следующей фигуры · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.shape.rectangle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to draw a shape on a new layer · Shift square · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите, чтобы создать фигуру на новом слое · Shift квадрат · Option из центра · Shift-U или Tab для следующей фигуры · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.shape.ellipse" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to draw a shape on a new layer · Shift circle · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите, чтобы создать фигуру на новом слое · Shift круг · Option из центра · Shift-U или Tab для следующей фигуры · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.gradient" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для создания · перетаскивайте концы для настройки · Shift 45° · 1–0 непрозрачность · Enter применить · Escape отмена" } }
+      }
+    },
+    "status.crop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to crop · Enter apply · Escape cancel · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для кадрирования · Enter применить · Escape отмена · Space панорамирование" } }
+      }
+    },
+    "status.move" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для перемещения · маркеры изменяют размер · круг вращает · 1–0 непрозрачность слоя · Space панорамирование" } }
+      }
+    },
+    "status.hand" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag to pan · Pinch to zoom" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетащите для панорамирования · сведите пальцы для масштаба" } }
+      }
+    },
+    "status.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No tool selected · Press a tool's key to pick one · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инструмент не выбран · нажмите клавишу инструмента · Space панорамирование" } }
+      }
+    },
+    "status.zoom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click to zoom in · Option-click to zoom out · Drag right or left to zoom smoothly · Space to pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните для увеличения · Option-щелчок уменьшает · перетаскивайте вправо или влево для плавного масштаба · Space панорамирование" } }
+      }
+    },
+    "Input black" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input black" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Входной черный" } }
+      }
+    },
+    "Gamma" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gamma" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Гамма" } }
+      }
+    },
+    "Input white" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input white" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Входной белый" } }
+      }
+    },
+    "Output black" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Output black" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выходной черный" } }
+      }
+    },
+    "Output white" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Output white" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выходной белый" } }
+      }
+    },
+    "levels.sampleHint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click the original layer to set %@. Click the eyedropper again to stop." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по исходному слою, чтобы задать %@. Снова щелкните по пипетке для остановки." } }
+      }
+    },
+    "Underlying pixels · alpha-weighted histogram" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Underlying pixels · alpha-weighted histogram" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Исходные пиксели · гистограмма с учетом альфа-канала" } }
+      }
+    },
+    "Original pixels · alpha-weighted histogram" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Original pixels · alpha-weighted histogram" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Исходные пиксели · гистограмма с учетом альфа-канала" } }
+      }
+    },
+    "Original pixels · selection and alpha-weighted histogram" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Original pixels · selection and alpha-weighted histogram" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Исходные пиксели · выделение и гистограмма с учетом альфа-канала" } }
+      }
+    },
+    "levels.originalHistogram" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Original %1$@ histogram" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Гистограмма исходного канала «%1$@»" } }
+      }
+    },
+    "hueSample.Sample" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click the image to center this range on that color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по изображению, чтобы центрировать этот диапазон на данном цвете" } }
+      }
+    },
+    "hueSample.Add" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click the image to widen this range to include that color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по изображению, чтобы расширить диапазон и включить этот цвет" } }
+      }
+    },
+    "hueSample.Remove" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Click the image to narrow this range to exclude that color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Щелкните по изображению, чтобы сузить диапазон и исключить этот цвет" } }
+      }
+    },
+    "Transform Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформировать маску" } }
+      }
+    },
+    "Transform" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформирование" } }
+      }
+    },
+    "Strength" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Strength" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сила" } }
+      }
+    },
+    "Marquee" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Marquee" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прямоугольное выделение" } }
+      }
+    },
+    "Magic" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Magic" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Волшебная палочка" } }
+      }
+    },
+    "Mask background" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mask background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фон маски" } }
+      }
+    },
+    "Mask foreground" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mask foreground" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Передний план маски" } }
+      }
+    },
+    "Applying…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applying…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Применение…" } }
+      }
+    },
+    "Horizontal ruler" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Horizontal ruler" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Горизонтальная линейка" } }
+      }
+    },
+    "Vertical ruler" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Vertical ruler" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вертикальная линейка" } }
+      }
+    },
+    "Invert Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invert Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инвертировать маску" } }
+      }
+    },
+    "Invert" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invert" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инверсия" } }
+      }
+    },
+    "Transform Selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформировать выделение" } }
+      }
+    },
+    "Transform Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформировать слой" } }
+      }
+    },
+    "Duplicate Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Duplicate Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дублировать слой" } }
+      }
+    },
+    "Layer via Copy" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Layer via Copy" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слой через копирование" } }
+      }
+    },
+    "Create Clipping Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Clipping Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать обтравочную маску" } }
+      }
+    },
+    "Show Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать слой" } }
+      }
+    },
+    "Hide Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hide Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрыть слой" } }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить" } }
+      }
+    },
+    "Delete Layer Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Layer Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить маску слоя" } }
+      }
+    },
+    "Delete Layers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Layers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить слои" } }
+      }
+    },
+    "Delete Layer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Layer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить слой" } }
+      }
+    },
+    "Create a canvas or import an image." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a canvas or import an image." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создайте холст или импортируйте изображение." } }
+      }
+    },
+    "Import an image or add a blank layer." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import an image or add a blank layer." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Импортируйте изображение или добавьте пустой слой." } }
+      }
+    },
+    "Transparent canvas · sRGB" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transparent canvas · sRGB" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прозрачный холст · sRGB" } }
+      }
+    },
+    "Enter whole numbers from 1 to 30,000 pixels." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter whole numbers from 1 to 30,000 pixels." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Введите целые числа от 1 до 30 000 пикселей." } }
+      }
+    },
+    "imageSize.result" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Result: %d × %d pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Результат: %d × %d пикселей" } }
+      }
+    },
+    "imageSize.invalid" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Используйте от 1 до 30 000 пикселей по стороне, до 100 мегапикселей и от 1 до 9600 пикселей/дюйм." } }
+      }
+    },
+    "canvas.dimensions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d px" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d пикс." } }
+      }
+    },
+    "canvasSize.current" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current: %d × %d pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущий размер: %d × %d пикселей" } }
+      }
+    },
+    "canvasSize.uncompressed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ uncompressed RGBA canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ — несжатый холст RGBA" } }
+      }
+    },
+    "canvasSize.new" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New: %d × %d pixels · %@ uncompressed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый размер: %d × %d пикселей · %@ без сжатия" } }
+      }
+    },
+    "crop.dimensions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d px" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d пикс." } }
+      }
+    },
+    "jpeg.quality" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d%%" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d%%" } }
+      }
+    },
+    "jpeg.dimensions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d px · sRGB" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d × %d пикс. · sRGB" } }
+      }
+    },
+    "curves.point" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input %d · Output %d" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вход: %d · Выход: %d" } }
+      }
+    },
+    "projectTabs.close" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закрыть %@" } }
+      }
+    },
+    "selection.amountHelp" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ the selection by this many pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ выделение на указанное число пикселей" } }
+      }
+    },
+    "selection.amountInput" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a whole number from 1 to %d px." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Введите целое число от 1 до %d пикс." } }
+      }
+    },
+    "filter.chooseColor" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose the %@ color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите цвет: %@" } }
+      }
+    },
+    "filter.colorAccessibility" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет: %1$@" } }
+      }
+    },
+    "Clear the haze that leaves background showing through thin areas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear the haze that leaves background showing through thin areas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Убрать дымку, из-за которой фон виден в тонких областях" } }
+      }
+    },
+    "Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Option временно включает пипетку в инструментах рисования. Shift ограничивает фигуры/перемещение или добавляет к выделению; Option вычитает из выделения или рисует из центра. Command-перетаскивание перемещает выбранные пиксели; Command-Option-перетаскивание копирует их. Option-перетаскивание дублирует слои/группы/эффекты; Option-щелчок на границе слоя переключает обтравку. Command-щелчок по миниатюре загружает ее выделение. Control отключает привязку. Перетаскивание вправо меняет размер кисти. Жесты с модификаторами фиксированы." } }
+      }
+    },
+    "Press 1–9 for 10–90%, 0 for 100%" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press 1–9 for 10–90%, 0 for 100%" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите 1–9 для 10–90%, 0 для 100%" } }
+      }
+    },
+    "Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать рамку трансформирования и маркеры (⌘H). Когда они скрыты, перетаскивайте слой в любом месте." } }
+      }
+    },
+    "· encoded preview, fitted to window" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "· encoded preview, fitted to window" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "· закодированный предпросмотр, вписанный в окно" } }
+      }
+    },
+    "Top left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top left" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сверху слева" } }
+      }
+    },
+    "Top center" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top center" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сверху по центру" } }
+      }
+    },
+    "Top right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top right" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сверху справа" } }
+      }
+    },
+    "Middle left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Middle left" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По центру слева" } }
+      }
+    },
+    "Middle right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Middle right" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По центру справа" } }
+      }
+    },
+    "Bottom left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom left" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снизу слева" } }
+      }
+    },
+    "Bottom center" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom center" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снизу по центру" } }
+      }
+    },
+    "Bottom right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom right" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снизу справа" } }
+      }
+    },
+    "Selected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрано" } }
+      }
+    },
+    "Transparent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transparent" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прозрачный" } }
+      }
+    },
+    "Foreground" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Foreground" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Основной цвет" } }
+      }
+    },
+    "Background" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фоновый цвет" } }
+      }
+    },
+    "Custom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Другой" } }
+      }
+    },
+    "Keyboard Shortcuts" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keyboard Shortcuts" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Клавиатурные сокращения" } }
+      }
+    },
+    "Color Picker" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color Picker" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пипетка цвета" } }
+      }
+    },
+    "Background color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Background color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цвет фона" } }
+      }
+    },
+    "Gradient Map highlights" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient Map highlights" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Света карты градиента" } }
+      }
+    },
+    "Gradient Map shadows" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient Map shadows" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Тени карты градиента" } }
+      }
+    },
+    "Press keys…" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press keys…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите клавиши…" } }
+      }
+    },
+    "Press a shortcut" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press a shortcut" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите сочетание" } }
+      }
+    },
+    "Import couldn’t finish" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Import couldn’t finish" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось завершить импорт" } }
+      }
+    },
+    "Couldn’t paint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t paint" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось рисовать" } }
+      }
+    },
+    "Couldn’t crop" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t crop" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось кадрировать" } }
+      }
+    },
+    "Pan" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панорамирование" } }
+      }
+    },
+    "Zoom" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштаб" } }
+      }
+    },
+    "Spot Healing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spot Healing" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Точечное восстановление" } }
+      }
+    },
+    "Clone Stamp" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clone Stamp" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Штамп" } }
+      }
+    },
+    "Smear" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smear" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Размазывание" } }
+      }
+    },
+    "Eraser" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Eraser" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ластик" } }
+      }
+    },
+    "Brush" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brush" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Кисть" } }
+      }
+    },
     "tool.move" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Move" } },
@@ -263,6 +3329,252 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom" } },
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Масштаб" } }
+      }
+    },
+    "layer.numbered" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ %lld" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ %lld" } }
+      }
+    },
+    "Finish editing text" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Finish editing text" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Завершить редактирование текста" } }
+      }
+    },
+    "Menus" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Menus" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Меню" } }
+      }
+    },
+    "Canvas & Layers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Canvas & Layers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Холст и слои" } }
+      }
+    },
+    "Text Editing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text Editing" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Редактирование текста" } }
+      }
+    },
+    "shortcuts.byTen" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ by 10" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ на 10" } }
+      }
+    },
+    "shortcuts.opacityDigit" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opacity digit %@ (type two for exact %%)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Цифра непрозрачности %@ (введите две для точного значения %%)" } }
+      }
+    },
+    "shortcuts.nudge" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nudge %@ %lld px" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сместить %@ на %lld пкс" } }
+      }
+    },
+    "shortcuts.movePixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move selected pixels %@ %lld px" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить выделенные пиксели %@ на %lld пкс" } }
+      }
+    },
+    "shortcuts.direction.left" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "left" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "влево" } }
+      }
+    },
+    "shortcuts.direction.right" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "right" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "вправо" } }
+      }
+    },
+    "shortcuts.direction.up" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "up" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "вверх" } }
+      }
+    },
+    "shortcuts.direction.down" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "down" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "вниз" } }
+      }
+    },
+    "shortcuts.error.singleKey" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a single key with optional modifiers." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите одну клавишу с дополнительными модификаторами." } }
+      }
+    },
+    "shortcuts.error.textEditing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text-editing shortcuts need Command, Option, or Control so they do not replace normal typing." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для команд редактирования текста нужны Command, Option или Control, чтобы не заменять обычный ввод." } }
+      }
+    },
+    "shortcuts.error.reserved" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ is reserved by macOS." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ зарезервирована macOS." } }
+      }
+    },
+    "shortcuts.error.conflict" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ is assigned to both %@ and %@." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Клавиша %@ назначена одновременно для команд «%@» и «%@»." } }
+      }
+    },
+    "liveMask.message.single" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This layer supplies a live mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Этот слой является источником динамической маски" } }
+      }
+    },
+    "liveMask.message.multiple" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "These layers supply live masks" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эти слои являются источниками динамических масок" } }
+      }
+    },
+    "liveMask.info" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запекание сохраняет текущий вид маски в пикселях зависимых слоёв. «Удалить связи» открывает их пиксели. Любое решение можно отменить." } }
+      }
+    },
+    "Bake and Delete" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bake and Delete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Запечь и удалить" } }
+      }
+    },
+    "Remove Links and Delete" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Links and Delete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить связи и удалить" } }
+      }
+    },
+    "Move pixels" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move pixels" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещение пикселей" } }
+      }
+    },
+    "Rotate" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rotate" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поворот" } }
+      }
+    },
+    "Sample color" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sample color" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Образец цвета" } }
+      }
+    },
+    "Cycle shape kind" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cycle shape kind" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключить тип фигуры" } }
+      }
+    },
+    "Decrease brush hardness" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Decrease brush hardness" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уменьшить жёсткость кисти" } }
+      }
+    },
+    "Export PNG" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Export PNG" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Экспорт PNG" } }
+      }
+    },
+    "Fill with Background" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fill with Background" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заливка цветом фона" } }
+      }
+    },
+    "Inverse Selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Inverse Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инвертировать выделение" } }
+      }
+    },
+    "New Canvas" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Canvas" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый холст" } }
+      }
+    },
+    "Previous blend mode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Previous blend mode" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предыдущий режим наложения" } }
+      }
+    },
+    "Select All" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select All" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выделить всё" } }
+      }
+    },
+    "Show Grid" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Grid" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать сетку" } }
+      }
+    },
+    "Show Rulers" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show Rulers" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать линейки" } }
+      }
+    },
+    "Toggle Clipping Mask" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Toggle Clipping Mask" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключить обтравочную маску" } }
+      }
+    },
+    "Toggle Levels preview" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Toggle Levels preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переключить предпросмотр уровней" } }
+      }
+    },
+    "Transform Layer / Selection" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Transform Layer / Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Трансформировать слой или выделение" } }
+      }
+    },
+    "Zoom out" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom out" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уменьшить масштаб" } }
+      }
+    },
+    "Zoom in" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Zoom in" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Увеличить масштаб" } }
+      }
+    },
+    "Increase brush hardness" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Increase brush hardness" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Увеличить жёсткость кисти" } }
       }
     }
   },

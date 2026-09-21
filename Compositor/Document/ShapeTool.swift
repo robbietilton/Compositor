@@ -152,8 +152,8 @@ extension EditorSession {
     func nextShapeName(_ kind: ShapeKind) -> String {
         let names = Set(document?.layers.map(\.name) ?? [])
         var number = 1
-        while names.contains("\(kind.rawValue) \(number)") { number += 1 }
-        return "\(kind.rawValue) \(number)"
+        while names.contains(L10n.numbered(kind.rawValue, number: number)) || names.contains("\(kind.rawValue) \(number)") { number += 1 }
+        return L10n.numbered(kind.rawValue, number: number)
     }
 
     /// A shape layer scaled to a new size draws its shape again at that size, so a rounded corner keeps its radius

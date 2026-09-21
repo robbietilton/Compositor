@@ -47,4 +47,27 @@ struct LocalizationTests {
         #expect(L10n.text("menu.edit.undo", locale: Locale(identifier: "en")) == "Undo")
         #expect(L10n.text("unknown.localization.key", locale: Locale(identifier: "ru")) == "unknown.localization.key")
     }
+
+    @Test func enumDisplayNamesDoNotChangeSerializedValues() {
+        #expect(LayerBlendMode.normal.rawValue == "Normal")
+        #expect(LayerBlendMode.colorDodge.rawValue == "Color Dodge")
+        #expect(FilterKind.contentAwareFill.rawValue == "Content-Aware Fill")
+        #expect(AdjustmentKind.hsv.rawValue == "Hue/Saturation")
+    }
+
+    @Test func russianEnumDisplayNamesUseAdobeTerminology() {
+        let ru = Locale(identifier: "ru")
+        #expect(LayerBlendMode.normal.localizedName(locale: ru) == "Обычный")
+        #expect(LayerBlendMode.multiply.localizedName(locale: ru) == "Умножение")
+        #expect(FilterKind.contentAwareFill.localizedName(locale: ru) == "Заливка с учетом содержимого")
+        #expect(AdjustmentKind.hsv.localizedName(locale: ru) == "Цветовой тон/Насыщенность")
+    }
+
+    @Test func generatedLabelsAndSystemMessagesUseSelectedLocale() {
+        let ru = Locale(identifier: "ru")
+        #expect(L10n.numbered("Layer", number: 2, locale: ru) == "Слой 2")
+        let definition = ShortcutDefinition(title: "Nudge Left 10 px", group: "Canvas & Layers", original: ShortcutChord("←"))
+        #expect(definition.localizedTitle(locale: ru) == "Сместить влево на 10 пкс")
+        #expect(L10n.text("liveMask.message.single", locale: ru) == "Этот слой является источником динамической маски")
+    }
 }

@@ -8,7 +8,7 @@ struct CurvesControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Channel", selection: $settings.channel) {
-                ForEach(LevelsChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(LevelsChannel.allCases, id: \.self) { Text(L10n.key($0.rawValue)).tag($0) }
             }.onValueChangeCompat(of: settings.channel) { _, _ in selected = nil; dragging = nil }
             Canvas { context, size in
                 func position(_ p: CurvePoint) -> CGPoint { CGPoint(x: p.x/255*size.width, y: (1-p.y/255)*size.height) }
@@ -56,7 +56,7 @@ struct CurvesControls: View {
             Text("Click to add a point. Drag to adjust.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 if let selected, points.indices.contains(selected) {
-                    Text("Input \(Int(points[selected].x)) · Output \(Int(points[selected].y))").monospacedDigit()
+                    Text(String(format: L10n.text("curves.point"), Int(points[selected].x), Int(points[selected].y))).monospacedDigit()
                 }
                 Spacer()
                 Button("Remove point") {

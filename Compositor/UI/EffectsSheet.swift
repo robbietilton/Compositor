@@ -4,6 +4,7 @@ import SwiftUI
 struct EffectsSheet: View {
     @ObservedObject var session: EditorSession
     let kind: LayerEffectKind
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -127,8 +128,8 @@ struct EffectsSheet: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help(kind.rawValue + " color")
-        .accessibilityLabel(kind.rawValue + " color")
+        .help(kind.localizedName(locale: locale) + " " + L10n.text("Color", locale: locale).lowercased())
+        .accessibilityLabel(kind.localizedName(locale: locale) + " " + L10n.text("Color", locale: locale).lowercased())
     }
 
     private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>,

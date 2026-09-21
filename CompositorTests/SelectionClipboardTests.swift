@@ -55,7 +55,7 @@ struct SelectionClipboardTests {
         session.paste()
         #expect(session.history.undoCount == count + 1 && session.history.undoName == "Paste")
         let pasted = try #require(session.activeLayer)
-        #expect(pasted.id != source && pasted.name == "Layer 2" && session.selection == nil)
+        #expect(pasted.id != source && pasted.name == L10n.numbered("Layer", number: 2) && session.selection == nil)
         #expect(pasted.transform.origin == CGPoint(x: 40, y: 10) && pasted.size == CGSize(width: 20, height: 20))
         #expect(try await layerPixel(session, pasted.id, x: 45, y: 15) == [255, 0, 0, 255])
         #expect(try await layerPixel(session, pasted.id, x: 55, y: 15) == [0, 0, 255, 255])
