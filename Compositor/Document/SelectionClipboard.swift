@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Pixels copied from the canvas, with where they came from so Paste can put them back in place.
 struct PixelClipboard {
@@ -6,6 +8,46 @@ struct PixelClipboard {
     let origin: CGPoint
     /// The system pasteboard's change count right after writing; a mismatch means another app copied since.
     let changeCount: Int
+}
+
+/// Decodes image data exposed by other apps, including browsers that advertise only a generic `public.image` UTI.
+enum ClipboardImage {
+    static func image(from pasteboard: NSPasteboard = .general) -> CGImage? {
+        for type in imageTypes(for: pasteboard) {
+            guard let data = pasteboard.data(forType: type),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { continue }
+            return image
+        }
+        return NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    static func dimensions(_ pasteboard: NSPasteboard = .general) -> (width: Int, height: Int)? {
+        for type in imageTypes(for: pasteboard) {
+            guard let data = pasteboard.data(forType: type),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  var width = properties[kCGImagePropertyPixelWidth] as? Int,
+                  var height = properties[kCGImagePropertyPixelHeight] as? Int else { continue }
+            if let orientation = properties[kCGImagePropertyOrientation] as? Int, (5...8).contains(orientation) {
+                swap(&width, &height)
+            }
+            if CanvasDocument.validDimension(String(width)) != nil,
+               CanvasDocument.validDimension(String(height)) != nil { return (width, height) }
+        }
+        guard let image = image(from: pasteboard),
+              CanvasDocument.validDimension(String(image.width)) != nil,
+              CanvasDocument.validDimension(String(image.height)) != nil else { return nil }
+        return (image.width, image.height)
+    }
+
+    private static func imageTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
+        var result = [NSPasteboard.PasteboardType.png, .tiff]
+        for type in pasteboard.types ?? [] where !result.contains(type) {
+            if UTType(type.rawValue)?.conforms(to: .image) == true { result.append(type) }
+        }
+        return result
+    }
 }
 
 extension EditorSession {
@@ -115,7 +157,7 @@ extension EditorSession {
     var canPaste: Bool {
         guard document != nil, canEditLayers else { return false }
         if let pixelClipboard, NSPasteboard.general.changeCount == pixelClipboard.changeCount { return true }
-        return NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil)
+        return ClipboardImage.image(from: NSPasteboard.general) != nil
     }
 
     /// Cmd-V: pastes as a new layer above the active one. Pixels copied here go back exactly
@@ -125,7 +167,7 @@ extension EditorSession {
         let pasteboard = NSPasteboard.general
         if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
             addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
-        } else if let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+        } else if let external = ClipboardImage.image(from: pasteboard),
                   let image = try? Self.sRGBCopy(of: external) {
             let origin = CGPoint(x: floor((document.size.width - CGFloat(image.width)) / 2),
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))

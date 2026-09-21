@@ -29,6 +29,16 @@ import UniformTypeIdentifiers
         #expect(size.width == 64 && size.height == 32)
     }
 
+    @Test func clipboardSuggestsImagePixelsFromGenericImageUTI() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let url = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: url) }
+        pasteboard.setData(try Data(contentsOf: url), forType: NSPasteboard.PasteboardType("public.image"))
+        let size = try #require(NewCanvasSheet.clipboardDimensions(pasteboard))
+        #expect(size.width == 64 && size.height == 32)
+    }
+
     @Test func mountingCanvasGivesItKeyboardFocus() async {
         let session = EditorSession()
         session.createDocument(width: 100, height: 100)
