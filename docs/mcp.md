@@ -32,7 +32,7 @@ A complete [960 × 640 example](examples/agent-layout.html) imports as 11 layers
 
 The application retains its macOS sandbox. The private bridge binds only to `127.0.0.1` on an ephemeral port. Its random per-start token is stored in an owner-only application-support file. The bridge checks ownership and permissions, and the app authenticates every request. The rendezvous file lives in the app's sandbox container when sandboxed.
 
-The private wire is one newline-delimited authenticated JSON envelope per TCP connection. It is **not an HTTP endpoint**; MCP clients use the stdio bridge, not this private transport. Requests and responses are limited to 40 MiB. There are no automatic mutation retries.
+The private wire is one newline-delimited authenticated JSON envelope per TCP connection. It is **not an HTTP endpoint**; MCP clients use the stdio bridge, not this private transport. Requests and responses are limited to 40 MiB. There are no automatic mutation retries. The stdio bridge processes one request at a time and cannot consume client `notifications/cancelled` while waiting on that request. Disable the app connection to cancel pending work; completed edits remain undoable.
 
 ## Reuse
 

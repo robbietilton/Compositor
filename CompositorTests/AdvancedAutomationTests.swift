@@ -88,6 +88,10 @@ struct AdvancedAutomationTests {
         let workspace = ProjectWorkspace(), api = EditorAutomation(workspace: workspace)
         _ = try await api.call("new_document", arguments: ["width": 40, "height": 20])
         let session = workspace.current.session
+        _ = try await api.call("selection_operation", arguments: [
+            "action": "rectangle", "x": 2, "y": 2, "width": 8, "height": 6
+        ])
+        let originalBounds = try #require(session.selection?.path.boundingBoxOfPath)
         let history = session.history.undoCount
 
         let task = Task { @MainActor in
@@ -96,7 +100,7 @@ struct AdvancedAutomationTests {
         }
         await task.value
 
-        #expect(session.selection == nil)
+        #expect(session.selection?.path.boundingBoxOfPath == originalBounds)
         #expect(session.history.undoCount == history)
         #expect(!session.isProjectBusy)
     }
