@@ -22,3 +22,7 @@ xcuserdata/
 # Claude Code settings personal to this machine
 .claude/settings.local.json
 BUILD_PLAN.md
+
+# Python bridge bytecode
+__pycache__/
+*.py[cod]

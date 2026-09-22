@@ -157,12 +157,14 @@ extension EditorSession {
         guard stroke.committedTransform.isValid else { throw ProjectError.tooLarge }
         let input = stroke.commitInput()
         let result = try await BrushCommit.shared.render(input)
+        try Task.checkCancellation()
         let asset = result.asset
         let transform = stroke.transform(for: result.pixelBounds.offsetBy(dx: stroke.committedBounds.minX, dy: stroke.committedBounds.minY))
         guard transform.isValid else { throw ProjectError.tooLarge }
         var mask = stroke.layer.mask
         if !stroke.isMask, let originalMask = mask, originalMask.placement == nil {
             mask = originalMask.replacing(try await BrushCommit.shared.expandMask(originalMask.asset, for: input, croppedTo: result.pixelBounds))
+            try Task.checkCancellation()
         }
         // The raster was built from this layer's pixels, transform, and mask; never
         // write it over content that changed underneath it.

@@ -1,12 +1,12 @@
 import AppKit
 import CoreImage
 
-nonisolated enum CameraRawUprightMode: String, CaseIterable, Sendable {
+nonisolated enum CameraRawUprightMode: String, CaseIterable, Sendable, Codable {
     case off = "Off"
     case guided = "Guided"
 }
 
-nonisolated enum CameraRawProjection: String, CaseIterable, Sendable {
+nonisolated enum CameraRawProjection: String, CaseIterable, Sendable, Codable {
     case perspective = "Perspective"
     case rectilinear = "Rectilinear"
 }
@@ -22,7 +22,7 @@ nonisolated struct CameraRawGeometryGuide: Equatable, Sendable, Codable {
     var end: CGPoint { CGPoint(x: endX, y: endY) }
 }
 
-nonisolated struct CameraRawGeometrySettings: Equatable, Sendable {
+nonisolated struct CameraRawGeometrySettings: Equatable, Sendable, Codable {
     var upright: CameraRawUprightMode = .off
     var projection: CameraRawProjection = .perspective
     var vertical: Double = 0
@@ -172,7 +172,7 @@ nonisolated struct CameraRawGeometrySettings: Equatable, Sendable {
     }
 }
 
-nonisolated enum CameraRawProcessVersion: String, CaseIterable, Sendable {
+nonisolated enum CameraRawProcessVersion: String, CaseIterable, Sendable, Codable {
     case version1 = "Version 1"
     case version2 = "Version 2"
     case version3 = "Version 3"
@@ -209,7 +209,7 @@ nonisolated enum CameraRawProcessVersion: String, CaseIterable, Sendable {
     }
 }
 
-nonisolated struct CameraRawCalibrationSettings: Equatable, Sendable {
+nonisolated struct CameraRawCalibrationSettings: Equatable, Sendable, Codable {
     var process: CameraRawProcessVersion = .version6
     var shadowTint: Double = 0
     var redHue: Double = 0

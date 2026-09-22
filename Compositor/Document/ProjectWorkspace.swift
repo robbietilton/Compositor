@@ -36,9 +36,9 @@ final class ProjectWorkspace {
         first.controller.workspace = self
     }
     @discardableResult
-    func addTab(reuseEmpty: Bool = true) -> ProjectTab {
+    func addTab(reuseEmpty: Bool = true, name: String? = nil) -> ProjectTab {
         if reuseEmpty, tabs.count == 1, current.session.document == nil { return current }
-        let tab = ProjectTab(name: "Untitled \(nextNumber)")
+        let tab = ProjectTab(name: name ?? "Untitled \(nextNumber)")
         nextNumber += 1
         tab.controller.workspace = self; tab.controller.window = window
         tabs.append(tab); selectedID = tab.id

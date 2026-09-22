@@ -101,11 +101,12 @@ extension EditorSession {
               let sample = selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else { return }
         let job = WandJob(image: sample, point: point, settings: wandSettings)
         isProjectBusy = true
+        defer { isProjectBusy = false }
         let result = await Task.detached(priority: .userInitiated) { () -> WandResult in
             do { return WandResult(path: try MagicWand.select(in: job.image, at: job.point, settings: job.settings), error: nil) }
             catch { return WandResult(path: nil, error: error) }
         }.value
-        isProjectBusy = false
+        guard !Task.isCancelled else { return }
         if let error = result.error { brushError = error.localizedDescription; return }
         guard self.document?.id == document.id else { return }
         guard let path = result.path else {

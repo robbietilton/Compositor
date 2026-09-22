@@ -278,11 +278,12 @@ extension EditorSession {
                                      edgeOffset: min(10, max(-10, objectSelectionSettings.edgeOffset)),
                                      smoothEdges: selectionAntialiased)
         isProjectBusy = true
+        defer { isProjectBusy = false }
         let result = await Task.detached(priority: .userInitiated) { () -> ObjectSelectionResult in
             do { return ObjectSelectionResult(path: try ObjectSelection.select(in: job.image, at: job.point, edgeOffset: job.edgeOffset, smoothEdges: job.smoothEdges), error: nil) }
             catch { return ObjectSelectionResult(path: nil, error: error) }
         }.value
-        isProjectBusy = false
+        guard !Task.isCancelled else { return }
         if let error = result.error { brushError = error.localizedDescription; return }
         guard self.document?.id == document.id else { return }
         guard let path = result.path else {

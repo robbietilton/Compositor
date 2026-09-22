@@ -81,3 +81,7 @@ It needs, all kept outside this repository:
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Agent connection (MCP)
+
+This branch integrates an opt-in MCP server with the live editor. Agents can read and edit native documents, composite layers and masks, and import HTML/CSS into new editable tabs. See [setup, tools, examples, and limits](docs/mcp.md).

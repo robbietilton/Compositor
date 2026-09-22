@@ -181,7 +181,8 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
 }
 
 extension EditorSession {
-    func addAdjustment(_ kind: AdjustmentKind) {
+    func addAdjustment(_ kind: AdjustmentKind, value: LayerAdjustment? = nil) {
+        if let value, !value.isValid || value.kind != kind { return }
         guard canEditLayers, let document, document.layers.count < 10_000 else { return }
         var layer = ImageLayer(name: kind.rawValue, blankSize: document.size)
         var adjustment = LayerAdjustment(kind: kind)
@@ -192,7 +193,7 @@ extension EditorSession {
         }
         if kind == .grain { adjustment.grain.seed = .random(in: .min ... .max) }
         if kind == .addNoise { adjustment.resolvedNoiseSeed = .random(in: .min ... .max) }
-        layer.adjustment = adjustment
+        layer.adjustment = value ?? adjustment
         layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
         let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
         beginEdit("New \(kind.rawValue) Adjustment")

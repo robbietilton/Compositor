@@ -83,6 +83,16 @@ struct CompositorApp: App {
                     CommandGroup(after: .appInfo) {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates(nil) }
                     }
+                    CommandGroup(after: .appSettings) {
+                        Menu("Agent Connection") {
+                            Toggle("Enable MCP", isOn: Binding(get: { applicationDelegate.automation.isEnabled }, set: { enabled in
+                                if enabled { applicationDelegate.automation.start() } else { applicationDelegate.automation.stop() }
+                            }))
+                            Text(applicationDelegate.automation.status)
+                            Button("Copy MCP Configuration") { applicationDelegate.automation.copyConfiguration() }
+                                .disabled(!applicationDelegate.automation.isEnabled)
+                        }
+                    }
                     CommandGroup(after: .toolbar) {
                         Button("Fit Canvas") { session.fit() }.configuredKeyboardShortcut("0").disabled(session.document == nil)
                         Button("Actual Pixels") { session.zoom(to: 1) }.configuredKeyboardShortcut("1").disabled(session.document == nil)

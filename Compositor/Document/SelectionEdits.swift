@@ -108,6 +108,7 @@ extension EditorSession {
             let job = PixelInvert.Job(image: image, isMask: mask,
                 pixelToDocument: BrushRaster.pixelToDocument(mask ? layer.maskTransform : layer.transform, width: image.width, height: image.height), selection: clip)
             let result = try await Task.detached(priority: .userInitiated) { Box(try PixelInvert.run(job)) }.value.image
+            guard !Task.isCancelled else { return }
             let asset = mask ? try LayerMask.asset(from: result)
                              : ImportedImage(image: result, thumbnail: try PixelInvert.thumbnail(of: result), name: layer.name)
             // Only write over the layer the invert was computed from.

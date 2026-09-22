@@ -204,6 +204,7 @@ extension EditorSession {
         guard let trimmedSnapshot = try await ImageTrim.trim(snapshot, options: options) else {
             return false
         }
+        try Task.checkCancellation()
         applyDocumentSize(trimmedSnapshot, actionName: "Trim")
         return true
     }

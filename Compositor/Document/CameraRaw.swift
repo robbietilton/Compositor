@@ -2,13 +2,13 @@ import AppKit
 
 /// White balance on an already-rendered layer. Raw lighting presets are absent: temperature and tint
 /// are relative offsets, not kelvin.
-nonisolated enum CameraRawWhiteBalance: String, CaseIterable, Sendable {
+nonisolated enum CameraRawWhiteBalance: String, CaseIterable, Sendable, Codable {
     case custom = "Custom"
     case auto = "Auto"
 }
 
 /// Glow's three looks. Warmth tints Diffusion and Bloom from cool to warm; Halation's fringe stays red.
-nonisolated enum CameraRawGlowStyle: String, CaseIterable, Sendable {
+nonisolated enum CameraRawGlowStyle: String, CaseIterable, Sendable, Codable {
     case diffusion = "Diffusion"
     case bloom = "Bloom"
     case halation = "Halation"
@@ -22,7 +22,7 @@ nonisolated enum CameraRawGlowStyle: String, CaseIterable, Sendable {
 }
 
 /// Post-crop vignette. Highlight Priority is the style whose Highlights slider protects bright pixels.
-nonisolated enum CameraRawVignetteStyle: String, CaseIterable, Sendable {
+nonisolated enum CameraRawVignetteStyle: String, CaseIterable, Sendable, Codable {
     case highlightPriority = "Highlight Priority"
     case colorPriority = "Color Priority"
     case paintOverlay = "Paint Overlay"
@@ -44,7 +44,7 @@ nonisolated enum CameraRawClipping: Int32, Sendable {
 }
 
 /// Camera Raw Filter settings. Defaults leave the image unchanged.
-nonisolated struct CameraRawSettings: Equatable, Sendable {
+nonisolated struct CameraRawSettings: Equatable, Sendable, Codable {
     static let exposureRange: ClosedRange<Double> = -5...5
     static let toneRange: ClosedRange<Double> = -100...100
     static let unitRange: ClosedRange<Double> = 0...100

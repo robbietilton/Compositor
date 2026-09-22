@@ -56,7 +56,7 @@ struct FloatingPanelTests {
         let session = try sessionWithPixels()
         session.addAdjustment(kind)
         await session.beginAdjustmentEditing(try #require(session.adjustmentEditingID))
-        let controller = FloatingPanelController(name: "testDynamicAdjustmentPanel")
+        let controller = FloatingPanelController(name: "testDynamicAdjustmentPanel-\(kind.rawValue)")
         controller.onClose = { session.finishAdjustmentEditing(commit: false) }
         switch kind {
         case .levels: controller.show(title: "Levels", content: LevelsSheet(session: session))

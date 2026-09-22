@@ -139,7 +139,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// neither main nor key is set while the app is in the background — so fall back to the
     /// frontmost ordinary window rather than centring the panel somewhere unrelated.
     private func documentWindow() -> NSWindow? {
-        if let candidate = NSApp.mainWindow ?? NSApp.keyWindow, candidate !== panel { return candidate }
+        if let candidate = NSApp.mainWindow, candidate !== panel, candidate.isVisible, !(candidate is NSPanel) { return candidate }
+        if let candidate = NSApp.keyWindow, candidate !== panel, candidate.isVisible, !(candidate is NSPanel) { return candidate }
         return NSApp.windows.first { $0 !== panel && $0.isVisible && !($0 is NSPanel) }
     }
 

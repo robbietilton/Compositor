@@ -478,7 +478,7 @@ extension EditorSession {
         guard let edit = filterEdit, !edit.committing else { return }
         if edit.kind.isAutomatic {
             await edit.previewTask?.value
-            guard filterEdit === edit, !edit.committing, edit.preparedPreview != nil, edit.previewError == nil else { return }
+            guard !Task.isCancelled, filterEdit === edit, !edit.committing, edit.preparedPreview != nil, edit.previewError == nil else { return }
             // Remove Background masks from the full-size image, so a preview made at preview size is fine to discard.
         }
         // A hidden Camera Raw group is absent from the layer. Remember that rendered grade, including
@@ -515,6 +515,7 @@ extension EditorSession {
                 }
                 return (ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: job.kind.rawValue), placed)
             }.value
+            guard !Task.isCancelled else { return }
             let asset = made.asset
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index], current.asset?.image === edit.original.image,
@@ -562,6 +563,7 @@ extension EditorSession {
                 }
                 return mask
             }.value
+            guard !Task.isCancelled else { return }
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let layer = document?.layers[index], layer.asset?.image === edit.original.image,
                   layer.transform == edit.transform else { return }
