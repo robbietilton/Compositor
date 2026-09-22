@@ -57,7 +57,7 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 
 ## Requirements
 
-- macOS 26
+- macOS 26.5 or later (the deployment target; the appcast advertises the same `minimumSystemVersion`)
 - Xcode 26 (to build from source)
 
 ## Building
