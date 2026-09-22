@@ -145,6 +145,10 @@ final class ShortcutSettings {
         guard let definition = ShortcutDefinition.all.first(where: { $0.isMenu && $0.original == original }) else { return original }
         return chord(definition)
     }
+    func menuTitle(for event: NSEvent) -> String? {
+        let input = ShortcutChord(event)
+        return ShortcutDefinition.all.first(where: { $0.isMenu && chord($0) == input })?.title
+    }
     func native(_ key: KeyEquivalent, modifiers: EventModifiers = []) -> ShortcutChord {
         let bits = (modifiers.contains(.command) ? 1 : 0) | (modifiers.contains(.option) ? 2 : 0)
             | (modifiers.contains(.control) ? 4 : 0) | (modifiers.contains(.shift) ? 8 : 0)

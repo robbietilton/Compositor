@@ -78,6 +78,7 @@ final class CanvasView: NSView {
     private var antsTimer: Timer?
     private var modifierMonitor: Any?
     private var keyMonitor: Any?
+    private let commandRouter: EditorCommandRouter
     /// Document point where a selection-outline drag began.
     private var selectionDragStart: CGPoint?
     /// Document point where a Cmd-drag of the selected pixels began.
@@ -557,6 +558,7 @@ final class CanvasView: NSView {
 
     init(session: EditorSession) {
         self.session = session
+        commandRouter = EditorCommandRouter(session: session)
         transformOverlay = TransformOverlay(session: session)
         super.init(frame: .zero)
         session.refreshCanvasPreview = { [weak self] in
@@ -634,13 +636,16 @@ final class CanvasView: NSView {
             return event
         }
         // Window-wide keys that work wherever focus sits — the canvas, the Layers panel, a header
-        // control, the tool rail — except while typing in a text field.
+        // control, the tool rail — except while typing in a text field. An image paste on the empty
+        // welcome canvas is the one intentional exception, so Cmd-V can create a canvas from a browser image.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let originalEvent = event
             guard let event = ShortcutSettings.shared.canvasEvent(event) else { return originalEvent }
-            guard let self, let window = self.window, event.windowNumber == window.windowNumber, !(window.firstResponder is NSText) else {
+            guard let self, let window = self.window, event.windowNumber == window.windowNumber else {
                 return originalEvent
             }
+            if self.commandRouter.handle(event, firstResponder: window.firstResponder) { return nil }
+            guard !(window.firstResponder is NSText) else { return originalEvent }
             // Zoom shortcuts are window-wide so they also work with focus in the Layers panel or a toolbar control.
             // Handle keyDown here instead of waiting for SwiftUI's menu key equivalent on keyUp.
             if self.handleKeyboardZoom(event) { return nil }
@@ -1697,6 +1702,7 @@ final class CanvasView: NSView {
     override func keyDown(with event: NSEvent) {
         let physicalKey = event.keyCode
         guard let event = ShortcutSettings.shared.canvasEvent(event) else { return }
+        if commandRouter.handle(event) { return }
         if handleKeyboardZoom(event) { return }
         if event.keyCode == 53, textBoxAnchor != nil { textBoxAnchor = nil; textBoxRect = nil; needsDisplay = true; return }
         if event.keyCode == 53, session.textDraft != nil { session.cancelText(); return }
