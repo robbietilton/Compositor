@@ -5,6 +5,7 @@ import Observation
 /// Filters from the Filter menu. Each runs on the active image layer, inside the selection if
 /// there is one, with a live preview and one undo step on OK.
 nonisolated enum FilterKind: String, CaseIterable, Sendable {
+    case renderFinish = "Darkroom"
     case gaussianBlur = "Gaussian Blur"
     case motionBlur = "Motion Blur"
     case addNoise = "Add Noise"
@@ -55,6 +56,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var grain = GrainSettings()
     var blackWhite = BlackWhiteSettings()
     var colorBalance = ColorBalanceSettings()
+    var renderFinish = RenderFinishSettings()
     /// Remove Background: Basic is the quick subject mask; Advanced refines it (see the three settings below).
     var backgroundQuality: BackgroundQuality = .basic
     /// Remove Background: how far the mask is pulled onto the image's own edges (0 off, in layer pixels).
@@ -79,6 +81,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.exposure = exposure.normalized
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
+        result.renderFinish = renderFinish.normalized
         return result
     }
 }
@@ -93,6 +96,10 @@ nonisolated struct FilterJob: @unchecked Sendable {
     let mapping: CGAffineTransform
     /// Add Noise's random pattern: the same seed gives the same grain.
     var seed: UInt32 = 0
+    /// Render Finish on a crop of the layer (the zoomed-in preview): where the crop lies in the whole layer.
+    var finishRegion: FinishRegion? = nil
+    /// Render Finish previews: each effect's last output, reused while only later effects change.
+    var finishCache: FinishStageCache? = nil
 }
 
 nonisolated enum PixelFilter {
@@ -134,6 +141,9 @@ nonisolated enum PixelFilter {
         let edges = CIImage(cgImage: job.image)
         let image: CGImage
         switch job.kind {
+        case .renderFinish:
+            image = try settings.renderFinish.apply(job.image, scale: job.scale, region: job.finishRegion,
+                                                    cache: job.finishCache, seed: job.seed)
         case .curves: image = try settings.curves.apply(job.image)
         case .exposure: image = try settings.exposure.apply(job.image)
         case .gradientMap: image = try settings.gradientMap.apply(job.image)
@@ -199,6 +209,19 @@ final class FilterEdit {
     var grownMargin: CGFloat = 0
     var settings: FilterSettings
     var preview = true
+    var comparisonMode: FinishComparisonMode = .split
+    var showingOriginal = false
+    /// nil = manual zoom, false = Fit, true = Fill.
+    var comparisonFill: Bool? = false
+    var splitPosition: Double = 0.5
+    /// Render Finish on the merged visible canvas: the document's layers when it began, so Apply can tell they are
+    /// unchanged. The edit's layer is then a stand-in holding the composite, not a layer of the document.
+    var mergedLayers: [ImageLayer]? = nil
+    /// Render Finish zoomed in: the part on screen at full resolution, and the request being rendered.
+    @ObservationIgnored var finishDetail: FinishDetail?
+    @ObservationIgnored var finishDetailPending: FinishDetail.Request?
+    @ObservationIgnored var finishDetailTask: Task<Void, Never>?
+    let finishStages = FinishStageCache()
     var committing = false
     var previewError: String?
     var preparing = false
@@ -300,7 +323,7 @@ final class FilterEdit {
     func previewImage(for id: UUID) -> CGImage? { preview && id == layerID ? preparedPreview : nil }
     var previewJob: FilterJob {
         FilterJob(kind: kind, image: previewSource, settings: settings, scale: previewScale, selection: selection,
-                  mapping: previewMapping, seed: seed)
+                  mapping: previewMapping, seed: seed, finishCache: kind == .renderFinish ? finishStages : nil)
     }
 }
 
@@ -346,6 +369,9 @@ extension EditorSession {
         if edit.kind.isAutomatic, edit.preparedPreview != nil, edit.preparedSettings == edit.settings { brushRevision += 1; return }
         guard preview else {
             edit.pending = nil; edit.preparedPreview = nil; brushRevision += 1
+            edit.finishDetailTask?.cancel()
+            edit.finishDetailTask = nil
+            edit.finishDetailPending = nil
             return
         }
         edit.pending = edit.previewJob
@@ -379,6 +405,8 @@ extension EditorSession {
         if finishAdjustmentEditing(commit: false) { return }
         guard let edit = filterEdit, !edit.committing else { return }
         edit.previewTask?.cancel()
+        edit.finishDetailTask?.cancel()
+        edit.finishDetailPending = nil
         filterEdit = nil
         brushRevision += 1
     }
@@ -394,10 +422,17 @@ extension EditorSession {
         }
         // No distortion to remove: close as Cancel does, without an undo step.
         if (edit.kind == .lensCorrection && edit.settings.distortion == 0)
+            || (edit.kind == .renderFinish && edit.settings.renderFinish.isIdentity)
             || (edit.kind == .exposure && edit.settings.exposure == ExposureSettings())
             || (edit.kind == .grain && edit.settings.grain.amount == 0) { cancelFilter(); return }
+        if edit.kind == .renderFinish, (document?.layers.count ?? 0) >= 10_000 {
+            edit.previewError = "The document has reached its 10,000-layer limit."
+            return
+        }
         edit.committing = true
         edit.previewTask?.cancel()
+        edit.finishDetailTask?.cancel()
+        edit.finishDetailPending = nil
         filterSettings = edit.settings
         isProjectBusy = true
         // The preview stays up until the result is on the layer, so the canvas never flashes the original.
@@ -411,17 +446,20 @@ extension EditorSession {
         do {
             let grown = edit.grownTransform
             let spreads = edit.kind == .gaussianBlur || edit.kind == .motionBlur
+            // A blur is cut back to what it spread over; a merged Render Finish to what the canvas holds.
+            let trimTo = spreads ? grown : edit.mergedLayers != nil ? edit.transform : nil
             let made = try await Task.detached(priority: .userInitiated) { () -> (asset: ImportedImage, transform: LayerTransform?) in
                 var image = try cached ?? PixelFilter.run(job)
                 var placed = grown
-                if spreads, let grown {
-                    let trimmed = try PixelFilter.trimmed(image, placed: grown)
+                if let trimTo {
+                    let trimmed = try PixelFilter.trimmed(image, placed: trimTo)
                     image = trimmed.image
                     placed = trimmed.transform
                 }
                 return (ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: job.kind.rawValue), placed)
             }.value
             let asset = made.asset
+            if edit.kind == .renderFinish { try insertRenderFinish(edit, asset: asset, transform: made.transform ?? edit.transform); return }
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index], current.asset?.image === edit.original.image,
                   current.transform == edit.transform else { return }

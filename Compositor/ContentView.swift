@@ -111,9 +111,18 @@ struct ContentView: View {
         }
     }
 
+    /// Render Finish replaces the editor with its own workspace (see RenderFinishWorkspace).
+    @ViewBuilder private var editorOrFinish: some View {
+        if session.filterEdit?.kind == .renderFinish {
+            RenderFinishWorkspace(session: session)
+        } else {
+            editorStack
+        }
+    }
+
     // Split again for 1.1: the chain outgrew the type checker once more.
     @ViewBuilder private var editorChrome: some View {
-        editorStack
+        editorOrFinish
         .background(Color(white: 0.14))
         .background {
             if let applicationDelegate, applicationDelegate.projects.workspace == nil {
@@ -186,6 +195,7 @@ struct ContentView: View {
                 }.help("Zoom out (⌘−)").disabled(session.document == nil)
             }
         }
+        .toolbarVisibility(session.filterEdit?.kind == .renderFinish ? .hidden : .automatic, for: .windowToolbar)
     }
 
     var body: some View {
@@ -226,7 +236,7 @@ struct ContentView: View {
             } else { selectionAmountPanel.close() }
         }
         .onChange(of: session.filterEdit == nil) { _, closed in
-            if closed { filterPanel.close() }
+            if closed || session.filterEdit?.kind == .renderFinish { filterPanel.close() }
             else {
                 filterPanel.onClose = { session.cancelFilter() }
                 filterPanel.show(title: session.filterEdit?.kind.rawValue ?? "Filter", content: FilterSheet(session: session))

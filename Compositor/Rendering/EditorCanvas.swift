@@ -21,6 +21,99 @@ final class CanvasView: NSView {
     var textBoxAnchor: CGPoint?
     var textBoxRect: CGRect?
     private var lastFocusRequest = 0
+    private var drawingOriginalFilter = false
+    private let finishEffectsPreviews = EffectsPreviewCache()
+    private var draggingFilterDivider = false
+    /// Render Finish: the part of the layer on screen, in its pixels, while zoomed in past the preview's resolution.
+    private var finishDetailNeed: CGRect?
+
+    private var filterSplitRect: CGRect? {
+        guard let edit = session.filterEdit, edit.kind == .renderFinish,
+              edit.preview, edit.comparisonMode == .split, !edit.showingOriginal, !edit.committing,
+              let document = session.document else { return nil }
+        let origin = session.viewport.viewPoint(from: .zero, documentSize: document.size)
+        let rect = CGRect(origin: origin, size: CGSize(width: document.size.width * session.viewport.pointsPerPixel,
+                                                      height: document.size.height * session.viewport.pointsPerPixel))
+            .intersection(bounds)
+        return rect.isNull || rect.isEmpty ? nil : rect
+    }
+
+    private func hitsFilterDivider(_ point: CGPoint) -> Bool {
+        guard let rect = filterSplitRect, let edit = session.filterEdit else { return false }
+        return abs(point.x - (rect.minX + rect.width * edit.splitPosition)) <= 12
+            && point.y >= rect.minY && point.y <= rect.maxY
+    }
+
+    private func moveFilterDivider(to point: CGPoint) {
+        guard let rect = filterSplitRect else { draggingFilterDivider = false; return }
+        session.filterEdit?.splitPosition = min(1, max(0, (point.x - rect.minX) / rect.width))
+        needsDisplay = true
+        window?.invalidateCursorRects(for: self)
+    }
+
+    private func filterPreviewImage(for id: UUID) -> CGImage? {
+        (drawingOriginalFilter || session.filterEdit?.showingOriginal == true) ? nil : session.filterEdit?.previewImage(for: id)
+    }
+
+    /// The layer's on-screen part in its own pixels, when the view shows it more sharply than the preview has pixels for.
+    private func finishDetailArea(_ edit: FilterEdit, document: CanvasDocument) -> CGRect? {
+        guard edit.preview, !edit.showingOriginal, !edit.committing, edit.previewScale < 1 else { return nil }
+        // Layer effects currently draw from the reduced preview, so a detail render would be discarded.
+        if edit.mergedLayers == nil, document.layers.first(where: { $0.id == edit.layerID })?.effects?.visible.isEmpty == false {
+            return nil
+        }
+        let width = CGFloat(edit.original.image.width), height = CGFloat(edit.original.image.height)
+        // Screen pixels per layer pixel, against the preview's pixels per layer pixel.
+        let layerScale = max(edit.transform.size.width / width, edit.transform.size.height / height)
+        guard session.viewport.zoom * layerScale > edit.previewScale * 1.05 else { return nil }
+        var view = bounds
+        if edit.comparisonMode == .sideBySide {
+            // Each pane shows the part of the document that would sit in the middle of the whole view.
+            let pane = FinishComparisonGeometry.panes(in: bounds)[0]
+            view = CGRect(x: bounds.midX - pane.width / 2, y: pane.minY, width: pane.width, height: pane.height)
+        }
+        let toPixels = edit.mapping.inverted()
+        let corners = [CGPoint(x: view.minX, y: view.minY), CGPoint(x: view.maxX, y: view.minY),
+                       CGPoint(x: view.minX, y: view.maxY), CGPoint(x: view.maxX, y: view.maxY)]
+            .map { session.viewport.documentPoint(from: $0, documentSize: document.size).applying(toPixels) }
+        guard let minX = corners.map(\.x).min(), let maxX = corners.map(\.x).max(),
+              let minY = corners.map(\.y).min(), let maxY = corners.map(\.y).max() else { return nil }
+        let area = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            .intersection(CGRect(x: 0, y: 0, width: width, height: height)).integral
+        return area.isNull || area.isEmpty ? nil : area
+    }
+
+    /// The full-size render of the part on screen, when it is current and covers all of it.
+    private func finishDetail(for id: UUID) -> FinishDetail? {
+        guard let edit = session.filterEdit, edit.kind == .renderFinish, edit.layerID == id, let need = finishDetailNeed,
+              let detail = edit.finishDetail, detail.request.settings == edit.settings,
+              detail.request.valid.contains(need) else { return nil }
+        return detail
+    }
+
+    private func drawFilterDivider(in context: CGContext) {
+        guard let rect = filterSplitRect, let edit = session.filterEdit else { return }
+        let x = rect.minX + rect.width * edit.splitPosition
+        context.saveGState()
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+        context.setLineWidth(3)
+        context.move(to: CGPoint(x: x, y: rect.minY)); context.addLine(to: CGPoint(x: x, y: rect.maxY))
+        context.strokePath()
+        context.setStrokeColor(NSColor.white.cgColor); context.setLineWidth(1)
+        context.move(to: CGPoint(x: x, y: rect.minY)); context.addLine(to: CGPoint(x: x, y: rect.maxY))
+        context.strokePath()
+        let handle = CGRect(x: x - 15, y: rect.midY - 15, width: 30, height: 30)
+        context.setFillColor(NSColor(white: 0.12, alpha: 0.95).cgColor)
+        context.fillEllipse(in: handle); context.strokeEllipse(in: handle)
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+                                                        .foregroundColor: NSColor.white,
+                                                        .backgroundColor: NSColor.black.withAlphaComponent(0.6)]
+        ("↔" as NSString).draw(at: CGPoint(x: x - 7, y: rect.midY - 8), withAttributes: attributes)
+        if x - rect.minX > 70 { (" BEFORE " as NSString).draw(at: CGPoint(x: rect.minX + 10, y: rect.minY + 10), withAttributes: attributes) }
+        if rect.maxX - x > 65 { (" AFTER " as NSString).draw(at: CGPoint(x: rect.maxX - 65, y: rect.minY + 10), withAttributes: attributes) }
+        context.restoreGState()
+    }
+
     func consumeFocusRequest(_ request: Int) {
         guard request != lastFocusRequest else { return }
         lastFocusRequest = request
@@ -542,6 +635,7 @@ final class CanvasView: NSView {
         // Observe selection only for the lightweight handles overlay.
         _ = session.activeLayerID
         _ = session.cropRect
+        transformOverlay.isHidden = session.filterEdit?.kind == .renderFinish
         transformOverlay.needsDisplay = true
         redrawRulers()
         return changed
@@ -697,6 +791,9 @@ final class CanvasView: NSView {
                     self.session.viewport.backingScale != scale else { return }
             self.session.viewport.resize(to: self.bounds.size, backingScale: scale,
                                          documentSize: self.session.document?.size)
+            if let fill = self.session.filterEdit?.comparisonFill, self.session.filterEdit?.kind == .renderFinish {
+                self.session.fitFinishComparison(fill: fill)
+            }
             self.needsDisplay = true
         }
     }
@@ -707,6 +804,17 @@ final class CanvasView: NSView {
         dirtyRect.fill()
         guard let document = session.document,
               let context = NSGraphicsContext.current?.cgContext else { return }
+        if let edit = session.filterEdit, edit.kind == .renderFinish {
+            finishDetailNeed = finishDetailArea(edit, document: document)
+            session.requestFinishDetail(finishDetailNeed) { [weak self] in self?.needsDisplay = true }
+        } else {
+            finishDetailNeed = nil
+        }
+        if let edit = session.filterEdit, edit.kind == .renderFinish,
+           edit.comparisonMode == .sideBySide, !edit.committing {
+            drawFinishSideBySide(document, dirtyRect: dirtyRect, in: context)
+            return
+        }
         let pixels = renderBounds ?? CGRect(origin: .zero, size: document.size)
         let rect = CGRect(origin: session.viewport.viewPoint(from: pixels.origin, documentSize: document.size),
                           size: CGSize(width: pixels.width * session.viewport.pointsPerPixel,
@@ -738,15 +846,31 @@ final class CanvasView: NSView {
                 }
             }
         }
-        if session.viewport.zoom >= Self.crispZoom, !visible.isNull, !visible.isEmpty {
-            drawDocumentPixels(covering: visible, clippedTo: pixels, document: document, in: context)
+        func drawComparisonSide(original: Bool, clip: CGRect?) {
+            let sideVisible = clip.map { visible.intersection($0) } ?? visible
+            guard !sideVisible.isNull, !sideVisible.isEmpty else { return }
+            context.saveGState()
+            if let clip { context.clip(to: clip) }
+            drawingOriginalFilter = original
+            if session.viewport.zoom >= Self.crispZoom, !visible.isNull, !visible.isEmpty {
+                drawDocumentPixels(covering: sideVisible, clippedTo: pixels, document: document, in: context)
+            } else {
+                // Draw native-resolution assets into the same document/view mapping as navigation.
+                // The AppKit view is flipped; flip each image locally so its top stays at the top.
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+                drawLayers(document, scale: session.viewport.pointsPerPixel,
+                           center: { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }, in: context)
+                context.endTransparencyLayer()
+            }
+            drawingOriginalFilter = false
+            context.restoreGState()
+        }
+        if let split = filterSplitRect, let edit = session.filterEdit {
+            let x = split.minX + split.width * edit.splitPosition
+            drawComparisonSide(original: true, clip: CGRect(x: split.minX, y: split.minY, width: x - split.minX, height: split.height))
+            drawComparisonSide(original: false, clip: CGRect(x: x, y: split.minY, width: split.maxX - x, height: split.height))
         } else {
-            // Draw native-resolution assets into the same document/view mapping as navigation.
-            // The AppKit view is flipped; flip each image locally so its top stays at the top.
-            context.beginTransparencyLayer(auxiliaryInfo: nil)
-            drawLayers(document, scale: session.viewport.pointsPerPixel,
-                       center: { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }, in: context)
-            context.endTransparencyLayer()
+            drawComparisonSide(original: false, clip: nil)
         }
         if session.showsPixelGrid, session.viewport.zoom >= Self.pixelGridZoom, !visible.isNull, !visible.isEmpty {
             drawPixelGrid(in: visible, document: document, context: context)
@@ -755,6 +879,53 @@ final class CanvasView: NSView {
         context.setStrokeColor(NSColor.white.withAlphaComponent(0.13).cgColor)
         context.setLineWidth(1 / session.viewport.backingScale)
         context.stroke(rect)
+        drawFilterDivider(in: context)
+    }
+
+    /// Two synchronized views of the same document. Translate the complete compositor, so masks,
+    /// adjustment layers and blend modes behave exactly as they do in the normal canvas.
+    private func drawFinishSideBySide(_ document: CanvasDocument, dirtyRect: CGRect, in context: CGContext) {
+        let pixels = CGRect(origin: .zero, size: document.size)
+        let imageRect = session.viewport.documentRect(document.size)
+        for (index, pane) in FinishComparisonGeometry.panes(in: bounds).enumerated() {
+            // Whole device pixels, so neither pane is resampled at 1:1.
+            let offset = FinishComparisonGeometry.paneOffset(pane, in: bounds, backingScale: session.viewport.backingScale)
+            let placed = imageRect.offsetBy(dx: offset, dy: 0)
+            let visible = pane.intersection(placed).intersection(dirtyRect)
+            context.saveGState()
+            context.clip(to: pane.intersection(dirtyRect))
+            if !visible.isEmpty, !visible.isNull {
+                context.setFillColor(NSColor(white: 0.30, alpha: 1).cgColor)
+                context.fill(placed)
+                let tile: CGFloat = 10
+                context.setFillColor(NSColor(white: 0.35, alpha: 1).cgColor)
+                for row in Int(floor((visible.minY - placed.minY) / tile))..<Int(ceil((visible.maxY - placed.minY) / tile)) {
+                    for col in Int(floor((visible.minX - placed.minX) / tile))..<Int(ceil((visible.maxX - placed.minX) / tile)) where (row + col).isMultiple(of: 2) {
+                        context.fill(CGRect(x: placed.minX + CGFloat(col) * tile, y: placed.minY + CGFloat(row) * tile, width: tile, height: tile).intersection(placed))
+                    }
+                }
+                context.saveGState()
+                context.clip(to: placed)
+                context.translateBy(x: offset, y: 0)
+                drawingOriginalFilter = index == 0
+                if session.viewport.zoom >= Self.crispZoom {
+                    drawDocumentPixels(covering: visible.offsetBy(dx: -offset, dy: 0), clippedTo: pixels, document: document, in: context)
+                } else {
+                    context.beginTransparencyLayer(auxiliaryInfo: nil)
+                    drawLayers(document, scale: session.viewport.pointsPerPixel,
+                        center: { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }, in: context)
+                    context.endTransparencyLayer()
+                }
+                drawingOriginalFilter = false
+                context.restoreGState()
+            }
+            let before = index == 0 || session.filterEdit?.preview != true || session.filterEdit?.showingOriginal == true
+            let label = before ? " BEFORE " : " AFTER "
+            (label as NSString).draw(at: CGPoint(x: pane.minX + 12, y: pane.minY + 12), withAttributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.white,
+                .backgroundColor: NSColor.black.withAlphaComponent(0.65)])
+            context.restoreGState()
+        }
     }
 
     /// From 200% (2 screen pixels per document pixel) the canvas shows hard-edged
@@ -770,7 +941,19 @@ final class CanvasView: NSView {
     }
 
     private func drawLayers(_ document: CanvasDocument, scale: CGFloat, center: @escaping (CGPoint) -> CGPoint, in context: CGContext, onSurface: Bool = false) {
-        session.effectsPreviews.prepare(layers: document.layers)
+        let finishing = !drawingOriginalFilter && session.filterEdit?.kind == .renderFinish
+            && session.filterEdit?.preview == true && session.filterEdit?.showingOriginal != true
+        // Render Finish on the merged canvas: its result stands in for every layer.
+        if finishing, let edit = session.filterEdit, edit.mergedLayers != nil, let preview = filterPreviewImage(for: edit.layerID) {
+            let detail = finishDetail(for: edit.layerID)
+            let placed = detail?.transform ?? edit.transform
+            LayerRenderer.draw(detail?.image ?? preview, transform: placed, center: center(placed.center), scale: scale, in: context)
+            return
+        }
+        // Release the finishing previews once Render Finish closes.
+        if session.filterEdit?.kind != .renderFinish { finishEffectsPreviews.prepare(layers: []) }
+        let effectsPreviews = finishing ? finishEffectsPreviews : session.effectsPreviews
+        effectsPreviews.prepare(layers: document.layers)
         // Color Burn and Color Dodge are blended by hand against the pixels under them, which needs a surface to
         // read back (see SeparableBlend).
         if !onSurface, document.layers.contains(where: { $0.adjustment != nil
@@ -780,7 +963,12 @@ final class CanvasView: NSView {
         }
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
-            guard let layer = byID[id], layer.id != session.textDraft?.layerID else { return }
+            guard var layer = byID[id], layer.id != session.textDraft?.layerID else { return }
+            if finishing, let preview = filterPreviewImage(for: layer.id) {
+                layer.asset = ImportedImage(image: preview, thumbnail: preview, name: layer.name)
+                // Effect sizes are in layer pixels, and the preview has fewer of them.
+                if let factor = session.filterEdit?.previewScale, factor < 1 { layer.effects = layer.effects?.scaled(by: factor) }
+            }
             // A folder the layer sits in dims it along with everything else inside (see LayerOpacity).
             let opacity = layer.effectiveOpacity(in: byID)
             let mode = session.displayedBlendMode(for: layer)
@@ -804,7 +992,7 @@ final class CanvasView: NSView {
             // A pending distortion shows the layer warped into its new shape — with its effects warped along with
             // it, so they stay on while the corners move.
             if stroke == nil, layer.effects?.visible.isEmpty == false,
-               let effects = session.effectsPreviews.preview(for: layer, mask: layer.mask?.enabledImage,
+               let effects = effectsPreviews.preview(for: layer, mask: layer.mask?.enabledImage,
                     transform: layer.transform, maskPlacement: session.displayedMaskPlacement(for: layer),
                     completion: { [weak self] in self?.needsDisplay = true }),
                let warped = session.distortedEffects(for: layer, effects: effects.image, inset: effects.inset) {
@@ -837,7 +1025,7 @@ final class CanvasView: NSView {
             }()
             // A stroke or drop shadow is drawn around the layer's pixels, on a canvas grown to hold it.
             if stroke == nil, layer.asset != nil,
-               let effects = session.effectsPreviews.preview(for: layer, mask: mask, transform: transform,
+               let effects = effectsPreviews.preview(for: layer, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsDisplay = true
                     }) {
@@ -845,6 +1033,14 @@ final class CanvasView: NSView {
                 let grown = effects.placement ?? LayerEffectsRenderer.placed(transform, image: effects.image, inset: effects.inset)
                 LayerRenderer.draw(effects.image, transform: grown, center: center(grown.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), mask: nil, in: context)
+                return
+            }
+            // Render Finish zoomed in past its preview's resolution: the part on screen, processed at full size.
+            if stroke == nil, finishing, let detail = finishDetail(for: layer.id) {
+                let clip = layer.mask?.clipImage(placement: session.displayedMaskPlacement(for: layer) ?? layer.transform,
+                    over: detail.transform, width: detail.image.width, height: detail.image.height)
+                LayerRenderer.draw(detail.image, transform: detail.transform, center: center(detail.transform.center),
+                    scale: scale, opacity: opacity, blendMode: blendMode(of: layer), mask: clip, in: context)
                 return
             }
             if stroke == nil, let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
@@ -862,7 +1058,7 @@ final class CanvasView: NSView {
                         opacity: opacity, blendMode: blendMode(of: layer), mask: nil, in: context)
                     return
                 }
-                if let effects = session.effectsPreviews.rendered(layer.id) {
+                if let effects = effectsPreviews.rendered(layer.id) {
                     let grown = effects.placement
                         ?? LayerEffectsRenderer.placed(layer.transform, image: effects.image, inset: effects.inset)
                     LayerRenderer.draw(effects.image, transform: grown, center: center(grown.center), scale: scale,
@@ -895,11 +1091,11 @@ final class CanvasView: NSView {
                     image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
                     transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), in: context)
-            } else if let asset = layer.asset, let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if let asset = layer.asset, let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && filterPreviewImage(for: layer.id) == nil {
                 TiledLayerRenderer.drawRaster(raster, transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer),
                     mask: mask, in: context)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
+            } else if let image = filterPreviewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
                 // LayerRenderer picks a sharp reduction for the image and its mask itself.
                 LayerRenderer.draw(image, transform: transform,
                     center: center(transform.center), scale: scale,
@@ -1078,6 +1274,12 @@ final class CanvasView: NSView {
     }
 
     override func resetCursorRects() {
+        if let rect = filterSplitRect, let edit = session.filterEdit, !spaceHeld {
+            addCursorRect(bounds, cursor: .arrow)
+            let x = rect.minX + rect.width * edit.splitPosition
+            addCursorRect(CGRect(x: x - 12, y: rect.minY, width: 24, height: rect.height), cursor: .resizeLeftRight)
+            return
+        }
         if let dragCursor { addCursorRect(bounds, cursor: dragCursor); return }
         if picking { addCursorRect(bounds, cursor: Self.eyedropperCursor); return }
         if session.hueTargeting { addCursorRect(bounds, cursor: .resizeLeftRight); return }
@@ -1113,7 +1315,7 @@ final class CanvasView: NSView {
         // only tools whose cursor depends on where the pointer is also track movement.
         // The picker panel stays key, so sampling must track while this window is not.
         var options: NSTrackingArea.Options = [.mouseEnteredAndExited, picking ? .activeAlways : .activeInKeyWindow, .inVisibleRect]
-        if picking || session.tool == .move || session.tool.isBrushTool || session.tool.isSelectionTool {
+        if session.filterEdit?.kind == .renderFinish || picking || session.tool == .move || session.tool.isBrushTool || session.tool.isSelectionTool {
             options.formUnion([.mouseMoved, .cursorUpdate])
         }
         let area = NSTrackingArea(rect: .zero, options: options, owner: self)
@@ -1121,7 +1323,7 @@ final class CanvasView: NSView {
         hoverTrackingArea = area
     }
     private func updateBrushCursor() {
-        let shows = session.tool.isBrushTool && !spaceHeld && !picking && middlePanPoint == nil
+        let shows = session.filterEdit?.kind != .renderFinish && session.tool.isBrushTool && !spaceHeld && !picking && middlePanPoint == nil
         let diameter = session.brushStroke?.settings.diameter ?? session.brushSettings.diameter
         // Clone Stamp also marks where it is copying from and, between strokes, previews inside
         // the circle what a click would stamp there.
@@ -1212,7 +1414,9 @@ final class CanvasView: NSView {
         if NSEvent.pressedMouseButtons == 0 { NSCursor.arrow.set() }
     }
     override func mouseMoved(with event: NSEvent) {
+        if !spaceHeld, hitsFilterDivider(convert(event.locationInWindow, from: nil)) { NSCursor.resizeLeftRight.set(); return }
         optionHeld = event.modifierFlags.contains(.option)
+        if session.filterEdit?.kind == .renderFinish { NSCursor.openHand.set(); return }
         if picking { Self.eyedropperCursor.set(); return }
         if session.tool.isSelectionTool {
             // Keys may have changed while the app was in the background.
@@ -1230,6 +1434,8 @@ final class CanvasView: NSView {
         else { super.mouseMoved(with: event) }
     }
     override func cursorUpdate(with event: NSEvent) {
+        if !spaceHeld, hitsFilterDivider(convert(event.locationInWindow, from: nil)) { NSCursor.resizeLeftRight.set(); return }
+        if session.filterEdit?.kind == .renderFinish { NSCursor.openHand.set(); return }
         if picking { Self.eyedropperCursor.set() }
         else if session.tool.isSelectionTool, !spaceHeld { lassoCursor.set() }
         // Cursor-update events carry no modifier flags (AppKit sends one after every key change), so read
@@ -1309,6 +1515,7 @@ final class CanvasView: NSView {
     /// change its hardness. The brush circle stays where the press was.
     private var brushTipDrag: (start: CGPoint, diameter: CGFloat, hardness: CGFloat, hardnessShown: Bool)?
     override func rightMouseDown(with event: NSEvent) {
+        guard session.filterEdit?.kind != .renderFinish else { return }
         guard session.tool.isBrushTool, session.brushStroke == nil, session.warpStroke == nil, !spaceHeld else {
             super.rightMouseDown(with: event); return
         }
@@ -1346,6 +1553,17 @@ final class CanvasView: NSView {
         window?.makeFirstResponder(self)
         guard session.document != nil, !session.isProjectBusy, !session.isImporting else { return }
         let point = convert(event.locationInWindow, from: nil)
+        if !spaceHeld, hitsFilterDivider(point) {
+            draggingFilterDivider = true
+            NSCursor.resizeLeftRight.set()
+            return
+        }
+        if session.filterEdit?.kind == .renderFinish {
+            lastDragPoint = point
+            session.filterEdit?.comparisonFill = nil
+            NSCursor.closedHand.set()
+            return
+        }
         if session.levels?.sampleMode != nil, !spaceHeld, let document = session.document {
             session.sampleLevels(at: session.viewport.documentPoint(from: point, documentSize: document.size))
             FloatingPanelController.refocus(NSUserInterfaceItemIdentifier("levelsPanel"))
@@ -1414,6 +1632,7 @@ final class CanvasView: NSView {
     }
     override func mouseDragged(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if draggingFilterDivider { moveFilterDivider(to: point); NSCursor.resizeLeftRight.set(); return }
         if textBoxAnchor != nil { dragTextGesture(to: point); return }
         if var drag = zoomDrag {
             let dx = point.x - drag.start.x
@@ -1552,6 +1771,7 @@ final class CanvasView: NSView {
     override func otherMouseDown(with event: NSEvent) {
         guard event.buttonNumber == 2, session.document != nil else { super.otherMouseDown(with: event); return }
         middlePanPoint = panPoint(of: event)
+        if session.filterEdit?.kind == .renderFinish { session.filterEdit?.comparisonFill = nil }
         if session.tool.isBrushTool { updateBrushCursor() }
         NSCursor.closedHand.set()
     }
@@ -1572,6 +1792,11 @@ final class CanvasView: NSView {
         window?.invalidateCursorRects(for: self)
     }
     override func mouseUp(with event: NSEvent) {
+        if draggingFilterDivider {
+            moveFilterDivider(to: convert(event.locationInWindow, from: nil))
+            draggingFilterDivider = false
+            return
+        }
         if textBoxAnchor != nil { finishTextGesture(); return }
         stopMarqueeAutoscroll()
         if let drag = zoomDrag {
@@ -1655,6 +1880,7 @@ final class CanvasView: NSView {
             session.zoom(to: session.viewport.zoom * exp(-event.scrollingDeltaY * 0.015),
                          anchor: convert(event.locationInWindow, from: nil))
         } else {
+            if session.filterEdit?.kind == .renderFinish { session.filterEdit?.comparisonFill = nil }
             let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 12
             session.viewport.translate(by: CGSize(width: event.scrollingDeltaX * multiplier,
                                                   height: event.scrollingDeltaY * multiplier))
@@ -1674,6 +1900,23 @@ final class CanvasView: NSView {
         // A drag session swallows the flagsChanged that says Option was let go, which left the canvas thinking it
         // was still held — and with it the Eyedropper standing in for the Brush. Every key press re-reads it.
         optionHeld = event.modifierFlags.contains(.option)
+        if session.filterEdit?.kind == .renderFinish {
+            guard !session.isProjectBusy else { return }
+            if event.charactersIgnoringModifiers == "\\",
+               event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                if !event.isARepeat { session.showFinishOriginal(session.filterEdit?.showingOriginal != true) }
+            } else if event.keyCode == 53 {
+                session.cancelFilter()
+            } else if [36, 76].contains(event.keyCode) {
+                Task { await session.applyDarkroom() }
+            } else if event.keyCode == 49 {
+                panPhysicalKey = physicalKey
+                spaceHeld = true
+                window?.invalidateCursorRects(for: self)
+            }
+            // The finishing workspace is modal: underlying tool shortcuts must not edit its source.
+            return
+        }
         if [51, 117].contains(event.keyCode), event.modifierFlags.intersection([.command, .control, .option, .shift]) == .shift {
             if session.canContentAwareFill { session.beginFilter(.contentAwareFill) }
             return

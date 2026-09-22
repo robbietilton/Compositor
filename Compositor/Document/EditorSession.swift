@@ -562,7 +562,8 @@ final class EditorSession {
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
+        // An open filter keeps the layer it was made from; undoing under it would leave Apply with nothing to apply.
+        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && filterEdit == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
     }
     var canUndo: Bool { canUseHistory && (history.canUndo || gradientEdit != nil) }
     var canRedo: Bool { canUseHistory && history.canRedo }
@@ -906,12 +907,20 @@ final class EditorSession {
     }
 
     func fit() {
+        if filterEdit?.kind == .renderFinish { fitFinishComparison(); return }
         guard let document else { return }
         viewport.fit(documentSize: document.size)
     }
 
     func zoom(to value: CGFloat, anchor: CGPoint? = nil) {
         guard let document else { return }
-        viewport.setZoom(value, anchoredAt: anchor ?? viewport.center, documentSize: document.size)
+        var anchor = anchor ?? viewport.center
+        if let edit = filterEdit, edit.kind == .renderFinish {
+            edit.comparisonFill = nil
+            if edit.comparisonMode == .sideBySide, anchor != viewport.center {
+                anchor = FinishComparisonGeometry.centeredAnchor(anchor, view: viewport.viewSize, backingScale: viewport.backingScale)
+            }
+        }
+        viewport.setZoom(value, anchoredAt: anchor, documentSize: document.size)
     }
 }

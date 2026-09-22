@@ -46,6 +46,7 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain and Invert
 - Gaussian Blur and Motion Blur that spread past a layer's edges
 - Add Noise, Lens Correction and Remove Background
+- [Darkroom](docs/darkroom.md): a finishing workspace for renders — Tonal Contrast, Ink, Pro Contrast, Detail Extractor, Bloom, Warmth and Vignette, plus Photo Realism (Sensor Grain, Micro Texture, Highlight Rolloff, Chromatic Aberration, Lens Softness) — with live before/after comparison and presets, on a layer or the merged canvas
 - Live previews, limited to the selection when there is one
 
 ### Canvas and files

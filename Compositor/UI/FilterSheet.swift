@@ -14,6 +14,8 @@ struct FilterSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch edit?.kind ?? .gaussianBlur {
+            // Render Finish has a workspace of its own (RenderFinishWorkspace) instead of this panel.
+            case .renderFinish: EmptyView()
             case .curves:
                 CurvesControls(settings: Binding(get: { settings.curves }, set: { new in update { $0.curves = new } }))
             case .exposure:

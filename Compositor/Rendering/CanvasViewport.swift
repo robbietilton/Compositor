@@ -8,7 +8,7 @@ struct CanvasViewport: Equatable {
     private(set) var zoom: CGFloat = 1
     var pan: CGSize = .zero
     private(set) var followsFit = true
-    static let zoomRange: ClosedRange<CGFloat> = 0.001...32
+    nonisolated static let zoomRange: ClosedRange<CGFloat> = 0.001...32
     var pointsPerPixel: CGFloat { zoom / backingScale }
     var center: CGPoint { CGPoint(x: viewSize.width / 2, y: viewSize.height / 2) }
 

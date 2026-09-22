@@ -6,3 +6,4 @@
 #import "Rendering/LensPixels.h"
 #import "Rendering/ContentFill.h"
 #import "Rendering/AdjustPixels.h"
+#import "Rendering/FinishPixels.h"

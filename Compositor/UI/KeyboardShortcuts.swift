@@ -122,6 +122,7 @@ struct ShortcutDefinition: Identifiable {
             result.append(.init(title: title + " by 10", group: "Text Editing", original: ShortcutChord(key, 10)))
         }
         result.append(entry("Toggle Levels preview", "p", 2))
+        result.append(entry("Darkroom before/after", "\\"))
         return result
     }()
 }

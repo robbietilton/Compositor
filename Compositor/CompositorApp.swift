@@ -251,7 +251,12 @@ struct CompositorApp: App {
                     }
                 }
                 CommandMenu("Filter") {
-                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }, id: \.self) { kind in
+                    Button("Darkroom…") { session.beginRenderFinish(source: .layer) }
+                        .disabled(!session.canAdjustColors || session.hueSaturation != nil)
+                    Button("Darkroom on Merged Visible…") { session.beginRenderFinish(source: .mergedVisible) }
+                        .disabled(!session.canFinishMergedVisible)
+                    Divider()
+                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && $0 != .renderFinish && !$0.isImageAdjustment }, id: \.self) { kind in
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
                             .disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     }
