@@ -7,6 +7,7 @@ struct RenderFinishWorkspace: View {
     @Bindable var session: EditorSession
     @State private var selected: FinishEffect = .tonalContrast
     private var edit: FilterEdit? { session.filterEdit }
+    private var enlargeFactor: Int { edit?.enlargeFactor ?? 0 }
     private var settings: Binding<RenderFinishSettings> {
         Binding(get: { edit?.settings.renderFinish ?? RenderFinishSettings() }, set: { new in
             guard var value = edit?.settings else { return }
@@ -56,8 +57,11 @@ struct RenderFinishWorkspace: View {
                         .controlSize(.small).frame(maxWidth: .infinity, alignment: .leading)
                     ScrollView {
                         // Room for the scroller, so it never sits over (and takes clicks from) the checkboxes.
-                        RenderFinishFilterList(settings: settings, selected: $selected)
-                            .padding(.trailing, 12)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RenderFinishFilterList(settings: settings, selected: $selected)
+                            EnlargerStep(session: session)
+                        }
+                        .padding(.trailing, 12)
                     }
                     .scrollBounceBehavior(.basedOnSize)
                     Spacer(minLength: 0)
@@ -114,9 +118,9 @@ struct RenderFinishWorkspace: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Button("Cancel") { session.cancelFilter() }.configuredNativeShortcut(.escape)
-                Button("Apply") { Task { await session.applyDarkroom() } }
+                Button(enlargeFactor > 1 ? "Apply & Enlarge \(enlargeFactor)×" : "Apply") { Task { await session.applyDarkroom() } }
                     .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
-                    .disabled(edit?.previewError != nil)
+                    .disabled(edit?.previewError != nil || (enlargeFactor > 1 && !EnlargerStep.isReady(session: session, factor: enlargeFactor)))
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
         }

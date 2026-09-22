@@ -242,6 +242,8 @@ struct CompositorApp: App {
                     Button("Image Size…") { Task { await applicationDelegate.projects.imageSize() } }
                         .configuredKeyboardShortcut("i", modifiers: [.command, .option])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
+                    Button("Enlarger…") { Task { await applicationDelegate.projects.aiUpscale() } }
+                        .disabled(!session.canAIUpscale || !applicationDelegate.projects.canStart)
                     Group {
                         Divider()
                         Button("Flip Canvas Horizontal") { session.flipCanvas(horizontally: true) }

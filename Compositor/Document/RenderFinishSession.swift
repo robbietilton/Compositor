@@ -126,7 +126,10 @@ extension EditorSession {
 
     /// Darkroom's Apply, from its button and the canvas's Return key alike.
     func applyDarkroom() async {
+        let factor = filterEdit?.enlargeFactor ?? 0
         await commitFilter()
+        // Enlarger, when it is the last step, runs on the finished document with its own progress and undo step.
+        if factor > 1, filterEdit == nil, brushError == nil { Self.enlargeAfterDarkroom?(self, factor) }
     }
 
     /// Apply Finish: the result goes on a new layer and source visibility changes as one undo step. A layer's

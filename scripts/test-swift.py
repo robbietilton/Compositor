@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the project's Swift Testing target using macOS Command Line Tools.
 
-The default run covers Darkroom (Render Finish) and the existing pixel filters.
+The default run covers Darkroom (Render Finish), Enlarger (AI Upscale) and the existing pixel filters.
 Use --all for the complete suite, or --suite REGEX to choose tests. A real Sparkle
 framework is required; an existing local app build is detected automatically.
 No dependencies are downloaded. Xcode's hosted test target remains authoritative
@@ -173,7 +173,7 @@ def main():
     options = {"parallel": False, "listTests": args.list, "skip": args.skip,
                "xunitOutput": str(out / "results.xml")}
     if not args.all:
-        options["filter"] = args.suite or ["RenderFinishTests|RenderComparisonTests|FilterTests"]
+        options["filter"] = args.suite or ["RenderFinishTests|RenderComparisonTests|AIUpscaleTests|FilterTests"]
     options_path = out / "test-options.json"
     options_path.write_text(json.dumps(options) + "\n")
     env = os.environ.copy()

@@ -222,6 +222,8 @@ final class FilterEdit {
     @ObservationIgnored var finishDetailPending: FinishDetail.Request?
     @ObservationIgnored var finishDetailTask: Task<Void, Never>?
     let finishStages = FinishStageCache()
+    /// Darkroom's Enlarger step: 0 off, else the factor the canvas is enlarged by after Apply.
+    var enlargeFactor = 0
     var committing = false
     var previewError: String?
     var preparing = false

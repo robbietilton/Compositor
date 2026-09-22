@@ -11,7 +11,13 @@ final class ProjectController {
     var canStart: Bool {
         session.canStartProjectOperation && workspace?.isManaging != true
     }
-    init(session: EditorSession) { self.session = session }
+    init(session: EditorSession) {
+        self.session = session
+        EditorSession.enlargeAfterDarkroom = { [weak self] session, factor in
+            guard let self, session === self.session else { return }
+            Task { await self.aiUpscale(factor: factor, autoStart: true) }
+        }
+    }
 
     private func begin() -> Bool {
         guard session.canStartProjectOperation else { return false }
@@ -90,6 +96,24 @@ final class ProjectController {
             let resized = try await ImageResizer.shared.resize(snapshot, to: options)
             session.applyImageSize(resized)
         } catch { await showError("Couldn’t resize the image", error: error) }
+    }
+
+    /// `autoStart`: Darkroom's Enlarger step, which has already chosen the factor, so the run starts at once.
+    func aiUpscale(factor: Int = 2, autoStart: Bool = false) async {
+        guard let window, session.canAIUpscale, begin() else { return }
+        defer { session.isProjectBusy = false }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let sheet = NSWindow()
+            sheet.styleMask = [.titled, .fullSizeContentView]
+            sheet.title = "Enlarger"
+            sheet.contentViewController = NSHostingController(rootView: AIUpscaleSheet(session: session, factor: factor, autoStart: autoStart) {
+                window.endSheet(sheet)
+                sheet.orderOut(nil)
+                sheet.contentViewController = nil
+                continuation.resume()
+            })
+            window.beginSheet(sheet)
+        }
     }
 
     func exportJPEG() async {
