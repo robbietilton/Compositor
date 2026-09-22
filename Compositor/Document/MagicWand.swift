@@ -106,6 +106,9 @@ extension EditorSession {
             do { return WandResult(path: try MagicWand.select(in: job.image, at: job.point, settings: job.settings), error: nil) }
             catch { return WandResult(path: nil, error: error) }
         }.value
+        // Selection mutations use the normal editing gate, so release the busy state before
+        // applying the completed result. The defer still covers cancellation and early returns.
+        isProjectBusy = false
         guard !Task.isCancelled else { return }
         if let error = result.error { brushError = error.localizedDescription; return }
         guard self.document?.id == document.id else { return }

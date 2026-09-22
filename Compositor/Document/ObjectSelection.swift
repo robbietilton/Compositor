@@ -283,6 +283,9 @@ extension EditorSession {
             do { return ObjectSelectionResult(path: try ObjectSelection.select(in: job.image, at: job.point, edgeOffset: job.edgeOffset, smoothEdges: job.smoothEdges), error: nil) }
             catch { return ObjectSelectionResult(path: nil, error: error) }
         }.value
+        // Selection mutations use the normal editing gate, so release the busy state before
+        // applying the completed result. The defer still covers cancellation and early returns.
+        isProjectBusy = false
         guard !Task.isCancelled else { return }
         if let error = result.error { brushError = error.localizedDescription; return }
         guard self.document?.id == document.id else { return }
