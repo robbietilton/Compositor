@@ -277,7 +277,7 @@ struct ContentView: View {
             ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
                 Button { session.selectTool(tool) } label: {
                     Group {
-                        if tool == .gradient, session.fillToolMode == .bucket { Image(systemName: "paintbucket.fill").frame(width: 18, height: 18) }
+                        if tool == .gradient, session.fillToolMode == .bucket { PaintBucketToolIcon().frame(width: 18, height: 18) }
                         else if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
                         else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
                         else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
