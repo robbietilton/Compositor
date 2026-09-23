@@ -24,7 +24,7 @@ struct CompositorApp: App {
                 CommandGroup(replacing: .undoRedo) {
                     // Dialog text fields keep native text undo; document history
                     // is unavailable while an import or modal edit is active.
-                    if session.textDraft != nil || session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
+                    if session.textDraft != nil || session.levels != nil || session.generativeEdit != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
                         Button("Undo") {
                             if NSApp.keyWindow?.firstResponder is NSTextView {
                                 NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
@@ -82,6 +82,10 @@ struct CompositorApp: App {
                 Group {
                     CommandGroup(after: .appInfo) {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates(nil) }
+                    }
+                    // A plain shortcut, not a configurable one: ⌘, is reserved, and listing it would reject every saved shortcut.
+                    CommandGroup(replacing: .appSettings) {
+                        Button("Settings…") { GenerativeSettings.shared.show() }.keyboardShortcut(",")
                     }
                     CommandGroup(after: .toolbar) {
                         Button("Fit Canvas") { session.fit() }.configuredKeyboardShortcut("0").disabled(session.document == nil)
@@ -189,6 +193,11 @@ struct CompositorApp: App {
                         .disabled(session.selection == nil || !session.canEditPixels)
                     Button("Content-Aware Fill…") { session.beginFilter(.contentAwareFill) }
                         .configuredKeyboardShortcut(.delete, modifiers: .shift).disabled(!session.canContentAwareFill)
+                    Divider()
+                    // Generated with the user's own API key; see Settings.
+                    Button("Generative Fill…") { session.beginGenerative(.fill) }.disabled(!session.canBeginGenerative(.fill))
+                    Button("Generative Remove") { session.beginGenerative(.remove) }.disabled(!session.canBeginGenerative(.remove))
+                    Button("Generative Expand…") { session.beginGenerative(.expand) }.disabled(!session.canBeginGenerative(.expand))
                 }
                 CommandMenu("Select") {
                     // A field being edited keeps its own Select All: offer it to the responder chain
