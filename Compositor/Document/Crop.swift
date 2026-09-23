@@ -162,17 +162,52 @@ extension EditorSession {
         let next = CropGeometry.snapped(CGRect(x: rect.minX, y: rect.midY - height / 2, width: rect.width, height: height))
         if CropGeometry.valid(next) { cropRect = next }
     }
+    /// Crop uses the geometric bounds, even for an ellipse or a feathered selection.
+    var selectionCropRect: CGRect? {
+        guard let document, let selection, !selection.isEmpty else { return nil }
+        let rect = selection.path.boundingBoxOfPath.integral
+            .intersection(CGRect(origin: .zero, size: document.size))
+        return CropGeometry.valid(rect) ? rect : nil
+    }
+
+    var canCropToSelection: Bool { canEditLayers && canStartProjectOperation && selectionCropRect != nil }
+
+    func cropToSelection() {
+        guard canCropToSelection, let rect = selectionCropRect else { return }
+        applyCrop(rect, actionName: "Crop to Selection")
+    }
+
     func commitCrop() async {
-        guard canStartProjectOperation, let rect = cropRect, CropGeometry.valid(rect),
-              let snapshot = projectSnapshot() else { return }
-        isProjectBusy = true
-        defer { isProjectBusy = false }
-        do {
-            let result = try await CanvasResizer.shared.resize(snapshot,
-                to: CanvasSizeOptions(width: Int(rect.width), height: Int(rect.height),
-                    contentOffset: CGPoint(x: -rect.minX, y: -rect.minY)))
-            cropRect = nil
-            applyDocumentSize(result, actionName: "Crop")
-        } catch { cropError = error.localizedDescription }
+        guard canStartProjectOperation, transformEdit == nil, gradientEdit == nil,
+              pixelMove == nil, hueSaturation == nil, filterEdit == nil,
+              let rect = cropRect else { return }
+        applyCrop(rect, actionName: "Crop")
+    }
+
+    /// Change document geometry without rebuilding layers or resampling their pixels.
+    /// Keeping whole layer records also preserves editable text, shapes, and effects.
+    private func applyCrop(_ rect: CGRect, actionName: String) {
+        guard CropGeometry.valid(rect), let original = document else { return }
+        var layers = original.layers
+        for index in layers.indices {
+            layers[index].transform.origin.x -= rect.minX
+            layers[index].transform.origin.y -= rect.minY
+            if var placement = layers[index].mask?.placement {
+                placement.origin.x -= rect.minX
+                placement.origin.y -= rect.minY
+                layers[index].mask?.placement = placement
+            }
+            guard layers[index].transform.isValid,
+                  layers[index].mask?.placement?.isValid != false else { return }
+        }
+        let cropped = CanvasDocument(id: original.id, width: Int(rect.width), height: Int(rect.height),
+            layers: layers, resolution: original.resolution,
+            guides: original.guides.map { $0.offset(x: -rect.minX, y: -rect.minY) })
+        finishOpacityEdit()
+        beginEdit(actionName)
+        document = cropped
+        cropRect = nil
+        endEdit()
+        viewport.fit(documentSize: cropped.size)
     }
 }

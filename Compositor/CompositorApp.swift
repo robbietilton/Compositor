@@ -228,6 +228,9 @@ struct CompositorApp: App {
                         .disabled(!session.canModifySelection)
                 }
                 CommandMenu("Image") {
+                    Button("Crop to Selection") { session.cropToSelection() }
+                        .disabled(!session.canCropToSelection)
+                    Divider()
                     Button("Curves…") { session.beginFilter(.curves) }
                         .configuredKeyboardShortcut("m").disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     Button("Levels…") { session.beginLevels() }

@@ -346,7 +346,7 @@ final class EditorSession {
         if value.isBrushTool { _ = MetalBrushCoverage.shared }
         if value == .crop, cropRect == nil, let document {
             cropRatioChoice = "Free"
-            cropRect = CGRect(origin: .zero, size: document.size)
+            cropRect = selectionCropRect ?? CGRect(origin: .zero, size: document.size)
         }
     }
     /// Tab steps the current tool through its own modes — the setting sitting at the left of its tool bar. Tools
