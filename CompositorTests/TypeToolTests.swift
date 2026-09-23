@@ -170,4 +170,283 @@ struct TypeToolTests {
         #expect(!session.applyText(draft))
         #expect(session.document?.layers.count == 1)
     }
+
+    private func setupEditor(session: EditorSession, initialText: String = "") throws -> (CanvasView, InlineTextEditor, CanvasTextView, NSWindow) {
+        let canvas = CanvasView(session: session)
+        canvas.synchronizeInlineText()
+        let editor = try #require(canvas.inlineTextEditor)
+        let textView = editor.textView
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = canvas
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(textView)
+        if !initialText.isEmpty {
+            textView.string = initialText
+            editor.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
+            textView.undoManager?.removeAllActions()
+        }
+        return (canvas, editor, textView, window)
+    }
+
+    private func endEventCycle() {
+        (NSClassFromString("NSUndoManager") as? AnyObject)?.perform(NSSelectorFromString("_endTopLevelGroupings"))
+    }
+
+    private func simulateKeyType(_ character: String, in textView: CanvasTextView, window: NSWindow) {
+        let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: character,
+            charactersIgnoringModifiers: character.lowercased(),
+            isARepeat: false,
+            keyCode: 0
+        )!
+        NSApp.sendEvent(event)
+        endEventCycle()
+    }
+
+    private func simulateTypingSequence(_ text: String, in textView: CanvasTextView, window: NSWindow) {
+        for char in text {
+            simulateKeyType(String(char), in: textView, window: window)
+        }
+    }
+
+    private func simulateDeleteSelection(range: NSRange, in textView: CanvasTextView, window: NSWindow) {
+        textView.setSelectedRange(range)
+        let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: "\u{7F}",
+            charactersIgnoringModifiers: "\u{7F}",
+            isARepeat: false,
+            keyCode: 51
+        )!
+        NSApp.sendEvent(event)
+        endEventCycle()
+    }
+
+    private func simulatePasteText(_ text: String, in textView: CanvasTextView) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        textView.paste(nil)
+        endEventCycle()
+    }
+
+    private func simulateSelectionReplacement(range: NSRange, with text: String, in textView: CanvasTextView) {
+        textView.setSelectedRange(range)
+        textView.insertText(text, replacementRange: range)
+        endEventCycle()
+    }
+
+    @Test func continuousTypingCharacterByCharacterUndoAndRedo() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        let (_, _, textView, window) = try setupEditor(session: session)
+
+        simulateTypingSequence("ABC", in: textView, window: window)
+        #expect(textView.string == "ABC")
+        #expect(session.textDraft?.style.content == "ABC")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+
+        // Step back through individual characters
+        textView.undo()
+        #expect(textView.string == "AB")
+        #expect(session.textDraft?.style.content == "AB")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.undo()
+        #expect(textView.string == "A")
+        #expect(session.textDraft?.style.content == "A")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.undo()
+        #expect(textView.string == "")
+        #expect(session.textDraft?.style.content == "")
+        #expect(textView.undoManager?.canUndo == false)
+        #expect(textView.undoManager?.canRedo == true)
+
+        // Redo steps back forward through individual characters
+        textView.redo()
+        #expect(textView.string == "A")
+        #expect(session.textDraft?.style.content == "A")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.redo()
+        #expect(textView.string == "AB")
+        #expect(session.textDraft?.style.content == "AB")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.redo()
+        #expect(textView.string == "ABC")
+        #expect(session.textDraft?.style.content == "ABC")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+    }
+
+    @Test func pasteRemainsSingleUndoOperation() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        let (_, _, textView, _) = try setupEditor(session: session)
+
+        simulatePasteText("ABC", in: textView)
+        #expect(textView.string == "ABC")
+        #expect(session.textDraft?.style.content == "ABC")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+
+        // Pasting "ABC" must undo atomically in one step, not character-by-character
+        textView.undo()
+        #expect(textView.string == "")
+        #expect(session.textDraft?.style.content == "")
+        #expect(textView.undoManager?.canUndo == false)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.redo()
+        #expect(textView.string == "ABC")
+        #expect(session.textDraft?.style.content == "ABC")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+    }
+
+    @Test func selectionDeletionRemainsSingleUndoOperation() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        let (_, _, textView, window) = try setupEditor(session: session, initialText: "ABCDEF")
+
+        let cdRange = NSRange(location: 2, length: 2) // "CD"
+        simulateDeleteSelection(range: cdRange, in: textView, window: window)
+        #expect(textView.string == "ABEF")
+        #expect(session.textDraft?.style.content == "ABEF")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+
+        // Deleting selection must undo in one step back to "ABCDEF"
+        textView.undo()
+        #expect(textView.string == "ABCDEF")
+        #expect(session.textDraft?.style.content == "ABCDEF")
+        #expect(textView.undoManager?.canUndo == false)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.redo()
+        #expect(textView.string == "ABEF")
+        #expect(session.textDraft?.style.content == "ABEF")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+    }
+
+    @Test func selectionReplacementRemainsSingleUndoOperation() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        let (_, _, textView, _) = try setupEditor(session: session, initialText: "ABCDEF")
+
+        let cdRange = NSRange(location: 2, length: 2) // "CD"
+        simulateSelectionReplacement(range: cdRange, with: "XY", in: textView)
+        #expect(textView.string == "ABXYEF")
+        #expect(session.textDraft?.style.content == "ABXYEF")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+
+        // Replacing selection must undo in one step back to "ABCDEF"
+        textView.undo()
+        #expect(textView.string == "ABCDEF")
+        #expect(session.textDraft?.style.content == "ABCDEF")
+        #expect(textView.undoManager?.canUndo == false)
+        #expect(textView.undoManager?.canRedo == true)
+
+        textView.redo()
+        #expect(textView.string == "ABXYEF")
+        #expect(session.textDraft?.style.content == "ABXYEF")
+        #expect(textView.undoManager?.canUndo == true)
+        #expect(textView.undoManager?.canRedo == false)
+    }
+
+    @Test func textEditingUndoDoesNotPolluteDocumentHistory() throws {
+        let session = makeSession()
+        session.addBlankLayer()
+        let docHistoryBefore = session.history.undoCount
+
+        session.selectTool(.type)
+        session.beginText(at: CGPoint(x: 10, y: 10))
+        let (_, _, textView, window) = try setupEditor(session: session, initialText: "Hello")
+
+        simulateTypingSequence("!", in: textView, window: window)
+        #expect(session.history.undoCount == docHistoryBefore)
+
+        textView.undo()
+        #expect(textView.string == "Hello")
+        #expect(session.history.undoCount == docHistoryBefore)
+
+        #expect(session.finishText())
+        #expect(session.history.undoCount == docHistoryBefore + 1)
+        #expect(session.activeLayer?.liveText?.style.content == "Hello")
+
+        session.undo()
+        #expect(session.history.undoCount == docHistoryBefore)
+        #expect(session.activeLayer?.liveText == nil)
+    }
+
+    @Test func textEditingResponderChainRoutingAndValidation() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        let (_, _, textView, window) = try setupEditor(session: session, initialText: "Hello")
+
+        let undoItem = NSMenuItem(title: "Undo", action: #selector(CanvasTextView.undo(_:)), keyEquivalent: "z")
+        let redoItem = NSMenuItem(title: "Redo", action: #selector(CanvasTextView.redo(_:)), keyEquivalent: "Z")
+
+        #expect(!textView.validateUserInterfaceItem(undoItem))
+        #expect(!textView.validateUserInterfaceItem(redoItem))
+
+        simulateTypingSequence("!", in: textView, window: window)
+        #expect(textView.validateUserInterfaceItem(undoItem))
+        #expect(!textView.validateUserInterfaceItem(redoItem))
+
+        let undoPerformed = window.firstResponder?.tryToPerform(#selector(CanvasTextView.undo(_:)), with: nil) ?? false
+        #expect(undoPerformed)
+        #expect(textView.string == "Hello")
+        #expect(session.textDraft?.style.content == "Hello")
+
+        #expect(!textView.validateUserInterfaceItem(undoItem))
+        #expect(textView.validateUserInterfaceItem(redoItem))
+
+        let redoPerformed = window.firstResponder?.tryToPerform(#selector(CanvasTextView.redo(_:)), with: nil) ?? false
+        #expect(redoPerformed)
+        #expect(textView.string == "Hello!")
+        #expect(session.textDraft?.style.content == "Hello!")
+    }
+
+    @Test func cancelTextEditingPreservesDocumentState() throws {
+        let session = makeSession()
+        session.beginText(at: .zero)
+        session.textDraft?.style.content = "Original"
+        #expect(session.finishText())
+        let beforeUndoCount = session.history.undoCount
+
+        session.editActiveText()
+        let (_, _, textView, window) = try setupEditor(session: session, initialText: "Original")
+        simulateTypingSequence(" Altered", in: textView, window: window)
+        #expect(textView.string == "Original Altered")
+
+        session.cancelText()
+        #expect(session.textDraft == nil)
+        #expect(session.activeLayer?.liveText?.style.content == "Original")
+        #expect(session.history.undoCount == beforeUndoCount)
+    }
 }
