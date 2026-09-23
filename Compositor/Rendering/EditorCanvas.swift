@@ -1460,7 +1460,10 @@ final class CanvasView: NSView {
             lassoMouseDown(at: point, event: event)
             refreshLassoCursor()
         } else if session.tool == .gradient {
-            beginGradientDrag(at: point)
+            if session.fillToolMode == .bucket, let document = session.document {
+                let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+                Task { await session.paintBucket(at: pixel) }
+            } else { beginGradientDrag(at: point) }
         } else if session.tool == .type {
             beginTextGesture(at: point, event: event)
         } else if session.tool == .shape, let document = session.document {

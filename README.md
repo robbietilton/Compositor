@@ -40,6 +40,7 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 - Blur tool, on pixels or masks
 - Gradient tool and Shape tool (rectangles, rounded rectangles, ellipses and lines), which stay editable rather than being rasterized
 - Type tool (T): inline multiline editing in draggable, resizable paragraph boxes; font, size, color, alignment and spacing in the tool header; transform text and use it as a clipping mask
+- Paint Bucket in the Gradient tool (G, then Tab): tolerance, contiguous matching, all-layer sampling, and selection clipping
 - Eyedropper and a full color picker
 
 ### Adjustments and filters

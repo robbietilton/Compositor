@@ -5,7 +5,7 @@ struct GradientControls: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("Gradient").font(ToolHeaderStyle.titleFont)
+            FillToolModePicker(session: session)
             Picker("Shape", selection: $session.gradientSettings.shape) {
                 ForEach(GradientShape.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }

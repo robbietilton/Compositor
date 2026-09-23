@@ -34,9 +34,17 @@ nonisolated enum MagicWand {
     /// The outline, in the image's top-left pixel coordinates, of the pixels matching the one
     /// at `point`. Nil when nothing matches or the point is outside the image.
     static func select(in image: CGImage, at point: CGPoint, settings: WandSettings) throws -> CGPath? {
+        guard let selected = try matchingPixels(in: image, at: point, settings: settings) else { return nil }
+        return try outline(of: selected, width: image.width, height: image.height)
+    }
+
+    /// Shared raster matching for Magic Wand and Paint Bucket; the bucket needs no vector outline.
+    static func matchingPixels(in image: CGImage, at point: CGPoint, settings: WandSettings) throws -> [UInt8]? {
         let width = image.width, height = image.height
+        guard point.x.isFinite, point.y.isFinite, point.x >= 0, point.y >= 0,
+              point.x < CGFloat(width), point.y < CGFloat(height) else { return nil }
+        guard width <= 100_000_000 / max(1, height) else { throw ProjectError.tooLarge }
         let x = Int(point.x.rounded(.down)), y = Int(point.y.rounded(.down))
-        guard point.x.isFinite, point.y.isFinite, (0..<width).contains(x), (0..<height).contains(y) else { return nil }
         let context = try BrushRaster.context(width: width, height: height, mask: false)
         BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: context)
         guard let data = context.data else { throw ExportError.render }
@@ -48,7 +56,7 @@ nonisolated enum MagicWand {
         }
         guard count >= 0 else { throw Failure.memory }
         guard count > 0 else { return nil }
-        return try outline(of: selected, width: width, height: height)
+        return selected
     }
 
     /// Outline of a mask's nonzero pixels along exact pixel edges (winding rule); nil when empty.
