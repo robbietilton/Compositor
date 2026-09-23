@@ -57,4 +57,34 @@ struct CropToSelectionTests {
         session.document?.selection = nil
         #expect(!session.canCropToSelection)
     }
+    @Test func cropPreservesEditableLayersAndExplicitMaskPlacement() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 80, emptyLayer: true)
+        await session.fillSelection(with: .foreground)
+        let image = try #require(session.activeLayer?.asset?.image)
+        session.document?.layers[0].text = LayerText(style: LayerTextStyle(), image: image)
+        session.document?.layers[0].effects = LayerEffects(stroke: StrokeEffect())
+        session.addLayerMask()
+        session.document?.layers[0].mask?.placement = LayerTransform(origin: CGPoint(x: 7, y: 9), size: CGSize(width: 60, height: 40))
+        session.document?.layers[0].mask?.isLinked = false
+        session.isMaskSelected = false
+        var shape = try #require(session.activeLayer)
+        shape.text = nil
+        shape.shape = LayerShape(style: LayerShapeStyle(kind: .ellipse, red: 1, green: 0, blue: 0, cornerRadius: 0), image: image)
+        // Give the second layer its own identity while preserving its editable content.
+        let second = ImageLayer(id: UUID(), asset: shape.asset, name: "Shape", isVisible: true,
+            transform: shape.transform, shape: shape.shape, effects: shape.effects)
+        session.document?.layers.append(second)
+        session.document?.selection = DocumentSelection(path: CGPath(rect:
+            CGRect(x: 10, y: 20, width: 40, height: 30), transform: nil))
+        let before = try #require(session.document)
+        session.cropToSelection()
+        #expect(session.document?.layers[0].liveText == before.layers[0].liveText)
+        #expect(session.document?.layers[1].liveShape == before.layers[1].liveShape)
+        #expect(session.document?.layers[0].effects == before.layers[0].effects)
+        #expect(session.document?.layers[0].mask?.placement?.origin == CGPoint(x: -3, y: -11))
+        #expect(session.document?.layers[0].mask?.isLinked == false)
+        session.undo()
+        #expect(session.document == before)
+    }
 }
