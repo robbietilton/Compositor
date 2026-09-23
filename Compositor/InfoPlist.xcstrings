@@ -1,0 +1,46 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Adobe Photoshop Document" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adobe Photoshop 文档"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compositor"
+          }
+        }
+      }
+    },
+    "Compositor Project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compositor 工程"
+          }
+        }
+      }
+    },
+    "Photoshop Document" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photoshop 文档"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

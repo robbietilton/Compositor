@@ -74,9 +74,9 @@ struct NewCanvasSheet: View {
     }
     private func dimension(_ title: String, text: Binding<String>, field: Field) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.callout.weight(.medium))
+            Text(L10n.text(title)).font(.callout.weight(.medium))
             HStack {
-                TextField(title, text: text).textFieldStyle(.plain)
+                TextField(L10n.text(title), text: text).textFieldStyle(.plain)
                     .focused($focusedField, equals: field)
                     .accessibilityIdentifier(title.lowercased() + "Input")
                 Text("px").foregroundStyle(.secondary)

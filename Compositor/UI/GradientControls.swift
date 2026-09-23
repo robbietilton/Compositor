@@ -7,13 +7,13 @@ struct GradientControls: View {
         HStack(spacing: 12) {
             Text("Gradient").font(ToolHeaderStyle.titleFont)
             Picker("Shape", selection: $session.gradientSettings.shape) {
-                ForEach(GradientShape.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(GradientShape.allCases, id: \.self) { Text(L10n.text($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
             .help("Linear runs along the line; Radial spreads out from the start point")
             swatch
             Picker("Colors", selection: $session.gradientSettings.style) {
-                ForEach(GradientStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(GradientStyle.allCases, id: \.self) { Text(L10n.text($0.rawValue)).tag($0) }
             }
             .labelsHidden().fixedSize()
             Toggle("Reverse", isOn: $session.gradientSettings.reversed)

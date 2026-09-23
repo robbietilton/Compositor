@@ -8,7 +8,7 @@ struct CanvasSizeSheet: View {
     @State private var anchor = 4
     @State private var extensionChoice = "Transparent"
     @State private var customColor = Color.white
-    private let anchorNames = ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"]
+    private var anchorNames: [String] { ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"].map(L10n.text) }
 
     init(document: CanvasDocument, foreground: PaletteColor = .black, background: PaletteColor = .white, finish: @escaping (CanvasSizeOptions?) -> Void) {
         self.foreground = foreground
@@ -41,12 +41,12 @@ struct CanvasSizeSheet: View {
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Canvas Size").font(.title2.bold())
-            Text("Current: \(draft.originalWidth) × \(draft.originalHeight) pixels")
-            Text("\(bytes(draft.originalWidth, draft.originalHeight)) uncompressed RGBA canvas")
+            Text(L10n.format("Current: %lld × %lld pixels", draft.originalWidth, draft.originalHeight))
+            Text(L10n.format("%@ uncompressed RGBA canvas", bytes(draft.originalWidth, draft.originalHeight)))
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
             Picker("Units", selection: $draft.unit) {
-                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CanvasUnit.allCases, id: \.self) { Text(L10n.text($0.rawValue)).tag($0) }
             }
             HStack {
                 Text("Width").frame(width: 60, alignment: .leading)
@@ -62,7 +62,7 @@ struct CanvasSizeSheet: View {
                     if locked { draft.set(draft.displayed(widthAxis: true), widthAxis: true) }
                 }
             if draft.valid {
-                Text("New: \(Int(draft.width.rounded())) × \(Int(draft.height.rounded())) pixels · \(bytes(Int(draft.width.rounded()), Int(draft.height.rounded()))) uncompressed")
+                Text(L10n.format("New: %lld × %lld pixels · %@ uncompressed", Int(draft.width.rounded()), Int(draft.height.rounded()), bytes(Int(draft.width.rounded()), Int(draft.height.rounded()))))
                     .font(.callout).foregroundStyle(.secondary)
             } else {
                 Text("Final dimensions must be 1–30,000 pixels per side.")

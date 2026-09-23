@@ -32,7 +32,7 @@ struct FilterSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Picker("Quality", selection: Binding(get: { settings.backgroundQuality },
                                                      set: { new in update { $0.backgroundQuality = new } })) {
-                    ForEach(BackgroundQuality.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(BackgroundQuality.allCases, id: \.self) { Text(L10n.text($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .help("Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur")
@@ -155,9 +155,9 @@ struct GradientMapControls: View {
                     .contentShape(shape)
             }
             .buttonStyle(.plain)
-            .help("Choose the \(title.lowercased()) color")
-            .accessibilityLabel("\(title) color")
-            Text(title)
+            .help(L10n.format("Choose the %@ color", L10n.text(title.lowercased())))
+            .accessibilityLabel(L10n.format("%@ color", L10n.text(title)))
+            Text(L10n.text(title))
         }
     }
 }

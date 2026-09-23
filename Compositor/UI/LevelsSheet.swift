@@ -17,7 +17,7 @@ struct LevelsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Picker("Channel", selection: Binding(get: { settings.channel }, set: { channel in update { $0.channel = channel } })) {
-                ForEach(LevelsChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(LevelsChannel.allCases, id: \.self) { Text(L10n.text($0.rawValue)).tag($0) }
             }.frame(width: 180)
             VStack(spacing: 0) {
                 histogram.frame(height: 150).background(.black.opacity(0.25))
@@ -49,19 +49,19 @@ struct LevelsSheet: View {
                         edit?.sampleMode = edit?.sampleMode == mode ? nil : mode
                         session.brushRevision += 1
                     } label: {
-                        Label(mode.rawValue, systemImage: "eyedropper")
+                        Label(L10n.text(mode.rawValue), systemImage: "eyedropper")
                     }.tint(edit?.sampleMode == mode ? .accentColor : .secondary)
                 }
             }
             if let mode = edit?.sampleMode {
-                Text("Click the original layer to set \(mode.rawValue.lowercased()). Click the eyedropper again to stop.")
+                Text(L10n.format("Click the original layer to set %@. Click the eyedropper again to stop.", L10n.text(mode.rawValue.lowercased())))
                     .font(.caption).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Auto").font(.caption).foregroundStyle(.secondary)
                 HStack {
                     ForEach(LevelsAuto.allCases, id: \.self) { mode in
-                        Button(mode.rawValue) { session.autoLevels(mode) }
+                        Button(L10n.text(mode.rawValue)) { session.autoLevels(mode) }
                     }
                 }.disabled(edit?.histogramReady != true)
             }

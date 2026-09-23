@@ -277,7 +277,7 @@ final class LayerTableView: NSTableView {
             drawOutlined(box, in: NSRect(x: 10, y: 1, width: 19, height: 17))
             return true
         }
-        image.accessibilityDescription = releasing ? "Release clipping mask" : "Create clipping mask"
+        image.accessibilityDescription = L10n.text(releasing ? "Release clipping mask" : "Create clipping mask")
         return NSCursor(image: image, hotSpot: NSPoint(x: 3, y: 3))
     }
     private static let createClippingCursor = clippingCursor(releasing: false)
@@ -531,7 +531,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         maskThumbnail.action = #selector(selectMask)
         maskThumbnail.isMaskTarget = true
         thumbnail.loadsSelection = true
-        thumbnail.toolTip = "Select layer; Cmd-click to select its pixels (Cmd-Shift adds, Cmd-Option subtracts)"
+        thumbnail.toolTip = L10n.text("Select layer; Cmd-click to select its pixels (Cmd-Shift adds, Cmd-Option subtracts)")
         maskThumbnail.imageScaling = .scaleProportionallyUpOrDown
         linkButton.isBordered = false
         linkButton.title = ""
@@ -606,7 +606,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
                                 ("Add White Mask", #selector(addWhiteMask)), ("Add Black Mask", #selector(addBlackMask)),
                                 ("Enable/Disable Mask", #selector(toggleMask)), ("Delete Mask", #selector(deleteMask)), ("Release Clipping Mask", #selector(removeLiveMask)),
                                 ("Move Out of Folder", #selector(moveOut)), ("Delete Layer / Folder", #selector(deleteLayer))] {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            let item = NSMenuItem(title: L10n.text(title), action: action, keyEquivalent: "")
             item.target = self
             menu.addItem(item)
         }

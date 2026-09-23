@@ -36,7 +36,7 @@ final class ProjectController {
         panel.allowedContentTypes = [.png]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export PNG"
+        panel.title = L10n.text("Export PNG")
         panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".png"
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
@@ -54,7 +54,7 @@ final class ProjectController {
         let options: CanvasSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Canvas Size"
+            sheet.title = L10n.text("Canvas Size")
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, foreground: session.foregroundColor, background: session.backgroundColor) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -76,7 +76,7 @@ final class ProjectController {
         let options: ImageSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Image Size"
+            sheet.title = L10n.text("Image Size")
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -101,7 +101,7 @@ final class ProjectController {
             let data: Data? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export JPEG"
+                sheet.title = L10n.text("Export JPEG")
                 sheet.contentViewController = NSHostingController(rootView: JPEGExportSheet(raster: raster) { data in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
@@ -116,7 +116,7 @@ final class ProjectController {
             panel.allowedContentTypes = [.jpeg]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.title = "Export JPEG"
+            panel.title = L10n.text("Export JPEG")
             panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".jpg"
             guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -134,7 +134,7 @@ final class ProjectController {
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
             panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
-            panel.title = asNew ? "Save Project As" : "Save Project"
+            panel.title = L10n.text(asNew ? "Save Project As" : "Save Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -169,7 +169,7 @@ final class ProjectController {
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
+            panel.title = L10n.text("Open Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
