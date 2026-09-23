@@ -51,7 +51,7 @@ Because it’s open source, you can download the Xcode project and add, remove, 
 ### Canvas and files
 - Multiple projects in tabs
 - Rulers (⌘R), guides dragged from them, a layout grid, and Snap To for guides, grid, layers and document bounds
-- Crop with snapping, Option for symmetric cropping, and Image → Crop to Selection
+- Crop with snapping, Option for symmetric cropping, and Image → Crop to crop to the selection
 - Canvas Size and Image Size
 - Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
 - Import JPEG, PNG, HEIC, TIFF and Photoshop PSD (8-bit RGB only; not PSB or CMYK). PSD folders, masks, a subset of blend modes, and fill rectangles/ellipses stay editable; text and other vectors become pixels. A conversion report is shown before anything is applied.

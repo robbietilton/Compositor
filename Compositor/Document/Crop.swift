@@ -174,7 +174,7 @@ extension EditorSession {
 
     func cropToSelection() {
         guard canCropToSelection, let rect = selectionCropRect else { return }
-        applyCrop(rect, actionName: "Crop to Selection")
+        applyCrop(rect, actionName: "Crop")
     }
 
     func commitCrop() async {

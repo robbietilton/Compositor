@@ -228,9 +228,6 @@ struct CompositorApp: App {
                         .disabled(!session.canModifySelection)
                 }
                 CommandMenu("Image") {
-                    Button("Crop to Selection") { session.cropToSelection() }
-                        .disabled(!session.canCropToSelection)
-                    Divider()
                     Button("Curves…") { session.beginFilter(.curves) }
                         .configuredKeyboardShortcut("m").disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     Button("Levels…") { session.beginLevels() }
@@ -251,6 +248,8 @@ struct CompositorApp: App {
                     Button("Image Size…") { Task { await applicationDelegate.projects.imageSize() } }
                         .configuredKeyboardShortcut("i", modifiers: [.command, .option])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
+                    Button("Crop") { session.cropToSelection() }
+                        .disabled(!session.canCropToSelection)
                     Button("Trim…") { Task { await applicationDelegate.projects.trim() } }
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Group {
