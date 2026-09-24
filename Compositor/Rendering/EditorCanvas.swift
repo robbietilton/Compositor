@@ -18,6 +18,17 @@ struct EditorCanvas: NSViewRepresentable {
 
 final class CanvasView: NSView {
     var inlineTextEditor: InlineTextEditor?
+    /// The text being typed, rendered as the layer will hold it, remade only when its style changes.
+    private var draftTextCache: (style: LayerTextStyle, image: CGImage)?
+    /// The text being typed as pixels, where the editor shows it (see InlineTextEditor).
+    private var draftText: (image: CGImage, transform: LayerTransform)? {
+        guard let draft = session.textDraft, let transform = inlineTextEditor?.shownTransform else { draftTextCache = nil; return nil }
+        if draftTextCache?.style != draft.style {
+            guard let image = try? EditorSession.textImage(draft.style) else { draftTextCache = nil; return nil }
+            draftTextCache = (draft.style, image)
+        }
+        return draftTextCache.map { ($0.image, transform) }
+    }
     var textBoxAnchor: CGPoint?
     var textBoxRect: CGRect?
     private var lastFocusRequest = 0
@@ -474,6 +485,9 @@ final class CanvasView: NSView {
             let transform: LayerTransform
         }
         let folderMasks: [FolderMask]
+        /// The text being typed, which the canvas draws as pixels.
+        let textStyle: LayerTextStyle?
+        let textTransform: LayerTransform?
     }
 
     @discardableResult
@@ -502,7 +516,7 @@ final class CanvasView: NSView {
             folderMasks: (document?.layers ?? []).filter { $0.isGroup && $0.mask != nil }.map {
                 DisplayState.FolderMask(id: $0.id, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) },
                                         transform: session.displayedTransform(for: $0))
-            })
+            }, textStyle: session.textDraft?.style, textTransform: session.textDraft == nil ? nil : inlineTextEditor?.shownTransform)
         var changed = false
         if displayedState != state {
             if let previous = displayedState, previous.documentID == state.documentID,
@@ -812,7 +826,15 @@ final class CanvasView: NSView {
         }
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
-            guard let layer = byID[id], layer.id != session.textDraft?.layerID else { return }
+            guard let layer = byID[id] else { return }
+            // Text being edited draws as it will be committed, in its place among the layers.
+            if layer.id == session.textDraft?.layerID {
+                if let text = draftText {
+                    LayerRenderer.draw(text.image, transform: text.transform, center: center(text.transform.center), scale: scale,
+                        opacity: layer.effectiveOpacity(in: byID), blendMode: blendMode(of: layer), in: context)
+                }
+                return
+            }
             // A folder the layer sits in dims it along with everything else inside (see LayerOpacity).
             let opacity = layer.effectiveOpacity(in: byID)
             let mode = session.displayedBlendMode(for: layer)
@@ -946,6 +968,15 @@ final class CanvasView: NSView {
             drawOwn(id, context)
             guard id == session.activeLayerID else { return }
             drawShapeDraft(scale: scale, center: center, in: context)
+            drawNewText(context)
+        }
+        // New text goes where its layer will: just above the active layer, or on top when that isn't drawn (a
+        // folder, a hidden layer, or none).
+        var drewNewText = false
+        func drawNewText(_ context: CGContext) {
+            guard !drewNewText, session.textDraft?.layerID == nil, let text = draftText else { return }
+            drewNewText = true
+            LayerRenderer.draw(text.image, transform: text.transform, center: center(text.transform.center), scale: scale, in: context)
         }
         let live = LiveMaskRenderer(bounds: context.boundingBoxOfClipPath, source: { byID[$0]?.maskSourceID }, drawOwn: drawOwnWithDraft)
         live.adjustment = { byID[$0]?.adjustment }
@@ -977,6 +1008,7 @@ final class CanvasView: NSView {
             let origin = center(transform.center)
             return { clip.apply(scale: scale, center: origin, in: $0) }
         }, in: context) { live.drawComposite($0, in: context) }
+        drawNewText(context)
     }
 
     /// The shape being dragged out with the Shape tool, drawn in the color it will be made in.

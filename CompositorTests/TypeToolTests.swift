@@ -202,4 +202,42 @@ struct TypeToolTests {
         #expect(!session.applyText(draft))
         #expect(session.document?.layers.count == 1)
     }
+
+    /// Zoomed in, text being typed shows as the pixels it will be committed as, so confirming it changes nothing on
+    /// screen — at a zoom that smooths pixels and at one that shows them hard-edged.
+    @Test(arguments: [1.5, 4] as [CGFloat])
+    func textLooksTheSameWhileEditingAndOnceCommitted(zoom: CGFloat) throws {
+        let session = makeSession()
+        let view = CanvasView(session: session)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        session.viewport.resize(to: view.bounds.size, backingScale: 1, documentSize: CGSize(width: 800, height: 600))
+        session.zoom(to: zoom)
+        func snapshot() throws -> [UInt8] {
+            // The canvas's own drawing, without the editor's box and handles over it.
+            view.synchronizeDisplay()
+            view.subviews.forEach { $0.isHidden = true }
+            defer { view.subviews.forEach { $0.isHidden = false } }
+            let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let data = try #require(rep.bitmapData)
+            return Array(UnsafeBufferPointer(start: data, count: rep.bytesPerRow * rep.pixelsHigh))
+        }
+        let blank = try snapshot()
+        session.beginText(at: CGPoint(x: 380, y: 300))
+        session.textDraft?.style.content = "Sharp"
+        session.textDraft?.style.fontSize = 24
+        view.synchronizeDisplay()
+        let editor = try #require(view.inlineTextEditor)
+        #expect(editor.textView.textStorage?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .clear)
+
+        let editing = try snapshot()
+        #expect(editing != blank, "the text being typed wasn't drawn on the canvas")
+        #expect(session.finishText())
+        #expect(session.activeLayer?.liveText != nil)
+        let committed = try snapshot()
+        #expect(editing.count == committed.count)
+        let largest = zip(editing, committed).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        #expect(largest <= 2, "the canvas changed by up to \(largest) when the text was committed")
+    }
 }
