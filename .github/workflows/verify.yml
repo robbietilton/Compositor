@@ -38,7 +38,7 @@ jobs:
           xcodebuild build-for-testing
           -project Compositor.xcodeproj
           -scheme Compositor
-          -destination 'platform=macOS'
+          -destination 'platform=macOS,arch=arm64'
           -configuration Debug
           -derivedDataPath DerivedData
           CODE_SIGN_IDENTITY=-
@@ -49,7 +49,7 @@ jobs:
           xcodebuild test-without-building
           -project Compositor.xcodeproj
           -scheme Compositor
-          -destination 'platform=macOS'
+          -destination 'platform=macOS,arch=arm64'
           -derivedDataPath DerivedData
           -resultBundlePath ParallelResults.xcresult
           -parallel-testing-enabled YES
@@ -62,7 +62,7 @@ jobs:
           xcodebuild test-without-building
           -project Compositor.xcodeproj
           -scheme Compositor
-          -destination 'platform=macOS'
+          -destination 'platform=macOS,arch=arm64'
           -derivedDataPath DerivedData
           -resultBundlePath SerialResults.xcresult
           -parallel-testing-enabled NO

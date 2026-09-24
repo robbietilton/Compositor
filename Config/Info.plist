@@ -37,23 +37,6 @@
 			<key>LSTypeIsPackage</key>
 			<true/>
 		</dict>
-		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.image</string>
-			</array>
-			<key>UTTypeDescription</key>
-			<string>Adobe Photoshop Large Document</string>
-			<key>UTTypeIdentifier</key>
-			<string>com.adobe.photoshop-large-image</string>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>psb</string>
-				</array>
-			</dict>
-		</dict>
 	</array>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
@@ -109,6 +92,23 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>psd</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.image</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Adobe Photoshop Large Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.adobe.photoshop-large-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>psb</string>
 				</array>
 			</dict>
 		</dict>
