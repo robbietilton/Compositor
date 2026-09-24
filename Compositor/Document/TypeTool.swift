@@ -2,6 +2,7 @@ import AppKit
 
 nonisolated enum TextAlignment: String, Codable, CaseIterable, Sendable {
     case left = "Left", center = "Center", right = "Right"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {

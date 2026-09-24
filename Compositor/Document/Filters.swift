@@ -21,6 +21,10 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case grain = "Grain"
     case blackWhite = "Black & White"
     case colorBalance = "Color Balance"
+    /// Localized menu/panel name; the English rawValue is the catalog key.
+    var localizedName: String {
+        String(localized: String.LocalizationValue(rawValue))
+    }
     var isAutomatic: Bool { self == .contentAwareFill || self == .removeBackground }
     /// Color adjustments: in the Image menu (and editable as adjustment layers), not under Filter.
     var isImageAdjustment: Bool {
@@ -34,6 +38,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
 nonisolated enum BackgroundQuality: String, CaseIterable, Sendable {
     case basic = "Basic"
     case advanced = "Advanced"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 /// Every filter's settings; each filter reads only its own.

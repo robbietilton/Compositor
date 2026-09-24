@@ -3,12 +3,14 @@ import AppKit
 nonisolated enum GradientStyle: String, CaseIterable, Sendable {
     case foregroundToBackground = "Foreground to Background"
     case foregroundToTransparent = "Foreground to Transparent"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 /// Linear runs from start to end; radial is centered on the start with the end on its rim.
 nonisolated enum GradientShape: String, CaseIterable, Sendable {
     case linear = "Linear"
     case radial = "Radial"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 nonisolated struct GradientSettings: Equatable, Sendable {

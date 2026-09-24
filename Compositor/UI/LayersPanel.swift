@@ -23,7 +23,7 @@ struct LayersPanel: View {
                 VStack(spacing: 10) {
                     Image(systemName: "square.3.layers.3d").font(.system(size: 25, weight: .light))
                     Text("No layers yet").font(.callout.weight(.medium))
-                    Text(session.document == nil ? "Create a canvas or import an image." : "Import an image or add a blank layer.")
+                    Text(LocalizedStringKey(session.document == nil ? "Create a canvas or import an image." : "Import an image or add a blank layer."))
                         .font(.caption).multilineTextAlignment(.center)
                 }
                 .foregroundStyle(.secondary).padding(16)

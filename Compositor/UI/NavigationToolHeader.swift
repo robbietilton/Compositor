@@ -9,7 +9,7 @@ struct NavigationToolHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .hand ? "Pan" : "Zoom").font(ToolHeaderStyle.titleFont)
+            Text(LocalizedStringKey(session.tool == .hand ? "Pan" : "Zoom")).font(ToolHeaderStyle.titleFont)
             if session.tool == .zoom {
                 TextField("Zoom", text: $zoomText)
                     .textFieldStyle(.roundedBorder)

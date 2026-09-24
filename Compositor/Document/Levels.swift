@@ -3,6 +3,7 @@ import Observation
 
 nonisolated enum LevelsChannel: String, CaseIterable, Sendable, Codable {
     case rgb = "RGB", red = "Red", green = "Green", blue = "Blue"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
     var index: Int { Self.allCases.firstIndex(of: self)! }
 }
 nonisolated struct LevelRange: Equatable, Sendable, Codable {

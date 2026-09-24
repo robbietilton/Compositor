@@ -18,7 +18,7 @@ struct TrimSheet: View {
                 Text("Based On").font(.headline)
                 Picker("", selection: $basedOn) {
                     ForEach(TrimBasedOn.allCases) { option in
-                        Text(option.rawValue).tag(option)
+                        Text(option.localizedName).tag(option)
                     }
                 }
                 .labelsHidden()

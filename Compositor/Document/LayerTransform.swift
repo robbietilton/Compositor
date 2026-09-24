@@ -5,6 +5,7 @@ nonisolated enum LayerSampling: String, CaseIterable, Codable, Sendable {
     case nearest = "Nearest"
     case smooth = "Smooth"
     case high = "High quality"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
     var quality: CGInterpolationQuality {
         switch self {
         case .nearest: return .none

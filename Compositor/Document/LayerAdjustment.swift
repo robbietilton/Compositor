@@ -7,6 +7,12 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
     case gaussianBlur = "Gaussian Blur", motionBlur = "Motion Blur"
     case invert = "Invert"
     case blackWhite = "Black & White", colorBalance = "Color Balance"
+
+    /// Localized menu/panel name; the English rawValue is the catalog key.
+    var localizedName: String {
+        String(localized: String.LocalizationValue(rawValue))
+    }
+
     var symbol: String {
         switch self {
         case .curves: return "point.topleft.down.to.point.bottomright.curvepath"

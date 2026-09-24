@@ -95,7 +95,49 @@ enum NavigationTool: String, CaseIterable {
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
     var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    /// Localized tool name for SwiftUI help() — literals stay LocalizedStringKey
+    /// so the String Catalog translates them.
+    var label: LocalizedStringKey {
+        switch self {
+        case .type: "Type (T)"
+        case .eyedropper: "Eyedropper (I)"
+        case .marquee: "Marquee (M)"
+        case .lasso: "Lasso (L)"
+        case .wand: "Magic (W) · Tab switches Wand and Object"
+        case .brush: "Brush (B) · Eraser (E)"
+        case .spotHealing: "Spot Healing Brush (J)"
+        case .cloneStamp: "Clone Stamp (S) · Option-click sets the source"
+        case .blur: "Smear (R)"
+        case .gradient: "Gradient (G)"
+        case .shape: "Shape (U) · Shift-U switches Rectangle/Ellipse"
+        case .crop: "Crop (C)"
+        case .move: "Move / Transform (V)"
+        case .hand: "Hand (H)"
+        case .zoom: "Zoom (Z)"
+        case .idle: ""
+        }
+    }
+    /// Localized plain String for accessibility (AppKit a11y needs String).
+    var accessibilityName: String {
+        switch self {
+        case .type: String(localized: "Type (T)")
+        case .eyedropper: String(localized: "Eyedropper (I)")
+        case .marquee: String(localized: "Marquee (M)")
+        case .lasso: String(localized: "Lasso (L)")
+        case .wand: String(localized: "Magic (W) · Tab switches Wand and Object")
+        case .brush: String(localized: "Brush (B) · Eraser (E)")
+        case .spotHealing: String(localized: "Spot Healing Brush (J)")
+        case .cloneStamp: String(localized: "Clone Stamp (S) · Option-click sets the source")
+        case .blur: String(localized: "Smear (R)")
+        case .gradient: String(localized: "Gradient (G)")
+        case .shape: String(localized: "Shape (U) · Shift-U switches Rectangle/Ellipse")
+        case .crop: String(localized: "Crop (C)")
+        case .move: String(localized: "Move / Transform (V)")
+        case .hand: String(localized: "Hand (H)")
+        case .zoom: String(localized: "Zoom (Z)")
+        case .idle: ""
+        }
+    }
 }
 
 @Observable

@@ -8,14 +8,14 @@ struct CameraRawCurveControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Curve", selection: Binding(get: { edit?.cameraRawCurvePage ?? .parametric }, set: { session.filterEdit?.cameraRawCurvePage = $0 })) {
-                ForEach(CameraRawCurvePage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawCurvePage.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .help("Parametric lifts tonal regions. Point places anchors on the curve.")
             if edit?.cameraRawCurvePage == .point {
                 Picker("Channel", selection: Binding(get: { edit?.cameraRawPointChannel ?? .rgb }, set: { session.filterEdit?.cameraRawPointChannel = $0 })) {
-                    ForEach(CameraRawPointChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(CameraRawPointChannel.allCases, id: \.self) { Text($0.localizedName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -227,7 +227,7 @@ struct CameraRawMixerControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Mixer", selection: Binding(get: { edit?.cameraRawMixerPage ?? .hsl }, set: { session.filterEdit?.cameraRawMixerPage = $0 })) {
-                ForEach(CameraRawMixerPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawMixerPage.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -235,7 +235,7 @@ struct CameraRawMixerControls: View {
             switch edit?.cameraRawMixerPage ?? .hsl {
             case .hsl:
                 Picker("Component", selection: Binding(get: { edit?.cameraRawMixerTab ?? .hue }, set: { session.filterEdit?.cameraRawMixerTab = $0 })) {
-                    ForEach(CameraRawMixerTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(CameraRawMixerTab.allCases, id: \.self) { Text($0.localizedName).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
                 .help("Hue shifts the color, Saturation its strength, and Luminance its brightness.")
@@ -385,7 +385,7 @@ struct CameraRawGradingControls: View {
             // Five segments spelled out want 453 points and the docked panel has 374, so the
             // choice is a menu rather than a row that runs past the panel's edge.
             Picker("Grading", selection: Binding(get: { page }, set: { session.filterEdit?.cameraRawGradePage = $0 })) {
-                ForEach(CameraRawGradePage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawGradePage.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .pickerStyle(.menu)
             .labelsHidden()

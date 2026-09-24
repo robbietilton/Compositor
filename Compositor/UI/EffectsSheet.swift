@@ -167,8 +167,8 @@ struct EffectsSheet: View {
         .accessibilityLabel(kind.rawValue + " color")
     }
 
-    private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>,
-                        inputRange: ClosedRange<CGFloat>? = nil, unit: String) -> some View {
+    private func slider(_ title: LocalizedStringKey, value: Binding<CGFloat>, range: ClosedRange<CGFloat>,
+                        inputRange: ClosedRange<CGFloat>? = nil, unit: LocalizedStringKey) -> some View {
         let limits = inputRange ?? range
         let setAmount: (Double) -> Void = { amount in
             guard amount.isFinite else { return }

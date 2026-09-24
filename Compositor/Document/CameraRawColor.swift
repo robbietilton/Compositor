@@ -1,11 +1,21 @@
 import AppKit
 
-nonisolated enum CameraRawCurvePage: String, CaseIterable, Sendable { case parametric = "Parametric", point = "Point" }
-nonisolated enum CameraRawPointChannel: String, CaseIterable, Sendable { case rgb = "RGB", red = "Red", green = "Green", blue = "Blue" }
-nonisolated enum CameraRawMixerPage: String, CaseIterable, Sendable { case hsl = "HSL", color = "Color", point = "Point Color" }
-nonisolated enum CameraRawMixerTab: String, CaseIterable, Sendable { case hue = "Hue", saturation = "Saturation", luminance = "Luminance" }
+nonisolated enum CameraRawCurvePage: String, CaseIterable, Sendable { case parametric = "Parametric", point = "Point" 
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+}
+nonisolated enum CameraRawPointChannel: String, CaseIterable, Sendable { case rgb = "RGB", red = "Red", green = "Green", blue = "Blue" 
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+}
+nonisolated enum CameraRawMixerPage: String, CaseIterable, Sendable { case hsl = "HSL", color = "Color", point = "Point Color" 
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+}
+nonisolated enum CameraRawMixerTab: String, CaseIterable, Sendable { case hue = "Hue", saturation = "Saturation", luminance = "Luminance" 
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+}
 nonisolated enum CameraRawGradePage: String, CaseIterable, Sendable {
     case threeWay = "Three-Way", shadows = "Shadows", midtones = "Midtones", highlights = "Highlights", global = "Global"
+
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 struct CameraRawDrag {

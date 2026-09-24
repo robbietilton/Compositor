@@ -24,7 +24,7 @@ struct HueSaturationSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Picker("Range", selection: settings.range) {
-                    ForEach(ColorRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(ColorRange.allCases, id: \.self) { Text($0.localizedName).tag($0) }
                 }
                 .pickerStyle(.menu).frame(width: 160).labelsHidden().disabled(current.colorize)
                 Spacer()
@@ -109,7 +109,7 @@ struct HueSaturationSheet: View {
         .frame(width: 24, height: 20)
     }
 
-    private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String) -> some View {
+    private func slider(_ title: LocalizedStringKey, value: Binding<Double>, range: ClosedRange<Double>, unit: LocalizedStringKey) -> some View {
         HStack(spacing: 10) {
             Text(title).frame(width: 76, alignment: .leading)
             Slider(value: value, in: range)

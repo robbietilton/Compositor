@@ -211,6 +211,7 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
 
 nonisolated enum LayerEffectKind: String, CaseIterable, Sendable {
     case stroke = "Stroke", shadow = "Drop Shadow", colorOverlay = "Color Overlay", innerShadow = "Inner Shadow", outerGlow = "Outer Glow", innerGlow = "Inner Glow"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 struct LayerEffectSelection: Equatable {

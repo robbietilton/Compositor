@@ -10,7 +10,7 @@ enum ToolHeaderStyle {
 extension View {
     /// Keeps a unit ("%", "px") tight against its field so the two read as one value,
     /// regardless of the wider spacing between controls in a bar.
-    func unitSuffix(_ unit: String) -> some View {
+    func unitSuffix(_ unit: LocalizedStringKey) -> some View {
         HStack(spacing: 2) {
             self
             Text(unit)

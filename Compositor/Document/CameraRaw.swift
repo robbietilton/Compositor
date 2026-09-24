@@ -5,6 +5,7 @@ import AppKit
 nonisolated enum CameraRawWhiteBalance: String, CaseIterable, Sendable {
     case custom = "Custom"
     case auto = "Auto"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 /// Glow's three looks. Warmth tints Diffusion and Bloom from cool to warm; Halation's fringe stays red.
@@ -12,6 +13,7 @@ nonisolated enum CameraRawGlowStyle: String, CaseIterable, Sendable {
     case diffusion = "Diffusion"
     case bloom = "Bloom"
     case halation = "Halation"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
     var kernelValue: Int32 {
         switch self {
         case .diffusion: return 0
@@ -26,6 +28,7 @@ nonisolated enum CameraRawVignetteStyle: String, CaseIterable, Sendable {
     case highlightPriority = "Highlight Priority"
     case colorPriority = "Color Priority"
     case paintOverlay = "Paint Overlay"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
     var kernelValue: Int32 {
         switch self {
         case .highlightPriority: return 0
@@ -327,6 +330,7 @@ nonisolated struct CameraRawSettings: Equatable, Sendable {
 nonisolated enum CameraRawScopeMode: String, Sendable {
     case histogram = "Histogram"
     case vectorscope = "Vectorscope"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 /// One RGB histogram and a hue/saturation vectorscope of the same graded pixels.

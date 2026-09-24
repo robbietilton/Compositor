@@ -10,7 +10,7 @@ struct CameraRawGeometryControls: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Upright").font(.subheadline)
             Picker("Upright", selection: uprightBinding) {
-                ForEach(CameraRawUprightMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawUprightMode.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
@@ -36,7 +36,7 @@ struct CameraRawGeometryControls: View {
                 }
             }
             Picker("Projection", selection: binding(\.projection)) {
-                ForEach(CameraRawProjection.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawProjection.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .help("Perspective allows stronger keystone. Rectilinear keeps the warp gentler.")
             geometrySlider("Vertical", \.vertical, help: "Straightens vertical lines toward the center.")
@@ -92,7 +92,7 @@ struct CameraRawCalibrationControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Process", selection: binding(\.process)) {
-                ForEach(CameraRawProcessVersion.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawProcessVersion.allCases, id: \.self) { Text($0.localizedName).tag($0) }
             }
             .help("Chooses how strongly the calibration sliders below are applied. Version 6 is the current default.")
             Text(raw.calibration.process.summary)

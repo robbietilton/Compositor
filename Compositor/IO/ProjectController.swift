@@ -252,11 +252,18 @@ final class ProjectController {
     private func confirmReplacement() async -> Bool {
         guard session.isModified, session.document != nil else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? "Untitled")?"
-        alert.informativeText = "Your changes will be lost if you don’t save them."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Don’t Save")
+        let name = session.projectURL?.lastPathComponent
+            ?? String(localized: "Untitled", defaultValue: "Untitled")
+        alert.messageText = String(
+            format: String(localized: "Save changes to %@?",
+                           defaultValue: "Save changes to %@?"),
+            name)
+        alert.informativeText = String(
+            localized: "Your changes will be lost if you don’t save them.",
+            defaultValue: "Your changes will be lost if you don’t save them.")
+        alert.addButton(withTitle: String(localized: "Save", defaultValue: "Save"))
+        alert.addButton(withTitle: String(localized: "Cancel", defaultValue: "Cancel"))
+        alert.addButton(withTitle: String(localized: "Don’t Save", defaultValue: "Don’t Save"))
         let response = await show(alert)
         if response == .alertFirstButtonReturn { return await saveCurrent() }
         return response == .alertThirdButtonReturn

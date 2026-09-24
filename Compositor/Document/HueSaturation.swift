@@ -5,6 +5,7 @@ import CoreImage
 nonisolated enum ColorRange: String, CaseIterable, Sendable, Hashable, Codable {
     case master = "Master", reds = "Reds", yellows = "Yellows", greens = "Greens"
     case cyans = "Cyans", blues = "Blues", magentas = "Magentas"
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 
     /// Photoshop's starting hue band: falloff start, range start, range end, falloff end.
     var defaultBand: HueBand {
@@ -150,6 +151,7 @@ nonisolated enum HueSampleMode: String, CaseIterable, Sendable {
         case .remove: "Click the image to narrow this range to exclude that color"
         }
     }
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 /// A targeted-adjustment drag in progress.

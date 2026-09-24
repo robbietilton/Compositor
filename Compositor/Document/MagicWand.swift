@@ -2,7 +2,13 @@ import AppKit
 
 nonisolated enum WandSampleSize: Int, CaseIterable, Sendable {
     case point, threeByThree, fiveByFive
-    var title: String { ["Point Sample", "3 by 3 Average", "5 by 5 Average"][rawValue] }
+    var title: String {
+        switch self {
+        case .point: String(localized: "Point Sample")
+        case .threeByThree: String(localized: "3 by 3 Average")
+        case .fiveByFive: String(localized: "5 by 5 Average")
+        }
+    }
     /// Pixels either side of the click that are averaged into the color to match.
     var radius: Int { rawValue }
 }

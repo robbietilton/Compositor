@@ -1,6 +1,8 @@
 import AppKit
 
-nonisolated enum LevelsSample: String, CaseIterable { case black = "Black", gray = "Gray", white = "White" }
+nonisolated enum LevelsSample: String, CaseIterable { case black = "Black", gray = "Gray", white = "White" 
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
+}
 nonisolated enum LevelsAuto: String, CaseIterable {
     case contrast = "Contrast", color = "Color", neutral = "Color + neutral midtones"
     func settings(histogram: [[Double]]) -> LevelsSettings {
@@ -34,6 +36,7 @@ nonisolated enum LevelsAuto: String, CaseIterable {
         }
         return result
     }
+    var localizedName: String { String(localized: String.LocalizationValue(rawValue)) }
 }
 
 extension LevelsSettings {
