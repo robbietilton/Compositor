@@ -73,7 +73,7 @@ extension ImageLayer {
             imageFile: asset == nil ? nil : "\(id.uuidString).png", parentID: parentID, isGroup: isGroup, opacity: opacity, blendMode: blendMode, maskFile: mask == nil ? nil : "\(id.uuidString).mask.png", maskEnabled: mask?.isEnabled, maskSourceID: maskSourceID, adjustment: adjustment, maskPlacement: mask?.placement, maskLinked: mask?.isLinked)
     }
 }
-extension ProjectLayerRecord {
+nonisolated extension ProjectLayerRecord {
     /// The opacity this layer is drawn at, folders included (see LayerOpacity).
     func effectiveOpacity(in byID: [UUID: ProjectLayerRecord]) -> Double {
         LayerOpacity.effective(opacity ?? 1, parent: parentID) { byID[$0].map { ($0.opacity ?? 1, $0.parentID) } }

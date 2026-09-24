@@ -246,7 +246,7 @@ nonisolated struct CameraRawGradeWheel: Equatable, Sendable {
     }
 }
 
-extension CameraRawSettings {
+nonisolated extension CameraRawSettings {
     /// Runs Curve, then Color Mixer, then Color Grading. `visualize` dims pixels outside that point color.
     func applyCurveColor(_ pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, stride: Int, visualize: Int) {
         let curve = curve.normalized

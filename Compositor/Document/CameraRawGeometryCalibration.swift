@@ -80,7 +80,7 @@ nonisolated struct CameraRawGeometrySettings: Equatable, Sendable {
             "inputBottomRight": vector(corners[2]),
             "inputBottomLeft": vector(corners[3]),
         ])
-        var result = try PixelAdjust.render(warped, width: width, height: height, isMask: false)
+        let result = try PixelAdjust.render(warped, width: width, height: height, isMask: false)
         guard settings.constrainCrop else { return result }
         let context = try BrushRaster.context(width: width, height: height, mask: false)
         BrushRaster.draw(result, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: context)
@@ -241,7 +241,7 @@ nonisolated struct CameraRawCalibrationSettings: Equatable, Sendable {
     func applying(shows: Bool) -> Self { shows ? self : Self() }
 }
 
-extension CameraRawSettings {
+nonisolated extension CameraRawSettings {
     func applyCalibration(pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, stride: Int) {
         let calibration = calibration.normalized
         guard calibration.adjusts else { return }

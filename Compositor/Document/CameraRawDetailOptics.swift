@@ -95,7 +95,7 @@ nonisolated struct CameraRawOpticsSettings: Equatable, Sendable {
     }
 }
 
-extension CameraRawSettings {
+nonisolated extension CameraRawSettings {
     func applyDetailOptics(pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, stride: Int, scale: Double,
                            profileStrength: Double, sharpenMask: Bool) {
         let detail = detail.normalized

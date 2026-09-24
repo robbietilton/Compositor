@@ -147,9 +147,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         removeFrameObserver()
         guard let window = documentWindow() else { return }
         dockedWindow = window
-        let follow = { [weak self] (_: Notification) in
-            guard let self, let panel = self.panel, panel.isVisible, self.placement == .dockedToMainWindowRight else { return }
-            self.applyDockedFrame(panel: panel)
+        let follow: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let panel = self.panel, panel.isVisible, self.placement == .dockedToMainWindowRight else { return }
+                self.applyDockedFrame(panel: panel)
+            }
         }
         for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
             frameObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main, using: follow))

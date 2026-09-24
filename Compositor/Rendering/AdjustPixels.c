@@ -1044,7 +1044,7 @@ static void optics_chromatic(uint8_t *rgba, size_t width, size_t height, size_t 
             double dx = x + 0.5 - cx, dy = y + 0.5 - cy;
             double radial = hypot(dx, dy) / maxR;
             double shift = strength * radial * radial * 2.5;
-            long rx = (long)lround(x - shift), bx = (long)lround(x + shift);
+            int rx = (int)lround(x - shift), bx = (int)lround(x + shift);
             const uint8_t *pr = srcRow + clamped_index(rx, width) * 4;
             const uint8_t *pb = srcRow + clamped_index(bx, width) * 4;
             double g = fmin(1.0, srcRow[x * 4 + 1] / alpha);

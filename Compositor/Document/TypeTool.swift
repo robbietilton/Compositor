@@ -209,7 +209,7 @@ extension EditorSession {
         return flattened.isEmpty ? "Text" : String(flattened.prefix(40))
     }
 
-    static func textAttributes(_ style: LayerTextStyle) -> [NSAttributedString.Key: Any] {
+    nonisolated static func textAttributes(_ style: LayerTextStyle) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = style.alignment == .left ? .left : style.alignment == .center ? .center : .right
         let font = NSFont(name: style.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
