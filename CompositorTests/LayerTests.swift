@@ -244,7 +244,7 @@ struct LayerTests {
 
     private func makeLayerTable(session: EditorSession) -> (LayerTableView, NativeLayerList.Coordinator, NSWindow) {
         let coordinator = NativeLayerList.Coordinator(session: session)
-        let table = LayerTableView()
+        let table = LayerTableView(frame: NSRect(x: 0, y: 0, width: 252, height: 400))
         table.session = session
         table.rowHeight = 52
         table.intercellSpacing = NSSize(width: 0, height: 2)
@@ -263,7 +263,16 @@ struct LayerTests {
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = scroll
         coordinator.update(table)
+        window.layoutIfNeeded()
+        table.layoutSubtreeIfNeeded()
         return (table, coordinator, window)
+    }
+
+    @Test func testLayerRowViewHasNonNilContextMenu() throws {
+        let session = sessionWithThreeLayers()
+        let (table, _, _) = makeLayerTable(session: session)
+        let rowView = try #require(table.rowView(atRow: 0, makeIfNecessary: true))
+        #expect(rowView.menu != nil)
     }
 
     @Test func testContextMenuContainsCoreLayerActions() throws {
@@ -273,13 +282,9 @@ struct LayerTests {
         let menu = try #require(coordinator.contextMenu(for: 0))
         let titles = menu.items.map(\.title)
 
-        // Duplicate
         #expect(titles.contains("Duplicate Layer"))
-        // Rename
         #expect(titles.contains("Rename…"))
-        // Delete
         #expect(titles.contains("Delete Layer"))
-        // Mask actions
         let addMaskItem = try #require(menu.items.first(where: { $0.title == "Add Mask" }))
         let submenu = try #require(addMaskItem.submenu)
         let subTitles = submenu.items.map(\.title)
@@ -288,6 +293,7 @@ struct LayerTests {
         #expect(titles.contains("Disable Mask"))
         #expect(titles.contains("Delete Mask"))
         #expect(titles.contains("Link Mask") || titles.contains("Unlink Mask"))
+        #expect(!titles.contains("Layer Effects…"))
     }
 
     @Test func testRightClickOnUnselectedLayerSelectsIt() throws {
@@ -473,7 +479,6 @@ struct LayerTests {
         let (table, coordinator, _) = makeLayerTable(session: session)
 
         let layers = session.layerRows.map(\.layer)
-        // Select top layer (row 0 in layerRows)
         session.selectLayer(layers[0].id)
         coordinator.update(table)
 
@@ -482,18 +487,15 @@ struct LayerTests {
         #expect(clippingItem.title == "Create Clipping Mask")
         #expect(clippingItem.isEnabled == true)
 
-        // Create clipping mask
         coordinator.toggleClippingMaskAction(nil)
         #expect(session.activeLayer?.maskSourceID != nil)
 
-        // Now it is clipped -> shows Release Clipping Mask
         coordinator.update(table)
         menu = try #require(coordinator.contextMenu(for: 0))
         clippingItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleClippingMaskAction) })
         #expect(clippingItem.title == "Release Clipping Mask")
         #expect(clippingItem.isEnabled == true)
 
-        // Release clipping mask
         coordinator.toggleClippingMaskAction(nil)
         #expect(session.activeLayer?.maskSourceID == nil)
     }
@@ -502,7 +504,6 @@ struct LayerTests {
         let session = sessionWithThreeLayers()
         let (table, coordinator, _) = makeLayerTable(session: session)
 
-        // 1 layer selected (top): can merge down
         let layers = session.layerRows.map(\.layer)
         session.selectLayer(layers[0].id)
         coordinator.update(table)
@@ -512,7 +513,6 @@ struct LayerTests {
         #expect(mergeItem.title == "Merge Down")
         #expect(mergeItem.isEnabled == session.canMergeLayers)
 
-        // Multi-selection: "Merge Layers"
         session.selectLayers([layers[0].id, layers[1].id], primary: layers[0].id)
         coordinator.update(table)
         menu = try #require(coordinator.contextMenu(for: 0))
@@ -521,7 +521,6 @@ struct LayerTests {
         #expect(mergeItem.title == "Merge Layers")
         #expect(mergeItem.isEnabled == session.canMergeLayers)
 
-        // Execute merge
         let beforeCount = session.document?.layers.count ?? 0
         coordinator.mergeLayersAction(nil)
         #expect((session.document?.layers.count ?? 0) == beforeCount - 1)
@@ -554,5 +553,66 @@ struct LayerTests {
         #expect(session.activeLayer?.isVisible == !wasVisible)
         session.undo()
         #expect(session.activeLayer?.isVisible == wasVisible)
+    }
+
+    @Test func testRightClickOnMaskThumbnailSelectsMaskTargetAndReturnsMenu() throws {
+        let session = sessionWithThreeLayers()
+        session.addMask()
+        let (table, coordinator, window) = makeLayerTable(session: session)
+        coordinator.update(table)
+
+        let rowView = try #require(table.rowView(atRow: 0, makeIfNecessary: true))
+        let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true))
+        if rowView.superview == nil {
+            table.addSubview(rowView)
+            rowView.frame = table.rect(ofRow: 0)
+        }
+        if cell.superview == nil {
+            rowView.addSubview(cell)
+            cell.frame = rowView.bounds
+        }
+        window.layoutIfNeeded()
+        table.layoutSubtreeIfNeeded()
+        cell.layoutSubtreeIfNeeded()
+        func findMaskThumb(_ view: NSView) -> NSView? {
+            for sub in view.subviews {
+                if let thumb = sub as? NSButton, thumb.toolTip?.hasPrefix("Select layer mask") == true { return thumb }
+                if let found = findMaskThumb(sub) { return found }
+            }
+            return nil
+        }
+        let maskThumb = try #require(findMaskThumb(cell))
+        let thumbCenter = NSPoint(x: maskThumb.bounds.midX, y: maskThumb.bounds.midY)
+        let windowPoint = maskThumb.convert(thumbCenter, to: nil)
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown,
+            location: windowPoint,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1.0
+        ))
+
+        let targetID = try #require(session.activeLayerID)
+        session.selectLayerTarget(targetID, mask: false)
+        #expect(!session.isMaskSelected)
+
+        let menu = table.menu(for: event)
+        #expect(menu != nil)
+        #expect(session.isMaskSelected)
+        let titles = menu?.items.map(\.title) ?? []
+        #expect(titles.contains("Delete Mask"))
+    }
+
+    @Test func testRowMenuConsistencyWithTableMenuProvider() throws {
+        let session = sessionWithThreeLayers()
+        let (table, coordinator, _) = makeLayerTable(session: session)
+        let rowView = try #require(table.rowView(atRow: 0, makeIfNecessary: true))
+        #expect(rowView.menu != nil)
+        let canonicalMenu = coordinator.contextMenu(for: 0)
+        #expect(rowView.menu?.items.map(\.title) == canonicalMenu?.items.map(\.title))
     }
 }

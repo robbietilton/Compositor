@@ -62,6 +62,10 @@ extension EditorSession {
     /// targeted mask, or the layer when its pixels are targeted.
     func deleteKeyPressed() {
         if selectedEffect != nil { removeSelectedEffect(); return }
+        if tool == .directSelection, let selection = vectorSelection, !selection.selectedAnchors.isEmpty {
+            deleteSelectedVectorAnchors()
+            return
+        }
         if selection != nil { Task { await clearSelectedPixels() } }
         else { deleteLayerOrMask() }
     }

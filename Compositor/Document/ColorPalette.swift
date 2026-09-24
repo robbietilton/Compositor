@@ -1,13 +1,14 @@
 import AppKit
 import Observation
 
-nonisolated struct PaletteColor: Equatable, Sendable {
+nonisolated struct PaletteColor: Codable, Equatable, Sendable {
     var red: CGFloat
     var green: CGFloat
     var blue: CGFloat
     static let black = PaletteColor(red: 0, green: 0, blue: 0)
     static let white = PaletteColor(red: 1, green: 1, blue: 1)
     var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
+    var cgColor: CGColor { CGColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
     init(red: CGFloat, green: CGFloat, blue: CGFloat) {
         self.red = red; self.green = green; self.blue = blue
     }

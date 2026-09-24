@@ -92,6 +92,9 @@ struct NativeLayerList: NSViewRepresentable {
             if visible.location != NSNotFound {
                 for row in visible.location..<min(next.count, NSMaxRange(visible)) {
                     (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? LayerCell)?.updateTarget()
+                    if let rowView = table.rowView(atRow: row, makeIfNecessary: false) {
+                        rowView.menu = contextMenu(for: row)
+                    }
                 }
             }
             // A rename — double-click, the row's menu, or the Layer menu — is typed in the row itself.
@@ -313,6 +316,14 @@ struct NativeLayerList: NSViewRepresentable {
             session.toggleLayerVisibility(id)
         }
 
+        func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+            let identifier = NSUserInterfaceItemIdentifier("layerRowView")
+            let rowView = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableRowView ?? NSTableRowView()
+            rowView.identifier = identifier
+            rowView.menu = contextMenu(for: row)
+            return rowView
+        }
+
         func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
         func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
             52 + CGFloat(rows[row].effects?.kinds.count ?? 0) * 24
@@ -506,7 +517,11 @@ final class LayerTableView: NSTableView {
             }
         }
 
-        return coordinator.contextMenu(for: row)
+        let menu = coordinator.contextMenu(for: row)
+        if let rowView = rowView(atRow: row, makeIfNecessary: false) {
+            rowView.menu = menu
+        }
+        return menu
     }
     private static func clippingCursor(releasing: Bool) -> NSCursor {
         let image = NSImage(size: NSSize(width: 30, height: 28), flipped: false) { _ in
@@ -601,6 +616,12 @@ final class LayerTableView: NSTableView {
     }
     /// The layer or mask thumbnail under a point in this view's coordinates, if any.
     private func thumbnail(at point: NSPoint) -> LayerThumbnailButton? {
+        let r = row(at: point)
+        if r >= 0, r < numberOfRows,
+           let cell = view(atColumn: 0, row: r, makeIfNecessary: true) as? LayerCell,
+           let thumb = cell.thumbnail(at: point, in: self) {
+            return thumb
+        }
         guard let superview else { return nil }
         var view = superview.hitTest(convert(point, to: superview))
         while let current = view, current !== self {
@@ -682,7 +703,7 @@ final class LayerTableView: NSTableView {
             session?.resetPaletteColors()
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "t" {
             session?.selectTool(.type)
-        } else if plain, ["a", "v", "h", "z", "b", "e", "g", "l", "m", "w", "j", "s", "u", "r", "i", "c"].contains(event.charactersIgnoringModifiers?.lowercased() ?? "") {
+        } else if plain, ["a", "v", "h", "z", "b", "e", "g", "l", "m", "w", "j", "s", "u", "r", "i", "c", "p"].contains(event.charactersIgnoringModifiers?.lowercased() ?? "") {
             let key = event.charactersIgnoringModifiers?.lowercased()
             if key == "m" { if !event.isARepeat { session?.pressMarqueeKey() } }
             else if key == "l" { if !event.isARepeat { session?.pressLassoKey() } }
@@ -691,7 +712,7 @@ final class LayerTableView: NSTableView {
                 session?.brushMode = key == "e" ? .erase : .paint
             }
             else if key == "w" { if !event.isARepeat { session?.pressWandKey() } }
-            else { session?.selectTool(key == "a" ? .idle : key == "i" ? .eyedropper : key == "c" ? .crop : key == "r" ? .blur : key == "b" ? .brush : key == "g" ? .gradient : key == "l" ? .lasso : key == "m" ? .marquee : key == "j" ? .spotHealing : key == "s" ? .cloneStamp : key == "u" ? .shape : key == "v" ? .move : key == "h" ? .hand : .zoom) }
+            else { session?.selectTool(key == "a" ? .directSelection : key == "i" ? .eyedropper : key == "c" ? .crop : key == "r" ? .blur : key == "b" ? .brush : key == "g" ? .gradient : key == "l" ? .lasso : key == "m" ? .marquee : key == "j" ? .spotHealing : key == "s" ? .cloneStamp : key == "u" ? .shape : key == "p" ? .pen : key == "v" ? .move : key == "h" ? .hand : .zoom) }
         } else if plain, let digit = Int(event.charactersIgnoringModifiers ?? ""), session?.usesOpacityKeys == true {
             session?.typeOpacityDigit(digit)
         // With the Move tool the arrows move the layer, as on the canvas, rather than changing the row selection.
@@ -1003,6 +1024,17 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     /// Whether a window point lands on one of the row's buttons rather than its name.
     func isOnControl(_ windowPoint: NSPoint) -> Bool {
         [eye, disclosure, thumbnail, linkButton, maskThumbnail].contains { !$0.isHidden && $0.bounds.contains($0.convert(windowPoint, from: nil)) }
+    }
+    /// The layer or mask thumbnail located at the given point in the specified view's coordinate space.
+    func thumbnail(at point: NSPoint, in view: NSView) -> LayerThumbnailButton? {
+        for button in [maskThumbnail, thumbnail] {
+            guard !button.isHidden else { continue }
+            let localPoint = button.convert(point, from: view)
+            if button.bounds.contains(localPoint) {
+                return button
+            }
+        }
+        return nil
     }
     @objc func loadMaskSelection() {
         guard let layerID else { return }

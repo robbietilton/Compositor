@@ -9,7 +9,7 @@ extension EditorSession {
             if let asset = layer.asset { images[layer.id] = asset }
             if let mask = layer.mask { masks[layer.id] = mask.asset }
             return ProjectLayerRecord(id: layer.id, name: layer.name, isVisible: layer.isVisible,
-                transform: layer.transform, imageFile: layer.asset == nil ? nil : "\(layer.id.uuidString).png", parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.mask == nil ? nil : "\(layer.id.uuidString).mask.png", maskEnabled: layer.mask?.isEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, maskPlacement: layer.mask?.placement, maskLinked: layer.mask?.isLinked, shape: layer.liveShape?.style, effects: layer.effects, text: layer.liveText?.style)
+                transform: layer.transform, imageFile: layer.asset == nil ? nil : "\(layer.id.uuidString).png", parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.mask == nil ? nil : "\(layer.id.uuidString).mask.png", maskEnabled: layer.mask?.isEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, maskPlacement: layer.mask?.placement, maskLinked: layer.mask?.isLinked, shape: layer.liveShape?.style, effects: layer.effects, text: layer.liveText?.style, vector: layer.vector)
         }
         return ProjectSnapshot(manifest: ProjectManifest(resolution: document.resolution, documentID: document.id, width: document.width,
             height: document.height, activeLayerID: activeLayerID, layers: layers,
@@ -21,6 +21,8 @@ extension EditorSession {
         collapsedGroupIDs = []
         isMaskSelected = false
         cancelCrop()
+        cancelPen()
+        cancelDirectSelection()
         guideDrag = nil
         let manifest = snapshot.manifest
         transformEdit = nil
@@ -30,7 +32,8 @@ extension EditorSession {
                            isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
                            shape: LayerShape.loaded($0.shape, image: snapshot.images[$0.id]?.image),
                            effects: $0.effects,
-                           text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image))
+                           text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image),
+                           vector: $0.vector)
             }, resolution: manifest.resolution ?? 72, guides: manifest.guides ?? [])
         activeLayerID = manifest.activeLayerID
         projectURL = url
@@ -43,6 +46,10 @@ extension EditorSession {
         collapsedGroupIDs = []
         isMaskSelected = false
         cancelCrop()
+        cancelPen()
+        cancelDirectSelection()
+        cancelShape()
+        cancelLasso()
         transformEdit = nil
         guideDrag = nil
         document = nil

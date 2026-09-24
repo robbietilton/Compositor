@@ -181,9 +181,14 @@ final class TransformOverlay: NSView {
         drawGuides()
         if session.tool == .crop { drawCrop() }
         else if let line = gradientLine { drawGradientLine(line) }
+        else if session.tool == .directSelection { drawDirectSelection() }
+        else if session.tool == .pen { /* pen draft/interaction drawn below */ }
         else { drawTransformHandles() }
+        drawPenPathOutline()
         drawSelection()
         drawLassoDraft()
+        drawPenDraft()
+        drawPenPathInteraction()
         drawSnapGuides()
     }
 
@@ -458,6 +463,503 @@ final class TransformOverlay: NSView {
             context.fill(handle)
             context.stroke(handle)
         }
+        context.restoreGState()
+    }
+
+    private func drawPenDraft() {
+        guard session.tool == .pen,
+              let draft = session.penDraft,
+              session.document != nil,
+              let transform = documentToView,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let points = draft.subpath.points
+        guard !points.isEmpty else { return }
+
+        context.saveGState()
+
+        // 1. Draw existing committed segments of the draft
+        if points.count >= 2 {
+            let path = CGMutablePath()
+            let firstView = points[0].anchor.applying(transform)
+            path.move(to: firstView)
+
+            for i in 0 ..< points.count - 1 {
+                let a = points[i]
+                let b = points[i + 1]
+                let bView = b.anchor.applying(transform)
+                if a.nextControl == nil && b.previousControl == nil {
+                    path.addLine(to: bView)
+                } else {
+                    let c1 = (a.nextControl ?? a.anchor).applying(transform)
+                    let c2 = (b.previousControl ?? b.anchor).applying(transform)
+                    path.addCurve(to: bView, control1: c1, control2: c2)
+                }
+            }
+
+            if draft.isClosingCandidate {
+                let last = points[points.count - 1]
+                let first = points[0]
+                if last.nextControl == nil && first.previousControl == nil {
+                    path.addLine(to: firstView)
+                } else {
+                    let c1 = (last.nextControl ?? last.anchor).applying(transform)
+                    let c2 = (first.previousControl ?? first.anchor).applying(transform)
+                    path.addCurve(to: firstView, control1: c1, control2: c2)
+                }
+            }
+
+            // Dark shadow/outline for contrast
+            context.addPath(path)
+            context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+            context.setLineWidth(3)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.strokePath()
+
+            // Main stroke line
+            context.addPath(path)
+            context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            context.setLineWidth(1.5)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.strokePath()
+        }
+
+        // 2. Draw live preview segment from last anchor to pointer
+        if !draft.isDragging && !draft.isClosingCandidate, let pointer = draft.pointer, let last = points.last {
+            let lastView = last.anchor.applying(transform)
+            let pointerView = pointer.applying(transform)
+
+            let previewPath = CGMutablePath()
+            previewPath.move(to: lastView)
+            if let nextC = last.nextControl {
+                let c1 = nextC.applying(transform)
+                previewPath.addCurve(to: pointerView, control1: c1, control2: pointerView)
+            } else {
+                previewPath.addLine(to: pointerView)
+            }
+
+            context.saveGState()
+            context.setLineDash(phase: 0, lengths: [4, 4])
+            context.addPath(previewPath)
+            context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor)
+            context.setLineWidth(1.5)
+            context.strokePath()
+            context.restoreGState()
+        }
+
+        // 3. Draw Bézier handles if dragging the active anchor
+        if draft.isDragging, let index = draft.activeAnchorIndex, points.indices.contains(index) {
+            let activePoint = points[index]
+            let anchorView = activePoint.anchor.applying(transform)
+
+            if let prevC = activePoint.previousControl, let nextC = activePoint.nextControl {
+                let prevView = prevC.applying(transform)
+                let nextView = nextC.applying(transform)
+
+                // Handle stalks
+                let handleLines = CGMutablePath()
+                handleLines.move(to: prevView)
+                handleLines.addLine(to: anchorView)
+                handleLines.addLine(to: nextView)
+
+                context.saveGState()
+                context.addPath(handleLines)
+                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.7).cgColor)
+                context.setLineWidth(1)
+                context.strokePath()
+
+                // Circular control endpoints
+                for cp in [prevView, nextView] {
+                    let handleRect = CGRect(x: cp.x - 3.5, y: cp.y - 3.5, width: 7, height: 7)
+                    context.setFillColor(NSColor.white.cgColor)
+                    context.fillEllipse(in: handleRect)
+                    context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                    context.setLineWidth(1.5)
+                    context.strokeEllipse(in: handleRect)
+                }
+                context.restoreGState()
+            }
+        }
+
+        // 4. Draw anchors
+        // Check if pointer is hovering close to initial anchor for closing
+        let firstView = points[0].anchor.applying(transform)
+        var hoveringFirst = draft.isClosingCandidate
+        if !hoveringFirst, points.count >= 2, let pointer = draft.pointer {
+            let pointerView = pointer.applying(transform)
+            hoveringFirst = hypot(firstView.x - pointerView.x, firstView.y - pointerView.y) <= 10.0
+        }
+
+        for (idx, pt) in points.enumerated() {
+            let v = pt.anchor.applying(transform)
+            let rect = CGRect(x: v.x - 3.5, y: v.y - 3.5, width: 7, height: 7)
+
+            if idx == 0 {
+                // First anchor
+                if hoveringFirst {
+                    // Close-path indicator: draw a circle ring around first anchor
+                    let ring = CGRect(x: v.x - 7, y: v.y - 7, width: 14, height: 14)
+                    context.setStrokeColor(NSColor.systemGreen.cgColor)
+                    context.setLineWidth(2)
+                    context.strokeEllipse(in: ring)
+                }
+                context.setFillColor(NSColor.white.cgColor)
+                context.fill(rect)
+                context.setStrokeColor(hoveringFirst ? NSColor.systemGreen.cgColor : NSColor.controlAccentColor.cgColor)
+                context.setLineWidth(hoveringFirst ? 2 : 1.5)
+                context.stroke(rect)
+            } else {
+                // Other anchors
+                context.setFillColor(NSColor.white.cgColor)
+                context.fill(rect)
+                context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                context.setLineWidth(1)
+                context.stroke(rect)
+            }
+        }
+
+        context.restoreGState()
+    }
+
+    private func drawPenPathOutline() {
+        guard session.tool == .pen,
+              session.penDraft == nil,
+              let document = session.document,
+              let docToView = documentToView,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+
+        let activeVectorLayer = session.activeLayer.flatMap { layer in
+            (layer.isVisible && layer.vector != nil && !(layer.vector?.subpaths.isEmpty ?? true)) ? layer : nil
+        }
+
+        if let activeLayer = activeVectorLayer, let vector = activeLayer.vector {
+            let layerToDoc = activeLayer.transform.layerToDocument
+            var layerToView = layerToDoc.concatenating(docToView)
+
+            let basePath = VectorBridge.cgPath(from: vector)
+            if let viewPath = basePath.copy(using: &layerToView) {
+                context.saveGState()
+                context.addPath(viewPath)
+                context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                context.setLineWidth(1)
+                context.setLineDash(phase: 0, lengths: [4, 4])
+                context.strokePath()
+                context.restoreGState()
+            }
+        }
+    }
+
+    private func drawPenPathInteraction() {
+        guard session.tool == .pen,
+              session.penDraft == nil,
+              let document = session.document,
+              let docToView = documentToView,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // 1. If an active layer has a VectorModel and is visible, draw all its anchor points
+        let activeVectorLayer = session.activeLayer.flatMap { layer in
+            (layer.isVisible && layer.vector != nil && !(layer.vector?.subpaths.isEmpty ?? true)) ? layer : nil
+        }
+
+        if let activeLayer = activeVectorLayer, let vector = activeLayer.vector {
+            let layerToDoc = activeLayer.transform.layerToDocument
+            let layerToView = layerToDoc.concatenating(docToView)
+
+            context.saveGState()
+
+            // 1b. Draw all anchor points on each subpath
+            for (sIdx, subpath) in vector.subpaths.enumerated() {
+                for (aIdx, pt) in subpath.points.enumerated() {
+                    let anchorIdx = VectorAnchorIndex(subpathIndex: sIdx, anchorIndex: aIdx)
+                    let anchorView = pt.anchor.applying(layerToView)
+
+                    let isHovered = (session.penHoverAnchor?.layerID == activeLayer.id &&
+                                     session.penHoverAnchor?.anchorIndex == anchorIdx)
+
+                    context.saveGState()
+                    if isHovered {
+                        // Outer accent halo for hovered anchor
+                        let haloRect = CGRect(x: anchorView.x - 6.5, y: anchorView.y - 6.5, width: 13, height: 13)
+                        context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor)
+                        context.setLineWidth(2)
+                        context.stroke(haloRect)
+                    }
+
+                    // Anchor square with dark contrast backing and white fill
+                    let anchorRect = CGRect(x: anchorView.x - 3.5, y: anchorView.y - 3.5, width: 7, height: 7)
+                    context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+                    context.setLineWidth(2.5)
+                    context.stroke(anchorRect)
+
+                    context.setFillColor(NSColor.white.cgColor)
+                    context.fill(anchorRect)
+                    context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                    context.setLineWidth(isHovered ? 1.5 : 1.0)
+                    context.stroke(anchorRect)
+
+                    context.restoreGState()
+                }
+            }
+
+            context.restoreGState()
+        }
+
+        // 2. Open endpoint continuation indicator
+        if let hover = session.penHoverEndpoint {
+            let hoverView = hover.point.applying(docToView)
+            context.saveGState()
+            let ring = CGRect(x: hoverView.x - 7, y: hoverView.y - 7, width: 14, height: 14)
+            context.setStrokeColor(NSColor.systemGreen.cgColor)
+            context.setLineWidth(2)
+            context.strokeEllipse(in: ring)
+
+            let dot = CGRect(x: hoverView.x - 3.5, y: hoverView.y - 3.5, width: 7, height: 7)
+            context.setFillColor(NSColor.white.cgColor)
+            context.fillEllipse(in: dot)
+            context.setStrokeColor(NSColor.systemGreen.cgColor)
+            context.setLineWidth(1.5)
+            context.strokeEllipse(in: dot)
+            context.restoreGState()
+        } else {
+            // 3. If hovering a non-active vector layer, draw its dashed outline and hovered anchor
+            let activeID = session.activeLayerID
+            if let hoverLayerHit = session.penHoverVectorLayer,
+               hoverLayerHit.layerID != activeID,
+               let layer = document.layers.first(where: { $0.id == hoverLayerHit.layerID && $0.isVisible }),
+               let vector = layer.vector {
+                let layerToDoc = layer.transform.layerToDocument
+                var layerToView = layerToDoc.concatenating(docToView)
+                let localPath = VectorBridge.cgPath(from: vector)
+                if let viewPath = localPath.copy(using: &layerToView) {
+                    context.saveGState()
+                    context.addPath(viewPath)
+                    context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor)
+                    context.setLineWidth(1.5)
+                    context.setLineDash(phase: 0, lengths: [4, 4])
+                    context.strokePath()
+                    context.restoreGState()
+                }
+            }
+
+            if let anchorTarget = session.penHoverAnchor,
+               anchorTarget.layerID != activeID,
+               let layer = document.layers.first(where: { $0.id == anchorTarget.layerID && $0.isVisible }),
+               let vector = layer.vector {
+                let s = anchorTarget.anchorIndex.subpathIndex
+                let a = anchorTarget.anchorIndex.anchorIndex
+                if vector.subpaths.indices.contains(s),
+                   vector.subpaths[s].points.indices.contains(a) {
+                    let pt = vector.subpaths[s].points[a]
+                    let layerToDoc = layer.transform.layerToDocument
+                    let layerToView = layerToDoc.concatenating(docToView)
+                    let anchorView = pt.anchor.applying(layerToView)
+
+                    context.saveGState()
+                    let haloRect = CGRect(x: anchorView.x - 6.5, y: anchorView.y - 6.5, width: 13, height: 13)
+                    context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.5).cgColor)
+                    context.setLineWidth(2)
+                    context.stroke(haloRect)
+
+                    let anchorRect = CGRect(x: anchorView.x - 3.5, y: anchorView.y - 3.5, width: 7, height: 7)
+                    context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+                    context.setLineWidth(2.5)
+                    context.stroke(anchorRect)
+
+                    context.setFillColor(NSColor.white.cgColor)
+                    context.fill(anchorRect)
+                    context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                    context.setLineWidth(1.5)
+                    context.stroke(anchorRect)
+                    context.restoreGState()
+                }
+            }
+        }
+    }
+
+    private func drawDirectSelection() {
+        guard session.tool == .directSelection,
+              let document = session.document,
+              let docToView = documentToView,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // Find active vector layer or target layer
+        let targetLayerID = session.vectorSelection?.layerID ?? session.activeLayerID
+        guard let layer = document.layers.first(where: { $0.id == targetLayerID && $0.isVisible && $0.vector != nil }),
+              let baseVector = layer.vector else { return }
+
+        let vector = (session.directSelectionDrag?.layerID == layer.id)
+            ? session.directSelectionDrag!.currentModel
+            : baseVector
+
+        let layerToDoc = layer.transform.layerToDocument
+        var layerToView = layerToDoc.concatenating(docToView)
+
+        context.saveGState()
+
+        // 1. Draw path outline
+        let basePath = VectorBridge.cgPath(from: vector)
+        if let viewPath = basePath.copy(using: &layerToView) {
+            context.saveGState()
+            context.addPath(viewPath)
+            context.setStrokeColor(NSColor.black.withAlphaComponent(0.4).cgColor)
+            context.setLineWidth(2.5)
+            context.strokePath()
+
+            context.addPath(viewPath)
+            context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            context.setLineWidth(1)
+            context.strokePath()
+            context.restoreGState()
+        }
+
+        // 2. Draw anchors and handles
+        let selection = session.vectorSelection?.layerID == layer.id ? session.vectorSelection : nil
+
+        for (sIdx, subpath) in vector.subpaths.enumerated() {
+            for (aIdx, pt) in subpath.points.enumerated() {
+                let anchorIdx = VectorAnchorIndex(subpathIndex: sIdx, anchorIndex: aIdx)
+                let anchorView = pt.anchor.applying(layerToView)
+                let isSelected = selection?.selectedAnchors.contains(anchorIdx) == true
+
+                if isSelected {
+                    // Draw Bézier handles if present
+                    let stalkPath = CGMutablePath()
+                    var handlesToDraw: [(point: CGPoint, side: DirectSelectionHandleSide)] = []
+
+                    if let prev = pt.previousControl {
+                        let prevView = prev.applying(layerToView)
+                        stalkPath.move(to: anchorView)
+                        stalkPath.addLine(to: prevView)
+                        handlesToDraw.append((prevView, .previous))
+                    }
+                    if let next = pt.nextControl {
+                        let nextView = next.applying(layerToView)
+                        stalkPath.move(to: anchorView)
+                        stalkPath.addLine(to: nextView)
+                        handlesToDraw.append((nextView, .next))
+                    }
+
+                    if !handlesToDraw.isEmpty {
+                        context.saveGState()
+                        // Subordinate dark contrast line under handle stalk
+                        context.addPath(stalkPath)
+                        context.setStrokeColor(NSColor.black.withAlphaComponent(0.35).cgColor)
+                        context.setLineWidth(2)
+                        context.strokePath()
+
+                        // Subordinate accent line for stalk
+                        context.addPath(stalkPath)
+                        context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor)
+                        context.setLineWidth(1)
+                        context.strokePath()
+
+                        for item in handlesToDraw {
+                            let handle = SelectedHandle(anchorIndex: anchorIdx, side: item.side)
+                            let vState = session.visualStateForHandle(handle, in: layer.id)
+                            let handleRect = CGRect(x: item.point.x - 3.5, y: item.point.y - 3.5, width: 7, height: 7)
+
+                            // Hover halo if hovered
+                            if vState.isHovered {
+                                let hoverRect = CGRect(x: item.point.x - 5.5, y: item.point.y - 5.5, width: 11, height: 11)
+                                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.5).cgColor)
+                                context.setLineWidth(2)
+                                context.strokeEllipse(in: hoverRect)
+                            }
+
+                            // Dark contrast outline
+                            context.setStrokeColor(NSColor.black.withAlphaComponent(0.5).cgColor)
+                            context.setLineWidth(2.5)
+                            context.strokeEllipse(in: handleRect)
+
+                            if vState.isSelected {
+                                // Selected handle: filled accent circle with white inner border
+                                context.setFillColor(NSColor.controlAccentColor.cgColor)
+                                context.fillEllipse(in: handleRect)
+                                context.setStrokeColor(NSColor.white.cgColor)
+                                context.setLineWidth(1.5)
+                                context.strokeEllipse(in: handleRect)
+                            } else {
+                                // Unselected handle: white circle with accent border
+                                context.setFillColor(NSColor.white.cgColor)
+                                context.fillEllipse(in: handleRect)
+                                context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                                context.setLineWidth(1.5)
+                                context.strokeEllipse(in: handleRect)
+                            }
+                        }
+                        context.restoreGState()
+                    }
+                }
+
+                // Draw Anchor Point
+                let anchorVState = session.visualStateForAnchor(anchorIdx, in: layer.id)
+                let rect = CGRect(x: anchorView.x - 3.5, y: anchorView.y - 3.5, width: 7, height: 7)
+
+                // Hover halo if hovered
+                if anchorVState.isHovered {
+                    let hoverRect = CGRect(x: anchorView.x - 5.5, y: anchorView.y - 5.5, width: 11, height: 11)
+                    context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.5).cgColor)
+                    context.setLineWidth(2)
+                    context.stroke(hoverRect)
+                }
+
+                // Dark contrast backing
+                context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+                context.setLineWidth(2.5)
+                context.stroke(rect)
+
+                if anchorVState.isSelected {
+                    // Selected anchor: solid accent fill with crisp white border
+                    context.setFillColor(NSColor.controlAccentColor.cgColor)
+                    context.fill(rect)
+                    context.setStrokeColor(NSColor.white.cgColor)
+                    context.setLineWidth(1.5)
+                    context.stroke(rect)
+                } else {
+                    // Unselected anchor: visually neutral, hollow (document content shows through), crisp white inner border
+                    context.setStrokeColor(NSColor.white.cgColor)
+                    context.setLineWidth(1.5)
+                    context.stroke(rect)
+                }
+            }
+        }
+
+        // Draw hover feedback for an anchor on a different visible vector layer if targeted
+        if let hover = session.directSelectionHoverTarget,
+           hover.layerID != layer.id,
+           let hoverLayer = document.layers.first(where: { $0.id == hover.layerID && $0.isVisible && $0.vector != nil }),
+           let hoverVector = hoverLayer.vector {
+            let hLayerToDoc = hoverLayer.transform.layerToDocument
+            var hLayerToView = hLayerToDoc.concatenating(docToView)
+            let s = hover.anchorIndex.subpathIndex
+            let a = hover.anchorIndex.anchorIndex
+            if hoverVector.subpaths.indices.contains(s),
+               hoverVector.subpaths[s].points.indices.contains(a) {
+                let pt = hoverVector.subpaths[s].points[a]
+                let ptDoc: CGPoint
+                switch hover.kind {
+                case .anchor:
+                    ptDoc = pt.anchor
+                case .handle(.previous):
+                    ptDoc = pt.previousControl ?? pt.anchor
+                case .handle(.next):
+                    ptDoc = pt.nextControl ?? pt.anchor
+                }
+                let ptView = ptDoc.applying(hLayerToView)
+                let hoverRect = CGRect(x: ptView.x - 5.5, y: ptView.y - 5.5, width: 11, height: 11)
+                context.saveGState()
+                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.6).cgColor)
+                context.setLineWidth(2)
+                if case .handle = hover.kind {
+                    context.strokeEllipse(in: hoverRect)
+                } else {
+                    context.stroke(hoverRect)
+                }
+                context.restoreGState()
+            }
+        }
+
         context.restoreGState()
     }
 }

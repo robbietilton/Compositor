@@ -53,6 +53,7 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     /// The stroke and drop shadow drawn around the layer.
     var effects: LayerEffects? = nil
     var text: LayerTextStyle? = nil
+    var vector: VectorModel? = nil
 }
 
 nonisolated struct ProjectSnapshot: @unchecked Sendable {
@@ -196,6 +197,9 @@ actor ProjectStore {
         for layer in manifest.layers {
             if let text = layer.text {
                 guard text.isValid, layer.imageFile != nil, layer.isGroup != true, layer.adjustment == nil else { throw ProjectError.invalid }
+            }
+            if let vector = layer.vector {
+                guard vector.isValid, layer.imageFile != nil, layer.isGroup != true, layer.adjustment == nil else { throw ProjectError.invalid }
             }
             if let adjustment = layer.adjustment {
                 guard manifest.version >= 7, layer.isGroup != true, layer.imageFile == nil, adjustment.isValid else { throw ProjectError.invalid }
