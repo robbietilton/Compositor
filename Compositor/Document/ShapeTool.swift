@@ -3,15 +3,54 @@ import AppKit
 nonisolated enum ShapeKind: String, CaseIterable, Codable, Sendable {
     case rectangle = "Rectangle"
     case ellipse = "Ellipse"
+    case star = "Star"
+    case polygon = "Polygon"
     case line = "Line"
+
+    /// A star's points, from a triangle-like three to a near-circle of twenty.
+    static let starPoints = 3...20
+    /// A polygon's sides.
+    static let polygonSides = 5...20
+    /// How far a star's inner corners sit from its center, as a fraction of its points' reach: Photoshop's
+    /// default 50% indent.
+    static let starIndent: CGFloat = 0.5
+
     /// The shape filling `rect`. A rectangle's corners round by `cornerRadius`, at most half its shorter
-    /// side (so a large radius makes a pill); ellipses ignore it. A line runs corner to corner and is stroked,
-    /// not filled (see `linePath`).
-    func path(in rect: CGRect, cornerRadius: CGFloat = 0) -> CGPath {
-        if self == .ellipse { return CGPath(ellipseIn: rect, transform: nil) }
+    /// side (so a large radius makes a pill); ellipses ignore it. A star has `points` points and a polygon
+    /// `points` sides, pointing straight up and stretched to touch every edge of `rect`. A line runs corner to
+    /// corner and is stroked, not filled (see `shapeImage`).
+    func path(in rect: CGRect, cornerRadius: CGFloat = 0, points: Int = 5) -> CGPath {
+        switch self {
+        case .ellipse: return CGPath(ellipseIn: rect, transform: nil)
+        case .star, .polygon: return Self.regularPath(in: rect, star: self == .star, count: points)
+        case .rectangle, .line: break
+        }
         let radius = min(max(0, cornerRadius), rect.width / 2, rect.height / 2)
         guard radius > 0 else { return CGPath(rect: rect, transform: nil) }
         return CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+    }
+
+    /// A regular polygon, or a star alternating between its points and its inner corners, with the first point at
+    /// the top (y grows downward here, as it does in a layer's pixels and on the canvas). The corners are laid out
+    /// on a unit circle, then their own bounding box is fitted to `rect`, so a pentagon's flat base sits on the
+    /// bottom edge instead of floating above it.
+    private static func regularPath(in rect: CGRect, star: Bool, count: Int) -> CGPath {
+        let count = max(3, min(20, count))
+        let corners = star ? count * 2 : count
+        let unit = (0..<corners).map { index -> CGPoint in
+            let angle = -CGFloat.pi / 2 + CGFloat(index) * 2 * .pi / CGFloat(corners)
+            let reach = star && index % 2 == 1 ? starIndent : 1
+            return CGPoint(x: cos(angle) * reach, y: sin(angle) * reach)
+        }
+        let minX = unit.map(\.x).min() ?? -1, maxX = unit.map(\.x).max() ?? 1
+        let minY = unit.map(\.y).min() ?? -1, maxY = unit.map(\.y).max() ?? 1
+        let path = CGMutablePath()
+        path.addLines(between: unit.map { point in
+            CGPoint(x: rect.minX + (point.x - minX) / (maxX - minX) * rect.width,
+                    y: rect.minY + (point.y - minY) / (maxY - minY) * rect.height)
+        })
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -28,7 +67,16 @@ nonisolated struct LayerShapeStyle: Codable, Equatable, Sendable {
     var lineWidth: CGFloat? = nil
     var start: CGPoint? = nil
     var end: CGPoint? = nil
+    /// A star's points or a polygon's sides. Nil on other shapes.
+    var points: Int? = nil
     var color: PaletteColor { PaletteColor(red: red, green: green, blue: blue) }
+    /// Stars and polygons arrived in format version 10 and must say how many corners they have.
+    func isValid(version: Int) -> Bool {
+        switch kind {
+        case .star, .polygon: return version >= 10 && points.map { (3...20).contains($0) } == true
+        case .rectangle, .ellipse, .line: return points == nil
+        }
+    }
 }
 
 /// A layer made with the Shape tool. Its pixels are an ordinary raster, so it clips, masks, blends and filters like
@@ -61,6 +109,8 @@ struct ShapeDraft: Equatable {
     var end: CGPoint? = nil
     /// Document pixels, fixed when the drag starts; rectangles only.
     var cornerRadius: CGFloat = 0
+    /// A star's points or a polygon's sides, fixed when the drag starts.
+    var points: Int = 5
 }
 
 extension EditorSession {
@@ -71,7 +121,8 @@ extension EditorSession {
         guard tool == .shape, canEditLayers, point.x.isFinite, point.y.isFinite else { return }
         let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
         shapeDraft = ShapeDraft(kind: shapeKind, anchor: anchor, rect: CGRect(origin: anchor, size: .zero),
-                                cornerRadius: shapeKind == .rectangle ? CGFloat(shapeCornerRadius) : 0)
+                                cornerRadius: shapeKind == .rectangle ? CGFloat(shapeCornerRadius) : 0,
+                                points: shapeKind == .star ? shapeStarPoints : shapePolygonSides)
     }
 
     /// The line being dragged, from where it began to where the pointer is, in document pixels.
@@ -103,7 +154,7 @@ extension EditorSession {
         if shapeDraft != nil { shapeDraft = nil }
     }
 
-    /// Shift-U (and Tab): the Shape tool steps through Rectangle, Ellipse and Line.
+    /// Shift-U (and Tab): the Shape tool steps through Rectangle, Ellipse, Star, Polygon and Line.
     func toggleShapeKind() {
         cancelShape()
         let kinds = ShapeKind.allCases
@@ -139,10 +190,11 @@ extension EditorSession {
             }
             let start = ends.map { unit($0.start) }, finish = ends.map { unit($0.end) }
             let image = try Self.shapeImage(draft.kind, size: rect.size, color: foregroundColor, cornerRadius: draft.cornerRadius,
-                                            lineWidth: thickness, start: start, end: finish)
+                                            lineWidth: thickness, start: start, end: finish, points: draft.points)
             let style = LayerShapeStyle(kind: draft.kind, red: foregroundColor.red, green: foregroundColor.green,
                                         blue: foregroundColor.blue, cornerRadius: draft.cornerRadius,
-                                        lineWidth: draft.kind == .line ? thickness : nil, start: start, end: finish)
+                                        lineWidth: draft.kind == .line ? thickness : nil, start: start, end: finish,
+                                        points: draft.kind == .star || draft.kind == .polygon ? draft.points : nil)
             addPixelLayer(image, at: rect.origin, name: nextShapeName(draft.kind), editName: draft.kind.rawValue,
                           dropsSelection: false, shape: LayerShape(style: style, image: image))
         } catch { brushError = error.localizedDescription }
@@ -165,7 +217,8 @@ extension EditorSession {
               let image = try? Self.shapeImage(shape.style.kind, size: CGSize(width: width, height: height),
                                                color: shape.style.color, cornerRadius: shape.style.cornerRadius,
                                                lineWidth: shape.style.lineWidth ?? 0,
-                                               start: shape.style.start, end: shape.style.end),
+                                               start: shape.style.start, end: shape.style.end,
+                                               points: shape.style.points ?? 5),
               let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
         // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
         if let mask = layer.mask, mask.placement == nil { document?.layers[index].mask?.placement = layer.maskTransform }
@@ -195,7 +248,7 @@ extension EditorSession {
 
     /// The shape filling its box, anti-aliased where it curves.
     nonisolated static func shapeImage(_ kind: ShapeKind, size: CGSize, color: PaletteColor, cornerRadius: CGFloat = 0,
-                           lineWidth: CGFloat = 0, start: CGPoint? = nil, end: CGPoint? = nil) throws -> CGImage {
+                           lineWidth: CGFloat = 0, start: CGPoint? = nil, end: CGPoint? = nil, points: Int = 5) throws -> CGImage {
         let context = try BrushRaster.context(width: Int(size.width), height: Int(size.height), mask: false)
         let bounds = CGRect(origin: .zero, size: size)
         if kind == .line {
@@ -216,7 +269,7 @@ extension EditorSession {
             return image
         }
         context.setFillColor(CGColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1))
-        context.addPath(kind.path(in: bounds, cornerRadius: cornerRadius))
+        context.addPath(kind.path(in: bounds, cornerRadius: cornerRadius, points: points))
         context.fillPath()
         guard let image = context.makeImage() else { throw ExportError.render }
         return image

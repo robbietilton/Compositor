@@ -13,7 +13,15 @@ struct ShapeControls: View {
                 ForEach(ShapeKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
-            .help("Shift-U (or Tab) steps through Rectangle, Ellipse and Line")
+            .help("Shift-U (or Tab) steps through Rectangle, Ellipse, Star, Polygon and Line")
+            if session.shapeKind == .star {
+                count("Points", value: $session.shapeStarPoints, range: ShapeKind.starPoints)
+                    .help("How many points the star has")
+            }
+            if session.shapeKind == .polygon {
+                count("Sides", value: $session.shapePolygonSides, range: ShapeKind.polygonSides)
+                    .help("How many sides the polygon has")
+            }
             if session.shapeKind == .line {
                 HStack(spacing: 6) {
                     Text("Width").scrubbable(sensitivity: 1, value: $session.shapeLineWidth, range: 1...5000)
@@ -60,5 +68,19 @@ struct ShapeControls: View {
         }
         .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
         .disabled(session.showsBusy || session.document == nil)
+    }
+
+    /// A whole-number setting: a slider stepping one at a time across its whole range, and a field to type it.
+    private func count(_ title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
+        let clamp: (Double) -> Int = { $0.isFinite ? min(range.upperBound, max(range.lowerBound, Int($0.rounded()))) : range.lowerBound }
+        let amount = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = clamp($0) })
+        return HStack(spacing: 6) {
+            Text(title).scrubbable(sensitivity: 1, value: value, range: range)
+            Slider(value: amount, in: Double(range.lowerBound)...Double(range.upperBound), step: 1)
+                .frame(width: 100)
+            TextField(title, value: amount, format: .number.precision(.fractionLength(0)))
+                .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                .arrowSteps(value: { amount.wrappedValue }, change: { amount.wrappedValue = $0 })
+        }
     }
 }

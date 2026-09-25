@@ -102,4 +102,80 @@ struct ShapeToolTests {
         #expect(session.shapeDraft?.cornerRadius == 0, "ellipses take no radius")
         session.cancelShape()
     }
+
+    @Test func shiftUStepsThroughEveryShapeInTheMenuOrder() {
+        let session = makeSession()
+        var seen: [ShapeKind] = [session.shapeKind]
+        for _ in 0..<5 { session.toggleShapeKind(); seen.append(session.shapeKind) }
+        #expect(seen == [.rectangle, .ellipse, .star, .polygon, .line, .rectangle])
+    }
+
+    /// Both fill a 40 × 40 box point-up; the star's sides dip in between its points where the pentagon's run straight.
+    @Test func starsAndPolygonsFillTheirBoxPointUp() async throws {
+        let session = makeSession()
+        session.shapeKind = .star
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 50))
+        #expect(session.activeLayer?.name == "Star 1" && session.activeLayer?.liveShape?.style.points == 5)
+        session.shapeKind = .polygon
+        drag(session, from: CGPoint(x: 55, y: 10), to: CGPoint(x: 95, y: 50))
+        #expect(session.activeLayer?.name == "Polygon 1" && session.activeLayer?.liveShape?.style.points == 5)
+        let pixel = try await pixels(session)
+        #expect(pixel(30, 30) == (255, 255) && pixel(75, 30) == (255, 255), "filled at the middle")
+        #expect(pixel(30, 11).alpha > 0 && pixel(75, 11).alpha > 0, "the top point touches the top edge")
+        #expect(pixel(12, 12).alpha == 0 && pixel(57, 12).alpha == 0, "the box's corners stay clear")
+        #expect(pixel(40, 19).alpha == 0, "the star is cut in between its points")
+        #expect(pixel(85, 19).alpha == 255, "the pentagon's side runs straight across")
+        #expect(pixel(30, 47).alpha == 0, "the star's bottom dips in")
+        #expect(pixel(75, 48).alpha == 255, "the pentagon sits on its flat base")
+    }
+
+    @Test func pointsAndSidesAreTakenWhenTheDragStarts() {
+        let session = makeSession()
+        session.shapeKind = .star
+        session.shapeStarPoints = 8
+        session.shapePolygonSides = 12
+        session.beginShape(at: CGPoint(x: 10, y: 10))
+        #expect(session.shapeDraft?.points == 8)
+        session.shapeStarPoints = 3 // a change mid-drag doesn't reach the shape being drawn
+        session.dragShape(to: CGPoint(x: 40, y: 40), square: false, fromCenter: false)
+        session.finishShape()
+        #expect(session.activeLayer?.liveShape?.style.points == 8)
+        session.shapeKind = .polygon
+        drag(session, from: CGPoint(x: 50, y: 10), to: CGPoint(x: 90, y: 40))
+        #expect(session.activeLayer?.liveShape?.style.points == 12)
+        session.shapeKind = .rectangle
+        drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 30, y: 70))
+        #expect(session.activeLayer?.liveShape?.style.points == nil)
+    }
+
+    /// Stars and polygons keep their corner count through a save, and need format version 10.
+    @Test func starsRoundTripAndNeedVersionTen() async throws {
+        let session = makeSession()
+        session.shapeKind = .star
+        session.shapeStarPoints = 7
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 50))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Star.comp")
+        let snapshot = try #require(session.projectSnapshot())
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        #expect(loaded.manifest.version == 10)
+        let shape = try #require(loaded.manifest.layers.last?.shape)
+        #expect(shape.kind == .star && shape.points == 7)
+
+        var older = snapshot.manifest
+        older.version = 9
+        do {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: root.appendingPathComponent("Old.comp"))
+            Issue.record("A star was saved as version 9")
+        } catch {}
+        var tooMany = snapshot.manifest
+        tooMany.layers[tooMany.layers.count - 1].shape?.points = 21
+        do {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: tooMany, images: snapshot.images), to: root.appendingPathComponent("Many.comp"))
+            Issue.record("A 21-point star was saved")
+        } catch {}
+    }
 }
