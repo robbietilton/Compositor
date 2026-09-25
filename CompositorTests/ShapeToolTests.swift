@@ -169,6 +169,33 @@ struct ShapeToolTests {
         #expect(ShapeKind.starIndent(points: 4) == ShapeKind.starIndent(points: 5))
     }
 
+    /// The inset stays even until it is chosen; a chosen one is kept with the star and cuts its points deeper.
+    @Test func aChosenInsetIsKeptAndDeepensTheStar() async throws {
+        let session = makeSession()
+        session.shapeKind = .star
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 50))
+        #expect(session.activeLayer?.liveShape?.style.inset == nil, "an untouched inset stays even")
+        session.shapeStarInset = 0.9
+        drag(session, from: CGPoint(x: 55, y: 10), to: CGPoint(x: 95, y: 50))
+        #expect(session.activeLayer?.liveShape?.style.inset == 0.9)
+        let pixel = try await pixels(session)
+        // Just below the top point, off to one side: inside an even star, outside a deeply cut one.
+        #expect(pixel(32, 26).alpha == 255 && pixel(77, 26).alpha == 0)
+        #expect(pixel(30, 31) == (255, 255) && pixel(75, 31) == (255, 255), "both keep a filled middle")
+
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.layers.last?.shape?.inset == 0.9)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var deep = snapshot.manifest
+        deep.layers[deep.layers.count - 1].shape?.inset = 1.5
+        do {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: deep, images: snapshot.images), to: root.appendingPathComponent("Deep.comp"))
+            Issue.record("An inset past the center was saved")
+        } catch {}
+    }
+
     /// Stars and polygons keep their corner count through a save, and need format version 10.
     @Test func starsRoundTripAndNeedVersionTen() async throws {
         let session = makeSession()

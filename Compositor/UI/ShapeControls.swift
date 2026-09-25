@@ -17,6 +17,7 @@ struct ShapeControls: View {
             if session.shapeKind == .star {
                 count("Points", value: $session.shapeStarPoints, range: ShapeKind.starPoints)
                     .help("How many points the star has")
+                starInset
             }
             if session.shapeKind == .polygon {
                 count("Sides", value: $session.shapePolygonSides, range: ShapeKind.polygonSides)
@@ -68,6 +69,32 @@ struct ShapeControls: View {
         }
         .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
         .disabled(session.showsBusy || session.document == nil)
+    }
+
+    /// How deep a star's points are cut, as a percentage of their reach. It follows the point count, keeping the
+    /// sides even, until it is moved; Even goes back to that.
+    private var starInset: some View {
+        let range = Double(ShapeKind.starInsets.lowerBound * 100)...Double(ShapeKind.starInsets.upperBound * 100)
+        let even = Double(ShapeKind.evenInset(points: session.shapeStarPoints)) * 100
+        let percent = Binding(get: { (session.shapeStarInset.map { $0 * 100 } ?? even).rounded() },
+                              set: { value in
+                                  guard value.isFinite else { return }
+                                  session.shapeStarInset = min(range.upperBound, max(range.lowerBound, value.rounded())) / 100
+                              })
+        return HStack(spacing: 6) {
+            Text("Inset").scrubbable(sensitivity: 1, value: percent, range: range)
+            Slider(value: percent, in: range, step: 1).frame(width: 100)
+            TextField("Inset", value: percent, format: .number.precision(.fractionLength(0)))
+                .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                .arrowSteps(value: { percent.wrappedValue }, change: { percent.wrappedValue = $0 })
+                .unitSuffix("%")
+            if session.shapeStarInset != nil {
+                Button("Even") { session.shapeStarInset = nil }
+                    .controlSize(.small)
+                    .help("Go back to the inset that keeps the star's sides even for its number of points")
+            }
+        }
+        .help("How far the star's inner corners are pulled in toward its center")
     }
 
     /// A whole-number setting: a slider stepping one at a time across its whole range, and a field to type it.

@@ -71,7 +71,7 @@ Break one of these and Compositor refuses the whole file **without any message**
 - **Images are 8-bit PNGs** in `images/`. Layer images are RGBA; masks are 8-bit grayscale (white shows the layer, black hides it).
 - **Blend modes are spelled exactly** as Compositor names them: `Normal`, `Darken`, `Multiply`, `Color Burn`, `Linear Burn`, `Lighten`, `Screen`, `Color Dodge`, `Linear Dodge (Add)`, `Overlay`, `Soft Light`, `Hard Light`, `Vivid Light`, `Linear Light`, `Pin Light`, `Hard Mix`, `Difference`, `Exclusion`, `Subtract`, `Divide`, `Hue`, `Saturation`, `Color`, `Luminosity`.
 - **Every layer the manifest names has its image in place**, and the manifest is valid JSON.
-- **A `shape` of kind `Star` or `Polygon` needs `points`** (3–20) and a manifest `version` of at least 10; other shape kinds leave `points` out.
+- **A `shape` of kind `Star` or `Polygon` needs `points`** (3–20) and a manifest `version` of at least 10; a star's optional `inset` is 0.01–0.99. Other shape kinds leave both out.
 
 ## Writing safely while the project is open
 

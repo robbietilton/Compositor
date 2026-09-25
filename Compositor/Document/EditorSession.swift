@@ -240,6 +240,9 @@ final class EditorSession {
     var shapeLineWidth: Double = 4
     /// How many points the Shape tool's stars have (3–20).
     var shapeStarPoints = 5
+    /// How far the Shape tool pulls a star's inner corners in, as a fraction of its points' reach; nil keeps its
+    /// sides even for however many points it has.
+    var shapeStarInset: Double?
     /// How many sides the Shape tool's polygons have (3–20).
     var shapePolygonSides = 5
     /// The shape being dragged out with the Shape tool, before it becomes a layer.

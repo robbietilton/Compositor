@@ -1104,7 +1104,7 @@ final class CanvasView: NSView {
             context.addLine(to: center(ends.end))
             context.strokePath()
         } else {
-            context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, points: draft.points))
+            context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, points: draft.points, inset: draft.inset))
             context.fillPath()
         }
         context.restoreGState()
