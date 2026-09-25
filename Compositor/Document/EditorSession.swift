@@ -238,6 +238,7 @@ final class EditorSession {
     @ObservationIgnored var quickSelectionPrepared: QuickSelection.PreparedImage?
     @ObservationIgnored var quickSelectionSettingsAtStart: QuickSelectionSettings?
     @ObservationIgnored var quickSelectionPreviewTask: Task<Void, Never>?
+    @ObservationIgnored var quickSelectionPreviewPointCount = 0
     /// Monotonically increasing token used to coalesce rapid pointer updates into one worker.
     @ObservationIgnored var quickSelectionPreviewRequest = 0
     @ObservationIgnored var quickSelectionGeneration = 0

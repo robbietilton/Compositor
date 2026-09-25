@@ -1,7 +1,14 @@
 import AppKit
+import ImageIO
 import Testing
 @testable import Compositor
 
+private enum SuppliedPortraitFixture {
+    static let path = ProcessInfo.processInfo.environment["COMPOSITOR_QUICK_SELECTION_IMAGE"]
+        ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Downloads/ChatGPT Image 24 сент. 2026 г., 12_04_51.png").path
+    static var isAvailable: Bool { FileManager.default.fileExists(atPath: path) }
+}
 @MainActor
 struct QuickSelectionTests {
     private func image(width: Int, height: Int, _ color: (Int, Int) -> [UInt8]) throws -> CGImage {
@@ -209,6 +216,16 @@ struct QuickSelectionTests {
         #expect(faceAndHair[78 * 128 + 16] == 0)
     }
 
+    @Test func oneStrokeGrowsAroundEachDifferentlyColouredBrushPoint() throws {
+        let image = try makeSplitImage(width: 80, height: 40, splitX: 40)
+        let settings = QuickSelectionSettings(diameter: 7, tolerance: 18, edgeSensitivity: 14)
+        let mask = try #require(QuickSelection.mask(in: image,
+                                                    points: [CGPoint(x: 10, y: 20), CGPoint(x: 55, y: 20)],
+                                                    settings: settings))
+        #expect(mask[20 * 80 + 5] == 255)
+        #expect(mask[20 * 80 + 75] == 255, "The second colour must grow beyond its brush footprint")
+    }
+
     @Test func largeImageQuickSelectionDoesNotCrawlOnTheMainPath() throws {
         let image = try makeLargeCharacterLikeFixture()
         let started = Date()
@@ -222,4 +239,110 @@ struct QuickSelectionTests {
         #expect(outline != nil)
         #expect(elapsed < 5.0, "Quick Selection took \(elapsed)s on a 1254×1254 image")
     }
+
+    @Test func largeFaceSelectionContinuesPastBrushSearchDistanceWithoutSquareEdges() throws {
+        let image = try makeLargeCharacterLikeFixture()
+        let width = image.width
+        let mask = try #require(QuickSelection.mask(in: image,
+                                                    points: [CGPoint(x: 627, y: 760)],
+                                                    settings: QuickSelectionSettings(diameter: 40, tolerance: 32, edgeSensitivity: 32)))
+        #expect(mask[930 * width + 627] == 255, "The face continues past the former 160-pixel search boundary")
+        #expect(mask[760 * width + 100] == 0, "The blue background stays unselected")
+    }
+
+    @Test func repeatedLargeBrushPointsRemainInteractive() throws {
+        let image = try makeLargeCharacterLikeFixture()
+        let prepared = try #require(QuickSelection.prepare(image))
+        let points = (0..<20).map { CGPoint(x: 627 + $0, y: 760) }
+        let began = Date()
+        let mask = try #require(QuickSelection.mask(in: prepared, points: points,
+                                                    settings: QuickSelectionSettings()))
+        let elapsed = Date().timeIntervalSince(began)
+        #expect(mask[760 * image.width + 627] == 255)
+        #expect(elapsed < 0.5, "Twenty brush points took \(elapsed)s after pixel preparation")
+    }
+
+    @Test func preparingLargeImagePixelsIsFastEnoughForBrushPreview() throws {
+        let image = try makeLargeCharacterLikeFixture()
+        let began = Date()
+        let rgba = try ForegroundMaskUtilities.rgbaBytes(from: image, width: image.width, height: image.height)
+        let elapsed = Date().timeIntervalSince(began)
+        #expect(rgba.count == image.width * image.height * 4)
+        #expect(elapsed < 0.25, "Pixel preparation took \(elapsed)s")
+    }
+
+    @Test func preparedPixelsGiveIdenticalRepeatedBrushResults() throws {
+        let image = try makeLargeCharacterLikeFixture()
+        let prepared = try #require(QuickSelection.prepare(image))
+        let points = [CGPoint(x: 627, y: 760)]
+        let settings = QuickSelectionSettings()
+        let first = try #require(QuickSelection.mask(in: image, points: points, settings: settings))
+        let second = try #require(QuickSelection.mask(in: prepared, points: points, settings: settings))
+        #expect(first == second)
+    }
+
+    @Test func incrementalBrushPreviewMatchesFinalWholeStroke() throws {
+        let image = try makeSplitImage(width: 80, height: 40, splitX: 40)
+        let prepared = try #require(QuickSelection.prepare(image))
+        let settings = QuickSelectionSettings(diameter: 7, tolerance: 18, edgeSensitivity: 14)
+        let first = CGPoint(x: 10, y: 20), second = CGPoint(x: 55, y: 20)
+        let preview = try #require(QuickSelection.mask(in: prepared, points: [first], settings: settings))
+        let incremental = try #require(QuickSelection.mask(in: prepared, points: [second],
+                                                           settings: settings, previousMask: preview))
+        let whole = try #require(QuickSelection.mask(in: prepared, points: [first, second], settings: settings))
+        #expect(incremental == whole)
+    }
+
+    /// Optional acceptance check on the user's supplied portrait. Missing fixture is explicitly
+    /// reported as skipped, never as a green test that returned early.
+    @Test(.enabled(if: SuppliedPortraitFixture.isAvailable))
+    func suppliedPortraitKeepsFaceHairBraidsAndBackgroundSeparate() throws {
+        let source = try #require(CGImageSourceCreateWithURL(URL(fileURLWithPath: SuppliedPortraitFixture.path) as CFURL, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        try #require(image.width == 1254 && image.height == 1254)
+        let prepared = try #require(QuickSelection.prepare(image))
+        let settings = QuickSelectionSettings()
+        let width = image.width
+        func selected(_ mask: [UInt8], _ x: Int, _ y: Int) -> Bool { mask[y * width + x] != 0 }
+
+        let face = try #require(QuickSelection.mask(in: prepared, points: [CGPoint(x: 627, y: 630)], settings: settings))
+        #expect(selected(face, 627, 630) && selected(face, 627, 760))
+        #expect(!selected(face, 627, 300) && !selected(face, 100, 630))
+
+        let hair = try #require(QuickSelection.mask(in: prepared, points: [CGPoint(x: 627, y: 300)], settings: settings))
+        #expect(selected(hair, 627, 300) && selected(hair, 627, 220))
+        #expect(!selected(hair, 627, 630) && !selected(hair, 100, 630))
+
+        let combined = try #require(QuickSelection.mask(in: prepared, points: [CGPoint(x: 627, y: 630)],
+                                                       settings: settings, previousMask: hair))
+        #expect(selected(combined, 627, 300) && selected(combined, 627, 630))
+        #expect(!selected(combined, 100, 630))
+
+        let singleStroke = try #require(QuickSelection.mask(in: prepared,
+                                                            points: [CGPoint(x: 627, y: 630), CGPoint(x: 627, y: 300)],
+                                                            settings: settings))
+        #expect(selected(singleStroke, 627, 630) && selected(singleStroke, 627, 300))
+        #expect(!selected(singleStroke, 100, 630))
+
+        let leftBraid = try #require(QuickSelection.mask(in: prepared, points: [CGPoint(x: 400, y: 900)], settings: settings))
+        #expect(selected(leftBraid, 400, 900) && selected(leftBraid, 400, 1050))
+        #expect(!selected(leftBraid, 627, 630) && !selected(leftBraid, 300, 900) && !selected(leftBraid, 100, 630))
+
+        let rightBraid = try #require(QuickSelection.mask(in: prepared, points: [CGPoint(x: 820, y: 900)], settings: settings))
+        #expect(selected(rightBraid, 820, 900) && selected(rightBraid, 820, 1050))
+        #expect(!selected(rightBraid, 627, 630) && !selected(rightBraid, 1000, 900) && !selected(rightBraid, 100, 630))
+    }
+
+    @Test func outliningLargeSelectionIsFastEnoughForBrushPreview() throws {
+        let image = try makeLargeCharacterLikeFixture()
+        let mask = try #require(QuickSelection.mask(in: image,
+                                                    points: [CGPoint(x: 627, y: 760)],
+                                                    settings: QuickSelectionSettings()))
+        let began = Date()
+        let outline = try MagicWand.displayOutline(of: mask, width: image.width, height: image.height)
+        let elapsed = Date().timeIntervalSince(began)
+        #expect(outline != nil)
+        #expect(elapsed < 0.25, "Outline preparation took \(elapsed)s")
+    }
+
 }

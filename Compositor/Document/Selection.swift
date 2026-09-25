@@ -233,6 +233,8 @@ extension EditorSession {
               let sample = selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else { return }
         cancelQuickSelectionAnalysis()
         quickSelectionSample = sample
+        quickSelectionPrepared = nil
+        quickSelectionPreviewPointCount = 0
         quickSelectionSettingsAtStart = quickSelectionSettings
         quickSelectionDraft = QuickSelectionDraft(points: [point], mode: mode)
         scheduleQuickSelectionPreview()
@@ -255,12 +257,20 @@ extension EditorSession {
         quickSelectionPreviewTask = nil
         quickSelectionPreviewRequest &+= 1
         let generation = quickSelectionGeneration
+        let prepared = quickSelectionPrepared
+        let previousMask = quickSelectionPreviewMask
+        let processedPointCount = quickSelectionPreviewPointCount
         quickSelectionDraft = nil
         quickSelectionSample = nil
+        quickSelectionPrepared = nil
+        quickSelectionPreviewPointCount = 0
         quickSelectionSettingsAtStart = nil
-        let points = draft.points
+        let points = previousMask == nil ? draft.points : Array(draft.points.dropFirst(processedPointCount))
         let mask = await Task.detached(priority: .userInitiated) {
-            QuickSelection.mask(in: sample, points: points, settings: settings)
+            guard let raster = prepared ?? QuickSelection.prepare(sample) else { return nil as [UInt8]? }
+            if points.isEmpty { return previousMask }
+            return QuickSelection.mask(in: raster, points: points, settings: settings,
+                                       previousMask: previousMask)
         }.value
         guard self.document?.id == document.id, self.quickSelectionGeneration == generation, let mask else { return }
         guard let outline = quickSelectionOutline(of: mask, document: document) else {
@@ -289,6 +299,8 @@ extension EditorSession {
         quickSelectionGeneration &+= 1
         quickSelectionDraft = nil
         quickSelectionSample = nil
+        quickSelectionPrepared = nil
+        quickSelectionPreviewPointCount = 0
         quickSelectionSettingsAtStart = nil
         clearQuickSelectionPreview()
     }
@@ -315,22 +327,33 @@ extension EditorSession {
                       let settings = self.quickSelectionSettingsAtStart,
                       let document = self.document else { return }
                 try? await Task.sleep(nanoseconds: 40_000_000)
-                guard !Task.isCancelled, request == self.quickSelectionPreviewRequest else { continue }
+                guard !Task.isCancelled else { return }
 
                 let generation = self.quickSelectionGeneration
                 let documentID = document.id
-                let points = draft.points
+                let processedPointCount = self.quickSelectionPreviewPointCount
                 let previousMask = self.quickSelectionPreviewMask
-                let mask = await Task.detached(priority: .userInitiated) {
-                    QuickSelection.mask(in: sample, points: points, settings: settings, previousMask: previousMask)
+                let points = previousMask == nil ? draft.points : Array(draft.points.dropFirst(processedPointCount))
+                if points.isEmpty { return }
+                let prepared = self.quickSelectionPrepared
+                let result = await Task.detached(priority: .userInitiated) { () -> (QuickSelection.PreparedImage, [UInt8])? in
+                    guard let raster = prepared ?? QuickSelection.prepare(sample),
+                          let mask = QuickSelection.mask(in: raster, points: points,
+                                                         settings: settings, previousMask: previousMask)
+                    else { return nil }
+                    return (raster, mask)
                 }.value
                 guard !Task.isCancelled, self.quickSelectionGeneration == generation,
-                      self.document?.id == documentID, let mask else { return }
-                guard request == self.quickSelectionPreviewRequest else { continue }
+                      self.document?.id == documentID, let (raster, mask) = result else { return }
+                self.quickSelectionPrepared = raster
+                self.quickSelectionPreviewPointCount = draft.points.count
                 self.quickSelectionPreviewMask = mask
                 self.quickSelectionPreviewOutline = self.quickSelectionOutline(of: mask, document: document)
                 self.refreshCanvasPreview?()
-                return
+                // A newer drag point may arrive while analysis runs. Show the completed
+                // contour now, then catch up, rather than withholding every preview until
+                // the pointer stops moving.
+                if request == self.quickSelectionPreviewRequest { return }
             }
         }
     }

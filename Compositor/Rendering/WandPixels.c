@@ -1,10 +1,36 @@
 #include "WandPixels.h"
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 enum { EAST = 1, SOUTH = 2, WEST = 4, NORTH = 8 };
 // Outlines with more pixel edges than this are refused: the path would be too slow to draw.
 static const size_t wand_edge_limit = 8000000;
+
+void wand_copy_flipped_rgba(const uint8_t *source, size_t sourceStride,
+                            uint8_t *destination, size_t width, size_t height) {
+    for (size_t y = 0; y < height; ++y)
+        memcpy(destination + y * width * 4, source + (height - 1 - y) * sourceStride, width * 4);
+}
+
+void wand_downsample_mask_any(const uint8_t *source, size_t width, size_t height,
+                              uint8_t *destination, size_t sampledWidth, size_t sampledHeight,
+                              double scale) {
+    memset(destination, 0, sampledWidth * sampledHeight);
+    for (size_t y = 0; y < height; ++y) {
+        size_t dy = (size_t)((double)y * scale);
+        if (dy >= sampledHeight) dy = sampledHeight - 1;
+        const uint8_t *row = source + y * width;
+        uint8_t *out = destination + dy * sampledWidth;
+        for (size_t x = 0; x < width; ++x) {
+            if (row[x]) {
+                size_t dx = (size_t)((double)x * scale);
+                if (dx >= sampledWidth) dx = sampledWidth - 1;
+                out[dx] = 255;
+            }
+        }
+    }
+}
 
 static inline int wand_matches(const uint8_t *p, const int reference[4], int tolerance) {
     for (int c = 0; c < 4; ++c) {
@@ -82,6 +108,202 @@ long wand_mask(const uint8_t *rgba, size_t width, size_t height, size_t stride,
     }
     free(stack);
     return count;
+}
+
+typedef struct {
+    int minimum[3], maximum[3];
+    uint64_t sum[3], count;
+} QuickColourModel;
+
+typedef struct {
+    int score;
+    size_t index, parent;
+} QuickCandidate;
+
+typedef struct {
+    QuickCandidate *items;
+    size_t count, capacity;
+} QuickHeap;
+
+static inline int quick_max(int a, int b) { return a > b ? a : b; }
+static inline int quick_abs(int value) { return value < 0 ? -value : value; }
+
+static void quick_observe(QuickColourModel *model, const uint8_t *pixel) {
+    for (int channel = 0; channel < 3; ++channel) {
+        int value = pixel[channel];
+        if (value < model->minimum[channel]) model->minimum[channel] = value;
+        if (value > model->maximum[channel]) model->maximum[channel] = value;
+        model->sum[channel] += value;
+    }
+    ++model->count;
+}
+
+static int quick_model_distance(const QuickColourModel *model, const uint8_t *pixel) {
+    int rangeDistance = 0, meanDistance = 0;
+    for (int channel = 0; channel < 3; ++channel) {
+        int value = pixel[channel];
+        int range = value < model->minimum[channel] ? model->minimum[channel] - value
+                  : value > model->maximum[channel] ? value - model->maximum[channel] : 0;
+        rangeDistance = quick_max(rangeDistance, range);
+        int mean = (int)((model->sum[channel] + model->count / 2) / model->count);
+        meanDistance = quick_max(meanDistance, quick_abs(value - mean));
+    }
+    return quick_max(rangeDistance, meanDistance / 2);
+}
+
+static inline int quick_colour_distance(const uint8_t *a, const uint8_t *b) {
+    return quick_max(quick_abs((int)a[0] - b[0]),
+                     quick_max(quick_abs((int)a[1] - b[1]), quick_abs((int)a[2] - b[2])));
+}
+
+static inline int quick_luminance(const uint8_t *pixel) {
+    return (54 * pixel[0] + 183 * pixel[1] + 19 * pixel[2]) / 256;
+}
+
+static inline int quick_before(QuickCandidate a, QuickCandidate b) {
+    return a.score == b.score ? a.index < b.index : a.score < b.score;
+}
+
+static int quick_push(QuickHeap *heap, QuickCandidate candidate) {
+    if (heap->count == heap->capacity) {
+        size_t capacity = heap->capacity ? heap->capacity * 2 : 1024;
+        if (capacity > SIZE_MAX / sizeof(QuickCandidate)) return 0;
+        QuickCandidate *items = realloc(heap->items, capacity * sizeof(QuickCandidate));
+        if (!items) return 0;
+        heap->items = items;
+        heap->capacity = capacity;
+    }
+    size_t index = heap->count++;
+    while (index > 0) {
+        size_t parent = (index - 1) / 2;
+        if (!quick_before(candidate, heap->items[parent])) break;
+        heap->items[index] = heap->items[parent];
+        index = parent;
+    }
+    heap->items[index] = candidate;
+    return 1;
+}
+
+static QuickCandidate quick_pop(QuickHeap *heap) {
+    QuickCandidate first = heap->items[0];
+    QuickCandidate last = heap->items[--heap->count];
+    if (heap->count) {
+        size_t index = 0;
+        for (;;) {
+            size_t left = index * 2 + 1;
+            if (left >= heap->count) break;
+            size_t right = left + 1;
+            size_t child = right < heap->count && quick_before(heap->items[right], heap->items[left]) ? right : left;
+            if (!quick_before(heap->items[child], last)) break;
+            heap->items[index] = heap->items[child];
+            index = child;
+        }
+        heap->items[index] = last;
+    }
+    return first;
+}
+
+static int quick_enqueue(QuickHeap *heap, int *best, uint32_t *stamp, uint32_t epoch,
+                         const uint8_t *rgba, const QuickColourModel *model,
+                         size_t parent, size_t index) {
+    const uint8_t *from = rgba + parent * 4, *to = rgba + index * 4;
+    int score = quick_colour_distance(from, to) * 3 + quick_model_distance(model, to) * 2
+              + quick_abs(quick_luminance(from) - quick_luminance(to)) * 4;
+    if (stamp[index] == epoch && score >= best[index]) return 1;
+    stamp[index] = epoch;
+    best[index] = score;
+    return quick_push(heap, (QuickCandidate){score, index, parent});
+}
+
+static int quick_neighbours(QuickHeap *heap, int *best, uint32_t *stamp, uint32_t epoch,
+                            const uint8_t *rgba, const QuickColourModel *model,
+                            size_t width, size_t height, size_t index) {
+    size_t x = index % width, y = index / width;
+    if (x && !quick_enqueue(heap, best, stamp, epoch, rgba, model, index, index - 1)) return 0;
+    if (x + 1 < width && !quick_enqueue(heap, best, stamp, epoch, rgba, model, index, index + 1)) return 0;
+    if (y && !quick_enqueue(heap, best, stamp, epoch, rgba, model, index, index - width)) return 0;
+    if (y + 1 < height && !quick_enqueue(heap, best, stamp, epoch, rgba, model, index, index + width)) return 0;
+    return 1;
+}
+
+long quick_selection_mask(const uint8_t *rgba, size_t width, size_t height,
+                          const int32_t *points, size_t pointCount, int diameter,
+                          int tolerance, int edgeSensitivity, const uint8_t *previous,
+                          uint8_t *mask) {
+    if (!rgba || !mask || !points || !width || !height || width > SIZE_MAX / height ||
+        pointCount >= UINT32_MAX) return -1;
+    size_t pixels = width * height;
+    if (pixels > SIZE_MAX / sizeof(int) || pixels > SIZE_MAX / sizeof(uint32_t)) return -1;
+    if (previous) memcpy(mask, previous, pixels);
+    else memset(mask, 0, pixels);
+    int *best = malloc(pixels * sizeof(int));
+    uint32_t *stamp = calloc(pixels, sizeof(uint32_t));
+    if (!best || !stamp) { free(best); free(stamp); return -1; }
+    QuickHeap heap = {0};
+    long selected = 0;
+    if (previous) {
+        for (size_t i = 0; i < pixels; ++i) selected += previous[i] != 0;
+    }
+    int radius = quick_max(1, diameter / 2);
+    for (size_t point = 0; point < pointCount; ++point) {
+        int64_t x = points[point * 2], y = points[point * 2 + 1];
+        if (x < 0 || y < 0 || (uint64_t)x >= width || (uint64_t)y >= height) continue;
+        uint32_t epoch = (uint32_t)point + 1;
+        QuickColourModel model = {.minimum = {255, 255, 255}};
+        const uint8_t *brushColour = rgba + ((size_t)y * width + (size_t)x) * 4;
+        size_t left = (size_t)x > (size_t)radius ? (size_t)x - radius : 0;
+        size_t top = (size_t)y > (size_t)radius ? (size_t)y - radius : 0;
+        size_t right = (size_t)x + radius < width ? (size_t)x + radius : width - 1;
+        size_t bottom = (size_t)y + radius < height ? (size_t)y + radius : height - 1;
+        for (size_t row = top; row <= bottom; ++row) {
+            for (size_t col = left; col <= right; ++col) {
+                int64_t dx = (int64_t)col - x, dy = (int64_t)row - y;
+                if (dx * dx + dy * dy > (int64_t)radius * radius) continue;
+                size_t index = row * width + col;
+                if (!mask[index]) { mask[index] = 255; ++selected; }
+                stamp[index] = epoch;
+                best[index] = 0;
+                quick_observe(&model, rgba + index * 4);
+            }
+        }
+        for (size_t row = top; row <= bottom; ++row) {
+            for (size_t col = left; col <= right; ++col) {
+                size_t index = row * width + col;
+                if (stamp[index] == epoch && best[index] == 0 &&
+                    !quick_neighbours(&heap, best, stamp, epoch, rgba, &model, width, height, index))
+                    goto memory_failure;
+            }
+        }
+        while (heap.count) {
+            QuickCandidate candidate = quick_pop(&heap);
+            if (mask[candidate.index] || stamp[candidate.index] != epoch ||
+                candidate.score != best[candidate.index]) continue;
+            const uint8_t *from = rgba + candidate.parent * 4, *to = rgba + candidate.index * 4;
+            int local = quick_colour_distance(from, to), distance = quick_model_distance(&model, to);
+            int edge = quick_abs(quick_luminance(from) - quick_luminance(to));
+            int localLimit = quick_max(8, tolerance * 3 / 2), modelLimit = quick_max(12, tolerance * 6);
+            if (local > localLimit || distance > modelLimit) continue;
+            int shiftedChannels = 0, anchorLimit = quick_max(24, tolerance * 2);
+            for (int channel = 0; channel < 3; ++channel)
+                shiftedChannels += quick_abs((int)to[channel] - brushColour[channel]) > anchorLimit;
+            if (shiftedChannels > 1) continue;
+            if (edge > edgeSensitivity && (edge > edgeSensitivity * 2 || distance > tolerance)) continue;
+            mask[candidate.index] = 255;
+            quick_observe(&model, to);
+            ++selected;
+            if (!quick_neighbours(&heap, best, stamp, epoch, rgba, &model,
+                                  width, height, candidate.index)) goto memory_failure;
+        }
+    }
+    free(best);
+    free(stamp);
+    free(heap.items);
+    return selected;
+memory_failure:
+    free(best);
+    free(stamp);
+    free(heap.items);
+    return -1;
 }
 
 // Headings, clockwise on screen (y grows downward): east, south, west, north.

@@ -97,11 +97,10 @@ nonisolated enum MagicWand {
             let sampledWidth = max(1, Int((CGFloat(width) * scale).rounded(.up)))
             let sampledHeight = max(1, Int((CGFloat(height) * scale).rounded(.up)))
             var sampled = [UInt8](repeating: 0, count: sampledWidth * sampledHeight)
-            for y in 0..<height {
-                let sampledY = min(sampledHeight - 1, Int((CGFloat(y) * scale).rounded(.down)))
-                for x in 0..<width where mask[y * width + x] != 0 {
-                    let sampledX = min(sampledWidth - 1, Int((CGFloat(x) * scale).rounded(.down)))
-                    sampled[sampledY * sampledWidth + sampledX] = 255
+            mask.withUnsafeBufferPointer { source in
+                sampled.withUnsafeMutableBufferPointer { output in
+                    wand_downsample_mask_any(source.baseAddress, width, height, output.baseAddress,
+                                             sampledWidth, sampledHeight, Double(scale))
                 }
             }
 
