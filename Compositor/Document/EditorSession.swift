@@ -240,7 +240,7 @@ final class EditorSession {
     var shapeLineWidth: Double = 4
     /// How many points the Shape tool's stars have (3–20).
     var shapeStarPoints = 5
-    /// How many sides the Shape tool's polygons have (5–20).
+    /// How many sides the Shape tool's polygons have (3–20).
     var shapePolygonSides = 5
     /// The shape being dragged out with the Shape tool, before it becomes a layer.
     var shapeDraft: ShapeDraft?

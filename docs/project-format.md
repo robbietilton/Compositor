@@ -32,7 +32,7 @@ Version 8 lets a folder carry its own `opacity`, which multiplies into every lay
 
 Version 9 adds three adjustment kinds that sample neighboring pixels: `Gaussian Blur` (`blurRadius`, 0.1–250 document pixels), `Motion Blur` (`motionAngle`, −90 to 90 degrees, and `motionDistance`, 1–2000) and `Add Noise` (`noiseAmount`, 0.1–400, `noiseGaussian`, `noiseMonochromatic` and `noiseSeed`, so the pattern is stable between sessions). Files declaring 1–8 cannot contain these kinds; the earlier adjustment kinds remain valid at version 7 and up.
 
-Version 10 adds two Shape tool kinds, `Star` and `Polygon`, to a layer's `shape` record. Both carry `points`: a star's points or a polygon's sides, 3–20 (the Shape tool offers 3–20 points and 5–20 sides). They are drawn point-up, with a star's inner corners at half its points' reach, and stretched to touch every edge of the layer. Other shape kinds must omit `points`. Files declaring 1–9 cannot contain these kinds; older app builds reject v10 rather than failing to read the unknown kind.
+Version 10 adds two Shape tool kinds, `Star` and `Polygon`, to a layer's `shape` record. Both carry `points`: a star's points or a polygon's sides, 3–20. They are drawn point-up, with each of a star's inner corners on the line joining the points either side of its neighbors (stars of three or four points keep a five-point star's depth), and stretched to touch every edge of the layer. Other shape kinds must omit `points`. Files declaring 1–9 cannot contain these kinds; older app builds reject v10 rather than failing to read the unknown kind.
 
 ### Additive layer fields
 

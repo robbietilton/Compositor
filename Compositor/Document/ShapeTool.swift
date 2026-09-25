@@ -9,11 +9,18 @@ nonisolated enum ShapeKind: String, CaseIterable, Codable, Sendable {
 
     /// A star's points, from a triangle-like three to a near-circle of twenty.
     static let starPoints = 3...20
-    /// A polygon's sides.
-    static let polygonSides = 5...20
-    /// How far a star's inner corners sit from its center, as a fraction of its points' reach: Photoshop's
-    /// default 50% indent.
-    static let starIndent: CGFloat = 0.5
+    /// A polygon's sides, from a triangle up.
+    static let polygonSides = 3...20
+
+    /// How far a star's inner corners sit from its center, as a fraction of its points' reach. Each inner corner
+    /// lies on the straight line joining the two points either side of its neighbors, as in a drawn pentagram, so
+    /// the edges line up across the star. With three or four points that line passes through the center or beyond
+    /// it, so those keep the five-point star's depth instead.
+    static func starIndent(points: Int) -> CGFloat {
+        guard points >= 5 else { return starIndent(points: 5) }
+        let step = CGFloat.pi / CGFloat(points)
+        return cos(2 * step) / cos(step)
+    }
 
     /// The shape filling `rect`. A rectangle's corners round by `cornerRadius`, at most half its shorter
     /// side (so a large radius makes a pill); ellipses ignore it. A star has `points` points and a polygon
@@ -37,9 +44,10 @@ nonisolated enum ShapeKind: String, CaseIterable, Codable, Sendable {
     private static func regularPath(in rect: CGRect, star: Bool, count: Int) -> CGPath {
         let count = max(3, min(20, count))
         let corners = star ? count * 2 : count
+        let indent = starIndent(points: count)
         let unit = (0..<corners).map { index -> CGPoint in
             let angle = -CGFloat.pi / 2 + CGFloat(index) * 2 * .pi / CGFloat(corners)
-            let reach = star && index % 2 == 1 ? starIndent : 1
+            let reach = star && index % 2 == 1 ? indent : 1
             return CGPoint(x: cos(angle) * reach, y: sin(angle) * reach)
         }
         let minX = unit.map(\.x).min() ?? -1, maxX = unit.map(\.x).max() ?? 1

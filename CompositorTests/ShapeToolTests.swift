@@ -146,6 +146,27 @@ struct ShapeToolTests {
         session.shapeKind = .rectangle
         drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 30, y: 70))
         #expect(session.activeLayer?.liveShape?.style.points == nil)
+        session.shapeKind = .polygon
+        session.shapePolygonSides = 3
+        drag(session, from: CGPoint(x: 50, y: 50), to: CGPoint(x: 90, y: 78))
+        #expect(session.activeLayer?.liveShape?.style.points == 3, "polygons go down to a triangle")
+    }
+
+    /// Each inner corner sits on the line between the points either side of it, so the edges run straight across.
+    @Test func starInnerCornersLineUpWithTheirNeighboringPoints() {
+        for points in 5...20 {
+            let step = 2 * CGFloat.pi / CGFloat(points)
+            // The top point's neighbors, and the inner corner just clockwise of the top.
+            let left = CGPoint(x: cos(-.pi / 2 - step), y: sin(-.pi / 2 - step))
+            let right = CGPoint(x: cos(-.pi / 2 + step), y: sin(-.pi / 2 + step))
+            let reach = ShapeKind.starIndent(points: points), angle = -CGFloat.pi / 2 + step / 2
+            let inner = CGPoint(x: cos(angle) * reach, y: sin(angle) * reach)
+            let cross = (right.x - left.x) * (inner.y - left.y) - (right.y - left.y) * (inner.x - left.x)
+            #expect(abs(cross) < 1e-9, "\(points) points")
+        }
+        #expect(abs(ShapeKind.starIndent(points: 6) - 0.5 / cos(.pi / 6)) < 1e-9)
+        #expect(ShapeKind.starIndent(points: 3) == ShapeKind.starIndent(points: 5))
+        #expect(ShapeKind.starIndent(points: 4) == ShapeKind.starIndent(points: 5))
     }
 
     /// Stars and polygons keep their corner count through a save, and need format version 10.
