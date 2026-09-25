@@ -47,6 +47,10 @@ nonisolated enum QuickSelection {
         let pixelCount = width * height
         var result = [UInt8](repeating: 0, count: pixelCount)
         var visited = [UInt8](repeating: 0, count: pixelCount)
+        // Keep at most the best frontier entry for each pixel. Without this guard a broad
+        // selection adds the same neighbours once for every adjacent selected pixel, making
+        // the heap grow quadratically on larger photographs.
+        var queuedScore = [Int](repeating: Int.max, count: pixelCount)
         var model = AdaptiveColourModel()
         var frontier = MinHeap()
 
@@ -57,6 +61,7 @@ nonisolated enum QuickSelection {
                 guard bounds.contains(x: x, y: y) else { continue }
                 result[index] = 255
                 visited[index] = 1
+                queuedScore[index] = 0
                 model.add(pixel(at: index, in: rgba))
             }
         }
@@ -74,6 +79,7 @@ nonisolated enum QuickSelection {
                 for x in minX...maxX where squaredDistance(x: x, y: y, centerX: centerX, centerY: centerY) <= radiusSquared {
                     let index = y * width + x
                     result[index] = 255
+                    queuedScore[index] = 0
                     if visited[index] == 0 {
                         visited[index] = 1
                         model.add(pixel(at: index, in: rgba))
@@ -84,11 +90,14 @@ nonisolated enum QuickSelection {
 
         guard model.count > 0 else { return nil }
 
-        for index in result.indices where result[index] != 0 {
-            let x = index % width
-            let y = index / width
-            enqueueNeighbours(of: index, x: x, y: y, width: width, height: height,
-                              bounds: bounds, rgba: rgba, model: model, heap: &frontier)
+        for y in bounds.minY...bounds.maxY {
+            for x in bounds.minX...bounds.maxX {
+                let index = y * width + x
+                guard result[index] != 0 else { continue }
+                enqueueNeighbours(of: index, x: x, y: y, width: width, height: height,
+                                  bounds: bounds, rgba: rgba, model: model,
+                                  queuedScore: &queuedScore, heap: &frontier)
+            }
         }
 
         while let candidate = frontier.pop() {
@@ -104,7 +113,8 @@ nonisolated enum QuickSelection {
             let x = candidate.index % width
             let y = candidate.index / width
             enqueueNeighbours(of: candidate.index, x: x, y: y, width: width, height: height,
-                              bounds: bounds, rgba: rgba, model: model, heap: &frontier)
+                              bounds: bounds, rgba: rgba, model: model,
+                              queuedScore: &queuedScore, heap: &frontier)
         }
 
         return result.contains(255) ? result : nil
@@ -227,7 +237,7 @@ nonisolated enum QuickSelection {
 
     private static func enqueueNeighbours(of index: Int, x: Int, y: Int, width: Int, height: Int,
                                           bounds: Bounds, rgba: [UInt8], model: AdaptiveColourModel,
-                                          heap: inout MinHeap) {
+                                          queuedScore: inout [Int], heap: inout MinHeap) {
         let parent = pixel(at: index, in: rgba)
         for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
             guard nx >= 0, ny >= 0, nx < width, ny < height, bounds.contains(x: nx, y: ny) else { continue }
@@ -237,6 +247,8 @@ nonisolated enum QuickSelection {
             let modelDistance = model.distance(to: neighbor)
             let edge = abs(parent.luminance - neighbor.luminance)
             let score = local * 3 + modelDistance * 2 + edge * 4
+            guard score < queuedScore[neighborIndex] else { continue }
+            queuedScore[neighborIndex] = score
             heap.push(Candidate(score: score, index: neighborIndex, parent: index))
         }
     }

@@ -89,6 +89,25 @@ struct MagicWandTests {
         #expect(try MagicWand.outline(of: [UInt8](repeating: 0, count: 4), width: 2, height: 2) == nil)
     }
 
+    @Test func displayOutlineSimplifiesDetailedMasksInsteadOfUsingABoundingRectangle() throws {
+        let width = 768, height = 768
+        var mask = [UInt8](repeating: 0, count: width * height)
+        for y in 80..<688 {
+            for x in 80..<688 {
+                let dx = CGFloat(x - 384) / 304
+                let dy = CGFloat(y - 384) / 260
+                if dx * dx + dy * dy <= 1 && ((x + y) % 23 != 0 || x % 7 < 5) {
+                    mask[y * width + x] = 255
+                }
+            }
+        }
+
+        let outline = try #require(try MagicWand.displayOutline(of: mask, width: width, height: height, maxDimension: 512))
+        var elements = 0
+        outline.applyWithBlock { _ in elements += 1 }
+        #expect(elements > 5)
+    }
+
     @Test func theWandReadsTheActiveLayerOrEveryVisibleLayerAndCombinesModes() async throws {
         let session = EditorSession()
         session.createDocument(width: 20, height: 10)

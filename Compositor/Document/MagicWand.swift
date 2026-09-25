@@ -78,6 +78,43 @@ nonisolated enum MagicWand {
         }
         return path
     }
+
+    /// Makes a drawable outline without allowing a pixel-detailed mask to freeze the canvas.
+    /// Large or noisy masks are reduced to a bounded grid before tracing; the resulting path is
+    /// scaled back into document coordinates, preserving the shape while discarding invisible
+    /// one-pixel noise at normal zoom levels.
+    static func displayOutline(of mask: [UInt8], width: Int, height: Int, maxDimension: Int = 768) throws -> CGPath? {
+        guard width > 0, height > 0, mask.count == width * height else { return nil }
+        let limit = min(2048, max(64, maxDimension))
+        if max(width, height) <= limit {
+            do { return try outline(of: mask, width: width, height: height) }
+            catch Failure.tooDetailed { }
+        }
+
+        var dimension = min(limit, max(width, height))
+        while dimension >= 64 {
+            let scale = min(1, CGFloat(dimension) / CGFloat(max(width, height)))
+            let sampledWidth = max(1, Int((CGFloat(width) * scale).rounded(.up)))
+            let sampledHeight = max(1, Int((CGFloat(height) * scale).rounded(.up)))
+            var sampled = [UInt8](repeating: 0, count: sampledWidth * sampledHeight)
+            for y in 0..<height {
+                let sampledY = min(sampledHeight - 1, Int((CGFloat(y) * scale).rounded(.down)))
+                for x in 0..<width where mask[y * width + x] != 0 {
+                    let sampledX = min(sampledWidth - 1, Int((CGFloat(x) * scale).rounded(.down)))
+                    sampled[sampledY * sampledWidth + sampledX] = 255
+                }
+            }
+
+            do {
+                guard let traced = try outline(of: sampled, width: sampledWidth, height: sampledHeight) else { return nil }
+                var transform = CGAffineTransform(scaleX: 1 / scale, y: 1 / scale)
+                return traced.copy(using: &transform)
+            } catch Failure.tooDetailed {
+                dimension /= 2
+            }
+        }
+        return nil
+    }
 }
 
 private nonisolated struct WandJob: @unchecked Sendable {

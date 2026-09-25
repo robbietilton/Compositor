@@ -115,6 +115,13 @@ struct LassoDraft {
     var anchor: CGPoint?
 }
 
+/// A brush-driven selection gesture. The image sample is kept privately by the session so
+/// the draft remains lightweight while analysis runs off the main actor.
+struct QuickSelectionDraft: Equatable {
+    var points: [CGPoint]
+    let mode: SelectionMode
+}
+
 extension EditorSession {
     var selection: DocumentSelection? { document?.selection }
     var canEditSelection: Bool { canEditLayers }
@@ -127,11 +134,11 @@ extension EditorSession {
     /// The mode the cursor advertises: an outline in progress keeps its starting mode,
     /// otherwise the currently held modifiers or the options-bar choice.
     func lassoCursorMode(shift: Bool, option: Bool) -> SelectionMode {
-        lassoDraft?.mode ?? selectionMode(shift: shift, option: option)
+        quickSelectionDraft?.mode ?? lassoDraft?.mode ?? selectionMode(shift: shift, option: option)
     }
 
     /// What the options bar highlights: the same rule, using the tracked held keys.
-    var displayedSelectionMode: SelectionMode { lassoDraft?.mode ?? heldSelectionMode ?? selectionModeChoice }
+    var displayedSelectionMode: SelectionMode { quickSelectionDraft?.mode ?? lassoDraft?.mode ?? heldSelectionMode ?? selectionModeChoice }
 
     func updateHeldSelectionKeys(shift: Bool, option: Bool) {
         let held: SelectionMode? = option ? .subtract : shift ? .add : nil
@@ -140,7 +147,7 @@ extension EditorSession {
 
     func beginLasso(at point: CGPoint, mode: SelectionMode) {
         // Click-selection tools never draw a draft outline.
-        guard tool.isSelectionTool, tool != .wand, canEditSelection, selectionMoveOrigin == nil else { return }
+        guard tool.isSelectionTool, tool != .wand, tool != .quickSelection, canEditSelection, selectionMoveOrigin == nil else { return }
         if tool == .marquee {
             let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
             lassoDraft = LassoDraft(points: [anchor], cursor: nil, mode: mode, kind: marqueeKind, anchor: anchor)
@@ -177,7 +184,10 @@ extension EditorSession {
         lassoDraft = draft.points.isEmpty ? nil : draft
     }
 
-    func cancelLasso() { lassoDraft = nil }
+    func cancelLasso() {
+        lassoDraft = nil
+        cancelQuickSelectionAnalysis()
+    }
 
     /// The M key chooses the Marquee in whichever shape it was last set to (switched only in the tool bar). The
     /// shape stays as last set while this project is open.
@@ -190,9 +200,17 @@ extension EditorSession {
         marqueeKind = marqueeKind == .rectangle ? .ellipse : .rectangle
     }
 
-    /// W picks the Magic tool; Tab switches its Wand and Object modes.
+    /// W cycles the Magic selection group: Wand, Object, and Quick Selection.
     func pressWandKey() {
-        selectTool(.wand)
+        if tool == .wand {
+            if wandMode == .wand { wandMode = .object }
+            else { selectTool(.quickSelection) }
+        } else if tool == .quickSelection {
+            wandMode = .wand
+            selectTool(.wand)
+        } else {
+            selectTool(.wand)
+        }
     }
 
     /// The L key chooses the Lasso in whichever mode it was last set to (switched only in the tool bar). The mode
@@ -206,6 +224,125 @@ extension EditorSession {
         lassoKind = lassoKind == .freehand ? .polygonal : .freehand
     }
 
+    /// Starts a Quick Selection brush gesture without touching history. The image sample is
+    /// captured at the beginning so one drag has stable pixels even if the pointer moves quickly.
+    func beginQuickSelection(at point: CGPoint, mode: SelectionMode) {
+        guard tool == .quickSelection, canEditSelection, selectionMoveOrigin == nil,
+              let document, point.x.isFinite, point.y.isFinite,
+              point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height,
+              let sample = selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else { return }
+        cancelQuickSelectionAnalysis()
+        quickSelectionSample = sample
+        quickSelectionSettingsAtStart = quickSelectionSettings
+        quickSelectionDraft = QuickSelectionDraft(points: [point], mode: mode)
+        scheduleQuickSelectionPreview()
+    }
+
+    /// Extends the current Quick Selection brush path, skipping sub-pixel pointer noise.
+    func continueQuickSelection(to point: CGPoint) {
+        guard var draft = quickSelectionDraft, point.x.isFinite, point.y.isFinite else { return }
+        if let last = draft.points.last, hypot(point.x - last.x, point.y - last.y) < 0.25 { return }
+        draft.points.append(point)
+        quickSelectionDraft = draft
+        scheduleQuickSelectionPreview()
+    }
+
+    /// Commits a Quick Selection gesture as one undo step after deterministic mask analysis.
+    func finishQuickSelection() async {
+        guard let draft = quickSelectionDraft, let sample = quickSelectionSample,
+              let settings = quickSelectionSettingsAtStart, let document else { return }
+        quickSelectionPreviewTask?.cancel()
+        quickSelectionPreviewTask = nil
+        quickSelectionPreviewRequest &+= 1
+        let generation = quickSelectionGeneration
+        quickSelectionDraft = nil
+        quickSelectionSample = nil
+        quickSelectionSettingsAtStart = nil
+        let points = draft.points
+        let mask = await Task.detached(priority: .userInitiated) {
+            QuickSelection.mask(in: sample, points: points, settings: settings)
+        }.value
+        guard self.document?.id == document.id, self.quickSelectionGeneration == generation, let mask else { return }
+        guard let outline = quickSelectionOutline(of: mask, document: document) else {
+            clearQuickSelectionPreview()
+            return
+        }
+        if draft.mode == .replace {
+            setSelection(DocumentSelection(path: outline, antialiased: selectionAntialiased), name: "Quick Selection")
+        } else if draft.mode == .subtract, mask.allSatisfy({ $0 == 255 }), let current = selection,
+                  current.path.boundingBoxOfPath.intersects(CGRect(origin: .zero, size: document.size)) {
+            // A full-canvas subtraction should become the model's explicit empty selection.
+            // Some CGPath Boolean implementations leave a zero-area boundary path behind.
+            setSelection(DocumentSelection(path: CGMutablePath(), antialiased: selectionAntialiased), name: "Quick Selection")
+        } else {
+            applySelection(outline, mode: draft.mode, name: "Quick Selection")
+        }
+        clearQuickSelectionPreview()
+    }
+
+    /// Cancels analysis and removes only the transient Quick Selection state.
+    /// The document selection and history are intentionally untouched.
+    private func cancelQuickSelectionAnalysis() {
+        quickSelectionPreviewTask?.cancel()
+        quickSelectionPreviewTask = nil
+        quickSelectionPreviewRequest &+= 1
+        quickSelectionGeneration &+= 1
+        quickSelectionDraft = nil
+        quickSelectionSample = nil
+        quickSelectionSettingsAtStart = nil
+        clearQuickSelectionPreview()
+    }
+
+    private func clearQuickSelectionPreview() {
+        quickSelectionPreviewMask = nil
+        quickSelectionPreviewOutline = nil
+        refreshCanvasPreview?()
+    }
+
+    /// Coalesces pointer updates and analyses the captured image off the main actor. A token
+    /// and document id prevent an older result from replacing a newer gesture or a new tab.
+    private func scheduleQuickSelectionPreview() {
+        guard quickSelectionDraft != nil, quickSelectionSample != nil,
+              quickSelectionSettingsAtStart != nil, document != nil else { return }
+        quickSelectionPreviewRequest &+= 1
+        guard quickSelectionPreviewTask == nil else { return }
+        quickSelectionPreviewTask = Task { @MainActor [weak self] in
+            defer { self?.quickSelectionPreviewTask = nil }
+            while let self, !Task.isCancelled {
+                let request = self.quickSelectionPreviewRequest
+                guard let draft = self.quickSelectionDraft,
+                      let sample = self.quickSelectionSample,
+                      let settings = self.quickSelectionSettingsAtStart,
+                      let document = self.document else { return }
+                try? await Task.sleep(nanoseconds: 40_000_000)
+                guard !Task.isCancelled, request == self.quickSelectionPreviewRequest else { continue }
+
+                let generation = self.quickSelectionGeneration
+                let documentID = document.id
+                let points = draft.points
+                let previousMask = self.quickSelectionPreviewMask
+                let mask = await Task.detached(priority: .userInitiated) {
+                    QuickSelection.mask(in: sample, points: points, settings: settings, previousMask: previousMask)
+                }.value
+                guard !Task.isCancelled, self.quickSelectionGeneration == generation,
+                      self.document?.id == documentID, let mask else { return }
+                guard request == self.quickSelectionPreviewRequest else { continue }
+                self.quickSelectionPreviewMask = mask
+                self.quickSelectionPreviewOutline = self.quickSelectionOutline(of: mask, document: document)
+                self.refreshCanvasPreview?()
+                return
+            }
+        }
+    }
+
+    private func quickSelectionOutline(of mask: [UInt8], document: CanvasDocument) -> CGPath? {
+        try? MagicWand.displayOutline(of: mask, width: document.width, height: document.height)
+    }
+
+    /// Compatibility spelling used by the gesture tests and callers.
+    func extendQuickSelection(to point: CGPoint) {
+        continueQuickSelection(to: point)
+    }
     /// Closes the outline and combines it with the current selection. A click that
     /// encloses nothing deselects in New mode, as in Photoshop.
     func finishLasso() {

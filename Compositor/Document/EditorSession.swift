@@ -229,6 +229,18 @@ final class EditorSession {
     var gradientSettings = GradientSettings() { didSet { refreshGradient() } }
     var gradientEdit: GradientEdit?
     var lassoDraft: LassoDraft?
+    /// The live, non-document state of a Quick Selection drag.
+    var quickSelectionDraft: QuickSelectionDraft?
+    /// Preview state is observed so the canvas can repaint before mouse-up.
+    var quickSelectionPreviewMask: [UInt8]?
+    var quickSelectionPreviewOutline: CGPath?
+    @ObservationIgnored var quickSelectionSample: CGImage?
+    @ObservationIgnored var quickSelectionPrepared: QuickSelection.PreparedImage?
+    @ObservationIgnored var quickSelectionSettingsAtStart: QuickSelectionSettings?
+    @ObservationIgnored var quickSelectionPreviewTask: Task<Void, Never>?
+    /// Monotonically increasing token used to coalesce rapid pointer updates into one worker.
+    @ObservationIgnored var quickSelectionPreviewRequest = 0
+    @ObservationIgnored var quickSelectionGeneration = 0
     var lassoKind = LassoKind.freehand
     var marqueeKind = LassoKind.rectangle
     var textDraft: TextDraft? { didSet { if oldValue != nil && textDraft == nil { resumeFileRequests() } } }
