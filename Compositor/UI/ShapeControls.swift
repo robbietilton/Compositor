@@ -83,7 +83,7 @@ struct ShapeControls: View {
                               })
         return HStack(spacing: 6) {
             Text("Inset").scrubbable(sensitivity: 1, value: percent, range: range)
-            Slider(value: percent, in: range, step: 1).frame(width: 100)
+            Slider(value: percent, in: range).frame(width: 100)
             TextField("Inset", value: percent, format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
                 .arrowSteps(value: { percent.wrappedValue }, change: { percent.wrappedValue = $0 })
@@ -103,7 +103,7 @@ struct ShapeControls: View {
         let amount = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = clamp($0) })
         return HStack(spacing: 6) {
             Text(title).scrubbable(sensitivity: 1, value: value, range: range)
-            Slider(value: amount, in: Double(range.lowerBound)...Double(range.upperBound), step: 1)
+            Slider(value: amount, in: Double(range.lowerBound)...Double(range.upperBound))
                 .frame(width: 100)
             TextField(title, value: amount, format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
