@@ -20,7 +20,8 @@ struct TypeControls: View {
                 HStack(spacing: 10) {
                     TypeFontPicker(fontName: value(\.fontName))
                         .frame(width: 210).help("Font face, including bold and italic variants")
-                    TextField("Size", value: number(\.fontSize), format: .number).frame(width: 52).unitSuffix("px")
+                    TextField("Size", value: number(\.fontSize), format: .number).frame(width: 52)
+                        .unitSuffix("px", scrubValue: value(\.fontSize), sensitivity: 1, range: 1...2000, step: 1)
                         .arrowSteps(value: { Double(session.currentTextStyle.fontSize) },
                                     change: { stepped in session.changeTextStyle { $0.fontSize = CGFloat(min(2000, max(1, stepped))) } })
                     Button { session.openTextColorPicker() } label: {
@@ -50,11 +51,11 @@ struct TypeControls: View {
                             .accessibilityAddTraits(selected ? .isSelected : [])
                         }
                     }
-                    Text("Tracking")
+                    Text("Tracking").scrubbable(sensitivity: 1, value: value(\.tracking), range: -100...1000, step: 1)
                     TextField("Tracking", value: number(\.tracking), format: .number).frame(width: 45)
                         .arrowSteps(value: { Double(session.currentTextStyle.tracking) },
                                     change: { stepped in session.changeTextStyle { $0.tracking = CGFloat(stepped) } })
-                    Text("Leading")
+                    Text("Leading").scrubbable(sensitivity: 1, value: value(\.leading), range: 0...5000, step: 1)
                     // 0 means Auto: the field is left empty so its "Auto" placeholder shows through.
                     TextField("Leading", text: Binding(get: {
                         let leading = session.currentTextStyle.leading
@@ -78,6 +79,7 @@ struct TypeControls: View {
         }
         .textFieldStyle(.roundedBorder).padding(.horizontal, 18).toolHeaderBar()
         .disabled(session.document == nil || session.showsBusy)
+        .onChange(of: session.colorPicker?.color) { _, _ in session.previewTextColor() }
     }
 }
 

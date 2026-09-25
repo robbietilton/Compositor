@@ -51,10 +51,10 @@ struct HueSaturationSheet: View {
             }
             Divider()
             HStack {
-                Button("Cancel") { session.cancelHueSaturation() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { session.cancelHueSaturation() }.configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") { Task { await session.commitHueSaturation() } }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
         .padding(24).frame(width: 460).fixedSize()
@@ -112,6 +112,7 @@ struct HueSaturationSheet: View {
     private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String) -> some View {
         HStack(spacing: 10) {
             Text(title).frame(width: 76, alignment: .leading)
+                .scrubbable(sensitivity: 1, value: value, range: range)
             Slider(value: value, in: range)
             TextField(title, value: value, format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)

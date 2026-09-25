@@ -12,6 +12,46 @@ struct CursorTests {
                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
     }
 
+    @Test func emptyCanvasLeavesTheScrubberCursorAloneAndRestoresTrackingForADocument() {
+        let session = EditorSession()
+        let view = CanvasView(session: session)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.contentView = view
+        let pointer = mouse(at: NSPoint(x: 200, y: 150), in: window)
+        defer { NSCursor.arrow.set() }
+
+        func hasCanvasTracking() -> Bool {
+            view.trackingAreas.contains { $0.owner === view && $0.options.contains(.mouseEnteredAndExited) }
+        }
+        func checkEmptyCanvas() {
+            view.synchronizeDisplay()
+            #expect(!hasCanvasTracking())
+            NSCursor.resizeLeftRight.set()
+            view.resetCursorRects()
+            view.mouseMoved(with: pointer)
+            view.cursorUpdate(with: pointer)
+            view.mouseExited(with: pointer)
+            let drag = NSEvent.mouseEvent(with: .leftMouseDragged, location: NSPoint(x: 200, y: 150),
+                                          modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                          context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            let release = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: -20, y: 150),
+                                             modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+            view.mouseDragged(with: drag)
+            view.mouseUp(with: release)
+            #expect(NSCursor.current === NSCursor.resizeLeftRight,
+                    "Document-close callbacks must not replace a form control's cursor")
+        }
+
+        checkEmptyCanvas()
+        session.createDocument(width: 400, height: 300)
+        view.synchronizeDisplay()
+        #expect(hasCanvasTracking())
+        session.clearProject()
+        checkEmptyCanvas()
+    }
+
     @Test func leavingTheCanvasRestoresTheArrowWithEveryTool() {
         let session = EditorSession()
         session.createDocument(width: 400, height: 300)
@@ -165,9 +205,11 @@ struct CursorTests {
         session.cancelTransform()
     }
 
-    /// In the layer list, Option over a thumbnail is for clipping masks; over the rest of a row it offers
-    /// to duplicate the layer by dragging.
-    @Test func optionOverALayerRowOffersDuplicatingExceptOverThumbnails() throws {
+    /// In the layer list, Option offers to duplicate the layer by dragging, over a row's name and over its
+    /// thumbnail alike. The clipping cursor is not the thumbnail's business at all: `clippingCursor(at:)`
+    /// reserves it for the bottom quarter of a row (`isClippingZone`). This comment, and the test's name, used
+    /// to say a thumbnail kept Option for clipping masks.
+    @Test func optionOverALayerRowOffersDuplicatingIncludingOverThumbnails() throws {
         let session = EditorSession()
         session.createDocument(width: 400, height: 300)
         session.addBlankLayer()
@@ -192,7 +234,10 @@ struct CursorTests {
         #expect(thumbnail.frame.size == CGSize(width: 36, height: 27), "the thumbnail takes the 400 × 300 canvas's shape")
         let center = thumbnail.convert(NSPoint(x: thumbnail.bounds.midX, y: thumbnail.bounds.midY), to: nil)
         table.mouseMoved(with: mouse(at: center, flags: .option, in: window))
-        #expect(NSCursor.current !== CanvasView.duplicateCursor, "Option over a thumbnail is for clipping masks")
+        // The thumbnail's centre is not in the row's bottom quarter, which is the only place Option means
+        // clipping (`clippingCursor(at:)` -> `isClippingZone`), so the list offers to duplicate here as it does
+        // over the rest of the row. This asserted the opposite, from when thumbnails kept Option for themselves.
+        #expect(NSCursor.current === CanvasView.duplicateCursor, "Option over a thumbnail still offers to duplicate")
         table.mouseMoved(with: mouse(at: name, in: window))
         #expect(NSCursor.current === NSCursor.arrow)
     }

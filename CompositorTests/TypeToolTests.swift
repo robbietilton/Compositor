@@ -15,6 +15,12 @@ struct TypeToolTests {
         let session = makeSession()
         let before = session.history.undoCount
         session.beginText(at: CGPoint(x: 30, y: 40))
+        // A click starts the first letter on the pointer: the box sits its padding to the left and its first
+        // baseline's height above.
+        let start = try #require(session.textDraft)
+        let style = start.style
+        let descent = abs((EditorSession.textAttributes(style)[.font] as? NSFont)?.descender ?? 0)
+        #expect(start.origin == CGPoint(x: 30 - LayerTextStyle.padding, y: 40 - (LayerTextStyle.padding + style.lineHeight - descent)))
         session.textDraft?.style.content = "Text"
         #expect(session.document?.layers.count == 1)
         var draft = try #require(session.textDraft)
@@ -22,7 +28,7 @@ struct TypeToolTests {
         draft.style.fontSize = 48
         #expect(session.applyText(draft))
         #expect(session.activeLayer?.liveText?.style == draft.style)
-        #expect(session.activeLayer?.origin == CGPoint(x: 30, y: 40))
+        #expect(session.activeLayer?.origin == start.origin)
         #expect(session.history.undoCount == before + 1)
         session.editActiveText()
         session.textDraft = nil
@@ -37,6 +43,30 @@ struct TypeToolTests {
         #expect(session.document?.layers.count == 1)
         session.redo()
         #expect(session.activeLayer?.liveText != nil)
+    }
+
+    @Test func textColorPickerPreviewsAndRestoresDraft() throws {
+        let session = makeSession()
+        session.beginText(at: CGPoint(x: 30, y: 40))
+        let original = try #require(session.textDraft?.style)
+
+        session.openTextColorPicker()
+        try #require(session.colorPicker).hsb.setRGB(PaletteColor(red: 1, green: 0, blue: 0))
+        session.previewTextColor()
+        #expect(session.textDraft?.style.red == 1)
+        #expect(session.textDraft?.style.green == 0)
+        #expect(session.foregroundColor == .black)
+
+        session.closeColorPicker(commit: false)
+        #expect(session.textDraft?.style == original)
+        #expect(session.foregroundColor == .black)
+
+        session.openTextColorPicker()
+        try #require(session.colorPicker).hsb.setRGB(PaletteColor(red: 0, green: 0, blue: 1))
+        session.previewTextColor()
+        session.closeColorPicker(commit: true)
+        #expect(session.textDraft?.style.blue == 1)
+        #expect(session.foregroundColor == PaletteColor(red: 0, green: 0, blue: 1))
     }
 
     @Test func transformsDuplicatesAndClippingKeepTextEditable() throws {
@@ -106,6 +136,8 @@ struct TypeToolTests {
     @Test func clippingToTextExportsColoredGlyphsOnTransparency() async throws {
         let session = makeSession()
         session.beginText(at: .zero)
+        // The box on the canvas's corner, where the clipped fill below is placed.
+        session.textDraft?.origin = .zero
         session.textDraft?.style.content = "Text"
         #expect(session.applyText(try #require(session.textDraft)))
         let source = try #require(session.activeLayerID)
@@ -169,5 +201,43 @@ struct TypeToolTests {
         session.createDocument(width: 100, height: 100, emptyLayer: true)
         #expect(!session.applyText(draft))
         #expect(session.document?.layers.count == 1)
+    }
+
+    /// Zoomed in, text being typed shows as the pixels it will be committed as, so confirming it changes nothing on
+    /// screen — at a zoom that smooths pixels and at one that shows them hard-edged.
+    @Test(arguments: [1.5, 4] as [CGFloat])
+    func textLooksTheSameWhileEditingAndOnceCommitted(zoom: CGFloat) throws {
+        let session = makeSession()
+        let view = CanvasView(session: session)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        session.viewport.resize(to: view.bounds.size, backingScale: 1, documentSize: CGSize(width: 800, height: 600))
+        session.zoom(to: zoom)
+        func snapshot() throws -> [UInt8] {
+            // The canvas's own drawing, without the editor's box and handles over it.
+            view.synchronizeDisplay()
+            view.subviews.forEach { $0.isHidden = true }
+            defer { view.subviews.forEach { $0.isHidden = false } }
+            let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let data = try #require(rep.bitmapData)
+            return Array(UnsafeBufferPointer(start: data, count: rep.bytesPerRow * rep.pixelsHigh))
+        }
+        let blank = try snapshot()
+        session.beginText(at: CGPoint(x: 380, y: 300))
+        session.textDraft?.style.content = "Sharp"
+        session.textDraft?.style.fontSize = 24
+        view.synchronizeDisplay()
+        let editor = try #require(view.inlineTextEditor)
+        #expect(editor.textView.textStorage?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .clear)
+
+        let editing = try snapshot()
+        #expect(editing != blank, "the text being typed wasn't drawn on the canvas")
+        #expect(session.finishText())
+        #expect(session.activeLayer?.liveText != nil)
+        let committed = try snapshot()
+        #expect(editing.count == committed.count)
+        let largest = zip(editing, committed).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        #expect(largest <= 2, "the canvas changed by up to \(largest) when the text was committed")
     }
 }

@@ -17,7 +17,7 @@ struct GradientControls: View {
             }
             .labelsHidden().fixedSize()
             Toggle("Reverse", isOn: $session.gradientSettings.reversed)
-            Text("Opacity")
+            Text("Opacity").scrubbable(sensitivity: 0.01, value: $session.gradientSettings.opacity, range: 0.01...1)
             Slider(value: $session.gradientSettings.opacity, in: 0.01...1).frame(width: 100)
             TextField("Opacity", value: Binding<Double>(get: { Double(session.gradientSettings.opacity * 100) },
                 set: { session.gradientSettings.opacity = $0.isFinite ? CGFloat(min(100, max(1, $0)) / 100) : 1 }),

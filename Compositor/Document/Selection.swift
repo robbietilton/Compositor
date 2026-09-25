@@ -65,6 +65,13 @@ nonisolated struct SelectionClip: @unchecked Sendable {
     }
 }
 
+/// The Magic tool's modes: Wand selects pixels of a similar color, Object traces the outline of
+/// whatever the click lands on. Tab switches between them, as with the Brush's Paint and Erase.
+nonisolated enum WandMode: String, CaseIterable, Sendable {
+    case wand = "Wand"
+    case object = "Object"
+}
+
 nonisolated enum LassoKind: String, CaseIterable, Sendable {
     case freehand = "Freehand"
     case polygonal = "Polygonal"
@@ -132,7 +139,7 @@ extension EditorSession {
     }
 
     func beginLasso(at point: CGPoint, mode: SelectionMode) {
-        // The Magic Wand selects with a click; it never draws an outline.
+        // Click-selection tools never draw a draft outline.
         guard tool.isSelectionTool, tool != .wand, canEditSelection, selectionMoveOrigin == nil else { return }
         if tool == .marquee {
             let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
@@ -181,6 +188,11 @@ extension EditorSession {
     func toggleMarqueeKind() {
         cancelLasso()
         marqueeKind = marqueeKind == .rectangle ? .ellipse : .rectangle
+    }
+
+    /// W picks the Magic tool; Tab switches its Wand and Object modes.
+    func pressWandKey() {
+        selectTool(.wand)
     }
 
     /// The L key chooses the Lasso in whichever mode it was last set to (switched only in the tool bar). The mode

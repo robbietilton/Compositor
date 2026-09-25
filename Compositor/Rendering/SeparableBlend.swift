@@ -1,22 +1,27 @@
 import CoreGraphics
 import CoreImage
 
-/// Color Burn and Color Dodge, blended the way the PDF spec (and Photoshop) define them.
+/// The blend modes Core Graphics can't draw, computed by Core Image instead.
 ///
-/// Core Graphics gets these two wrong: its `.colorBurn` and `.colorDodge` ignore how transparent the source is, so
-/// a soft brush comes out with a hard edge. Every other mode it has is right. Core Image's versions are correct, so
-/// a layer in one of these modes is drawn into a copy of the canvas, blended there, and the result put back.
+/// Two kinds end up here. Core Graphics gets Color Burn and Color Dodge wrong: its versions ignore how transparent
+/// the source is, so a soft brush comes out with a hard edge. And it has no equivalent at all for Linear Burn,
+/// Linear Dodge, Vivid Light, Linear Light, Pin Light, Hard Mix, Subtract or Divide. Either way the layer is drawn
+/// into a copy of the canvas, blended there, and the result put back.
 nonisolated enum SeparableBlend {
-    static func isCoreGraphicsWrong(_ mode: LayerBlendMode) -> Bool { mode == .colorBurn || mode == .colorDodge }
-    private static let ciContext = CIContext(options: [.cacheIntermediates: false])
+    /// Whether this mode has to be composited through a surface rather than drawn straight on.
+    static func needsSurface(_ mode: LayerBlendMode) -> Bool { mode.coreImageFilter != nil }
     private static let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    // Core Image works in a linear space unless told otherwise, and these two modes are not separable from
+    // the gamma they are computed in: over 40% grey, an 80% grey layer dodges to 62% instead of Photoshop's
+    // 100%, and burns to 0% instead of 25%. The blend has to happen in the same sRGB the canvas is in.
+    private static let ciContext = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: space])
 
     /// Draws one layer into `context` in `mode`. `body` draws it as it would be drawn normally, into a context laid
     /// out exactly like `context`. Only a bitmap-backed context can be read back, so anywhere else this reports
     /// false and the caller draws with Core Graphics as before.
     static func draw(_ mode: LayerBlendMode, in context: CGContext, body: (CGContext) -> Void) -> Bool {
-        guard isCoreGraphicsWrong(mode), context.data != nil, context.width > 0, context.height > 0,
-              let filter = CIFilter(name: mode == .colorBurn ? "CIColorBurnBlendMode" : "CIColorDodgeBlendMode"),
+        guard let name = mode.coreImageFilter, context.data != nil, context.width > 0, context.height > 0,
+              let filter = CIFilter(name: name),
               let backdrop = context.makeImage(),
               let surface = CGContext(data: nil, width: context.width, height: context.height, bitsPerComponent: 8,
                                       bytesPerRow: context.width * 4, space: space,

@@ -86,7 +86,7 @@ nonisolated enum LiveMaskBaker {
             } else {
                 ctx.saveGState(); ctx.concatenate(inverse)
                 LayerRenderer.draw(image, transform: layer.transform, center: layer.transform.center,
-                    opacity: layer.opacity ?? 1,
+                    opacity: layer.effectiveOpacity(in: records),
                     mask: snapshot.mask(for: layer).flatMap { $0.clipImage(placement: $0.placement, over: layer.transform, width: image.width, height: image.height) }, in: ctx)
                 ctx.restoreGState()
             }
@@ -164,26 +164,27 @@ extension EditorSession {
         let records = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let live = LiveMaskRenderer(bounds: context.boundingBoxOfClipPath, source: { records[$0]?.maskSourceID }) { id, ctx in
             guard let layer = records[id], let image = layer.asset?.image else { return }
+            let opacity = layer.effectiveOpacity(in: records)
             let transform = self.displayedTransform(for: layer)
             let mask = layer.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
             let effects = LayerEffectsRenderer.cached(image, mask: mask, effects: layer.effects)
             func drawLayer(_ mode: LayerBlendMode, _ target: CGContext) {
                 if let effects {
                     let grown = LayerEffectsRenderer.placed(transform, image: effects.image, inset: effects.inset)
-                    LayerRenderer.draw(effects.image, transform: grown, center: grown.center, opacity: layer.opacity,
+                    LayerRenderer.draw(effects.image, transform: grown, center: grown.center, opacity: opacity,
                         blendMode: mode, mask: nil, in: target)
                     return
                 }
-                LayerRenderer.draw(image, transform: transform, center: transform.center, opacity: layer.opacity,
+                LayerRenderer.draw(image, transform: transform, center: transform.center, opacity: opacity,
                     blendMode: mode, mask: mask, in: target)
             }
             let mode = self.displayedBlendMode(for: layer)
             // Core Graphics blends these two wrong; see SeparableBlend.
-            if SeparableBlend.isCoreGraphicsWrong(mode), SeparableBlend.draw(mode, in: ctx, body: { drawLayer(.normal, $0) }) { return }
+            if SeparableBlend.needsSurface(mode), SeparableBlend.draw(mode, in: ctx, body: { drawLayer(.normal, $0) }) { return }
             drawLayer(mode, ctx)
         }
         live.adjustment = { records[$0]?.adjustment }
-        live.adjustmentOpacity = { records[$0]?.opacity ?? 1 }
+        live.adjustmentOpacity = { records[$0]?.effectiveOpacity(in: records) ?? 1 }
         live.adjustmentClip = { id, ctx in
             if let layer = records[id], let image = layer.mask?.enabledImage {
                 FolderMaskClip(image: image, transform: layer.transform).apply(center: layer.transform.center, in: ctx)

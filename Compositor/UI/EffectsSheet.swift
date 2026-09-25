@@ -12,13 +12,15 @@ struct EffectsSheet: View {
             case .shadow: shadow
             case .colorOverlay: colorOverlay
             case .innerShadow: innerShadow
+            case .outerGlow: outerGlow
+            case .innerGlow: innerGlow
             }
             HStack(spacing: 10) {
                 Spacer()
                 Button("Cancel") { session.finishEffectsEditing(commit: false) }
-                    .keyboardShortcut(.cancelAction)
+                    .configuredNativeShortcut(.escape)
                 Button("OK") { session.finishEffectsEditing(commit: true) }
-                    .keyboardShortcut(.defaultAction)
+                    .configuredNativeShortcut(.return)
             }
         }
         .padding(20).frame(width: 340).fixedSize()
@@ -48,7 +50,7 @@ struct EffectsSheet: View {
             }
             slider("Size", value: Binding(get: { effect.size }, set: { size in
                 session.changeEffects { $0.stroke?.size = size }
-            }), range: 1...StrokeEffect.maxSize, unit: "px")
+            }), range: 0...20, inputRange: 0...StrokeEffect.maxSize, unit: "px")
             slider("Opacity", value: Binding(get: { CGFloat(effect.opacity * 100) }, set: { value in
                 session.changeEffects { $0.stroke?.opacity = Double(value) / 100 }
             }), range: 0...100, unit: "%")
@@ -71,10 +73,10 @@ struct EffectsSheet: View {
             }), range: -180...180, unit: "°")
             slider("Distance", value: Binding(get: { effect.distance }, set: { distance in
                 session.changeEffects { $0.shadow?.distance = distance }
-            }), range: 0...300, unit: "px")
+            }), range: 0...100, inputRange: 0...5000, unit: "px")
             slider("Blur", value: Binding(get: { effect.blur }, set: { blur in
                 session.changeEffects { $0.shadow?.blur = blur }
-            }), range: 0...300, unit: "px")
+            }), range: 0...100, inputRange: 0...500, unit: "px")
         }
     }
 
@@ -108,10 +110,44 @@ struct EffectsSheet: View {
             }), range: -180...180, unit: "°")
             slider("Distance", value: Binding(get: { effect.distance }, set: { distance in
                 session.changeEffects { $0.innerShadow?.distance = distance }
-            }), range: 0...300, unit: "px")
+            }), range: 0...50, inputRange: 0...5000, unit: "px")
             slider("Blur", value: Binding(get: { effect.blur }, set: { blur in
                 session.changeEffects { $0.innerShadow?.blur = blur }
-            }), range: 0...300, unit: "px")
+            }), range: 0...100, inputRange: 0...500, unit: "px")
+        }
+    }
+
+    @ViewBuilder private var outerGlow: some View {
+        let effect = session.editingEffects.outerGlow
+        HStack {
+            Text("Outer Glow").font(.headline)
+            Spacer()
+            if effect != nil { swatch(.outerGlow) }
+        }
+        if let effect {
+            slider("Size", value: Binding(get: { effect.size }, set: { size in
+                session.changeEffects { $0.outerGlow?.size = size }
+            }), range: 0...100, inputRange: 0...500, unit: "px")
+            slider("Opacity", value: Binding(get: { CGFloat(effect.opacity * 100) }, set: { value in
+                session.changeEffects { $0.outerGlow?.opacity = Double(value) / 100 }
+            }), range: 0...100, unit: "%")
+        }
+    }
+
+    @ViewBuilder private var innerGlow: some View {
+        let effect = session.editingEffects.innerGlow
+        HStack {
+            Text("Inner Glow").font(.headline)
+            Spacer()
+            if effect != nil { swatch(.innerGlow) }
+        }
+        if let effect {
+            slider("Size", value: Binding(get: { effect.size }, set: { size in
+                session.changeEffects { $0.innerGlow?.size = size }
+            }), range: 0...100, inputRange: 0...500, unit: "px")
+            slider("Opacity", value: Binding(get: { CGFloat(effect.opacity * 100) }, set: { value in
+                session.changeEffects { $0.innerGlow?.opacity = Double(value) / 100 }
+            }), range: 0...100, unit: "%")
         }
     }
 
@@ -121,24 +157,36 @@ struct EffectsSheet: View {
         let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
         return Button { session.openEffectColorPicker(kind) } label: {
             shape.fill(Color(red: Double(color?.red ?? 0), green: Double(color?.green ?? 0), blue: Double(color?.blue ?? 0)))
-                .overlay { shape.strokeBorder(.black.opacity(0.5), lineWidth: 1) }
+                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1) }
+                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
                 .frame(width: 36, height: 18)
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .help(kind.rawValue + " color")
         .accessibilityLabel(kind.rawValue + " color")
     }
 
-    private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>, unit: String) -> some View {
-        HStack(spacing: 10) {
+    private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>,
+                        inputRange: ClosedRange<CGFloat>? = nil, unit: String) -> some View {
+        let limits = inputRange ?? range
+        let setAmount: (Double) -> Void = { amount in
+            guard amount.isFinite else { return }
+            value.wrappedValue = min(limits.upperBound, max(limits.lowerBound, CGFloat(amount)))
+        }
+        return HStack(spacing: 10) {
             Text(title).frame(width: 64, alignment: .leading)
-            Slider(value: value, in: range).frame(width: 130)
+                .scrubbable(sensitivity: 1, value: value, range: limits)
+            // A manually entered larger value stays intact; only the thumb is pinned
+            // to the end of the slider until the user drags it again.
+            Slider(value: Binding(get: { min(range.upperBound, max(range.lowerBound, value.wrappedValue)) },
+                                  set: { value.wrappedValue = $0 }), in: range).frame(width: 130)
             TextField(title, value: Binding(get: { Double(value.wrappedValue) },
-                                            set: { value.wrappedValue = CGFloat(min(range.upperBound, max(range.lowerBound, $0))) }),
+                                            set: setAmount),
                       format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
                 .arrowSteps(value: { Double(value.wrappedValue) },
-                            change: { value.wrappedValue = CGFloat(min(range.upperBound, max(range.lowerBound, $0))) })
+                            change: setAmount)
                 .unitSuffix(unit)
         }
     }

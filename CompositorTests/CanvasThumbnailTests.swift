@@ -58,9 +58,14 @@ struct CanvasThumbnailTests {
         context.setFillColor(gray: 0, alpha: 1)
         context.fill(CGRect(x: 5, y: 5, width: 10, height: 10))
         let framed = try #require(context.makeImage())
-        #expect(CanvasThumbnail.edgeTone(of: framed) == 1)
+        #expect(LayerMask.background(of: framed) == 1)
         let shown = try pixels(CanvasThumbnail.mask(framed, transform: transform, canvas: canvas, box: 30))
         #expect(shown.read(2, 2)[0] > 245, "outside the layer the edge tone carries on")
         #expect(shown.read(22, 15)[0] < 10, "the black middle sits where the layer is")
+        // A stroke reaching the mask's edge: the rest still reads white, as the canvas treats it, not gray.
+        context.fill(CGRect(x: 0, y: 8, width: 20, height: 4))
+        let stroked = try #require(context.makeImage())
+        let beyond = try pixels(CanvasThumbnail.mask(stroked, transform: transform, canvas: canvas, box: 30))
+        #expect(beyond.read(2, 2)[0] > 245, "the background is white or black, never a gray average")
     }
 }

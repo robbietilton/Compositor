@@ -32,33 +32,15 @@ enum CanvasThumbnail {
         }
     }
 
-    /// The mask placed by `transform`. Outside its layer a mask has no effect, so its edge tone carries on
-    /// to the canvas edges: a reveal-all mask reads all white, a hide-all mask all black.
+    /// The mask placed by `transform`. Past its pixels a mask carries on in its background, white or black, the way
+    /// the canvas treats it (LayerMask.background): a reveal-all mask reads all white, a hide-all mask all black, and a
+    /// stroke touching the mask's edge doesn't turn the rest gray.
     static func mask(_ image: CGImage, transform: LayerTransform, canvas: CGSize, box: CGFloat) -> NSImage {
         render(canvas: canvas, box: box) { context, size, scale in
-            context.setFillColor(gray: edgeTone(of: image), alpha: 1)
+            context.setFillColor(gray: LayerMask.background(of: image), alpha: 1)
             context.fill(CGRect(origin: .zero, size: size))
             place(image, transform: transform, scale: scale, in: context)
         }
-    }
-
-    /// The mean gray (0–1) of an image's outermost pixels.
-    static func edgeTone(of image: CGImage) -> CGFloat {
-        let width = image.width, height = image.height
-        guard width > 0, height > 0,
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
-                                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue),
-              let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return 1 }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        var total = 0, count = 0
-        for y in 0..<height {
-            let edgeRow = y == 0 || y == height - 1
-            for x in 0..<width where edgeRow || x == 0 || x == width - 1 {
-                total += Int(data[y * width + x])
-                count += 1
-            }
-        }
-        return count == 0 ? 1 : CGFloat(total) / CGFloat(count) / 255
     }
 
     /// A canvas-shaped picture: `draw` gets a top-left context, its size in pixels, and pixels per document pixel.

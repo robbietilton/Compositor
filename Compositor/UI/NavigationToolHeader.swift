@@ -25,7 +25,9 @@ struct NavigationToolHeader: View {
                     .accessibilityLabel("Zoom percentage")
                     .help("Zoom percentage (0.1–3200%). Press Return to apply.")
                     .disabled(session.document == nil || session.showsBusy)
-                    .unitSuffix("%")
+                    .unitSuffix("%", scrubValue: Binding<Double>(
+                        get: { Double(session.viewport.zoom * 100) }, set: { step($0) }),
+                        sensitivity: 1, range: 0.1...3200)
             }
             Spacer()
         }

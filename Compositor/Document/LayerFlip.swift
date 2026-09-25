@@ -74,6 +74,7 @@ extension EditorSession {
                 self.document?.selection = DocumentSelection(path: path, antialiased: selection.antialiased, feather: selection.feather)
             }
         }
+        self.document?.guides = document.guides.map { $0.mirrored(horizontally: horizontally, across: axis) }
         endEdit()
     }
 }

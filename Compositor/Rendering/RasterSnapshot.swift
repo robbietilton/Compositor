@@ -10,6 +10,8 @@ nonisolated final class RasterSnapshot: @unchecked Sendable {
     let baseRect: CGRect
     let patches: [BrushPatch]
     let isMask: Bool
+    /// A mask's value past its base and patches, set once as the snapshot is made.
+    var fill: CGFloat = 1
     /// Where this raster's halving grids start (see `TiledLayerRenderer`): its base's origin, or for a raster
     /// painted from nothing, the grid of the stroke that made it — carried across commits so they never shift.
     let alignment: CGPoint
@@ -29,7 +31,8 @@ nonisolated final class RasterSnapshot: @unchecked Sendable {
 
     /// New patches are complete replacement tiles, including transparent pixels.
     /// Split older patches at their edges to keep the display list disjoint and flat.
-    static func replacing(source: ImportedImage?, sourceRect: CGRect, patches new: [BrushPatch], crop: CGRect, isMask: Bool = false) -> RasterSnapshot {
+    static func replacing(source: ImportedImage?, sourceRect: CGRect, patches new: [BrushPatch], crop: CGRect, isMask: Bool = false,
+                          fill: CGFloat = 1) -> RasterSnapshot {
         let old = source?.raster
         let dx = sourceRect.minX - crop.minX, dy = sourceRect.minY - crop.minY
         var patches = (old?.patches ?? []).map {
@@ -81,9 +84,11 @@ nonisolated final class RasterSnapshot: @unchecked Sendable {
             guard let image = patch.image.cropping(to: rect.offsetBy(dx: -patch.rect.minX, dy: -patch.rect.minY)) else { return nil }
             return BrushPatch(rect: rect, image: image)
         }
-        return RasterSnapshot(width: Int(crop.width), height: Int(crop.height), base: old?.base ?? (old == nil ? source?.image : nil),
+        let result = RasterSnapshot(width: Int(crop.width), height: Int(crop.height), base: old?.base ?? (old == nil ? source?.image : nil),
             baseRect: old?.baseRect.offsetBy(dx: dx, dy: dy) ?? sourceRect.offsetBy(dx: -crop.minX, dy: -crop.minY), patches: patches, isMask: isMask,
             alignment: CGPoint(x: sourceRect.minX + (old?.alignment.x ?? 0) - crop.minX, y: sourceRect.minY + (old?.alignment.y ?? 0) - crop.minY))
+        result.fill = fill
+        return result
     }
 
     /// Draw only the requested source pixels, used when allocating a brush tile.
@@ -92,8 +97,8 @@ nonisolated final class RasterSnapshot: @unchecked Sendable {
         context.clip(to: rect)
         context.setShouldAntialias(false)
         if isMask {
-            // A mask expansion reveals new pixels outside its original extent.
-            context.setFillColor(gray: 1, alpha: 1)
+            // Past its original extent a grown mask is its background: white reveals, black hides.
+            context.setFillColor(gray: fill, alpha: 1)
             context.fill(rect)
         }
         let sx = rect.width / CGFloat(width), sy = rect.height / CGFloat(height)

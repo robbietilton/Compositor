@@ -1,39 +1,117 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-    <key>CFBundleDocumentTypes</key>
-    <array><dict>
-        <key>CFBundleTypeName</key><string>Images</string>
-        <key>CFBundleTypeRole</key><string>Viewer</string>
-        <key>LSHandlerRank</key><string>Alternate</string>
-        <key>LSItemContentTypes</key>
-        <array><string>public.jpeg</string><string>public.png</string><string>public.heic</string><string>public.tiff</string></array>
-    </dict><dict>
-        <key>CFBundleTypeName</key><string>Compositor Project</string>
-        <key>CFBundleTypeRole</key><string>Editor</string>
-        <key>LSHandlerRank</key><string>Owner</string>
-        <key>LSTypeIsPackage</key><true/>
-        <key>LSItemContentTypes</key><array><string>com.compositor.project</string></array>
-    </dict></array>
-    <key>UTExportedTypeDeclarations</key>
-    <array><dict>
-        <key>UTTypeIdentifier</key><string>com.compositor.layer-row</string>
-        <key>UTTypeDescription</key><string>Compositor Layer</string>
-        <key>UTTypeConformsTo</key><array><string>public.data</string></array>
-    </dict><dict>
-        <key>UTTypeIdentifier</key><string>com.compositor.project</string>
-        <key>UTTypeDescription</key><string>Compositor Project</string>
-        <key>UTTypeConformsTo</key><array><string>com.apple.package</string></array>
-        <key>UTTypeTagSpecification</key><dict>
-            <key>public.filename-extension</key><array><string>comp</string></array>
-        </dict>
-    </dict></array>
-    <!-- Sparkle updates: where the feed lives (permanent), the key updates are signed with, and the helper a
-         sandboxed app installs them through. -->
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/robbietilton/Compositor/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>KZvD724t8QpzTR4OGrHrsCWt538TJ/g/qrTZii+o214=</string>
-    <key>SUEnableInstallerLauncherService</key>
-    <true/>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Images</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.jpeg</string>
+				<string>public.png</string>
+				<string>public.heic</string>
+				<string>public.tiff</string>
+				<string>com.adobe.photoshop-image</string>
+				<string>com.adobe.photoshop-large-image</string>
+				<string>public.camera-raw-image</string>
+				<string>public.svg-image</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Compositor Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.compositor.project</string>
+			</array>
+			<key>LSTypeIsPackage</key>
+			<true/>
+		</dict>
+	</array>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/robbietilton/Compositor/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>KZvD724t8QpzTR4OGrHrsCWt538TJ/g/qrTZii+o214=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Compositor Layer</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.compositor.layer-row</string>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Compositor Project</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.compositor.project</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>comp</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.image</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Adobe Photoshop Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.adobe.photoshop-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>psd</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.image</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Adobe Photoshop Large Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.adobe.photoshop-large-image</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>psb</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

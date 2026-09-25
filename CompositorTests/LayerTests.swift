@@ -238,6 +238,321 @@ struct LayerTests {
 
         session.addGroup()
         let folder = try #require(session.activeLayerID)
-        #expect(!session.duplicateLayer(folder, in: nil, atBottom: true), "folders aren't duplicated this way")
+        // Folder duplication arrived in 1.1.5: a dragged folder copies itself and its contents.
+        #expect(session.duplicateLayer(folder, in: nil, atBottom: true), "a folder duplicates with its contents")
+    }
+
+    private func makeLayerTable(session: EditorSession) -> (LayerTableView, NativeLayerList.Coordinator, NSWindow) {
+        let coordinator = NativeLayerList.Coordinator(session: session)
+        let table = LayerTableView()
+        table.session = session
+        table.rowHeight = 52
+        table.intercellSpacing = NSSize(width: 0, height: 2)
+        table.allowsMultipleSelection = true
+        table.allowsEmptySelection = true
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layer"))
+        column.width = 252
+        table.addTableColumn(column)
+        table.delegate = coordinator
+        table.dataSource = coordinator
+        coordinator.update(table)
+
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 252, height: 400))
+        scroll.documentView = table
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 252, height: 400),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = scroll
+        coordinator.update(table)
+        return (table, coordinator, window)
+    }
+
+    @Test func testContextMenuContainsCoreLayerActions() throws {
+        let session = sessionWithThreeLayers()
+        let (_, coordinator, _) = makeLayerTable(session: session)
+
+        let menu = try #require(coordinator.contextMenu(for: 0))
+        let titles = menu.items.map(\.title)
+
+        // Duplicate
+        #expect(titles.contains("Duplicate Layer"))
+        // Rename
+        #expect(titles.contains("Rename…"))
+        // Delete
+        #expect(titles.contains("Delete Layer"))
+        // Mask actions
+        let addMaskItem = try #require(menu.items.first(where: { $0.title == "Add Mask" }))
+        let submenu = try #require(addMaskItem.submenu)
+        let subTitles = submenu.items.map(\.title)
+        #expect(subTitles.contains("Reveal All (White)"))
+        #expect(subTitles.contains("Hide All (Black)"))
+        #expect(titles.contains("Disable Mask"))
+        #expect(titles.contains("Delete Mask"))
+        #expect(titles.contains("Link Mask") || titles.contains("Unlink Mask"))
+    }
+
+    @Test func testRightClickOnUnselectedLayerSelectsIt() throws {
+        let session = sessionWithThreeLayers()
+        let layers = session.layerRows.map(\.layer)
+        let layerA = layers[0]
+        let layerB = layers[1]
+        session.selectLayers([layerA.id], primary: layerA.id)
+        #expect(session.activeLayerID == layerA.id)
+        #expect(session.selectedLayerIDs == [layerA.id])
+
+        let (table, coordinator, window) = makeLayerTable(session: session)
+        coordinator.update(table)
+
+        let row1Rect = table.rect(ofRow: 1)
+        let tablePoint = NSPoint(x: row1Rect.midX, y: row1Rect.midY)
+        let windowPoint = table.convert(tablePoint, to: nil)
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown,
+            location: windowPoint,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1.0
+        ))
+
+        let menu = table.menu(for: event)
+        #expect(menu != nil)
+        #expect(session.selectedLayerIDs == [layerB.id])
+        #expect(session.activeLayerID == layerB.id)
+    }
+
+    @Test func testRightClickInsideMultiSelectionPreservesSelection() throws {
+        let session = sessionWithThreeLayers()
+        let layers = session.layerRows.map(\.layer)
+        let layerA = layers[0]
+        let layerB = layers[1]
+        let layerC = layers[2]
+        let allIDs: Set<UUID> = [layerA.id, layerB.id, layerC.id]
+        session.selectLayers(allIDs, primary: layerA.id)
+
+        let (table, coordinator, window) = makeLayerTable(session: session)
+        coordinator.update(table)
+
+        let row1Rect = table.rect(ofRow: 1)
+        let tablePoint = NSPoint(x: row1Rect.midX, y: row1Rect.midY)
+        let windowPoint = table.convert(tablePoint, to: nil)
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown,
+            location: windowPoint,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1.0
+        ))
+
+        let menu = table.menu(for: event)
+        #expect(menu != nil)
+        #expect(session.selectedLayerIDs == allIDs)
+        #expect(session.activeLayerID == layerB.id)
+    }
+
+    @Test func testRightClickOutsideRowsReturnsNoMenu() throws {
+        let session = sessionWithThreeLayers()
+        let initialSelection = session.selectedLayerIDs
+        let (table, coordinator, window) = makeLayerTable(session: session)
+        coordinator.update(table)
+
+        let clickPointInTable = NSPoint(x: 100, y: 380)
+        #expect(table.row(at: clickPointInTable) < 0)
+
+        let windowPoint = table.convert(clickPointInTable, to: nil)
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown,
+            location: windowPoint,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1.0
+        ))
+
+        let menu = table.menu(for: event)
+        #expect(menu == nil)
+        #expect(session.selectedLayerIDs == initialSelection)
+    }
+
+    @Test func testContextMenuDuplicateUsesExistingDuplicateOperation() throws {
+        let session = sessionWithThreeLayers()
+        let (_, coordinator, _) = makeLayerTable(session: session)
+
+        let target = try #require(session.activeLayer)
+        let initialCount = session.document?.layers.count ?? 0
+        let undoCount = session.history.undoCount
+
+        coordinator.duplicateLayerAction(nil)
+
+        let layers = try #require(session.document?.layers)
+        #expect(layers.count == initialCount + 1)
+        #expect(layers.contains { $0.id == target.id }, "original remains")
+        let copy = try #require(session.activeLayer)
+        #expect(copy.id != target.id, "duplicated layer is new")
+        #expect(copy.name == "\(target.name) copy")
+        #expect(session.activeLayerID == copy.id, "active layer is the duplicate")
+        #expect(session.history.undoCount == undoCount + 1)
+        #expect(session.history.undoName == "Duplicate Layer")
+    }
+
+    @Test func testContextMenuDuplicateFolderPreservesHierarchy() throws {
+        let session = sessionWithThreeLayers()
+        session.groupSelectedLayers()
+        let folderID = try #require(session.activeLayerID)
+        let (_, coordinator, _) = makeLayerTable(session: session)
+
+        let originalChildren = session.descendantIDs(of: folderID)
+        #expect(!originalChildren.isEmpty)
+
+        coordinator.duplicateLayerAction(nil)
+
+        let newFolder = try #require(session.activeLayer)
+        #expect(newFolder.id != folderID)
+        #expect(newFolder.isGroup)
+        let duplicatedChildren = session.descendantIDs(of: newFolder.id)
+        #expect(duplicatedChildren.count == originalChildren.count)
+        for childID in duplicatedChildren {
+            let child = session.document?.layers.first { $0.id == childID }
+            #expect(child?.parentID == newFolder.id)
+        }
+    }
+
+    @Test func testContextMenuMaskActionsFollowLayerState() throws {
+        let session = sessionWithThreeLayers()
+        let (table, coordinator, _) = makeLayerTable(session: session)
+
+        // Without mask:
+        var menu = try #require(coordinator.contextMenu(for: 0))
+        let addMaskItem = try #require(menu.items.first { $0.title == "Add Mask" })
+        #expect(addMaskItem.isEnabled == true)
+        let deleteMaskItem = try #require(menu.items.first { $0.title == "Delete Mask" })
+        #expect(deleteMaskItem.isEnabled == false)
+        let toggleMaskItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleMaskAction) })
+        #expect(toggleMaskItem.isEnabled == false)
+
+        // Add white mask
+        coordinator.addWhiteMaskAction(nil)
+        #expect(session.activeLayer?.mask != nil)
+        #expect(session.activeLayer?.mask?.isEnabled == true)
+
+        // With mask (enabled):
+        coordinator.update(table)
+        menu = try #require(coordinator.contextMenu(for: 0))
+        let addMaskAfter = try #require(menu.items.first { $0.title == "Add Mask" })
+        #expect(addMaskAfter.isEnabled == false)
+        let toggleMaskAfter = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleMaskAction) })
+        #expect(toggleMaskAfter.isEnabled == true)
+        #expect(toggleMaskAfter.title == "Disable Mask")
+        let deleteMaskAfter = try #require(menu.items.first { $0.title == "Delete Mask" })
+        #expect(deleteMaskAfter.isEnabled == true)
+
+        // Disable mask
+        coordinator.toggleMaskAction(nil)
+        #expect(session.activeLayer?.mask?.isEnabled == false)
+        coordinator.update(table)
+        menu = try #require(coordinator.contextMenu(for: 0))
+        let toggleMaskDisabled = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleMaskAction) })
+        #expect(toggleMaskDisabled.title == "Enable Mask")
+
+        // Delete mask
+        coordinator.deleteMaskAction(nil)
+        #expect(session.activeLayer?.mask == nil)
+    }
+
+    @Test func testContextMenuShowsCreateOrReleaseClippingAction() throws {
+        let session = sessionWithThreeLayers()
+        let (table, coordinator, _) = makeLayerTable(session: session)
+
+        let layers = session.layerRows.map(\.layer)
+        // Select top layer (row 0 in layerRows)
+        session.selectLayer(layers[0].id)
+        coordinator.update(table)
+
+        var menu = try #require(coordinator.contextMenu(for: 0))
+        var clippingItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleClippingMaskAction) })
+        #expect(clippingItem.title == "Create Clipping Mask")
+        #expect(clippingItem.isEnabled == true)
+
+        // Create clipping mask
+        coordinator.toggleClippingMaskAction(nil)
+        #expect(session.activeLayer?.maskSourceID != nil)
+
+        // Now it is clipped -> shows Release Clipping Mask
+        coordinator.update(table)
+        menu = try #require(coordinator.contextMenu(for: 0))
+        clippingItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.toggleClippingMaskAction) })
+        #expect(clippingItem.title == "Release Clipping Mask")
+        #expect(clippingItem.isEnabled == true)
+
+        // Release clipping mask
+        coordinator.toggleClippingMaskAction(nil)
+        #expect(session.activeLayer?.maskSourceID == nil)
+    }
+
+    @Test func testContextMenuUsesExistingMergeTitleAndAction() throws {
+        let session = sessionWithThreeLayers()
+        let (table, coordinator, _) = makeLayerTable(session: session)
+
+        // 1 layer selected (top): can merge down
+        let layers = session.layerRows.map(\.layer)
+        session.selectLayer(layers[0].id)
+        coordinator.update(table)
+        var menu = try #require(coordinator.contextMenu(for: 0))
+        var mergeItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.mergeLayersAction) })
+        #expect(mergeItem.title == session.mergeTitle)
+        #expect(mergeItem.title == "Merge Down")
+        #expect(mergeItem.isEnabled == session.canMergeLayers)
+
+        // Multi-selection: "Merge Layers"
+        session.selectLayers([layers[0].id, layers[1].id], primary: layers[0].id)
+        coordinator.update(table)
+        menu = try #require(coordinator.contextMenu(for: 0))
+        mergeItem = try #require(menu.items.first { $0.action == #selector(NativeLayerList.Coordinator.mergeLayersAction) })
+        #expect(mergeItem.title == session.mergeTitle)
+        #expect(mergeItem.title == "Merge Layers")
+        #expect(mergeItem.isEnabled == session.canMergeLayers)
+
+        // Execute merge
+        let beforeCount = session.document?.layers.count ?? 0
+        coordinator.mergeLayersAction(nil)
+        #expect((session.document?.layers.count ?? 0) == beforeCount - 1)
+    }
+
+    @Test func testContextMenuActionsPreserveUndoRedo() throws {
+        let session = sessionWithThreeLayers()
+        let (_, coordinator, _) = makeLayerTable(session: session)
+
+        let initialLayers = session.document?.layers
+
+        // 1. Duplicate & Undo
+        coordinator.duplicateLayerAction(nil)
+        #expect(session.document?.layers.count == 4)
+        session.undo()
+        #expect(session.document?.layers == initialLayers)
+        session.redo()
+        #expect(session.document?.layers.count == 4)
+        session.undo()
+
+        // 2. Add Mask & Undo
+        coordinator.addWhiteMaskAction(nil)
+        #expect(session.activeLayer?.mask != nil)
+        session.undo()
+        #expect(session.activeLayer?.mask == nil)
+
+        // 3. Visibility toggle & Undo
+        let wasVisible = session.activeLayer?.isVisible == true
+        coordinator.toggleVisibilityAction(nil)
+        #expect(session.activeLayer?.isVisible == !wasVisible)
+        session.undo()
+        #expect(session.activeLayer?.isVisible == wasVisible)
     }
 }

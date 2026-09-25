@@ -26,9 +26,9 @@ struct ColorPickerSheet: View {
                     preview
                     VStack(spacing: 8) {
                         Button { finish(true) } label: { Text("OK").frame(maxWidth: .infinity) }
-                            .keyboardShortcut(.defaultAction)
+                            .configuredNativeShortcut(.return)
                         Button { finish(false) } label: { Text("Cancel").frame(maxWidth: .infinity) }
-                            .keyboardShortcut(.cancelAction)
+                            .configuredNativeShortcut(.escape)
                     }
                     .controlSize(.large).frame(width: 90)
                 }
@@ -119,15 +119,17 @@ struct ColorPickerSheet: View {
     }
 
     private func channelRow(_ label: String, _ channel: WritableKeyPath<PaletteColor, CGFloat>) -> some View {
-        GridRow {
+        let channelValue = Binding<Int>(
+            get: { Int((color[keyPath: channel] * 255).rounded()) },
+            set: { newValue in
+                var rgb = color
+                rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue))) / 255
+                hsb.setRGB(rgb)
+            })
+        return GridRow {
             Text(label).frame(width: 14, alignment: .leading)
-            TextField(label, value: Binding(
-                get: { Int((color[keyPath: channel] * 255).rounded()) },
-                set: { newValue in
-                    var rgb = color
-                    rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue))) / 255
-                    hsb.setRGB(rgb)
-                }), format: .number)
+                .scrubbable(sensitivity: 1, value: channelValue, range: 0...255)
+            TextField(label, value: channelValue, format: .number)
                 .frame(width: 52)
                 .arrowSteps(value: { Double(Int((color[keyPath: channel] * 255).rounded())) },
                             change: { newValue in

@@ -27,14 +27,14 @@ enum ImageFileDrop {
         else if let projects { await projects.receive(urls, at: point) }
         else { await session.importImages(urls, at: point) }
         if unreadable, !providers.isEmpty {
-            let message = "Some dropped items couldn’t be read. Drag JPEG, PNG, HEIC, or TIFF files from Finder."
+            let message = "Some dropped items couldn’t be read. Drag JPEG, PNG, HEIC, TIFF, or Photoshop (PSD) files from Finder."
             session.importError = [session.importError, message].compactMap { $0 }.joined(separator: "\n\n")
         }
     }
 
     /// A dropped item's image written to a temporary file, or nil when it holds no image.
     private static func temporaryFile(from provider: NSItemProvider) async -> URL? {
-        let types = [UTType.png, .jpeg, .heic, .tiff, .image].map(\.identifier)
+        let types = [UTType.png, .jpeg, .heic, .tiff, .photoshopImage, .photoshopLargeImage, .rawImage, .image].map(\.identifier)
         guard let type = types.first(where: { provider.hasItemConformingToTypeIdentifier($0) }) else { return nil }
         return await withCheckedContinuation { continuation in
             // The file only exists until this closure returns, so it is copied, not referenced.
@@ -42,10 +42,15 @@ enum ImageFileDrop {
                 guard let url else { continuation.resume(returning: nil); return }
                 let name = url.deletingPathExtension().lastPathComponent
                 let suffix = url.pathExtension.isEmpty ? (UTType(type)?.preferredFilenameExtension ?? "png") : url.pathExtension
-                let copy = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("\(name.isEmpty ? "Dropped" : name)-\(UUID().uuidString)")
+                // A unique folder rather than a unique file name: the copy keeps the name the file
+                // was dropped under, which is the name the import sheet and the new layers show.
+                let folder = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                let copy = folder
+                    .appendingPathComponent(name.isEmpty ? "Dropped" : name)
                     .appendingPathExtension(suffix)
                 do {
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                     try FileManager.default.copyItem(at: url, to: copy)
                     continuation.resume(returning: copy)
                 } catch { continuation.resume(returning: nil) }

@@ -17,6 +17,23 @@ extension View {
         }
     }
 
+    /// Lets a field without a separate label use its unit as the drag target.
+    func unitSuffix<Value: BinaryFloatingPoint>(_ unit: String, scrubValue: Binding<Value>,
+                                                sensitivity: Value, range: ClosedRange<Value>, step: Value? = nil) -> some View {
+        HStack(spacing: 2) {
+            self
+            Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range, step: step)
+        }
+    }
+
+    func unitSuffix(_ unit: String, scrubValue: Binding<Int>, sensitivity: Double,
+                    range: ClosedRange<Int>) -> some View {
+        HStack(spacing: 2) {
+            self
+            Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range)
+        }
+    }
+
     func toolHeaderBar() -> some View {
         font(ToolHeaderStyle.controlFont)
             .controlSize(.regular)

@@ -68,7 +68,7 @@ struct LevelsSheet: View {
             HStack {
                 Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true }, set: {
                     session.updateLevels(settings, preview: $0)
-                })).keyboardShortcut("p", modifiers: .option)
+                })).configuredNativeShortcut("p", modifiers: .option)
                 Spacer()
                 Button("Reset") { edit?.sampleMode = nil; update { $0 = LevelsSettings() } }
             }
@@ -76,19 +76,21 @@ struct LevelsSheet: View {
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             HStack {
-                Button("Cancel") { session.cancelLevels() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { session.cancelLevels() }.configuredNativeShortcut(.escape)
                 Spacer()
                 if edit?.committing == true { ProgressView().controlSize(.small) }
                 Button("OK") { Task { await session.commitLevels() } }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
         .padding(24).frame(width: 440).fixedSize()
         .disabled(edit?.committing == true)
     }
     private func field(_ name: String, _ binding: Binding<Double>, decimals: Int) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let range: ClosedRange<Double> = name == "Gamma" ? 0.1...9.99 : 0...255
+        return VStack(alignment: .leading, spacing: 5) {
             Text(name).font(.caption).foregroundStyle(.secondary)
+                .scrubbable(sensitivity: decimals == 0 ? 1 : 0.01, value: binding, range: range)
             TextField(name, value: binding, format: .number.precision(.fractionLength(decimals)))
                 .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 80)
                 .accessibilityIdentifier("levels\(name.replacingOccurrences(of: " ", with: ""))")

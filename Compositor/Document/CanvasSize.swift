@@ -24,8 +24,8 @@ nonisolated struct CanvasSizeDraft {
     }
 
     var valid: Bool {
-        width.isFinite && height.isFinite && (1...30_000).contains(width.rounded())
-            && (1...30_000).contains(height.rounded())
+        width.isFinite && height.isFinite && (1...DocumentLimits.maxSideExtent).contains(width.rounded())
+            && (1...DocumentLimits.maxSideExtent).contains(height.rounded())
     }
 
     func displayed(widthAxis: Bool) -> Double {

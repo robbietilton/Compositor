@@ -45,6 +45,10 @@ final class EffectsPreviewCache {
     }
     nonisolated private static let worker = DispatchQueue(label: "com.compositor.effects-preview", qos: .userInitiated)
     private var entries: [UUID: Entry] = [:]
+    /// A few recent finished previews per layer, newest last. Undo and redo put a layer's earlier pixels back, and
+    /// the effects for them are taken from here instead of blinking off while they're rendered again.
+    private var recent: [UUID: [Entry]] = [:]
+    private static let recentPerLayer = 3
     /// A result handed in from elsewhere — the effects warped with a distortion as it is applied — shown until the
     /// worker has rendered the layer's new pixels, so the effects don't blink off for a frame.
     private var seeds: [UUID: Result] = [:]
@@ -68,6 +72,7 @@ final class EffectsPreviewCache {
         let ids = Set(layers.filter { $0.effects?.visible.isEmpty == false }.map(\.id))
         for id in Array(entries.keys) where !ids.contains(id) { entries.removeValue(forKey: id)?.request.cancel() }
         for id in Array(seeds.keys) where !ids.contains(id) { seeds.removeValue(forKey: id) }
+        for id in Array(recent.keys) where !ids.contains(id) { recent.removeValue(forKey: id) }
         // Share a ~64 MiB output budget across all effect layers. Do not evict visible layers in a
         // redraw cycle: that would repeatedly rebuild evicted previews when more layers are visible.
         sideLimit = min(1536, max(32, Int(sqrt(Double(16_777_216) / Double(max(1, ids.count))))))
@@ -86,12 +91,20 @@ final class EffectsPreviewCache {
         }
         let old = entries[layer.id]
         old?.request.cancel()
+        if let known = recent[layer.id]?.last(where: { $0.request.matches(request) }), let result = known.result {
+            entries[layer.id] = known
+            seeds.removeValue(forKey: layer.id)
+            return (result.image, result.inset, result.placement)
+        }
         // Keep effects visible during transforms and setting changes on the same pixels.
         // For an independently placed mask, retain the last preview until its updated
-        // coverage finishes rendering on the worker.
+        // coverage finishes rendering on the worker. Hiding one of several effects changes
+        // which kinds are visible but not the pixels underneath, and the effects still shown
+        // shouldn't blink off while the rest of them are rebuilt — so the last preview stands
+        // in for those few frames, one effect too many rather than none at all. The same goes for a mask added,
+        // removed or replaced on the same pixels: the effects as they were stand in until the new ones are ready.
         let previous = old.flatMap { entry in
-            entry.request.image === image && entry.request.maskSource === request.maskSource
-                && entry.request.effects.kinds == effects.kinds ? entry.result : nil
+            entry.request.image === image ? entry.result : nil
         } ?? seeds[layer.id]
         entries[layer.id] = Entry(request: request, result: previous)
         let layerID = layer.id
@@ -102,11 +115,24 @@ final class EffectsPreviewCache {
             Task { @MainActor [weak self] in
                 guard let self, self.entries[layerID]?.request.id == request.id else { return }
                 self.entries[layerID]?.result = result
-                if result != nil { self.seeds.removeValue(forKey: layerID) }
+                if let result {
+                    self.seeds.removeValue(forKey: layerID)
+                    var kept = (self.recent[layerID] ?? []).filter { !$0.request.matches(request) }
+                    kept.append(Entry(request: request, result: result))
+                    self.recent[layerID] = Array(kept.suffix(Self.recentPerLayer))
+                }
                 completion()
             }
         }
         return previous.map { ($0.image, $0.inset, $0.placement) }
+    }
+
+    /// Renders effects straight away, at the preview size: text being typed is small, and its effects shouldn't lag
+    /// a keystroke behind it.
+    func renderNow(image: CGImage, mask: CGImage?, effects: LayerEffects) -> (image: CGImage, inset: CGFloat)? {
+        let request = Request(image: image, mask: mask, maskSource: nil, placement: nil, transform: LayerTransform(origin: .zero, size: .zero),
+                              effects: effects, sideLimit: sideLimit)
+        return (try? Self.render(request)).map { ($0.image, $0.inset) }
     }
 
     nonisolated private static func render(_ request: Request) throws -> Result {

@@ -6,7 +6,12 @@ struct BlendModePicker: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: false)
-        button.addItems(withTitles: LayerBlendMode.allCases.map(\.rawValue))
+        // Grouped as Photoshop groups them — darkening, lightening, contrast, comparative, component —
+        // with a line between, so a long list stays readable.
+        for (index, group) in LayerBlendMode.groups.enumerated() {
+            if index > 0 { button.menu?.addItem(.separator()) }
+            for mode in group { button.addItem(withTitle: mode.rawValue) }
+        }
         button.menu?.delegate = context.coordinator
         button.target = context.coordinator
         button.action = #selector(Coordinator.choose(_:))

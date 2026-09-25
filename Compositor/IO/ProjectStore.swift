@@ -5,11 +5,20 @@ import UniformTypeIdentifiers
 
 extension UTType {
     static let compositorProject = UTType(exportedAs: "com.compositor.project", conformingTo: .package)
+    nonisolated static let photoshopImage = UTType(importedAs: "com.adobe.photoshop-image")
+    nonisolated static let photoshopLargeImage = UTType(importedAs: "com.adobe.photoshop-large-image")
+    static let importableImages: [UTType] = [.jpeg, .png, .heic, .tiff, .photoshopImage, .photoshopLargeImage, .rawImage, .svg]
 }
 
 nonisolated struct ProjectManifest: Codable, Sendable {
+    /// The format version new saves write.
+    static let current = 9
+    /// Every version `load` accepts. The package-header check, the manifest check and the error
+    /// message all read this, so they cannot drift apart when `current` is bumped.
+    static let supported = 1...ProjectManifest.current
+
     var format = "com.compositor.project"
-    var version = 7
+    var version = ProjectManifest.current
     var colorSpace = "sRGB"
     var resolution: Double? = nil // Older version-1 projects default to 72 pixels/inch.
     let documentID: UUID
@@ -17,6 +26,8 @@ nonisolated struct ProjectManifest: Codable, Sendable {
     let height: Int
     let activeLayerID: UUID?
     var layers: [ProjectLayerRecord]
+    /// Alignment guides. Missing on versions 1–7.
+    var guides: [CanvasGuide]? = nil
 }
 
 nonisolated struct ProjectLayerRecord: Codable, Sendable {
@@ -55,9 +66,9 @@ nonisolated enum ProjectError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid: "This is not a valid Compositor project, or its metadata is damaged."
-        case .version(let version): "This project uses format version \(version). This app supports versions 1–7."
+        case .version(let version): "This project uses format version \(version). This app supports versions \(ProjectManifest.supported.lowerBound)–\(ProjectManifest.supported.upperBound)."
         case .missingImage: "An image inside the project is missing or damaged. The current document has not been replaced."
-        case .tooLarge: "This project exceeds the supported canvas, layer, file-size, or 100-megapixel image limit."
+        case .tooLarge: "This project exceeds the supported canvas, layer, file-size, or \(DocumentLimits.documentBudgetMegapixels)-megapixel document limit."
         case .encode: "An image could not be saved. The previous project has not been replaced."
         }
     }
@@ -135,7 +146,7 @@ actor ProjectStore {
         do { header = try JSONDecoder().decode(Header.self, from: metadata) }
         catch { throw ProjectError.invalid }
         guard header.format == "com.compositor.project" else { throw ProjectError.invalid }
-        guard (1...7).contains(header.version) else { throw ProjectError.version(header.version) }
+        guard ProjectManifest.supported.contains(header.version) else { throw ProjectError.version(header.version) }
         do { manifest = try JSONDecoder().decode(ProjectManifest.self, from: metadata) }
         catch { throw ProjectError.invalid }
         try validate(manifest)
@@ -175,12 +186,12 @@ actor ProjectStore {
 
     private func validate(_ manifest: ProjectManifest) throws {
         guard manifest.format == "com.compositor.project" else { throw ProjectError.invalid }
-        guard (1...7).contains(manifest.version) else { throw ProjectError.version(manifest.version) }
+        guard ProjectManifest.supported.contains(manifest.version) else { throw ProjectError.version(manifest.version) }
         guard manifest.colorSpace == "sRGB" else { throw ProjectError.invalid }
         if let resolution = manifest.resolution {
             guard resolution.isFinite, (1...9600).contains(resolution) else { throw ProjectError.invalid }
         }
-        guard (1...30_000).contains(manifest.width), (1...30_000).contains(manifest.height),
+        guard (1...DocumentLimits.maxSide).contains(manifest.width), (1...DocumentLimits.maxSide).contains(manifest.height),
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
             if let text = layer.text {
@@ -188,6 +199,9 @@ actor ProjectStore {
             }
             if let adjustment = layer.adjustment {
                 guard manifest.version >= 7, layer.isGroup != true, layer.imageFile == nil, adjustment.isValid else { throw ProjectError.invalid }
+                if adjustment.kind == .gaussianBlur || adjustment.kind == .motionBlur || adjustment.kind == .addNoise {
+                    guard manifest.version >= 9 else { throw ProjectError.invalid }
+                }
             }
             // Layer masks arrived in version 4, folder masks in version 6.
             guard layer.maskFile == nil || (manifest.version >= (layer.isGroup == true ? 6 : 4)
@@ -196,9 +210,11 @@ actor ProjectStore {
                 layer.maskPlacement.map({ $0.isValid && layer.maskFile != nil }) ?? true else { throw ProjectError.invalid }
             let opacity = layer.opacity ?? 1
             let blend = layer.blendMode ?? .normal
+            // Folders took an opacity of their own in version 8, which multiplies into what is inside
+            // them; their blend mode is still pass-through, so it stays Normal.
             guard opacity.isFinite, (0...1).contains(opacity),
                   (manifest.version >= 3 || (opacity == 1 && blend == .normal)),
-                  (layer.isGroup != true || (opacity == 1 && blend == .normal)) else { throw ProjectError.invalid }
+                  (layer.isGroup != true || (blend == .normal && (manifest.version >= 8 || opacity == 1))) else { throw ProjectError.invalid }
         }
         try LayerHierarchy.validate(manifest.layers)
         try LiveMaskGraph.validate(manifest.layers)
@@ -212,10 +228,26 @@ actor ProjectStore {
                   layer.imageFile == nil || layer.imageFile == "\(layer.id.uuidString).png" else { throw ProjectError.invalid }
         }
         if let id = manifest.activeLayerID, !ids.contains(id) { throw ProjectError.invalid }
+        try validateGuides(manifest)
+    }
+
+    private func validateGuides(_ manifest: ProjectManifest) throws {
+        let guides = manifest.guides ?? []
+        if manifest.version < 8 {
+            guard guides.isEmpty else { throw ProjectError.invalid }
+            return
+        }
+        guard guides.count <= 1_000 else { throw ProjectError.tooLarge }
+        var ids = Set<UUID>()
+        for guide in guides {
+            guard ids.insert(guide.id).inserted, guide.position.isFinite, abs(guide.position) <= 1_000_000 else {
+                throw ProjectError.invalid
+            }
+        }
     }
 
     private func checkSize(width: Int, height: Int, used: inout Int) throws {
-        guard (1...30_000).contains(width), (1...30_000).contains(height), width * height <= 100_000_000 - used else {
+        guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height), width * height <= DocumentLimits.documentPixelBudget - used else {
             throw ProjectError.tooLarge
         }
         used += width * height

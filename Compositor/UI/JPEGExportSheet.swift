@@ -57,12 +57,12 @@ struct JPEGExportSheet: View {
                     Text("· encoded preview, fitted to window").foregroundStyle(.secondary)
                 } else { Text("Updating preview…").foregroundStyle(.secondary) }
                 Spacer()
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)
                 Button("Export…") {
                     UserDefaults.standard.set(options.quality, forKey: Self.qualityKey)
                     finish(result?.data)
                 }
-                    .keyboardShortcut(.defaultAction)
+                    .configuredNativeShortcut(.return)
                     .disabled(result == nil || readyOptions != options || error != nil)
             }
         }

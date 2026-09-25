@@ -14,6 +14,9 @@ nonisolated struct BrushSettings: Sendable {
     var blue: CGFloat = 0
     /// Caps the whole stroke, as in Photoshop: overlapping dabs never exceed it.
     var opacity: CGFloat = 1
+    /// 0–100. The brush trails the pointer on a string of this length, so a shaky hand
+    /// draws a smooth line; 0 follows the pointer exactly.
+    var smoothing: CGFloat = 0
     /// Spot-healing uses nearby source pixels instead of the foreground color.
     /// Erase: the stroke clears the layer's pixels instead of painting color on them.
     var erasing = false
@@ -109,7 +112,7 @@ final class BrushStroke {
     private let gridTip: CGImage?
     /// Past this width the tip is left to the fallback rather than held in memory.
     private static let gridTipLimit: CGFloat = 3000
-    var pixelLimit = 100_000_000
+    var pixelLimit = DocumentLimits.documentPixelBudget
     /// Limits every edit to the document selection; nil when nothing is selected.
     var selectionClip: SelectionClip?
     /// Clone Stamp: a document-size image to copy from, and the offset from each painted point to its source.
@@ -143,7 +146,9 @@ final class BrushStroke {
     private var dirtyTiles: [Int: CGRect] = [:]
     var patches: [BrushPatch] { tiles.values.compactMap { tile in tile.image.map { BrushPatch(rect: tile.rect, image: $0) } } }
 
-    init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true) throws {
+    /// `growsMask`: a brush on a mask can paint anywhere on the canvas, as Photoshop's does, growing the mask past its
+    /// layer. Other edits of a mask stay within it.
+    init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false) throws {
         gpu = useGPU ? MetalBrushCoverage.shared : nil
         self.layer = layer
         isMask = mask
@@ -152,11 +157,17 @@ final class BrushStroke {
         // A mask on its own placement is painted in its own pixel grid; otherwise the grid is the layer's.
         let placedMask = mask ? layer.mask.flatMap { mask in mask.placement.map { (mask.asset.image, $0) } } : nil
         let base = placedMask?.1 ?? layer.transform
-        let originalWidth = placedMask?.0.width ?? layer.asset?.image.width ?? Int(layer.size.width.rounded())
-        let originalHeight = placedMask?.0.height ?? layer.asset?.image.height ?? Int(layer.size.height.rounded())
+        // A solid mask is a single pixel stretched over its place; painted, it gets one pixel per document pixel.
+        let solidPlaced = placedMask.map { $0.0.width <= 2 && $0.0.height <= 2 } == true
+        let originalWidth = solidPlaced ? max(1, Int(base.size.width.rounded()))
+            : placedMask?.0.width ?? layer.asset?.image.width ?? Int(layer.size.width.rounded())
+        let originalHeight = solidPlaced ? max(1, Int(base.size.height.rounded()))
+            : placedMask?.0.height ?? layer.asset?.image.height ?? Int(layer.size.height.rounded())
         let originalMapping = BrushRaster.pixelToDocument(base, width: originalWidth, height: originalHeight)
         let originalBounds = CGRect(x: 0, y: 0, width: originalWidth, height: originalHeight)
-        let extent = mask ? originalBounds : originalBounds.union(self.canvas.applying(originalMapping.inverted()).integral)
+        let extent = mask && !growsMask ? originalBounds : originalBounds.union(self.canvas.applying(originalMapping.inverted()).integral)
+        // What a mask is past its pixels, and so what new mask area starts as: white reveals, black hides.
+        maskBackground = mask ? layer.mask.map { LayerMask.background(of: $0.asset.thumbnail) } ?? 1 : 1
         width = Int(extent.width)
         height = Int(extent.height)
         sourceRect = originalBounds.offsetBy(dx: -extent.minX, dy: -extent.minY)
@@ -168,7 +179,7 @@ final class BrushStroke {
         expanded.origin = CGPoint(x: center.x - expanded.size.width / 2, y: center.y - expanded.size.height / 2)
         paintTransform = expanded
         guard (1...1_000_000_000).contains(width), (1...1_000_000_000).contains(height),
-              (1...30_000).contains(originalWidth), (1...30_000).contains(originalHeight),
+              (1...DocumentLimits.maxSide).contains(originalWidth), (1...DocumentLimits.maxSide).contains(originalHeight),
               settings.diameter.isFinite, (1...2000).contains(settings.diameter),
               settings.hardness.isFinite, (0...1).contains(settings.hardness),
               settings.opacity.isFinite, (0.01...1).contains(settings.opacity) else { throw ProjectError.tooLarge }
@@ -567,10 +578,15 @@ final class BrushStroke {
         let size = Self.tileSize
         let rect = CGRect(x: x * size, y: y * size, width: min(size, width - x * size), height: min(size, height - y * size))
         let nextBounds = allocatedBounds.map { $0.union(rect) } ?? (source == nil ? rect : sourceRect.union(rect))
-        guard nextBounds.width <= 30_000, nextBounds.height <= 30_000,
+        guard nextBounds.width <= DocumentLimits.maxSideExtent, nextBounds.height <= DocumentLimits.maxSideExtent,
               nextBounds.width * nextBounds.height <= CGFloat(pixelLimit) else { throw ProjectError.tooLarge }
         allocatedBounds = nextBounds
         let context = try BrushRaster.context(width: Int(rect.width), height: Int(rect.height), mask: isMask)
+        if isMask {
+            // A tile past the mask's pixels starts as the mask's background.
+            context.setFillColor(gray: maskBackground, alpha: 1)
+            context.fill(CGRect(origin: .zero, size: rect.size))
+        }
         if let raster = (isMask ? layer.mask?.asset.raster : layer.asset?.raster) {
             raster.draw(in: sourceRect.offsetBy(dx: -rect.minX, dy: -rect.minY), context: context)
         } else if let source {
@@ -743,6 +759,8 @@ final class BrushStroke {
         dirtyDocumentRect = canvas
     }
 
+    /// A mask's background (see LayerMask.background): what its area past the old pixels starts as.
+    let maskBackground: CGFloat
     var committedBounds: CGRect { (allocatedBounds ?? sourceRect).integral }
     var committedTransform: LayerTransform { transform(for: committedBounds) }
     func transform(for bounds: CGRect) -> LayerTransform {
@@ -824,8 +842,10 @@ final class BrushStroke {
                 .offsetBy(dx: tile.rect.minX, dy: tile.rect.minY)
             bounds = bounds.map { $0.union(rect) } ?? rect
         }
-        let crop = bounds ?? committedBounds
-        let raster = RasterSnapshot.replacing(source: isMask ? layer.mask?.asset : layer.asset, sourceRect: sourceRect, patches: patches, crop: crop, isMask: isMask)
+        // A mask keeps every tile the stroke touched: painted past its old pixels, it grows to hold them.
+        let crop = isMask ? committedBounds : bounds ?? committedBounds
+        let raster = RasterSnapshot.replacing(source: isMask ? layer.mask?.asset : layer.asset, sourceRect: sourceRect, patches: patches, crop: crop,
+                                              isMask: isMask, fill: maskBackground)
         let image = try raster.makeImage()
         return (ImportedImage(image: image, thumbnail: try raster.thumbnail(), name: layer.name, raster: raster), transform(for: crop), crop)
     }
@@ -834,7 +854,7 @@ final class BrushStroke {
         let bounds = committedBounds
         return BrushCommit.Input(width: Int(bounds.width), height: Int(bounds.height), source: source,
             patches: patches.map { BrushPatch(rect: $0.rect.offsetBy(dx: -bounds.minX, dy: -bounds.minY), image: $0.image) },
-            mask: isMask, name: layer.name, sourceRect: sourceRect.offsetBy(dx: -bounds.minX, dy: -bounds.minY))
+            mask: isMask, name: layer.name, sourceRect: sourceRect.offsetBy(dx: -bounds.minX, dy: -bounds.minY), fill: maskBackground)
     }
 }
 
@@ -847,6 +867,8 @@ actor BrushCommit {
         let mask: Bool
         let name: String
         let sourceRect: CGRect
+        /// A mask's background: what a grown mask is where neither its old pixels nor the edit reach.
+        var fill: CGFloat = 1
     }
     nonisolated struct Output: @unchecked Sendable {
         let asset: ImportedImage
@@ -865,6 +887,10 @@ actor BrushCommit {
     }
     func render(_ input: Input) throws -> Output {
         let context = try BrushRaster.context(width: input.width, height: input.height, mask: input.mask)
+        if input.mask {
+            context.setFillColor(gray: input.fill, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: input.width, height: input.height))
+        }
         if let source = input.source {
             BrushRaster.draw(source, in: input.sourceRect, mask: input.mask, context: context)
         }

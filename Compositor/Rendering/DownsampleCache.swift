@@ -13,7 +13,7 @@ import Foundation
 nonisolated final class DownsampleCache: @unchecked Sendable {
     static let shared = DownsampleCache()
     /// Pixels of halved copies kept at once (about 400 MB of RGBA).
-    static let pixelBudget = 100_000_000
+    static let pixelBudget = DocumentLimits.maxSurfacePixels
     /// Most halvings ever used; past this Core Graphics does the rest.
     static let maxLevel = 6
 

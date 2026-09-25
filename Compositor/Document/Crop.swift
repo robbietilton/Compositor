@@ -9,7 +9,7 @@ nonisolated enum CropGeometry {
     }
     static func valid(_ rect: CGRect) -> Bool {
         [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite)
-            && (1...30_000).contains(rect.width) && (1...30_000).contains(rect.height)
+            && (1...DocumentLimits.maxSideExtent).contains(rect.width) && (1...DocumentLimits.maxSideExtent).contains(rect.height)
             && abs(rect.minX) <= 1_000_000 && abs(rect.minY) <= 1_000_000
     }
     /// A frame dragged from `start` to `end` — or, `symmetric` (Option), grown out from `start` as its center.
@@ -112,26 +112,15 @@ nonisolated struct CropSnap {
 }
 
 extension EditorSession {
-    /// What a moving layer snaps to: the canvas edges and center, and every other visible layer's upright bounds
-    /// and center. The layers being moved are left out, or they would snap to where they already are.
+    /// What a moving layer snaps to: View > Snap To targets, including the canvas and other layers by default.
     func transformSnapTargets(excluding moving: Set<UUID>) -> (xs: [CGFloat], ys: [CGFloat]) {
-        guard let document else { return ([], []) }
-        var xs: [CGFloat] = [0, document.size.width / 2, document.size.width]
-        var ys: [CGFloat] = [0, document.size.height / 2, document.size.height]
-        for layer in document.renderLayers where layer.asset != nil && !moving.contains(layer.id) {
-            let corners = DistortWarp.corners(of: displayedTransform(for: layer))
-            let cornerXs = corners.map(\.x), cornerYs = corners.map(\.y)
-            guard let minX = cornerXs.min(), let maxX = cornerXs.max(),
-                  let minY = cornerYs.min(), let maxY = cornerYs.max() else { continue }
-            xs += [minX.rounded(), ((minX + maxX) / 2).rounded(), maxX.rounded()]
-            ys += [minY.rounded(), ((minY + maxY) / 2).rounded(), maxY.rounded()]
-        }
-        return (xs, ys)
+        alignmentSnapTargets(excluding: moving, includeCenters: true)
     }
 
     /// `draft` nudged so the layer it places lines up with a nearby edge or center; `moving` is what is being
     /// dragged, and `tolerance` is in document pixels.
     func snappedMove(_ draft: LayerTransform, moving: Set<UUID>, tolerance: CGFloat) -> LayerTransform {
+        guard snappingEnabled else { snapGuides = ([], []); return draft }
         let corners = DistortWarp.corners(of: draft)
         let cornerXs = corners.map(\.x), cornerYs = corners.map(\.y)
         guard let minX = cornerXs.min(), let maxX = cornerXs.max(),
@@ -147,19 +136,9 @@ extension EditorSession {
         return snapped
     }
 
-    /// What crop edges snap to: the canvas edges and every visible layer's bounds (a rotated layer's
-    /// upright bounding box), in whole document pixels.
+    /// What crop edges snap to: View > Snap To targets, without layer/canvas centers.
     func cropSnapTargets() -> (xs: [CGFloat], ys: [CGFloat]) {
-        guard let document else { return ([], []) }
-        var xs: [CGFloat] = [0, document.size.width], ys: [CGFloat] = [0, document.size.height]
-        for layer in document.renderLayers where layer.asset != nil {
-            let corners = DistortWarp.corners(of: displayedTransform(for: layer))
-            let cornerXs = corners.map(\.x), cornerYs = corners.map(\.y)
-            guard let minX = cornerXs.min(), let maxX = cornerXs.max(), let minY = cornerYs.min(), let maxY = cornerYs.max() else { continue }
-            xs += [minX.rounded(), maxX.rounded()]
-            ys += [minY.rounded(), maxY.rounded()]
-        }
-        return (xs, ys)
+        alignmentSnapTargets(includeCenters: false)
     }
 
     /// Keep the tool frame visible without creating an uncommitted edit.
@@ -172,7 +151,9 @@ extension EditorSession {
         case "Original": return document.map { CGFloat($0.width) / CGFloat($0.height) }
         case "1:1": return 1
         case "4:3": return 4 / 3
+        case "3:4": return 3 / 4
         case "16:9": return 16 / 9
+        case "9:16": return 9 / 16
         default: return nil
         }
     }

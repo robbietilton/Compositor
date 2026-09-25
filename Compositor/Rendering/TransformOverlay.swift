@@ -89,13 +89,168 @@ final class TransformOverlay: NSView {
 
     var antsPhase: CGFloat = 0
 
+    // MARK: Marching ants level of detail
+    //
+    // A Magic Wand outline on detailed artwork can have hundreds of thousands of edges, one per pixel step. Stroked in
+    // full every tick, zoomed out they pile into a few screen pixels and one redraw can take seconds, which froze the
+    // app. Below 1:1 a complex outline is drawn from one traced at screen resolution instead: built in the background,
+    // cached per power-of-two zoom step, so it never has more edges than the screen has pixels to show.
+
+    /// Outlines at or under this many path elements are always drawn in full; marquees and lassos stay exact.
+    private static let fullDetailLimit = 20_000
+    private var antsSource: CGPath?
+    private var antsSourceIsComplex = false
+    /// The screen-resolution outline in document coordinates, and the zoom step it was traced for.
+    private var antsLevel: (path: CGPath, step: CGFloat)?
+    private var antsPendingStep: CGFloat?
+    private var antsTask: Task<Void, Never>?
+
+    /// What the ants stroke: the selection itself, or when zoomed out on a complex one, its screen-resolution outline.
+    /// Nil while the first simplified outline is still being traced.
+    private func antsOutline(for path: CGPath) -> CGPath? {
+        if antsSource !== path {
+            antsSource = path
+            antsTask?.cancel()
+            antsTask = nil
+            antsLevel = nil
+            antsPendingStep = nil
+            var elements = 0
+            path.applyWithBlock { _ in elements += 1 }
+            antsSourceIsComplex = elements > Self.fullDetailLimit
+        }
+        let scale = session.viewport.pointsPerPixel * (window?.backingScaleFactor ?? 2)
+        guard antsSourceIsComplex, scale < 1, let document = session.document else { return path }
+        // Screen pixels per document pixel, rounded up to a power of two so zooming doesn't retrace on every frame.
+        let step = min(1, pow(2, ceil(log2(max(scale, 1 / 4096)))))
+        if antsLevel?.step != step, antsPendingStep != step {
+            antsPendingStep = step
+            antsTask?.cancel()
+            let canvas = CGRect(origin: .zero, size: document.size)
+            antsTask = Task { [weak self] in
+                let traced = await Task.detached(priority: .userInitiated) { Self.traceOutline(path, canvas: canvas, step: step) }.value
+                guard let self, !Task.isCancelled, self.antsSource === path, self.antsPendingStep == step else { return }
+                self.antsPendingStep = nil
+                if let traced { self.antsLevel = (traced, step) }
+                self.needsDisplay = true
+            }
+        }
+        // Until the new step is traced, the last one stands in: a little coarse or fine for a moment, never slow.
+        return antsLevel?.path
+    }
+
+    /// `path` filled into a mask fine enough to fill quickly, averaged down to `step` screen pixels per document pixel,
+    /// and traced along those pixels' edges. Any coverage counts, so thin parts stay outlined rather than vanishing.
+    private nonisolated static func traceOutline(_ path: CGPath, canvas: CGRect, step: CGFloat) -> CGPath? {
+        let region = path.boundingBoxOfPath.intersection(canvas).integral
+        guard !region.isNull, region.width >= 1, region.height >= 1 else { return nil }
+        // Filling costs about as much as the edges each output pixel has to sort through, so the mask is filled at no
+        // less than half resolution and at most about 40 megapixels.
+        let fill = min(1, max(step, (40_000_000 / (region.width * region.height)).squareRoot()))
+        func mask(_ width: Int, _ height: Int) -> CGContext? {
+            CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
+                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        }
+        let fillWidth = max(1, Int((region.width * fill).rounded(.up))), fillHeight = max(1, Int((region.height * fill).rounded(.up)))
+        guard let filled = mask(fillWidth, fillHeight) else { return nil }
+        // Top-left origin, so a mask row is a document row, as the tracer expects.
+        filled.translateBy(x: 0, y: CGFloat(fillHeight))
+        filled.scaleBy(x: fill, y: -fill)
+        filled.translateBy(x: -region.minX, y: -region.minY)
+        filled.addPath(path)
+        filled.setFillColor(gray: 1, alpha: 1)
+        filled.fillPath(using: .winding)
+        guard let image = filled.makeImage() else { return nil }
+        let width = max(1, Int((region.width * step).rounded(.up))), height = max(1, Int((region.height * step).rounded(.up)))
+        guard let small = mask(width, height) else { return nil }
+        small.interpolationQuality = .medium
+        small.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = small.data else { return nil }
+        let bytes = data.assumingMemoryBound(to: UInt8.self)
+        var pixels = [UInt8](repeating: 0, count: width * height)
+        for row in 0..<height {
+            let line = bytes + row * small.bytesPerRow
+            for column in 0..<width where line[column] > 0 { pixels[row * width + column] = 255 }
+        }
+        guard let traced = try? MagicWand.outline(of: pixels, width: width, height: height) else { return nil }
+        var toDocument = CGAffineTransform(translationX: region.minX, y: region.minY).scaledBy(x: 1 / step, y: 1 / step)
+        return traced.copy(using: &toDocument)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        drawLayoutGrid()
+        drawGuides()
         if session.tool == .crop { drawCrop() }
         else if let line = gradientLine { drawGradientLine(line) }
         else { drawTransformHandles() }
         drawSelection()
         drawLassoDraft()
         drawSnapGuides()
+    }
+
+    /// Non-printing layout grid over the document: solid majors every 64 px, dotted 8 px subdivisions.
+    private func drawLayoutGrid() {
+        guard session.showsGrid, let document = session.document, let transform = documentToView,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let size = document.size
+        let scale = session.viewport.pointsPerPixel
+        let hairline = 1 / max(session.viewport.backingScale, 1)
+        let subdivisionGap = LayoutGrid.step * scale
+        context.saveGState()
+        context.concatenate(transform)
+        context.setLineWidth(hairline / max(scale, 0.0001))
+        context.setStrokeColor(NSColor(white: 0.55, alpha: 0.28).cgColor)
+        if subdivisionGap >= 4 {
+            context.setLineDash(phase: 0, lengths: [1 / max(scale, 0.0001), 2 / max(scale, 0.0001)])
+            let path = CGMutablePath()
+            for x in LayoutGrid.lines(along: size.width) where !LayoutGrid.isMajor(x) {
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in LayoutGrid.lines(along: size.height) where !LayoutGrid.isMajor(y) {
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            context.addPath(path)
+            context.strokePath()
+        }
+        context.setLineDash(phase: 0, lengths: [])
+        context.setStrokeColor(NSColor(white: 0.7, alpha: 0.45).cgColor)
+        let majors = CGMutablePath()
+        for x in LayoutGrid.lines(along: size.width) where LayoutGrid.isMajor(x) {
+            majors.move(to: CGPoint(x: x, y: 0))
+            majors.addLine(to: CGPoint(x: x, y: size.height))
+        }
+        for y in LayoutGrid.lines(along: size.height) where LayoutGrid.isMajor(y) {
+            majors.move(to: CGPoint(x: 0, y: y))
+            majors.addLine(to: CGPoint(x: size.width, y: y))
+        }
+        context.addPath(majors)
+        context.strokePath()
+        context.restoreGState()
+    }
+
+    /// User guides span the whole view, including the pasteboard.
+    private func drawGuides() {
+        guard session.showsGuides, let document = session.document,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let guides = session.displayedGuides
+        guard !guides.isEmpty else { return }
+        context.saveGState()
+        context.setStrokeColor(EditorSession.guideColor)
+        context.setLineWidth(1 / max(session.viewport.backingScale, 1))
+        for guide in guides {
+            if guide.axis == .vertical {
+                let x = session.viewport.viewPoint(from: CGPoint(x: guide.position, y: 0), documentSize: document.size).x
+                context.move(to: CGPoint(x: x, y: 0))
+                context.addLine(to: CGPoint(x: x, y: bounds.height))
+            } else {
+                let y = session.viewport.viewPoint(from: CGPoint(x: 0, y: guide.position), documentSize: document.size).y
+                context.move(to: CGPoint(x: 0, y: y))
+                context.addLine(to: CGPoint(x: bounds.width, y: y))
+            }
+        }
+        context.strokePath()
+        context.restoreGState()
     }
 
     /// While a move is snapped, a line along what it lined up with, across the whole canvas.
@@ -128,7 +283,8 @@ final class TransformOverlay: NSView {
     /// Marching ants: a white line under an animated black dash.
     private func drawSelection() {
         guard let selection = session.displayedSelection, !selection.isEmpty, var transform = documentToView,
-              let path = selection.path.copy(using: &transform), let context = NSGraphicsContext.current?.cgContext else { return }
+              let outline = antsOutline(for: selection.path),
+              let path = outline.copy(using: &transform), let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
         context.setLineWidth(1)
         context.addPath(path)
@@ -186,10 +342,7 @@ final class TransformOverlay: NSView {
             path.move(to: geometry.handles[1])
             path.addLine(to: geometry.rotationHandle)
         }
-        context.addPath(path)
-        context.setStrokeColor(NSColor.black.withAlphaComponent(0.7).cgColor)
-        context.setLineWidth(3)
-        context.strokePath()
+        // Just the accent line: a dark line behind it read as a grey halo around the box.
         context.addPath(path)
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
         context.setLineWidth(1)

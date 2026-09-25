@@ -19,12 +19,23 @@ import CoreImage
     private(set) var image: CGImage?
     /// Where the surface was last drawn, so what it holds can be handed on when the stroke ends.
     var placement: LayerTransform?
+    private var maskStroke: MaskStroke?
+
+    /// A mask being painted: its stroke's tiles, where they land in this surface's grid, and the mask as the stroke
+    /// leaves it over a region of that grid (white shows, top row first).
+    struct MaskStroke {
+        let patches: [BrushPatch]
+        let toGrid: CGAffineTransform
+        let coverage: (CGRect) -> CGImage?
+    }
 
     /// How far a pixel can reach into its surroundings: everything within this of a change may need redoing.
     private var reach: CGFloat {
         var reach: CGFloat = 1
         if let stroke = effects.stroke, stroke.isEnabled { reach = max(reach, stroke.size + 2) }
         if let shadow = effects.shadow, shadow.isEnabled { reach = max(reach, shadow.distance + shadow.blur * 3 + 2) }
+        if let glow = effects.outerGlow, glow.isEnabled { reach = max(reach, glow.size * 3 + 2) }
+        if let glow = effects.innerGlow, glow.isEnabled { reach = max(reach, glow.size * 3 + 2) }
         return ceil(reach)
     }
 
@@ -47,14 +58,19 @@ import CoreImage
     }
 
     /// Brings the surface up to date: everything on the first pass, and after that only where the paint changed.
-    /// `base` is the layer's committed pixels and `patches` the stroke's tiles as they stand.
-    func update(base: CGImage?, patches: [BrushPatch], mask: CGImage?) {
+    /// `base` is the layer's committed pixels and `patches` the stroke's tiles as they stand. Painting the layer's mask
+    /// instead, `maskStroke` holds the mask as it was and the stroke's tiles of it; the pixels themselves don't change.
+    func update(base: CGImage?, patches: [BrushPatch], mask: CGImage?, maskStroke: MaskStroke? = nil) {
+        self.maskStroke = maskStroke
         var dirty: CGRect?
         var seen: [String: ObjectIdentifier] = [:]
-        for patch in patches {
+        for patch in maskStroke?.patches ?? patches {
             let key = "\(Int(patch.rect.minX)),\(Int(patch.rect.minY))"
             seen[key] = ObjectIdentifier(patch.image)
-            if taken[key] != ObjectIdentifier(patch.image) { dirty = dirty.map { $0.union(patch.rect) } ?? patch.rect }
+            guard taken[key] != ObjectIdentifier(patch.image) else { continue }
+            // A mask on its own placement is painted in its own grid; what it touched is found in the layer's.
+            let rect = maskStroke.map { patch.rect.applying($0.toGrid).insetBy(dx: -1, dy: -1) } ?? patch.rect
+            dirty = dirty.map { $0.union(rect) } ?? rect
         }
         let first = image == nil
         taken = seen
@@ -90,11 +106,24 @@ import CoreImage
            let coverage = try? LayerEffectsRenderer.shadowCoverage(pixels, in: outer.size, offset: shadow.offset, blur: shadow.blur) {
             fill(shadow.color, alpha: shadow.opacity, coverage: coverage, in: placed(outer))
         }
+        if let glow = effects.outerGlow, glow.isEnabled, glow.opacity > 0,
+           let coverage = try? LayerEffectsRenderer.outerGlowCoverage(pixels, placed: CGRect(origin: .zero, size: outer.size), size: outer.size, glow: glow) {
+            fill(glow.color, alpha: glow.opacity, coverage: coverage, in: placed(outer))
+        }
         let stroke = effects.stroke.flatMap { $0.isEnabled && $0.size > 0 && $0.opacity > 0 ? $0 : nil }
         if let stroke, !stroke.inside, let ring = try? LayerEffectsRenderer.ringCoverage(pixels, in: outer.size, stroke: stroke) {
             fill(stroke.color, alpha: stroke.opacity, coverage: ring, in: placed(outer))
         }
         BrushRaster.draw(pixels, in: placed(outer), mask: false, context: context)
+        if let glow = effects.innerGlow, glow.isEnabled, glow.size > 0, glow.opacity > 0,
+           let coverage = try? LayerEffectsRenderer.innerGlowCoverage(
+                pixels,
+                placed: CGRect(origin: .zero, size: outer.size),
+                size: outer.size,
+                glow: glow
+           ) {
+            fill(glow.color, alpha: glow.opacity, coverage: coverage, in: placed(outer))
+        }
         if let stroke, stroke.inside, let ring = try? LayerEffectsRenderer.ringCoverage(pixels, in: outer.size, stroke: stroke) {
             fill(stroke.color, alpha: stroke.opacity, coverage: ring, in: placed(outer))
         }
@@ -106,6 +135,17 @@ import CoreImage
         guard region.width >= 1, region.height >= 1,
               let window = try? BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: false) else { return nil }
         window.translateBy(x: -region.minX, y: -region.minY)
+        if let maskStroke {
+            guard let live = maskStroke.coverage(region) else { return nil }
+            // Clipped the way BrushRaster draws, so the mask's top row lands on the region's top row.
+            window.translateBy(x: region.minX, y: region.maxY)
+            window.scaleBy(x: 1, y: -1)
+            window.clip(to: CGRect(origin: .zero, size: region.size), mask: live)
+            window.scaleBy(x: 1, y: -1)
+            window.translateBy(x: -region.minX, y: -region.maxY)
+            if let base { BrushRaster.draw(base, in: sourceRect, mask: false, context: window) }
+            return window.makeImage()
+        }
         func drawPixels() {
             if let base { BrushRaster.draw(base, in: sourceRect, mask: false, context: window) }
             for patch in patches where patch.rect.intersects(region) {
@@ -114,8 +154,13 @@ import CoreImage
         }
         if let mask {
             // The layer's own pixels are shown through its mask; paint laid down past them is not masked at all.
+            // Clipped the way BrushRaster draws, so the mask's top row lands on the layer's top row.
             window.saveGState()
-            window.clip(to: sourceRect, mask: mask)
+            window.translateBy(x: sourceRect.minX, y: sourceRect.maxY)
+            window.scaleBy(x: 1, y: -1)
+            window.clip(to: CGRect(origin: .zero, size: sourceRect.size), mask: mask)
+            window.scaleBy(x: 1, y: -1)
+            window.translateBy(x: -sourceRect.minX, y: -sourceRect.maxY)
             drawPixels()
             window.restoreGState()
             window.saveGState()

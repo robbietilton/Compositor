@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 struct BrushControls: View {
     @Bindable var session: EditorSession
@@ -37,7 +36,7 @@ struct BrushControls: View {
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .help("Copy from the active layer only, or from every visible layer as shown")
             }
-            Text("Size")
+            Text("Size").scrubbable(sensitivity: 1.0, value: $session.brushSettings.diameter, range: 1...2000)
             TextField("Size", value: Binding<Double>(get: { Double(session.brushSettings.diameter) },
                 set: { session.brushSettings.diameter = $0.isFinite ? CGFloat(min(2000, max(1, $0))) : 40 }),
                 format: .number.precision(.fractionLength(0)))
@@ -48,7 +47,7 @@ struct BrushControls: View {
                     session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                 }
                 .unitSuffix("px")
-            Text("Hardness")
+            Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
             Slider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
             TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
                 set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
@@ -58,6 +57,7 @@ struct BrushControls: View {
                             change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
                 .unitSuffix("%")
             Text(session.tool == .blur ? "Strength" : "Opacity")
+                .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
             Slider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
             TextField("Opacity", value: Binding<Double>(get: { Double(session.brushSettings.opacity * 100) },
                 set: { session.brushSettings.opacity = $0.isFinite ? CGFloat(min(100, max(1, $0)) / 100) : 1 }),
@@ -67,6 +67,19 @@ struct BrushControls: View {
                             change: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
                 .help("Press 1–9 for 10–90%, 0 for 100%")
                 .unitSuffix("%")
+            // Paint and Erase only: healing, cloning and smearing have their own feel.
+            if session.tool == .brush {
+                Text("Smoothing")
+                    .scrubbable(sensitivity: 1, value: $session.brushSettings.smoothing, range: 0...100)
+                Slider(value: $session.brushSettings.smoothing, in: 0...100).frame(width: 100)
+                TextField("Smoothing", value: Binding<Double>(get: { Double(session.brushSettings.smoothing) },
+                    set: { session.brushSettings.smoothing = $0.isFinite ? CGFloat(min(100, max(0, $0))) : 0 }),
+                    format: .number.precision(.fractionLength(0)))
+                    .frame(width: 42).textFieldStyle(.roundedBorder)
+                    .arrowSteps(value: { Double(session.brushSettings.smoothing) },
+                                change: { session.brushSettings.smoothing = CGFloat(min(100, max(0, $0))) })
+                    .help("The brush trails the pointer on a string this long, so a shaky hand still draws a smooth line")
+            }
             if session.isMaskSelected {
                 Picker("Paint", selection: $session.maskPaintWhite) {
                     Text("Black · Hide").tag(false)

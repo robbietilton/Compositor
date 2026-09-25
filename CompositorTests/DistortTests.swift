@@ -6,15 +6,24 @@ import Testing
 struct DistortTests {
     private let shape = [CGPoint(x: 10, y: 10), CGPoint(x: 60, y: 10), CGPoint(x: 30, y: 30), CGPoint(x: 10, y: 30)]
 
-    @Test func perspectiveMappingHitsTheCornersAndTwistedShapesAreRefused() {
+    /// Was perspectiveMappingHitsTheCornersAndTwistedShapesAreRefused, which asserted that a
+    /// folded shape is refused. Folding a layer over itself became a supported distortion in 1.1:
+    /// such a shape has no single perspective, so each half is warped as its own triangle
+    /// (`warpFolded`). What is still refused is a shape with nothing to draw.
+    @Test func perspectiveMappingHitsTheCornersAndDegenerateShapesAreRefused() {
         let map = DistortWarp.homography(shape)
         for (unit, corner) in zip([CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1)], shape) {
             let mapped = map(unit)
             #expect(abs(mapped.x - corner.x) < 1e-6 && abs(mapped.y - corner.y) < 1e-6, "\(unit) went to \(mapped)")
         }
         #expect(DistortWarp.isUsable(shape))
-        #expect(!DistortWarp.isUsable([shape[0], shape[2], shape[1], shape[3]]))           // bow-tie
-        #expect(!DistortWarp.isUsable([shape[0], shape[0], shape[2], shape[3]]))           // collapsed corner
+        #expect(DistortWarp.isConvex(shape))
+        // A bow-tie is usable — it draws folded — but it is not a perspective, so it isn't convex.
+        #expect(DistortWarp.isUsable([shape[0], shape[2], shape[1], shape[3]]))
+        #expect(!DistortWarp.isConvex([shape[0], shape[2], shape[1], shape[3]]))
+        // A collapsed corner leaves one half with nothing to draw, so neither accepts it.
+        #expect(!DistortWarp.isUsable([shape[0], shape[0], shape[2], shape[3]]))
+        #expect(!DistortWarp.isConvex([shape[0], shape[0], shape[2], shape[3]]))
     }
 
     @Test func distortingWarpsTheLayerIntoTheShapeAsOneUndoStep() async throws {
@@ -31,8 +40,9 @@ struct DistortTests {
         session.beginTransform(persistent: false)
         session.beginDistort()
         #expect(session.transformEdit?.corners?.count == 4 && session.transformEdit?.persistent == true)
-        session.previewCorners([shape[0], shape[2], shape[1], shape[3]]) // twisted: ignored
-        #expect(session.transformEdit?.corners?[1] == CGPoint(x: 30, y: 10))
+        // A folded shape is a distortion in its own right since 1.1, so the preview takes it.
+        session.previewCorners([shape[0], shape[2], shape[1], shape[3]])
+        #expect(session.transformEdit?.corners?[1] == shape[2])
         session.previewCorners(shape)
         let count = session.history.undoCount
         session.commitTransform()

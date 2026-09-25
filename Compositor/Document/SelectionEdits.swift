@@ -127,7 +127,7 @@ extension EditorSession {
     }
 
     private static func expandedUniformMask(_ image: CGImage, width: Int, height: Int) throws -> CGImage {
-        guard width > 0, height > 0, width * height <= 100_000_000 else { throw ProjectError.tooLarge }
+        guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
         let context = try BrushRaster.context(width: width, height: height, mask: true)
         BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height), mask: true, context: context)
         guard let expanded = context.makeImage() else { throw ExportError.render }
@@ -200,7 +200,8 @@ extension EditorSession {
     private func applyPixelEdit(to layer: ImageLayer, name: String, _ paint: (BrushStroke) throws -> Void) async {
         finishOpacityEdit()
         do {
-            let edit = try makeRasterEdit(for: layer)
+            // On a mask, a fill covers the whole canvas, past the mask's own area, as the brush can.
+            let edit = try makeRasterEdit(for: layer, growsMask: true)
             try paint(edit)
             guard !edit.patches.isEmpty else { return }
             try await commitRasterEdit(edit, name: name)

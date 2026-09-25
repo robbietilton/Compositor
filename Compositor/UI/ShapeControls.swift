@@ -16,7 +16,7 @@ struct ShapeControls: View {
             .help("Shift-U (or Tab) steps through Rectangle, Ellipse and Line")
             if session.shapeKind == .line {
                 HStack(spacing: 6) {
-                    Text("Width")
+                    Text("Width").scrubbable(sensitivity: 1, value: $session.shapeLineWidth, range: 1...5000)
                     Slider(value: Binding(get: { min(100, session.shapeLineWidth) },
                                           set: { session.shapeLineWidth = $0.rounded() }), in: 1...100)
                         .frame(width: 100)
@@ -31,7 +31,7 @@ struct ShapeControls: View {
             }
             if session.shapeKind == .rectangle {
                 HStack(spacing: 6) {
-                    Text("Radius")
+                    Text("Radius").scrubbable(sensitivity: 1, value: $session.shapeCornerRadius, range: 0...5000)
                     Slider(value: Binding(get: { min(200, session.shapeCornerRadius) },
                                           set: { session.shapeCornerRadius = $0.rounded() }), in: 0...200)
                         .frame(width: 100)

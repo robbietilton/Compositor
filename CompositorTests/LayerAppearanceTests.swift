@@ -42,7 +42,8 @@ struct LayerAppearanceTests {
         session.typeOpacityDigit(5, at: 10)
         let layers = try #require(session.document?.layers)
         #expect(layers.filter { [first, second].contains($0.id) }.allSatisfy { $0.opacity == 0.5 })
-        #expect(layers.first { $0.id == folder }?.opacity == 1)
+        // Folders took an opacity of their own in 1.1.6, so a selected folder takes the typed value too.
+        #expect(layers.first { $0.id == folder }?.opacity == 0.5)
         #expect(session.history.undoCount == count + 1)
         session.typeOpacityDigit(0, at: 20)
         #expect(session.document?.layers.first { $0.id == first }?.opacity == 1)
@@ -81,7 +82,7 @@ struct LayerAppearanceTests {
             #expect(try JSONDecoder().decode(LayerBlendMode.self, from: JSONEncoder().encode(mode)) == mode)
             let raster = try await ImageExporter.shared.render(try #require(session.projectSnapshot()))
             let (value, alpha) = try pixel(raster.image)
-            #expect(abs(value - expected) < 0.02)
+            #expect(abs(value - expected) < 0.02, "\(mode.rawValue): \(value), expected \(expected)")
             #expect(alpha == 1)
         }
         session.setLayerBlendMode(.normal)
@@ -123,7 +124,7 @@ struct LayerAppearanceTests {
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)
         let loaded = try await ProjectStore.shared.load(from: url)
-        #expect(loaded.manifest.version == 7)
+        #expect(loaded.manifest.version == 9)
         let resized = try await ImageResizer.shared.resize(loaded, to: ImageSizeOptions(width: 8, height: 8, resolution: 72))
         let canvas = try await CanvasResizer.shared.resize(resized, to: CanvasSizeOptions(width: 12, height: 12))
         let record = try #require(canvas.manifest.layers.first { $0.id == id })

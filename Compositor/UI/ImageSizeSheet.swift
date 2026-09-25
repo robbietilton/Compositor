@@ -22,8 +22,8 @@ struct ImageSizeSheet: View {
 
     private var valid: Bool {
         width.isFinite && height.isFinite && resolution.isFinite && (1...9600).contains(resolution)
-            && (1...30_000).contains(width.rounded()) && (1...30_000).contains(height.rounded())
-            && (!resample || width.rounded() * height.rounded() <= 100_000_000)
+            && (1...DocumentLimits.maxSideExtent).contains(width.rounded()) && (1...DocumentLimits.maxSideExtent).contains(height.rounded())
+            && (!resample || width.rounded() * height.rounded() <= DocumentLimits.maxSurfaceExtent)
     }
     private func display(_ pixels: Double, original: Int) -> Double {
         switch unit {
@@ -57,6 +57,45 @@ struct ImageSizeSheet: View {
         })
     }
 
+    private var canScrubDimensions: Bool {
+        (unit != "Inches" && unit != "Centimeters") || (resolution.isFinite && resolution > 0)
+    }
+
+    private func scrubRange(isWidth: Bool) -> ClosedRange<Double> {
+        guard canScrubDimensions else { return 0...0 }
+        let pixels = isWidth ? width : height
+        let other = isWidth ? height : width
+        let original = Double(isWidth ? document.width : document.height)
+        if !resample {
+            let multiplier = unit == "Centimeters" ? 2.54 : 1.0
+            return pixels * multiplier / 9600...pixels * multiplier
+        }
+        let minimum = locked ? max(1, pixels / other) : 1.0
+        let dimensionLimit = locked ? min(30_000, 30_000 * pixels / other) : 30_000.0
+        let areaLimit = locked ? sqrt(100_000_000 * pixels / other) : 100_000_000 / other
+        let maximum = max(minimum, min(dimensionLimit, areaLimit))
+        func displayed(_ count: Double) -> Double {
+            switch unit {
+            case "Percent": return count / original * 100
+            case "Inches": return count / resolution
+            case "Centimeters": return count / resolution * 2.54
+            default: return count
+            }
+        }
+        return displayed(minimum)...displayed(maximum)
+    }
+
+    private func scrubSensitivity(isWidth: Bool) -> Double {
+        guard canScrubDimensions else { return 0 }
+        if !resample { return unit == "Centimeters" ? 0.0254 : 0.01 }
+        switch unit {
+        case "Percent": return 100 / Double(isWidth ? document.width : document.height)
+        case "Inches": return 1 / resolution
+        case "Centimeters": return 2.54 / resolution
+        default: return 1
+        }
+    }
+
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -67,15 +106,21 @@ struct ImageSizeSheet: View {
             }
             HStack {
                 Text("Width").frame(width: 75, alignment: .leading)
+                    .scrubbable(sensitivity: scrubSensitivity(isWidth: true),
+                                value: dimension(isWidth: true), range: scrubRange(isWidth: true), step: 1)
+                    .disabled(!canScrubDimensions)
                 TextField("Width", value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
                 Text("Height").frame(width: 75, alignment: .leading)
+                    .scrubbable(sensitivity: scrubSensitivity(isWidth: false),
+                                value: dimension(isWidth: false), range: scrubRange(isWidth: false), step: 1)
+                    .disabled(!canScrubDimensions)
                 TextField("Height", value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
             }
             Toggle("Lock aspect ratio", isOn: $locked).disabled(!resample)
             HStack {
-                Text("Resolution")
+                Text("Resolution").scrubbable(sensitivity: 1, value: $resolution, range: 1...9600, step: 1)
                 TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
                     .onChange(of: resolution) { old, new in
                         if resample, unit == "Inches" || unit == "Centimeters",
@@ -104,16 +149,16 @@ struct ImageSizeSheet: View {
                 Text("Only print dimensions and resolution change. Pixels stay unchanged.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Text(valid ? "Result: \(Int(width.rounded())) × \(Int(height.rounded())) pixels" : "Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch.")
+            Text(valid ? "Result: \(Int(width.rounded())) × \(Int(height.rounded())) pixels" : "Use 1–\(DocumentLimits.maxSide.formatted()) pixels per side, up to \(DocumentLimits.maxSurfaceMegapixels) megapixels, and 1–9,600 pixels/inch.")
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
             HStack {
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)
                 Spacer()
                 Button("Resize") {
                     guard valid else { return }
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))
-                }.keyboardShortcut(.defaultAction).disabled(!valid)
+                }.configuredNativeShortcut(.return).disabled(!valid)
             }
         }.textFieldStyle(.roundedBorder).padding(24).frame(width: 430)
     }

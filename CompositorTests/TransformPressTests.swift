@@ -3,6 +3,11 @@ import Testing
 @testable import Compositor
 
 /// With the Move tool a press drags the active layer wherever it lands, not only inside its bounds.
+///
+/// The drags below hold Control, which is what drags a layer freely (EditorCanvas: "Control drags freely").
+/// Without it the move snaps to the canvas and to the other layers, and a 20 x 10 drag from the middle of a
+/// 400 x 300 canvas lands inside `TransformSnap.distance`, so the layer springs back - the snapping working,
+/// not the press failing. What these tests are about is that the press drags at all.
 @MainActor
 struct TransformPressTests {
     private func makeCanvas() throws -> (EditorSession, CanvasView, NSWindow) {
@@ -42,7 +47,7 @@ struct TransformPressTests {
 
     @Test func draggingOutsideTheLayerMovesIt() throws {
         let (session, view, window) = try makeCanvas()
-        try drag(session, view, in: window, from: CGPoint(x: 20, y: 20), to: CGPoint(x: 40, y: 30))
+        try drag(session, view, in: window, from: CGPoint(x: 20, y: 20), to: CGPoint(x: 40, y: 30), flags: .control)
         #expect(session.transformEdit == nil)
         let origin = try #require(session.activeLayer?.transform.origin)
         #expect(near(origin, CGPoint(x: 170, y: 110)), "layer origin \(origin)")
@@ -50,7 +55,7 @@ struct TransformPressTests {
 
     @Test func optionDraggingOutsideTheLayerDuplicatesIt() throws {
         let (session, view, window) = try makeCanvas()
-        try drag(session, view, in: window, from: CGPoint(x: 20, y: 20), to: CGPoint(x: 40, y: 30), flags: .option)
+        try drag(session, view, in: window, from: CGPoint(x: 20, y: 20), to: CGPoint(x: 40, y: 30), flags: [.option, .control])
         let origins = try #require(session.document?.layers.map(\.transform.origin))
         #expect(origins.count == 2, "\(origins)")
         #expect(origins.contains { near($0, CGPoint(x: 150, y: 100)) } && origins.contains { near($0, CGPoint(x: 170, y: 110)) },

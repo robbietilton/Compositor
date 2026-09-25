@@ -8,16 +8,25 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case gaussianBlur = "Gaussian Blur"
     case motionBlur = "Motion Blur"
     case addNoise = "Add Noise"
+    case vignette = "Vignette"
+    case bloomGlow = "Bloom / Glow"
+    case tonalContrast = "Tonal Contrast"
     case lensCorrection = "Lens Correction"
+    case cameraRaw = "Camera Raw Filter"
     case removeBackground = "Remove Background"
     case contentAwareFill = "Content-Aware Fill"
     case curves = "Curves"
     case exposure = "Exposure"
     case gradientMap = "Gradient Map"
     case grain = "Grain"
+    case blackWhite = "Black & White"
+    case colorBalance = "Color Balance"
     var isAutomatic: Bool { self == .contentAwareFill || self == .removeBackground }
     /// Color adjustments: in the Image menu (and editable as adjustment layers), not under Filter.
-    var isImageAdjustment: Bool { self == .curves || self == .exposure || self == .gradientMap || self == .grain }
+    var isImageAdjustment: Bool {
+        self == .curves || self == .exposure || self == .gradientMap || self == .grain
+            || self == .blackWhite || self == .colorBalance
+    }
 }
 
 /// Remove Background's two ways of working: Apple's own subject mask on its own, or that mask refined against the
@@ -41,6 +50,22 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var gaussian = false
     /// Add Noise changes brightness only, the same amount on every channel.
     var monochromatic = false
+    /// Standalone vignette: edge color, strength, and shape of its falloff.
+    var vignetteAmount: Double = 35
+    var vignetteColor = AdjustmentColor(red: 0, green: 0, blue: 0)
+    var vignetteMidpoint: Double = 50
+    var vignetteRoundness: Double = 100
+    var vignetteFeather: Double = 60
+    var vignetteHighlights: Double = 25
+    /// Bloom / Glow: strength and blur radius in layer pixels.
+    var bloomAmount: Double = 40
+    var bloomRadius: Double = 24
+    /// Tonal Contrast: one local-detail radius and separate tonal strengths.
+    var tonalAmount: Double = 50
+    var tonalRadius: Double = 16
+    var tonalShadows: Double = 40
+    var tonalMidtones: Double = 60
+    var tonalHighlights: Double = 30
     /// Lens Correction's Remove Distortion, −100–100: positive straightens barrel distortion
     /// (lines bowing outward), negative straightens pincushion (lines bowing inward).
     var distortion: Double = 0
@@ -48,6 +73,9 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var exposure = ExposureSettings()
     var gradientMap = GradientMapSettings()
     var grain = GrainSettings()
+    var blackWhite = BlackWhiteSettings()
+    var colorBalance = ColorBalanceSettings()
+    var cameraRaw = CameraRawSettings()
     /// Remove Background: Basic is the quick subject mask; Advanced refines it (see the three settings below).
     var backgroundQuality: BackgroundQuality = .basic
     /// Remove Background: how far the mask is pulled onto the image's own edges (0 off, in layer pixels).
@@ -65,6 +93,19 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.angle = clamp(angle, -90...90, 0)
         result.distance = clamp(distance, 1...2000, 10)
         result.amount = clamp(amount, 0.1...400, 10)
+        result.vignetteAmount = clamp(vignetteAmount, 0...100, 35)
+        result.vignetteColor = vignetteColor.clamped
+        result.vignetteMidpoint = clamp(vignetteMidpoint, 0...100, 50)
+        result.vignetteRoundness = clamp(vignetteRoundness, -100...100, 100)
+        result.vignetteFeather = clamp(vignetteFeather, 0...100, 60)
+        result.vignetteHighlights = clamp(vignetteHighlights, 0...100, 25)
+        result.bloomAmount = clamp(bloomAmount, 0...100, 40)
+        result.bloomRadius = clamp(bloomRadius, 1...150, 24)
+        result.tonalAmount = clamp(tonalAmount, 0...100, 50)
+        result.tonalRadius = clamp(tonalRadius, 1...100, 16)
+        result.tonalShadows = clamp(tonalShadows, -100...100, 40)
+        result.tonalMidtones = clamp(tonalMidtones, -100...100, 60)
+        result.tonalHighlights = clamp(tonalHighlights, -100...100, 30)
         result.distortion = clamp(distortion, -100...100, 0)
         result.refineEdges = clamp(refineEdges, 0...40, 12)
         result.matteContrast = clamp(matteContrast, 0...100, 25)
@@ -72,6 +113,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.exposure = exposure.normalized
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
+        result.cameraRaw = cameraRaw.normalized
         return result
     }
 }
@@ -86,6 +128,20 @@ nonisolated struct FilterJob: @unchecked Sendable {
     let mapping: CGAffineTransform
     /// Add Noise's random pattern: the same seed gives the same grain.
     var seed: UInt32 = 0
+    /// Vignette on an empty layer: the canvas, in the document, which it frames and fills. Otherwise the vignette
+    /// frames the layer's own pixels and recolors only those.
+    var canvas: CGRect? = nil
+    /// Canvas-space origin used by live adjustment layers so partial redraws keep one noise field.
+    var noiseOrigin: CGPoint = .zero
+    /// Camera Raw's Option-drag clipping view. Preview only; committing leaves this nil.
+    var cameraRawClipping: CameraRawClipping? = nil
+    /// Persistent histogram clipping indicators. Preview only; committing leaves these off.
+    var showsShadowClipping = false
+    var showsHighlightClipping = false
+    /// Point-color range preview. −1 leaves the grade alone.
+    var visualizesPointColor = -1
+    /// Option-drag on Sharpening Masking. Preview only.
+    var showsSharpenMask = false
 }
 
 nonisolated enum PixelFilter {
@@ -130,6 +186,10 @@ nonisolated enum PixelFilter {
         case .curves: image = try settings.curves.apply(job.image)
         case .exposure: image = try settings.exposure.apply(job.image)
         case .gradientMap: image = try settings.gradientMap.apply(job.image)
+        case .blackWhite: image = try settings.blackWhite.apply(job.image)
+        case .colorBalance: image = try settings.colorBalance.apply(job.image)
+        case .cameraRaw: image = try settings.cameraRaw.apply(job.image, clipping: job.cameraRawClipping, scale: job.scale, seed: job.seed,
+                                                                visualizePointColor: job.visualizesPointColor, sharpenMask: job.showsSharpenMask)
         // Grain sits in layer pixels; the job's seed gives each application its own pattern.
         case .grain: image = try settings.grain.apply(job.image, unitsPerPixel: 1 / job.scale, seed: job.seed)
         case .removeBackground:
@@ -151,10 +211,45 @@ nonisolated enum PixelFilter {
             let context = try BrushRaster.context(width: width, height: height, mask: false)
             BrushRaster.draw(job.image, in: extent, mask: false, context: context)
             guard let data = context.data else { throw ExportError.render }
-            noise_add(data.assumingMemoryBound(to: UInt8.self), width, height, context.bytesPerRow,
-                      Float(settings.amount), settings.gaussian ? 1 : 0, settings.monochromatic ? 1 : 0, job.seed)
+            noise_add_at(data.assumingMemoryBound(to: UInt8.self), width, height, context.bytesPerRow,
+                         Float(settings.amount), settings.gaussian ? 1 : 0, settings.monochromatic ? 1 : 0, job.seed,
+                         Int64(job.noiseOrigin.x.rounded(.down)), Int64(job.noiseOrigin.y.rounded(.down)))
             guard let noisy = context.makeImage() else { throw ExportError.render }
             image = noisy
+        case .vignette:
+            let context = try BrushRaster.context(width: width, height: height, mask: false)
+            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
+            guard let data = context.data else { throw ExportError.render }
+            // The canvas in this image's pixels; bottom-up, as the context's rows are.
+            let frame = job.canvas.map { $0.applying(job.mapping.inverted()) } ?? extent
+            adjust_colored_vignette(data.assumingMemoryBound(to: UInt8.self), width, height, context.bytesPerRow,
+                                    frame.minX, CGFloat(height) - frame.maxY, frame.width, frame.height, job.canvas == nil ? 0 : 1,
+                                    settings.vignetteAmount, settings.vignetteMidpoint, settings.vignetteRoundness,
+                                    settings.vignetteFeather, settings.vignetteHighlights,
+                                    settings.vignetteColor.red, settings.vignetteColor.green, settings.vignetteColor.blue)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
+        case .bloomGlow:
+            let bloomed = edges.applyingFilter("CIBloom", parameters: [
+                kCIInputRadiusKey: settings.bloomRadius * job.scale,
+                kCIInputIntensityKey: settings.bloomAmount / 50,
+            ])
+            image = try PixelAdjust.render(bloomed.cropped(to: extent), width: width, height: height, isMask: false)
+        case .tonalContrast:
+            let blurred = edges.applyingGaussianBlur(sigma: settings.tonalRadius * job.scale)
+            let base = try PixelAdjust.render(blurred.cropped(to: extent), width: width, height: height, isMask: false)
+            let context = try BrushRaster.context(width: width, height: height, mask: false)
+            let baseContext = try BrushRaster.context(width: width, height: height, mask: false)
+            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
+            BrushRaster.draw(base, in: extent, mask: false, context: baseContext)
+            guard let data = context.data, let baseData = baseContext.data else { throw ExportError.render }
+            adjust_tonal_contrast(data.assumingMemoryBound(to: UInt8.self),
+                                  baseData.assumingMemoryBound(to: UInt8.self),
+                                  width, height, context.bytesPerRow, baseContext.bytesPerRow,
+                                  settings.tonalAmount, settings.tonalShadows,
+                                  settings.tonalMidtones, settings.tonalHighlights)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
         case .lensCorrection:
             // The warp is relative to the image's own size, so a downscaled preview bends the same way.
             let source = try BrushRaster.context(width: width, height: height, mask: false)
@@ -195,7 +290,59 @@ final class FilterEdit {
     var preparing = false
     /// Add Noise's grain, fixed while the panel is open so changing Amount doesn't reshuffle it.
     let seed = UInt32.random(in: .min ... .max)
+    /// Camera Raw panel eyes. Off drops that group's amounts from the preview and from OK, without clearing the sliders.
+    var showsCameraRawLight = true
+    var showsCameraRawColor = true
+    var showsCameraRawEffects = true
+    var showsCameraRawCurve = true
+    var showsCameraRawMixer = true
+    var showsCameraRawGrading = true
+    var showsCameraRawDetail = true
+    var showsCameraRawOptics = true
+    var showsCameraRawGeometry = true
+    var showsCameraRawCalibration = true
+    var cameraRawCurvePage: CameraRawCurvePage = .parametric
+    var cameraRawPointChannel: CameraRawPointChannel = .rgb
+    var cameraRawMixerPage: CameraRawMixerPage = .hsl
+    var cameraRawMixerTab: CameraRawMixerTab = .hue
+    var cameraRawMixerSwatch = 0
+    var cameraRawPointIndex = 0
+    var cameraRawGradePage: CameraRawGradePage = .threeWay
+    var targetsCameraRawCurve = false
+    var targetsCameraRawMixer = false
+    var samplesPointColor = false
+    var cameraRawDrag: CameraRawDrag?
+    var pointColorVisualizeIndex: Int {
+        let points = settings.cameraRaw.mixer.points
+        guard points.indices.contains(cameraRawPointIndex), points[cameraRawPointIndex].visualize else { return -1 }
+        return cameraRawPointIndex
+    }
+    /// White-balance eyedropper, armed from the Color section.
+    var samplesWhiteBalance = false
+    /// Defringe eyedropper, armed from Optics. Sets purple or green hue range from the clicked fringe.
+    var samplesDefringe = false
+    /// Guided Upright: drag lines on the preview.
+    var drawingCameraRawGeometryGuide = false
+    var cameraRawGuideDraft: (start: CGPoint, end: CGPoint)?
+    /// Set while Option is held on Exposure, Highlights, Shadows, Whites, or Blacks.
+    var cameraRawClipping: CameraRawClipping?
+    /// Set while Option is held on Sharpening Masking.
+    var cameraRawSharpenMask = false
+    /// Histogram clipping indicators. They paint the preview and are not baked in on OK.
+    var showsShadowClipping = false
+    var showsHighlightClipping = false
+    /// Histogram, or the vectorscope chosen from its context menu.
+    var cameraRawScopeMode: CameraRawScopeMode = .histogram
+    var cameraRawScope: CameraRawScope?
+    /// RGB of the pixel under the pointer, in the adjusted preview.
+    var cameraRawReadout: (red: Int, green: Int, blue: Int)?
+    /// Vignette on an empty layer: the canvas it frames and fills.
+    @ObservationIgnored var canvas: CGRect?
+    /// The layer had no pixels yet (an empty layer); the filter started it from clear ones.
+    @ObservationIgnored var startedEmpty = false
     @ObservationIgnored var preparedPreview: CGImage?
+    /// Reject a render started before the blur's padded pixel grid changed.
+    @ObservationIgnored var previewSourceVersion: UInt64 = 0
     /// The settings `preparedPreview` was made with, for the automatic filters that have settings of their own.
     @ObservationIgnored var preparedSettings: FilterSettings?
     @ObservationIgnored var pending: FilterJob?
@@ -227,6 +374,7 @@ final class FilterEdit {
         switch kind {
         case .gaussianBlur: return CGFloat(settings.radius * 3 + 2)
         case .motionBlur: return CGFloat(settings.distance / 2 + 2)
+        case .bloomGlow: return CGFloat(settings.bloomRadius * 3 + 2)
         default: return 0
         }
     }
@@ -245,7 +393,7 @@ final class FilterEdit {
         let bounds = CGRect(x: 0, y: 0, width: original.image.width, height: original.image.height)
         let target = bounds.union(extent).integral
         guard target != bounds else { return }
-        guard target.width <= 30_000, target.height <= 30_000, target.width * target.height <= 100_000_000 else { throw ProjectError.tooLarge }
+        guard target.width <= DocumentLimits.maxSideExtent, target.height <= DocumentLimits.maxSideExtent, target.width * target.height <= DocumentLimits.maxSurfaceExtent else { throw ProjectError.tooLarge }
         let context = try BrushRaster.context(width: Int(target.width), height: Int(target.height), mask: false)
         let inside = bounds.offsetBy(dx: -target.minX, dy: -target.minY)
         if let raster = original.raster { raster.draw(in: inside, context: context) }
@@ -286,12 +434,32 @@ final class FilterEdit {
         previewSource = ready.previewSource
         previewScale = ready.previewScale
         previewMapping = ready.previewMapping
+        previewSourceVersion &+= 1
     }
 
     func previewImage(for id: UUID) -> CGImage? { preview && id == layerID ? preparedPreview : nil }
+    /// Sliders as they will be rendered: a hidden Camera Raw group contributes nothing.
+    func renderSettings() -> FilterSettings {
+        var value = settings
+        if kind == .cameraRaw {
+            value.cameraRaw = value.cameraRaw.applying(showsLight: showsCameraRawLight, showsColor: showsCameraRawColor,
+                                                        showsEffects: showsCameraRawEffects, showsCurve: showsCameraRawCurve,
+                                                        showsMixer: showsCameraRawMixer, showsGrading: showsCameraRawGrading,
+                                                        showsDetail: showsCameraRawDetail, showsOptics: showsCameraRawOptics,
+                                                        showsGeometry: showsCameraRawGeometry, showsCalibration: showsCameraRawCalibration)
+        }
+        return value
+    }
     var previewJob: FilterJob {
-        FilterJob(kind: kind, image: previewSource, settings: settings, scale: previewScale, selection: selection,
-                  mapping: previewMapping, seed: seed)
+        var job = FilterJob(kind: kind, image: previewSource, settings: renderSettings(), scale: previewScale, selection: selection,
+                            mapping: previewMapping, seed: seed)
+        job.canvas = canvas
+        job.cameraRawClipping = cameraRawClipping
+        job.showsShadowClipping = showsShadowClipping
+        job.showsHighlightClipping = showsHighlightClipping
+        job.visualizesPointColor = pointColorVisualizeIndex
+        job.showsSharpenMask = cameraRawSharpenMask
+        return job
     }
 }
 
@@ -301,24 +469,36 @@ extension EditorSession {
     }
     func beginFilter(_ kind: FilterKind) {
         if kind == .contentAwareFill && !canContentAwareFill { return }
-        guard filterEdit == nil, hueSaturation == nil, canAdjustColors else { NSSound.beep(); return }
+        guard filterEdit == nil, hueSaturation == nil, kind == .vignette ? canVignette : canAdjustColors else { NSSound.beep(); return }
         if gradientEdit != nil {
             Task { await commitGradient(); beginFilter(kind) }
             return
         }
         commitTransform(); cancelCrop(); cancelLasso()
-        guard let layer = activeLayer, let document else { return }
+        guard var layer = activeLayer, let document else { return }
         do {
+            // An empty layer has no pixels until something is put on it; Vignette starts it with clear ones.
+            let startedEmpty = layer.asset == nil
+            if startedEmpty {
+                let width = max(1, Int(layer.transform.size.width.rounded())), height = max(1, Int(layer.transform.size.height.rounded()))
+                guard let clear = try BrushRaster.context(width: width, height: height, mask: false).makeImage() else { throw ExportError.render }
+                layer.asset = ImportedImage(image: clear, thumbnail: try PixelAdjust.thumbnail(of: clear), name: layer.name)
+            }
             var settings = filterSettings
             // Gradient Map starts from the foreground and background colors, as in Photoshop.
             if kind == .gradientMap {
                 settings.gradientMap = GradientMapSettings(shadows: AdjustmentColor(foregroundColor), highlights: AdjustmentColor(backgroundColor))
             }
-            // Content-Aware Fill extends the layer over any of the selection on the canvas past its edge.
+            // Content-Aware Fill extends the layer over any of the selection on the canvas past its edge; Vignette on
+            // an empty layer covers the whole canvas, which it frames and fills.
+            let canvas = CGRect(origin: .zero, size: document.size)
+            let fillsCanvas = kind == .vignette && startedEmpty
             let area = kind == .contentAwareFill
-                ? selection.map { $0.path.boundingBoxOfPath.intersection(CGRect(origin: .zero, size: document.size)) }.flatMap { $0.isNull || $0.isEmpty ? nil : $0 }
-                : nil
+                ? selection.map { $0.path.boundingBoxOfPath.intersection(canvas) }.flatMap { $0.isNull || $0.isEmpty ? nil : $0 }
+                : fillsCanvas ? canvas : nil
             let edit = try FilterEdit(kind: kind, layer: layer, selection: selection?.clip(canvas: document.size), settings: settings, growingTo: area)
+            if fillsCanvas { edit.canvas = canvas }
+            edit.startedEmpty = startedEmpty
             filterEdit = edit
             updateFilter(edit.settings, preview: true)
         } catch { brushError = error.localizedDescription }
@@ -348,25 +528,39 @@ extension EditorSession {
     private func renderFilterPreview(_ edit: FilterEdit) {
         guard filterEdit === edit, edit.previewTask == nil, let job = edit.pending else { return }
         edit.pending = nil
+        let sourceVersion = edit.previewSourceVersion
         edit.preparing = true
         edit.previewError = nil
         edit.previewTask = Task { @MainActor [weak self, weak edit] in
-            let result = await Task.detached(priority: .userInitiated) {
-                do { return (Optional(try PixelFilter.run(job)), Optional<String>.none) }
-                catch { return (Optional<CGImage>.none, Optional(error.localizedDescription)) }
+            let result = await Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?) in
+                do {
+                    if job.kind == .cameraRaw {
+                        let made = try CameraRawScope.preview(job)
+                        return (made.image, made.scope, nil)
+                    }
+                    return (try PixelFilter.run(job), nil, nil)
+                } catch {
+                    return (nil, nil, error.localizedDescription)
+                }
             }.value
             guard let self, let edit, self.filterEdit === edit, !Task.isCancelled else { return }
             edit.previewTask = nil
             edit.preparing = false
-            edit.previewError = result.1
+            guard sourceVersion == edit.previewSourceVersion else {
+                self.renderFilterPreview(edit)
+                return
+            }
+            edit.previewError = result.2
+            if let scope = result.1 { edit.cameraRawScope = scope }
             if edit.preview || edit.kind.isAutomatic { edit.preparedPreview = result.0; edit.preparedSettings = job.settings; self.brushRevision += 1 }
             self.renderFilterPreview(edit)
         }
     }
 
     func cancelFilter() {
-        // A Gradient Map color still being picked goes with the panel.
+        // A filter color still being picked goes with the panel.
         if case .gradientMap = colorPicker?.target { closeColorPicker(commit: false) }
+        if case .vignette = colorPicker?.target { closeColorPicker(commit: false) }
         if finishAdjustmentEditing(commit: false) { return }
         guard let edit = filterEdit, !edit.committing else { return }
         edit.previewTask?.cancel()
@@ -376,6 +570,7 @@ extension EditorSession {
 
     func commitFilter() async {
         if case .gradientMap = colorPicker?.target { closeColorPicker(commit: true) }
+        if case .vignette = colorPicker?.target { closeColorPicker(commit: true) }
         if finishAdjustmentEditing(commit: true) { return }
         guard let edit = filterEdit, !edit.committing else { return }
         if edit.kind.isAutomatic {
@@ -383,25 +578,35 @@ extension EditorSession {
             guard filterEdit === edit, !edit.committing, edit.preparedPreview != nil, edit.previewError == nil else { return }
             // Remove Background masks from the full-size image, so a preview made at preview size is fine to discard.
         }
+        // A hidden Camera Raw group is absent from the layer. Remember that rendered grade, including
+        // when every remaining amount is zero, so the next open does not put the hidden sliders back.
+        let rendered = edit.renderSettings()
+        if edit.kind == .cameraRaw { filterSettings = rendered }
         // No distortion to remove: close as Cancel does, without an undo step.
         if (edit.kind == .lensCorrection && edit.settings.distortion == 0)
+            || (edit.kind == .vignette && edit.settings.vignetteAmount == 0)
+            || (edit.kind == .bloomGlow && edit.settings.bloomAmount == 0)
+            || (edit.kind == .tonalContrast && (edit.settings.tonalAmount == 0 ||
+                (edit.settings.tonalShadows == 0 && edit.settings.tonalMidtones == 0 && edit.settings.tonalHighlights == 0)))
             || (edit.kind == .exposure && edit.settings.exposure == ExposureSettings())
-            || (edit.kind == .grain && edit.settings.grain.amount == 0) { cancelFilter(); return }
+            || (edit.kind == .grain && edit.settings.grain.amount == 0)
+            || (edit.kind == .cameraRaw && rendered.cameraRaw.isIdentity) { cancelFilter(); return }
         edit.committing = true
         edit.previewTask?.cancel()
-        filterSettings = edit.settings
+        if edit.kind != .cameraRaw { filterSettings = edit.settings }
         isProjectBusy = true
         // The preview stays up until the result is on the layer, so the canvas never flashes the original.
         defer { filterEdit = nil; isProjectBusy = false; brushRevision += 1 }
         // Remove Background masks the background out rather than erasing it, so it can be brought back at any time
         // by painting the mask, disabling it, or deleting it.
         if edit.kind == .removeBackground { await commitBackgroundMask(edit); return }
-        let job = FilterJob(kind: edit.kind, image: edit.grownImage ?? edit.original.image, settings: edit.settings, scale: 1,
+        var job = FilterJob(kind: edit.kind, image: edit.grownImage ?? edit.original.image, settings: edit.renderSettings(), scale: 1,
                             selection: edit.selection, mapping: edit.mapping, seed: edit.seed)
+        job.canvas = edit.canvas
         let cached = edit.kind.isAutomatic && edit.preparedSettings == edit.settings ? edit.preparedPreview : nil
         do {
             let grown = edit.grownTransform
-            let spreads = edit.kind == .gaussianBlur || edit.kind == .motionBlur
+            let spreads = edit.kind == .gaussianBlur || edit.kind == .motionBlur || edit.kind == .bloomGlow
             let made = try await Task.detached(priority: .userInitiated) { () -> (asset: ImportedImage, transform: LayerTransform?) in
                 var image = try cached ?? PixelFilter.run(job)
                 var placed = grown
@@ -414,7 +619,8 @@ extension EditorSession {
             }.value
             let asset = made.asset
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
-                  let current = document?.layers[index], current.asset?.image === edit.original.image,
+                  let current = document?.layers[index],
+                  current.asset?.image === edit.original.image || (edit.startedEmpty && current.asset == nil),
                   current.transform == edit.transform else { return }
             // A grown layer's mask (covering the old grid) is carried onto the new one, its edge tone past the old edge.
             var mask = current.mask
@@ -429,7 +635,8 @@ extension EditorSession {
             beginEdit(edit.kind.rawValue)
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: made.transform ?? current.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID)
+                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID,
+                effects: current.effects)
             endEdit()
         } catch { brushError = error.localizedDescription }
     }

@@ -88,13 +88,89 @@ nonisolated struct GradientMapSettings: Codable, Equatable, Sendable {
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
         let (dark, light) = ends
-        let table: [UInt8] = (0...255).flatMap { index -> [UInt8] in
-            let t = Double(index) / 255
-            return [dark.red + (light.red - dark.red) * t, dark.green + (light.green - dark.green) * t,
-                    dark.blue + (light.blue - dark.blue) * t].map { UInt8(min(255, max(0, ($0 * 255).rounded()))) }
+        // Split into explicitly typed steps: as one expression the type checker times out (Xcode 26.1).
+        func channel(_ from: Double, _ to: Double, _ t: Double) -> UInt8 {
+            let value: Double = from + (to - from) * t
+            let scaled: Double = (value * 255).rounded()
+            return UInt8(min(255.0, max(0.0, scaled)))
+        }
+        var table = [UInt8]()
+        table.reserveCapacity(256 * 3)
+        for index in 0...255 {
+            let t: Double = Double(index) / 255
+            table.append(channel(dark.red, light.red, t))
+            table.append(channel(dark.green, light.green, t))
+            table.append(channel(dark.blue, light.blue, t))
         }
         return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
             adjust_gradient_map(pixels, width, height, stride, table)
+        }
+    }
+}
+
+/// Black & White, as Photoshop's is: not a desaturation, but a choice of how bright each family of
+/// colors becomes in gray. Reds at 40% and yellows at 60% is why a default conversion keeps skin and
+/// foliage apart where a plain luminance flattens them.
+nonisolated struct BlackWhiteSettings: Codable, Equatable, Sendable {
+    static let range: ClosedRange<Double> = -200...300
+    /// Photoshop's defaults.
+    var reds: Double = 40
+    var yellows: Double = 60
+    var greens: Double = 40
+    var cyans: Double = 60
+    var blues: Double = 20
+    var magentas: Double = 80
+    /// Color the result while keeping its tones, for a sepia or a cyanotype.
+    var tint = false
+    var tintHue: Double = 40
+    var tintSaturation: Double = 20
+    var isValid: Bool {
+        [reds, yellows, greens, cyans, blues, magentas].allSatisfy { $0.isFinite && Self.range.contains($0) }
+            && tintHue.isFinite && (0...360).contains(tintHue)
+            && tintSaturation.isFinite && (0...100).contains(tintSaturation)
+    }
+    func apply(_ image: CGImage) throws -> CGImage {
+        guard isValid else { throw ProjectError.invalid }
+        // The C routine's order: red, yellow, green, cyan, blue, magenta.
+        let weights = [reds, yellows, greens, cyans, blues, magentas].map { Float($0 / 100) }
+        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+            adjust_black_white(pixels, width, height, stride, weights,
+                               tint ? 1 : 0, tintHue, tintSaturation / 100)
+        }
+    }
+}
+
+/// Color Balance: shifts color towards one end of each opposing pair, separately for shadows,
+/// midtones and highlights. Preserve Luminosity puts each pixel's brightness back afterwards, so a
+/// warm cast doesn't also lighten the picture.
+nonisolated struct ColorBalanceSettings: Codable, Equatable, Sendable {
+    static let range: ClosedRange<Double> = -100...100
+    var shadowCyanRed: Double = 0
+    var shadowMagentaGreen: Double = 0
+    var shadowYellowBlue: Double = 0
+    var midCyanRed: Double = 0
+    var midMagentaGreen: Double = 0
+    var midYellowBlue: Double = 0
+    var highlightCyanRed: Double = 0
+    var highlightMagentaGreen: Double = 0
+    var highlightYellowBlue: Double = 0
+    var preserveLuminosity = true
+    private var all: [Double] {
+        [shadowCyanRed, shadowMagentaGreen, shadowYellowBlue,
+         midCyanRed, midMagentaGreen, midYellowBlue,
+         highlightCyanRed, highlightMagentaGreen, highlightYellowBlue]
+    }
+    var isValid: Bool { all.allSatisfy { $0.isFinite && Self.range.contains($0) } }
+    var isIdentity: Bool { all.allSatisfy { $0 == 0 } }
+    func apply(_ image: CGImage) throws -> CGImage {
+        guard isValid else { throw ProjectError.invalid }
+        guard !isIdentity else { return image }
+        let shadows = [shadowCyanRed, shadowMagentaGreen, shadowYellowBlue].map { Float($0 / 100) }
+        let midtones = [midCyanRed, midMagentaGreen, midYellowBlue].map { Float($0 / 100) }
+        let highlights = [highlightCyanRed, highlightMagentaGreen, highlightYellowBlue].map { Float($0 / 100) }
+        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+            adjust_color_balance(pixels, width, height, stride, shadows, midtones, highlights,
+                                 preserveLuminosity ? 1 : 0)
         }
     }
 }
@@ -109,7 +185,7 @@ nonisolated struct GrainSettings: Codable, Equatable, Sendable {
     var amount: Double = 25
     /// Grain scale in document pixels, 0.5–20.
     var size: Double = 1.5
-    /// 0–100: how much per-pixel noise roughens the smooth grain.
+    /// 0–100: how much smaller, irregular detail roughens the main grain particles.
     var roughness: Double = 50
     var seed: UInt32 = 0
     var isValid: Bool { Self.amountRange.contains(amount) && Self.sizeRange.contains(size) && Self.roughnessRange.contains(roughness) }

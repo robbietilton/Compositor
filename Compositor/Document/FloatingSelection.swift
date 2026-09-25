@@ -128,7 +128,7 @@ nonisolated enum FloatingMerge {
             .applying(BrushRaster.pixelToDocument(transform, width: pixels.width, height: pixels.height)).applying(toPixels)
         let original = CGRect(x: 0, y: 0, width: width, height: height)
         let extent = original.union(floatingBounds).integral
-        guard extent.width <= 30_000, extent.height <= 30_000, extent.width * extent.height <= 100_000_000
+        guard extent.width <= DocumentLimits.maxSideExtent, extent.height <= DocumentLimits.maxSideExtent, extent.width * extent.height <= DocumentLimits.maxSurfaceExtent
         else { throw ProjectError.tooLarge }
         let context = try BrushRaster.context(width: Int(extent.width), height: Int(extent.height), mask: false)
         let placed = original.offsetBy(dx: -extent.minX, dy: -extent.minY)

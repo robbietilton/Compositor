@@ -86,6 +86,21 @@ struct ImageAdjustmentTests {
         #expect(cleared.allSatisfy { (pixel: [Int]) -> Bool in pixel[3] == 0 }, "clear pixels stay clear")
     }
 
+    @Test func grainSizeControlsParticleScaleEvenWithRoughness() throws {
+        let source = try gray(width: 64, height: 64)
+        let small = try pixels(GrainSettings(amount: 70, size: 1, roughness: 70, seed: 17).apply(source))
+        let large = try pixels(GrainSettings(amount: 70, size: 12, roughness: 70, seed: 17).apply(source))
+        func neighboringDifference(_ values: [[Int]]) -> Double {
+            var total = 0, count = 0
+            for y in 0..<64 { for x in 1..<64 {
+                total += abs(values[y * 64 + x][0] - values[y * 64 + x - 1][0]); count += 1
+            } }
+            return Double(total) / Double(count)
+        }
+        #expect(neighboringDifference(large) < neighboringDifference(small) * 0.7,
+                "larger grain should form visibly larger, more coherent particles")
+    }
+
     @Test func settingsSaveAndOlderAdjustmentsStillOpen() throws {
         let levels = LayerAdjustment(kind: .levels)
         let data = try JSONEncoder().encode(levels)

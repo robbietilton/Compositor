@@ -238,7 +238,7 @@ extension EditorSession {
         let width = layer.asset?.image.width ?? Int(layer.size.width.rounded())
         let height = layer.asset?.image.height ?? Int(layer.size.height.rounded())
         do {
-            guard width > 0, height > 0, width * height <= 100_000_000 else { throw ProjectError.tooLarge }
+            guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
             let context = try BrushRaster.context(width: width, height: height, mask: true)
             context.setFillColor(gray: revealing ? 1 : 0, alpha: 1)
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))

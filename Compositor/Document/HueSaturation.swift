@@ -411,11 +411,18 @@ final class HueSaturationEdit {
 extension EditorSession {
     /// Color adjustments need a visible image layer (not a mask) and a non-empty selection
     /// if there is one; a pending gradient or transform is applied first.
-    var canAdjustColors: Bool {
+    /// Vignette also paints an empty layer, which has no pixels until something is put on it.
+    var canVignette: Bool {
+        if canAdjustColors { return true }
+        guard let layer = activeLayer, layer.asset == nil, layer.adjustment == nil, !layer.isGroup else { return false }
+        return canAdjust(allowingEmpty: true)
+    }
+    var canAdjustColors: Bool { canAdjust(allowingEmpty: false) }
+    private func canAdjust(allowingEmpty: Bool) -> Bool {
         _ = showsBusy
         guard levels == nil, filterEdit == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
               pixelMove == nil, renamingLayerID == nil, !showsNewDocument, !showsImporter,
-              selectedLayerIDs.count == 1, !layer.isGroup, !isMaskSelected, layer.asset != nil,
+              selectedLayerIDs.count == 1, !layer.isGroup, !isMaskSelected, layer.asset != nil || allowingEmpty,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }
         return true
     }

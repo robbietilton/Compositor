@@ -154,8 +154,30 @@ final class ProjectWorkspace {
         }
     }
     static let layerType = "com.compositor.layer-row"
+    /// Cmd-V with a whole layer copied: pastes it complete — a copy above it in its own project, or brought over as
+    /// dragging it onto this tab does. False when there is none, and Paste goes on with pixels.
+    func pasteCopiedLayer() -> Bool {
+        let count = NSPasteboard.general.changeCount
+        guard let source = tabs.first(where: { $0.session.copiedLayer?.changeCount == count }),
+              let copied = source.session.copiedLayer?.ids, let layers = source.session.document?.layers else { return false }
+        let ids = copied.filter { id in layers.contains { $0.id == id } }
+        guard !ids.isEmpty else { return false }
+        if source.id == selectedID {
+            guard source.session.canEditLayers else { return false }
+            source.session.duplicateLayers(ids, editName: "Paste")
+            return true
+        }
+        let destination = selectedID
+        Task { await copyLayers(ids, into: destination) }
+        return true
+    }
     func copyLayer(_ id: UUID, into destination: UUID?, at point: CGPoint? = nil) async {
-        guard canSwitch, let sourceTab = tabs.first(where: { $0.session.document?.layers.contains(where: { $0.id == id }) == true }),
+        await copyLayers([id], into: destination, at: point)
+    }
+    /// Copies layers (folders with all they hold) into another project, or a new one, as one undo step there. Several
+    /// keep where they sit relative to each other, centered on `point` or the canvas as a whole.
+    func copyLayers(_ ids: [UUID], into destination: UUID?, at point: CGPoint? = nil) async {
+        guard let id = ids.first, canSwitch, let sourceTab = tabs.first(where: { $0.session.document?.layers.contains(where: { $0.id == id }) == true }),
               sourceTab.session.canEditLayers, let snapshot = sourceTab.session.projectSnapshot(),
               let sourceDocument = sourceTab.session.document else { return }
         if let destination, destination == sourceTab.id { return }
@@ -165,11 +187,11 @@ final class ProjectWorkspace {
             target = existing
         } else { target = addTab(reuseEmpty: false) }
         guard target.session.document == nil || target.session.canEditLayers else { return }
-        let included = sourceTab.session.descendantIDs(of: id).union([id])
+        let included = ids.reduce(into: Set(ids)) { $0.formUnion(sourceTab.session.descendantIDs(of: $1)) }
         var copied = sourceDocument.layers.filter { included.contains($0.id) }
         let used = target.session.document?.layers.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) } ?? 0
         let added = copied.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) }
-        guard used + added <= 100_000_000 else { target.session.importError = "The copied layers exceed this project’s 100-megapixel limit."; return }
+        guard used + added <= DocumentLimits.documentPixelBudget else { target.session.importError = "The copied layers exceed this project’s \(DocumentLimits.documentBudgetMegapixels)-megapixel limit."; return }
         isManaging = true
         sourceTab.session.isProjectBusy = true
         target.session.isProjectBusy = true
@@ -187,7 +209,10 @@ final class ProjectWorkspace {
             }
             let mapping = Dictionary(uniqueKeysWithValues: copied.map { ($0.id, UUID()) })
             let size = target.session.document?.size ?? sourceDocument.size
-            let anchor = copied.first(where: { $0.id == id })?.transform.center ?? CGPoint(x: sourceDocument.size.width/2, y: sourceDocument.size.height/2)
+            let pictured = copied.filter { !$0.isGroup }.map { CGRect(origin: $0.transform.origin, size: $0.transform.size) }
+            let anchor = ids.count == 1 || pictured.isEmpty
+                ? copied.first(where: { $0.id == id })?.transform.center ?? CGPoint(x: sourceDocument.size.width/2, y: sourceDocument.size.height/2)
+                : { let r = pictured.dropFirst().reduce(pictured[0]) { $0.union($1) }; return CGPoint(x: r.midX, y: r.midY) }()
             let center = point ?? CGPoint(x: size.width/2, y: size.height/2)
             let layers = copied.map { layer -> ImageLayer in
                 var transform = layer.transform
@@ -196,13 +221,14 @@ final class ProjectWorkspace {
                 mask?.placement?.origin.x += center.x-anchor.x; mask?.placement?.origin.y += center.y-anchor.y
                 return ImageLayer(id: mapping[layer.id]!, asset: layer.asset, name: layer.name, isVisible: layer.isVisible,
                     transform: transform, parentID: layer.parentID.flatMap { mapping[$0] }, isGroup: layer.isGroup,
-                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, text: layer.text)
+                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text)
             }
             target.session.isProjectBusy = false
             target.session.beginEdit("Copy Layers from Project")
             if target.session.document == nil { target.session.createDocument(width: Int(size.width), height: Int(size.height)) }
             target.session.document?.layers.append(contentsOf: layers)
             target.session.activeLayerID = mapping[id]
+            target.session.selectedLayerIDs = Set(ids.compactMap { mapping[$0] })
             target.session.endEdit()
             selectedID = target.id
         } catch { target.session.importError = error.localizedDescription }

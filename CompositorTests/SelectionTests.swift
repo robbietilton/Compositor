@@ -330,7 +330,9 @@ struct SelectionTests {
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 40, y: 45, width: 20, height: 10))
         marquee(session, from: CGPoint(x: 50, y: 50), to: CGPoint(x: 45, y: 58), square: true, fromCenter: true)
         #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 42, y: 42, width: 16, height: 16))
-        #expect(NavigationTool.marquee.isSelectionTool && !NavigationTool.brush.isSelectionTool)
+        // Object selection is the Magic tool's Object mode now, not a tool of its own (EditorSession: "Tab
+        // switches Wand and Object"), so the tool that carries it is `.wand`. This read `.objectSelection`.
+        #expect(NavigationTool.marquee.isSelectionTool && NavigationTool.wand.isSelectionTool && !NavigationTool.brush.isSelectionTool)
     }
 
     @Test func marqueeEllipseSelectsAnOvalInItsBoxAndShiftMakesACircle() throws {
@@ -377,8 +379,15 @@ struct SelectionTests {
         #expect(try coverage(session, 30, 30) == 255) // a box grown from its center would have reached here
     }
 
-    /// M chooses the Marquee; pressed again it switches Rectangle and Ellipse, and the shape sticks.
-    @Test func mKeyChoosesTheMarqueeThenSwitchesItsShape() throws {
+    /// M chooses the Marquee in whichever shape it was last set to; the shape is switched in the tool bar only
+    /// (`pressMarqueeKey`). M used to cycle Rectangle/Ellipse, and this test asserted that.
+    ///
+    /// It also asserted that holding M down did not keep switching, which is gone rather than moved: the
+    /// `!event.isARepeat` guard in `EditorCanvas` cannot be observed any more. `pressMarqueeKey` is
+    /// `selectTool(.marquee)`, and `selectTool` returns early once that tool is current, so removing the guard
+    /// would change nothing a test could see. An assertion for it would pass whether the guard were there or
+    /// not, which is worse than not having one.
+    @Test func mKeyChoosesTheMarqueeAndKeepsTheShapeLastSet() throws {
         let session = makeSession()
         let view = CanvasView(session: session)
         func pressM(repeat isARepeat: Bool = false) throws {
@@ -389,12 +398,8 @@ struct SelectionTests {
         try pressM()
         #expect(session.tool == .marquee && session.marqueeKind == .rectangle)
         try pressM()
-        #expect(session.marqueeKind == .ellipse)
-        try pressM(repeat: true)
-        #expect(session.marqueeKind == .ellipse, "holding M must not keep switching")
-        try pressM()
-        #expect(session.marqueeKind == .rectangle)
-        try pressM()
+        #expect(session.marqueeKind == .rectangle, "pressing M again must not switch the shape")
+        session.marqueeKind = .ellipse
         session.selectTool(.brush)
         try pressM()
         #expect(session.tool == .marquee && session.marqueeKind == .ellipse, "the shape stays as last set")
@@ -441,8 +446,9 @@ struct SelectionTests {
         #expect(try coverage(session, 65, 45) == 255 && coverage(session, 10, 10) == 255, "still adding")
     }
 
-    /// L chooses the Lasso; pressed again it switches Freehand and Polygonal, and the mode sticks.
-    @Test func lKeyChoosesTheLassoThenSwitchesItsMode() throws {
+    /// L chooses the Lasso, and Freehand/Polygonal is switched in the tool bar only - the same rule as M, and
+    /// the same story about the repeat assertion; see `mKeyChoosesTheMarqueeAndKeepsTheShapeLastSet`.
+    @Test func lKeyChoosesTheLassoAndKeepsTheModeLastSet() throws {
         let session = makeSession()
         session.selectTool(.marquee)
         let view = CanvasView(session: session)
@@ -454,12 +460,8 @@ struct SelectionTests {
         try pressL()
         #expect(session.tool == .lasso && session.lassoKind == .freehand)
         try pressL()
-        #expect(session.lassoKind == .polygonal)
-        try pressL(repeat: true)
-        #expect(session.lassoKind == .polygonal, "holding L must not keep switching")
-        try pressL()
-        #expect(session.lassoKind == .freehand)
-        try pressL()
+        #expect(session.lassoKind == .freehand, "pressing L again must not switch the mode")
+        session.lassoKind = .polygonal
         session.selectTool(.brush)
         try pressL()
         #expect(session.tool == .lasso && session.lassoKind == .polygonal, "the mode stays as last set")

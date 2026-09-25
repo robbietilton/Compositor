@@ -92,6 +92,30 @@ final class ProjectController {
         } catch { await showError("Couldn’t resize the image", error: error) }
     }
 
+    func trim() async {
+        guard let window, session.document != nil, begin() else { return }
+        defer { session.isProjectBusy = false }
+        let options: TrimOptions? = await withCheckedContinuation { continuation in
+            let sheet = NSWindow()
+            sheet.styleMask = [.titled, .fullSizeContentView]
+            sheet.title = "Trim"
+            sheet.contentViewController = NSHostingController(rootView: TrimSheet { options in
+                window.endSheet(sheet)
+                sheet.orderOut(nil)
+                sheet.contentViewController = nil
+                continuation.resume(returning: options)
+            })
+            window.beginSheet(sheet)
+        }
+        guard let options, let snapshot = session.projectSnapshot() else { return }
+        do {
+            guard let resized = try await ImageTrim.trim(snapshot, options: options) else {
+                return
+            }
+            session.applyDocumentSize(resized, actionName: "Trim")
+        } catch { await showError("Couldn’t trim image", error: error) }
+    }
+
     func exportJPEG() async {
         guard let window, session.document != nil, begin() else { return }
         defer { session.isProjectBusy = false }

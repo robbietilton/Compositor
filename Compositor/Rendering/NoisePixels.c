@@ -14,6 +14,12 @@ static inline float noise_unit(uint32_t key) { return (float)(noise_hash(key) >>
 
 void noise_add(uint8_t *rgba, size_t width, size_t height, size_t stride,
                float amount, int gaussian, int monochromatic, uint32_t seed) {
+    noise_add_at(rgba, width, height, stride, amount, gaussian, monochromatic, seed, 0, 0);
+}
+
+void noise_add_at(uint8_t *rgba, size_t width, size_t height, size_t stride,
+                  float amount, int gaussian, int monochromatic, uint32_t seed,
+                  int64_t origin_x, int64_t origin_y) {
     float spread = amount / 100.0f * 127.5f;
     for (size_t y = 0; y < height; ++y) {
         uint8_t *row = rgba + y * stride;
@@ -21,7 +27,9 @@ void noise_add(uint8_t *rgba, size_t width, size_t height, size_t stride,
             uint8_t *p = row + x * 4;
             unsigned alpha = p[3];
             if (!alpha) continue;
-            uint32_t base = noise_hash(seed ^ noise_hash((uint32_t)(y * width + x)));
+            uint32_t px = (uint32_t)(origin_x + (int64_t)x);
+            uint32_t py = (uint32_t)(origin_y + (int64_t)y);
+            uint32_t base = noise_hash(seed ^ noise_hash(px * 0x9e3779b9U ^ noise_hash(py * 0x85ebca6bU)));
             for (int c = 0; c < 3; ++c) {
                 uint32_t key = monochromatic ? base : base + (uint32_t)c * 0x9e3779b9U;
                 float n;

@@ -45,7 +45,7 @@ extension EditorSession {
         guard canPaint else { return }
         finishOpacityEdit()
         do {
-            gradientEdit = GradientEdit(raster: try makeRasterEdit(for: layer), start: point)
+            gradientEdit = GradientEdit(raster: try makeRasterEdit(for: layer, growsMask: true), start: point)
             brushRevision += 1
         } catch { brushError = error.localizedDescription }
     }

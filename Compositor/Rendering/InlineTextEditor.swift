@@ -2,11 +2,14 @@ import AppKit
 
 /// A native text system on the canvas: selection, marked text/IME, clipboard and local undo
 /// stay with NSTextView. Its logical bounds are layer pixels; the containing view supplies zoom.
+/// Its glyphs are clear: the canvas draws the text as the layer's own pixels underneath, as Photoshop does, so
+/// what is typed looks the same at any zoom as it will once it is committed.
 final class CanvasTextView: NSTextView {
     weak var editor: InlineTextEditor?
     private let textUndo = UndoManager()
     override var undoManager: UndoManager? { textUndo }
     override func keyDown(with event: NSEvent) {
+        guard let event = ShortcutSettings.shared.textEvent(event) else { return }
         if event.keyCode == 53 { editor?.canvas?.session.cancelText(); return }
         // Option with the arrows sets spacing, as in Photoshop: left and right the tracking, up and down the
         // leading. Shift makes each step ten.
@@ -27,6 +30,8 @@ final class CanvasTextView: NSTextView {
             return
         }
         super.keyDown(with: event)
+        // Text views hide the pointer while typing; on the canvas it stays, so you can see where you'll click next.
+        NSCursor.setHiddenUntilMouseMoves(false)
     }
     override func paste(_ sender: Any?) { pasteAsPlainText(sender) }
     // The editor sets the cursor for the whole box — the I-beam over the text, resize arrows over the edges.
@@ -41,7 +46,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     private var synchronizing = false
     private var logicalSize = CGSize(width: 360, height: 160)
     private var handleSize: CGFloat = 6
-    private var shownTransform: LayerTransform?
+    private(set) var shownTransform: LayerTransform?
     private struct Geometry: Equatable {
         let transform: LayerTransform
         let logicalSize: CGSize
@@ -73,6 +78,8 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         textView.textContainer?.heightTracksTextView = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
+        // The selection shows through to the text the canvas draws beneath it.
+        textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.45)]
         textView.setAccessibilityLabel("Canvas text")
         // Both backed by layers from the start. Left to AppKit, the text surface's layer is first placed in the
         // canvas's own layer tree and only moved inside this view a frame later; with a flipped layer, whose
@@ -145,14 +152,15 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
             synchronizing = true
             let selection = textView.selectedRange()
             if textView.string != style.content { textView.string = style.content }
-            let attributes = EditorSession.textAttributes(style)
+            var attributes = EditorSession.textAttributes(style)
+            textView.insertionPointColor = (attributes[.foregroundColor] as? NSColor) ?? .white
+            attributes[.foregroundColor] = NSColor.clear
             textView.typingAttributes = attributes
             if !textView.hasMarkedText() {
                 textView.textStorage?.setAttributes(attributes, range: NSRange(location: 0, length: textView.string.utf16.count))
                 textView.setSelectedRange(NSRange(location: min(selection.location, textView.string.utf16.count),
                     length: min(selection.length, max(0, textView.string.utf16.count - selection.location))))
             }
-            textView.insertionPointColor = (attributes[.foregroundColor] as? NSColor) ?? .white
             shownStyle = style
             synchronizing = false
             needsDisplay = true
@@ -164,6 +172,10 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
                 guard let self, self.canvas?.session.textDraft?.id == draft.id else { return }
                 if self.window?.firstResponder is NSText, self.window?.firstResponder !== self.textView { return }
                 self.window?.makeFirstResponder(self.textView)
+                // Opening existing text puts the cursor after it, ready to add to it, unless a click already placed it.
+                if draft.layerID != nil, self.textView.selectedRange() == NSRange(location: 0, length: 0) {
+                    self.textView.setSelectedRange(NSRange(location: self.textView.string.utf16.count, length: 0))
+                }
             }
         }
     }

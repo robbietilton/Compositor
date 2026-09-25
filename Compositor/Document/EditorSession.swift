@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -23,7 +24,7 @@ struct ImageLayer: Identifiable, Equatable {
     /// A stroke and drop shadow drawn around the layer, kept apart from its pixels.
     var effects: LayerEffects?
     var text: LayerText?
-    var size: CGSize { transform.size }
+    nonisolated var size: CGSize { transform.size }
 
     init(asset: ImportedImage, origin: CGPoint) {
         self.id = UUID()
@@ -64,21 +65,24 @@ struct CanvasDocument: Equatable {
     let height: Int
     var resolution: Double = 72
     var layers: [ImageLayer] = [] // Bottom to top.
+    /// User-placed alignment lines. Saved with the project; undo covers them.
+    var guides: [CanvasGuide] = []
     /// Part of the document so undo/redo covers selection changes. Not saved to disk.
     var selection: DocumentSelection?
     var size: CGSize { CGSize(width: width, height: height) }
-    init(id: UUID = UUID(), width: Int, height: Int, layers: [ImageLayer] = [], resolution: Double = 72) {
+    init(id: UUID = UUID(), width: Int, height: Int, layers: [ImageLayer] = [], resolution: Double = 72, guides: [CanvasGuide] = []) {
         self.id = id
         self.width = width
         self.height = height
         self.layers = layers
         self.resolution = resolution
+        self.guides = guides
     }
 
     // Geometry limit; raster memory limits will be established with image import.
     static func validDimension(_ value: String) -> Int? {
         guard let n = Int(value.trimmingCharacters(in: .whitespaces)),
-              (1...30_000).contains(n) else { return nil }
+              (1...DocumentLimits.maxSide).contains(n) else { return nil }
         return n
     }
 }
@@ -92,7 +96,7 @@ enum NavigationTool: String, CaseIterable {
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
     var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic Wand (W)" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
 }
 
 @Observable
@@ -146,7 +150,7 @@ final class EditorSession {
     private var fileRequestWaiters: [CheckedContinuation<Void, Never>] = []
     var canStartProjectOperation: Bool {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil
+        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
     }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
@@ -175,17 +179,27 @@ final class EditorSession {
     @ObservationIgnored var distortEffectsCache: [UUID: DistortEffectsCache] = [:]
     /// Document positions a move has just snapped to, drawn as guides while it lasts.
     @ObservationIgnored var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
+    var snappingEnabled = true {
+        didSet {
+            if !snappingEnabled { snapGuides = ([], []) }
+            refreshCanvasPreview?()
+        }
+    }
     /// Where the last brush stroke ended, so a Shift-click paints a straight line on from it.
     @ObservationIgnored var lastBrushPoint: (point: CGPoint, layerID: UUID, mask: Bool)?
+    /// Where the brush is while Smoothing trails it behind the pointer (see `smoothed`).
+    @ObservationIgnored var brushAnchor: CGPoint?
+    /// The pointer itself, so a smoothed stroke can catch up to it when the button is released.
+    @ObservationIgnored var brushPointer: CGPoint?
     @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?
     /// The last rounded rectangle drawn for a transform in progress, by layer, with the size it was drawn at.
     @ObservationIgnored var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
     var locksTransformRatio = true
     /// Off by default: a Move-tool press drags the active layer; hold Cmd (or turn this on) to pick the layer under the pointer.
-    var transformAutoSelect = false
+    var transformAutoSelect = ToolDefaults.bool("autoSelect", false) { didSet { ToolDefaults.set(transformAutoSelect, "autoSelect") } }
     /// The Move tool's transform box and handles (⌘H). Hidden, a drag anywhere just moves the layer;
     /// a pending ⌘T transform still shows its box.
-    var showsTransformControls = true
+    var showsTransformControls = ToolDefaults.bool("transformControls", true) { didSet { ToolDefaults.set(showsTransformControls, "transformControls") } }
     /// The copies an Option-drag made, and what was selected before it, so Escape can take them away again.
     @ObservationIgnored var transformDuplicate: (copies: [UUID], source: Set<UUID>, primary: UUID?)?
     var brushSettings = BrushSettings() { didSet { refreshGradient() } }
@@ -197,6 +211,8 @@ final class EditorSession {
     func symbol(for tool: NavigationTool) -> String {
         tool == .brush && brushMode == .erase ? "eraser" : tool.symbol
     }
+    /// The Magic tool's two modes: Wand selects by color, Object traces the object under the pointer (Tab).
+    var wandMode: WandMode = .wand
     /// Clone Stamp: the source Option-click set (document pixels), its options, and — once a
     /// stroke has started — the offset from brush to source that aligned strokes keep.
     var cloneSource: CGPoint?
@@ -231,6 +247,7 @@ final class EditorSession {
     @ObservationIgnored var selectionMoveOrigin: DocumentSelection?
     var pixelMove: PixelMove?
     @ObservationIgnored var pixelClipboard: PixelClipboard?
+    @ObservationIgnored var copiedLayer: CopiedLayer?
     var levels: LevelsEdit? { didSet { resumeFileRequests() } }
     var hueSaturation: HueSaturationEdit?
     /// The open filter (Filter menu), and the settings the next one starts from.
@@ -248,7 +265,21 @@ final class EditorSession {
     var selectionAmountOperation: SelectionAmountOperation? { didSet { resumeFileRequests() } }
     var selectionFeatherAmount = 2
     var wandSettings = WandSettings()
-    var showsPixelGrid = true
+    var objectSelectionSettings = ObjectSelectionSettings()
+    var showsPixelGrid = ToolDefaults.bool("pixelGrid", true) { didSet { ToolDefaults.set(showsPixelGrid, "pixelGrid") } }
+    /// Layout grid (View > Show > Grid). Off until turned on; independent of the 800% pixel grid.
+    var showsGrid = ToolDefaults.bool("grid", false) { didSet { ToolDefaults.set(showsGrid, "grid") } }
+    /// User guides. Hidden extras do not snap.
+    var showsGuides = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(showsGuides, "guides") } }
+    var showsRulers = ToolDefaults.bool("rulers", false) { didSet { ToolDefaults.set(showsRulers, "rulers") } }
+    /// Master snap switch (View > Snap). On so today's layer/canvas snap keeps working.
+    var snapEnabled = ToolDefaults.bool("snap", true) { didSet { ToolDefaults.set(snapEnabled, "snap") } }
+    var snapToGuides = ToolDefaults.bool("snapGuides", true) { didSet { ToolDefaults.set(snapToGuides, "snapGuides") } }
+    var snapToGrid = ToolDefaults.bool("snapGrid", false) { didSet { ToolDefaults.set(snapToGrid, "snapGrid") } }
+    var snapToLayers = ToolDefaults.bool("snapLayers", true) { didSet { ToolDefaults.set(snapToLayers, "snapLayers") } }
+    var snapToDocumentBounds = ToolDefaults.bool("snapBounds", true) { didSet { ToolDefaults.set(snapToDocumentBounds, "snapBounds") } }
+    var locksGuides = ToolDefaults.bool("lockGuides", false) { didSet { ToolDefaults.set(locksGuides, "lockGuides") } }
+    var guideDrag: GuideDrag?
     /// Pixels the Expand / Contract buttons grow or shrink the selection by.
     var selectionExpandAmount = 1
     var selectionContractAmount = 1
@@ -317,11 +348,18 @@ final class EditorSession {
         if value.isBrushTool { _ = MetalBrushCoverage.shared }
         if value == .crop, cropRect == nil, let document {
             cropRatioChoice = "Free"
-            cropRect = CGRect(origin: .zero, size: document.size)
+            let canvas = CGRect(origin: .zero, size: document.size)
+            // With a selection, the crop starts at its bounds, as Photoshop's does: C, then Return, crops to it.
+            if let selection, !selection.isEmpty {
+                let bounds = selection.path.boundingBoxOfPath.integral.intersection(canvas)
+                cropRect = CropGeometry.valid(bounds) ? bounds : canvas
+            } else {
+                cropRect = canvas
+            }
         }
     }
     /// Tab steps the current tool through its own modes — the setting sitting at the left of its tool bar. Tools
-    /// without modes (Move, Wand, Crop, Type, Eyedropper, Hand, Zoom) ignore it.
+    /// without modes (Move, Crop, Type, Eyedropper, Hand, Zoom) ignore it.
     func cycleToolMode() {
         guard !isProjectBusy, brushStroke == nil, warpStroke == nil else { return }
         func next<T: CaseIterable & Equatable>(_ value: T) -> T where T.AllCases.Index == Int {
@@ -331,6 +369,7 @@ final class EditorSession {
         }
         switch tool {
         case .marquee: toggleMarqueeKind()
+        case .wand: wandMode = next(wandMode)
         case .lasso: toggleLassoKind()
         case .shape: toggleShapeKind()
         case .brush: brushMode = next(brushMode)
@@ -362,26 +401,23 @@ final class EditorSession {
         guard value.isValid, transformEdit != nil else { return }
         transformEdit?.draft = value
     }
-    /// Option-drag duplicates what is selected and drags the copies. A folder has no pixels of its own to copy, so
-    /// a folder selection just moves.
+    /// Option-drag duplicates selected roots with their descendants and drags the copies.
     func beginDuplicateTransform() {
         guard transformDuplicate == nil, let primary = activeLayerID else { return }
         commitTransform()
         guard canTransform else { return }
         let selection = selectedLayerIDs
         // Bottom to top, so the copies keep the order they had.
-        let targets = (document?.layers ?? []).filter { selection.contains($0.id) && !$0.isGroup }.map(\.id)
+        let carried = selection.reduce(into: Set<UUID>()) { $0.formUnion(descendantIDs(of: $1)) }
+        let targets = (document?.layers ?? []).filter { selection.contains($0.id) && !carried.contains($0.id) }.map(\.id)
         guard !targets.isEmpty else { return }
         beginEdit(targets.count > 1 ? "Duplicate Layers" : "Duplicate Layer")
-        var copies: [UUID] = []
-        for id in targets {
-            selectLayer(id)
-            duplicateActiveLayer()
-            if let copy = activeLayerID, copy != id { copies.append(copy) }
-        }
+        // Stacked as Duplicate Layer stacks them: several together above the topmost original.
+        duplicateLayers(targets)
+        let copies = selectedLayerIDs.subtracting(selection)
         guard !copies.isEmpty else { endEdit(); selectLayers(selection, primary: primary); return }
-        transformDuplicate = (copies, selection, primary)
-        selectLayers(Set(copies), primary: copies.last)
+        transformDuplicate = (Array(copies), selection, primary)
+        selectLayers(copies, primary: activeLayerID)
         beginTransform(persistent: false)
     }
     func commitTransform() {
@@ -431,7 +467,9 @@ final class EditorSession {
         guard let edit = transformEdit else { return }
         transformEdit = nil
         if let duplicate = transformDuplicate {
-            document?.layers.removeAll { duplicate.copies.contains($0.id) }
+            let removed = duplicate.copies.reduce(into: Set(duplicate.copies)) { $0.formUnion(descendantIDs(of: $1)) }
+            document?.layers.removeAll { removed.contains($0.id) }
+            collapsedGroupIDs.subtract(removed)
             selectLayers(duplicate.source, primary: duplicate.primary)
             transformDuplicate = nil
             endEdit()
@@ -482,6 +520,38 @@ final class EditorSession {
     var showsImporter = false { didSet { resumeFileRequests() } }
     var isImporting = false { didSet { resumeFileRequests() } }
     var importError: String? { didSet { resumeFileRequests() } }
+    var showsConversionSheet = false { didSet { resumeFileRequests() } }
+    var conversionRequest: PSDConversionRequest?
+    /// Tests assign this to skip the conversion sheet.
+    @ObservationIgnored var confirmConversions: (([PSDConversion]) async -> Bool)?
+    /// The RAW file being developed, and the settings the sheet is editing (see RawImporter).
+    var rawDevelop: (url: URL, settings: RawDevelopSettings)?
+    var showsRawDevelop = false { didSet { resumeFileRequests() } }
+    @ObservationIgnored private var rawContinuation: CheckedContinuation<RawDevelopSettings?, Never>?
+    /// Tests assign this to develop without a sheet.
+    @ObservationIgnored var confirmRawDevelop: ((URL, RawDevelopSettings) async -> RawDevelopSettings?)?
+
+    /// Puts the develop sheet up and waits for the choice; nil means the import was cancelled.
+    func developRaw(_ url: URL) async -> RawDevelopSettings? {
+        let asShot = RawImporter.asShot(url) ?? RawDevelopSettings()
+        if let confirmRawDevelop { return await confirmRawDevelop(url, asShot) }
+        return await withCheckedContinuation { continuation in
+            rawContinuation = continuation
+            rawDevelop = (url, asShot)
+            showsRawDevelop = true
+        }
+    }
+    func finishRawDevelop(_ settings: RawDevelopSettings?) {
+        showsRawDevelop = false
+        rawDevelop = nil
+        Task { await RawImporter.Queue.shared.release() }
+        let continuation = rawContinuation
+        rawContinuation = nil
+        continuation?.resume(returning: settings)
+    }
+    @ObservationIgnored private var conversionContinuation: CheckedContinuation<Bool, Never>?
+    /// Cancel pressed while a Photoshop file was still being read.
+    @ObservationIgnored private var conversionCancelled = false
     var opacityEditLayerID: UUID?
     var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
@@ -498,7 +568,7 @@ final class EditorSession {
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil
+        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
     }
     var canUndo: Bool { canUseHistory && (history.canUndo || gradientEdit != nil) }
     var canRedo: Bool { canUseHistory && history.canRedo }
@@ -674,7 +744,8 @@ final class EditorSession {
         var failures: [String] = []
         while !pendingImports.isEmpty {
           let request = pendingImports.removeFirst()
-          beginEdit("Import Images")
+          let psdOnly = request.files.allSatisfy { PSDReader.matches($0.0) }
+          beginEdit(psdOnly ? "Import Photoshop File" : "Import Images")
           // No document: the first successful image determines the canvas, regardless of drop point.
           let point = document == nil ? nil : request.point
           for (url, scoped) in request.files {
@@ -685,8 +756,47 @@ final class EditorSession {
                     guard let image = layer.asset?.image else { return total }
                     return total + image.width * image.height
                 } ?? 0
-                let asset = try await ImageImporter.shared.decode(url, remainingPixels: 100_000_000 - usedPixels)
-                insert(asset, centeredAt: point)
+                if RawImporter.matches(url) {
+                    guard let size = RawImporter.pixelSize(url) else { throw ImageImportError.unreadable }
+                    guard size.width <= DocumentLimits.maxSide, size.height <= DocumentLimits.maxSide,
+                          size.width * size.height <= DocumentLimits.documentPixelBudget - usedPixels else { throw ImageImportError.tooLarge }
+                    guard let settings = await developRaw(url) else { continue }
+                    // Seconds of work: off the main actor, or pressing Import freezes the window.
+                    guard let developed = await RawImporter.Queue.shared.develop(url, settings: settings, limit: nil)
+                    else { throw ImageImportError.unreadable }
+                    let thumbnail = try PixelAdjust.thumbnail(of: developed)
+                    insert(ImportedImage(image: developed, thumbnail: thumbnail,
+                                         name: url.deletingPathExtension().lastPathComponent), centeredAt: point)
+                } else if UTType(filenameExtension: url.pathExtension)?.conforms(to: .svg) == true {
+                    let asset = try await ImageImporter.shared.decodeSVG(url, fitting: document?.size,
+                                                                         remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                    insert(asset, centeredAt: point)
+                } else if PSDReader.matches(url) {
+                    beginPSDReading(title: "Open “\(url.lastPathComponent)”?", confirmTitle: "Import")
+                    let imported: PSDImport
+                    do {
+                        let parsed = try await ImageImporter.shared.loadPhotoshop(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                        // Only a background: Photoshop writes no layer records, just the merged image, so that is
+                        // what comes in, as one layer.
+                        if parsed.layers.isEmpty {
+                            endPSDReading()
+                            let asset = try await ImageImporter.shared.decode(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels,
+                                                                              flattenedPhotoshop: true)
+                            insert(asset, centeredAt: point)
+                            continue
+                        }
+                        let assets = try await ImageImporter.shared.photoshopAssets(parsed)
+                        imported = try PSDDocumentBuilder.makeImport(parsed, assets: assets)
+                    } catch {
+                        endPSDReading()
+                        throw error
+                    }
+                    if !(await finishPSDReading(imported.conversions)) { continue }
+                    try insertPhotoshop(imported, named: url.deletingPathExtension().lastPathComponent, centeredAt: point)
+                } else {
+                    let asset = try await ImageImporter.shared.decode(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                    insert(asset, centeredAt: point)
+                }
             } catch {
                 failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
             }
@@ -716,9 +826,91 @@ final class EditorSession {
         activeLayerID = layer.id
     }
 
+    /// Puts the sheet up before the file is read, so a big PSD doesn't leave the click unanswered.
+    /// `finishPSDReading` fills it in, or takes it away when there is nothing to report.
+    func beginPSDReading(title: String, confirmTitle: String) {
+        guard confirmConversions == nil else { return }
+        conversionCancelled = false
+        conversionRequest = PSDConversionRequest(title: title, confirmTitle: confirmTitle, conversions: [], isReading: true)
+        showsConversionSheet = true
+    }
+    func finishPSDReading(_ conversions: [PSDConversion]) async -> Bool {
+        if let confirmConversions {
+            if conversions.isEmpty { return true }
+            return await confirmConversions(conversions)
+        }
+        if conversionCancelled { endPSDReading(); return false }
+        guard !conversions.isEmpty else { endPSDReading(); return true }
+        return await withCheckedContinuation { continuation in
+            conversionContinuation = continuation
+            conversionRequest?.conversions = conversions
+            conversionRequest?.isReading = false
+        }
+    }
+    /// Takes the sheet away without an answer: nothing to report, or the read failed.
+    func endPSDReading() {
+        guard conversionContinuation == nil else { return }
+        showsConversionSheet = false
+        conversionRequest = nil
+    }
+    func confirmPSDConversions(_ conversions: [PSDConversion], title: String, confirmTitle: String) async -> Bool {
+        if let confirmConversions { return await confirmConversions(conversions) }
+        return await withCheckedContinuation { continuation in
+            conversionContinuation = continuation
+            conversionRequest = PSDConversionRequest(title: title, confirmTitle: confirmTitle, conversions: conversions)
+            showsConversionSheet = true
+        }
+    }
+
+    func finishConversion(_ confirmed: Bool) {
+        if !confirmed, conversionRequest?.isReading == true { conversionCancelled = true }
+        showsConversionSheet = false
+        conversionRequest = nil
+        let continuation = conversionContinuation
+        conversionContinuation = nil
+        continuation?.resume(returning: confirmed)
+    }
+
+    func insertPhotoshop(_ imported: PSDImport, named: String, centeredAt point: CGPoint? = nil) throws {
+        beginEdit("Import Photoshop File")
+        defer { endEdit() }
+        var incoming = imported.layers
+        let wrapping = document != nil
+        let added = incoming.count + (wrapping ? 1 : 0)
+        if (document?.layers.count ?? 0) + added > 10_000 { throw ImageImportError.tooLarge }
+        if document == nil {
+            document = CanvasDocument(width: imported.width, height: imported.height, layers: incoming, resolution: imported.resolution)
+            viewport.fit(documentSize: document!.size)
+            activeLayerID = incoming.last(where: { $0.parentID == nil })?.id ?? incoming.last?.id
+            return
+        }
+        guard document != nil else { return }
+        var group = ImageLayer(name: named, blankSize: document!.size)
+        group.isGroup = true
+        group.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
+        if let point {
+            let box = incoming.filter { !$0.isGroup }.reduce(CGRect.null) { $0.union(CGRect(origin: $1.origin, size: $1.size)) }
+            if !box.isNull, !box.isInfinite, !box.isEmpty, box.origin.x.isFinite, box.origin.y.isFinite {
+                let dx = point.x - box.midX, dy = point.y - box.midY
+                for index in incoming.indices {
+                    incoming[index].transform.origin.x += dx
+                    incoming[index].transform.origin.y += dy
+                }
+            }
+        }
+        for index in incoming.indices where incoming[index].parentID == nil {
+            incoming[index].parentID = group.id
+        }
+        self.document?.layers.append(group)
+        self.document?.layers.append(contentsOf: incoming)
+        if let parent = group.parentID { collapsedGroupIDs.remove(parent) }
+        collapsedGroupIDs.remove(group.id)
+        activeLayerID = group.id
+    }
+
     /// `emptyLayer` starts the canvas with a selected blank "Layer 1", as File > New does.
     func createDocument(width: Int, height: Int, emptyLayer: Bool = false) {
-        guard !isProjectBusy, !isImporting, (1...30_000).contains(width), (1...30_000).contains(height) else { return }
+        guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
         commitTransform()
         beginEdit("New Canvas")
         defer { endEdit() }
@@ -740,5 +932,13 @@ final class EditorSession {
     func zoom(to value: CGFloat, anchor: CGPoint? = nil) {
         guard let document else { return }
         viewport.setZoom(value, anchoredAt: anchor ?? viewport.center, documentSize: document.size)
+    }
+
+    /// Step through stable keyboard zoom levels while keeping the viewport center fixed.
+    func zoomKeyboard(by step: Int) {
+        guard let document, step != 0 else { return }
+        let target = viewport.keyboardZoomTarget(by: step)
+        guard target != viewport.zoom else { return }
+        viewport.setZoom(target, anchoredAt: viewport.center, documentSize: document.size)
     }
 }
