@@ -19,7 +19,7 @@ struct TypeControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
                     TypeFontPicker(fontName: value(\.fontName))
-                        .frame(width: 210).help("Font face, including bold and italic variants")
+                        .frame(width: 210).help(localized("Font face, including bold and italic variants"))
                     TextField("Size", value: number(\.fontSize), format: .number).frame(width: 52)
                         .unitSuffix("px", scrubValue: value(\.fontSize), sensitivity: 1, range: 1...2000, step: 1)
                         .arrowSteps(value: { Double(session.currentTextStyle.fontSize) },
@@ -31,7 +31,7 @@ struct TypeControls: View {
                             .overlay { swatch.strokeBorder(.black.opacity(0.5), lineWidth: 1) }
                             .frame(width: 36, height: 18)
                     }
-                    .buttonStyle(.plain).help("Text color").accessibilityLabel("Text color")
+                    .buttonStyle(.plain).help(localized("Text color")).accessibilityLabel(localized("Text color"))
                     HStack(spacing: 2) {
                         ForEach(TextAlignment.allCases, id: \.self) { alignment in
                             let selected = session.currentTextStyle.alignment == alignment
@@ -46,8 +46,8 @@ struct TypeControls: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 4))
                             }
                             .buttonStyle(.plain)
-                            .help("Align " + alignment.rawValue.lowercased())
-                            .accessibilityLabel("Align " + alignment.rawValue.lowercased())
+                            .help(String(localized: "Align \(localized(alignment.rawValue.lowercased()))"))
+                            .accessibilityLabel(String(localized: "Align \(localized(alignment.rawValue.lowercased()))"))
                             .accessibilityAddTraits(selected ? .isSelected : [])
                         }
                     }
@@ -67,7 +67,7 @@ struct TypeControls: View {
                         .frame(width: 52)
                         .arrowSteps(value: { Double(session.currentTextStyle.lineHeight) },
                                     change: { stepped in session.changeTextStyle { $0.leading = CGFloat(max(0, stepped)) } })
-                        .help("Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size.")
+                        .help(localized("Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size."))
                 }
             }.scrollIndicators(.hidden)
             if session.textDraft != nil {
@@ -99,7 +99,7 @@ private struct TypeFontPicker: NSViewRepresentable {
         button.cell?.lineBreakMode = .byTruncatingTail
         button.cell?.usesSingleLineMode = true
         button.cell?.alignment = .left
-        button.setAccessibilityLabel("Font")
+        button.setAccessibilityLabel(localized("Font"))
         button.target = context.coordinator
         button.action = #selector(Coordinator.choose(_:))
         button.menu?.delegate = context.coordinator

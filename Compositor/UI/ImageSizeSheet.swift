@@ -102,7 +102,7 @@ struct ImageSizeSheet: View {
             Text("Image Size").font(.title2.bold())
             Text("Current: \(document.width) × \(document.height) pixels").foregroundStyle(.secondary)
             Picker("Units", selection: $unit) {
-                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0) }
+                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text(localized($0)) }
             }
             HStack {
                 Text("Width").frame(width: 75, alignment: .leading)
@@ -141,7 +141,7 @@ struct ImageSizeSheet: View {
             }
             if resample {
                 Picker("Sampling", selection: $sampling) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text(localized($0.rawValue)).tag($0) }
                 }
                 Text("Resizes layer pixels and applies existing transforms. Undo restores the originals.")
                     .font(.callout).foregroundStyle(.secondary)

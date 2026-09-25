@@ -3,7 +3,7 @@ import AppKit
 nonisolated enum ContentFill {
     enum Failure: LocalizedError {
         case noSource
-        var errorDescription: String? { "Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image." }
+        var errorDescription: String? { localized("Not enough unselected, opaque image pixels to synthesize a fill. Use a smaller selection with some surrounding image.") }
     }
     static func run(_ job: FilterJob) throws -> CGImage {
         guard let selection = job.selection else { throw Failure.noSource }

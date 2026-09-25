@@ -604,7 +604,7 @@ final class CanvasView: NSView {
         clipsToBounds = true
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Canvas")
+        setAccessibilityLabel(localized("Canvas"))
         setAccessibilityIdentifier("editorCanvas")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

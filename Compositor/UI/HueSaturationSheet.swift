@@ -24,7 +24,7 @@ struct HueSaturationSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Picker("Range", selection: settings.range) {
-                    ForEach(ColorRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(ColorRange.allCases, id: \.self) { Text(localized($0.rawValue)).tag($0) }
                 }
                 .pickerStyle(.menu).frame(width: 160).labelsHidden().disabled(current.colorize)
                 Spacer()
@@ -75,8 +75,8 @@ struct HueSaturationSheet: View {
                     .buttonStyle(.plain)
                     .background(session.hueSampleMode == mode ? Color.accentColor.opacity(0.25) : .clear,
                                 in: RoundedRectangle(cornerRadius: 4))
-                    .help(mode.help)
-                    .accessibilityLabel("\(mode.rawValue) color")
+                    .help(localized(mode.help))
+                    .accessibilityLabel(String(localized: "\(localized(mode.rawValue)) color"))
                 }
                 Divider().frame(height: 16)
             }
@@ -90,8 +90,8 @@ struct HueSaturationSheet: View {
                 .buttonStyle(.plain)
                 .background(session.hueTargeting ? Color.accentColor.opacity(0.25) : .clear,
                             in: RoundedRectangle(cornerRadius: 4))
-                .help("Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held")
-                .accessibilityLabel("Targeted adjustment")
+                .help(localized("Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held"))
+                .accessibilityLabel(localized("Targeted adjustment"))
             }
         }
     }
@@ -111,10 +111,10 @@ struct HueSaturationSheet: View {
 
     private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String) -> some View {
         HStack(spacing: 10) {
-            Text(title).frame(width: 76, alignment: .leading)
+            Text(localized(title)).frame(width: 76, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: value, range: range)
             Slider(value: value, in: range)
-            TextField(title, value: value, format: .number.precision(.fractionLength(0)))
+            TextField(localized(title), value: value, format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
                 .unitSuffix(unit)
                 // A field's own submit swallows Return, so it confirms the window itself, as OK does.

@@ -7,8 +7,8 @@ struct LayerMaskMenu: View {
     var body: some View {
         Button { session.addMask() } label: { Image(systemName: "rectangle.inset.filled").footerHitArea() }
             .buttonStyle(.borderless)
-            .help(session.selection == nil ? "Add layer mask" : "Add layer mask (the selection becomes black)")
-            .accessibilityLabel("Add layer mask")
+            .help(localized(session.selection == nil ? "Add layer mask" : "Add layer mask (the selection becomes black)"))
+            .accessibilityLabel(localized("Add layer mask"))
             .disabled(!session.canEditMask || session.activeLayer?.mask != nil)
     }
 }

@@ -163,8 +163,8 @@ struct EffectsSheet: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help(kind.rawValue + " color")
-        .accessibilityLabel(kind.rawValue + " color")
+        .help(localized(kind.rawValue + " color"))
+        .accessibilityLabel(localized(kind.rawValue + " color"))
     }
 
     private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>,
@@ -175,13 +175,13 @@ struct EffectsSheet: View {
             value.wrappedValue = min(limits.upperBound, max(limits.lowerBound, CGFloat(amount)))
         }
         return HStack(spacing: 10) {
-            Text(title).frame(width: 64, alignment: .leading)
+            Text(localized(title)).frame(width: 64, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: value, range: limits)
             // A manually entered larger value stays intact; only the thumb is pinned
             // to the end of the slider until the user drags it again.
             Slider(value: Binding(get: { min(range.upperBound, max(range.lowerBound, value.wrappedValue)) },
                                   set: { value.wrappedValue = $0 }), in: range).frame(width: 130)
-            TextField(title, value: Binding(get: { Double(value.wrappedValue) },
+            TextField(localized(title), value: Binding(get: { Double(value.wrappedValue) },
                                             set: setAmount),
                       format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)

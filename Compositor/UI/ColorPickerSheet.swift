@@ -65,7 +65,7 @@ struct ColorPickerSheet: View {
             hsb.saturation = min(1, max(0, value.location.x / fieldSize))
             hsb.brightness = 1 - min(1, max(0, value.location.y / fieldSize))
         })
-        .accessibilityLabel("Saturation and brightness")
+        .accessibilityLabel(localized("Saturation and brightness"))
     }
 
     private var hueStrip: some View {
@@ -89,7 +89,7 @@ struct ColorPickerSheet: View {
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
             hsb.hue = (1 - min(1, max(0, value.location.y / fieldSize))) * 360
         })
-        .accessibilityLabel("Hue")
+        .accessibilityLabel(localized("Hue"))
         .accessibilityValue("\(Int(hsb.hue.rounded())) degrees")
     }
 
@@ -98,7 +98,7 @@ struct ColorPickerSheet: View {
             .fill(color.swiftUI)
             .overlay { RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(.black.opacity(0.6), lineWidth: 1) }
             .frame(width: 64, height: 64)
-            .accessibilityLabel("New color")
+            .accessibilityLabel(localized("New color"))
     }
 
     private var fields: some View {
@@ -113,7 +113,7 @@ struct ColorPickerSheet: View {
                     .frame(width: 84)
                     .focused($hexFocused)
                     .onSubmit(commitHex)
-                    .accessibilityLabel("Hex color")
+                    .accessibilityLabel(localized("Hex color"))
             }
         }
     }
@@ -127,9 +127,9 @@ struct ColorPickerSheet: View {
                 hsb.setRGB(rgb)
             })
         return GridRow {
-            Text(label).frame(width: 14, alignment: .leading)
+            Text(localized(label)).frame(width: 14, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: channelValue, range: 0...255)
-            TextField(label, value: channelValue, format: .number)
+            TextField(localized(label), value: channelValue, format: .number)
                 .frame(width: 52)
                 .arrowSteps(value: { Double(Int((color[keyPath: channel] * 255).rounded())) },
                             change: { newValue in
@@ -137,7 +137,7 @@ struct ColorPickerSheet: View {
                                 rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue.rounded()))) / 255
                                 hsb.setRGB(rgb)
                             })
-                .accessibilityLabel(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")
+                .accessibilityLabel(localized(label == "R" ? "Red" : label == "G" ? "Green" : "Blue"))
         }
     }
 

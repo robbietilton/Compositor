@@ -68,7 +68,7 @@ struct ProjectTabStrip: View {
             }
             .animation(.easeOut(duration: 0.15), value: scrolledFromStart)
         }
-        .accessibilityLabel("Project tabs")
+        .accessibilityLabel(localized("Project tabs"))
         .onReceive(dragTimer) { _ in
             // External drags don't deliver mouse-down to our window. Track the
             // drag pasteboard's new session, and clear on release/cancel.
@@ -258,8 +258,8 @@ private struct NewTabDropSlot: View {
             .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.secondary,
                 style: StrokeStyle(lineWidth: targeted ? 2 : 1, dash: targeted ? [] : [4, 3])))
             .contentShape(Capsule())
-            .help("Drop to open in a new canvas")
-            .accessibilityLabel("Drop into new canvas")
+            .help(localized("Drop to open in a new canvas"))
+            .accessibilityLabel(localized("Drop into new canvas"))
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
@@ -275,7 +275,7 @@ private struct ProjectTabButton: View {
             Button { workspace.select(tab.id) } label: {
                 HStack(spacing: 5) {
                     if tab.session.isModified {
-                        Circle().frame(width: 5, height: 5).accessibilityLabel("Unsaved changes")
+                        Circle().frame(width: 5, height: 5).accessibilityLabel(localized("Unsaved changes"))
                     }
                     Text(tab.title).font(.system(size: 12, weight: active ? .semibold : .medium)).lineLimit(1)
                 }
@@ -289,13 +289,13 @@ private struct ProjectTabButton: View {
                     .frame(width: 16, height: 28)
                     .padding(.trailing, 5)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain).help("Close \(tab.title)").disabled(!workspace.canSwitch)
-                .accessibilityLabel("Close \(tab.title)")
+            }.buttonStyle(.plain).help(String(localized: "Close \(tab.title)")).disabled(!workspace.canSwitch)
+                .accessibilityLabel(String(localized: "Close \(tab.title)"))
         }
         .frame(width: projectTabPillWidth(tab, active: active), height: 28, alignment: .leading)
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
-        .help(targeted ? "Add to \(tab.title)" : tab.title)
+        .help(targeted ? String(localized: "Add to \(tab.title)") : tab.title)
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
     }
@@ -307,7 +307,7 @@ struct NewProjectDropTarget: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
-            .help(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs")
+            .help(localized(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs"))
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
