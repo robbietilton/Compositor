@@ -238,6 +238,9 @@ final class EditorSession {
     var shapeCornerRadius: Double = 0
     /// A Line shape's thickness in document pixels.
     var shapeLineWidth: Double = 4
+    /// A Line shape's dash pattern and the finish on its ends (and on each dash).
+    var shapeLineStyle = ShapeLineStyle.solid
+    var shapeLineCap = ShapeLineCap.round
     /// How many points the Shape tool's stars have (3–20).
     var shapeStarPoints = 5
     /// How far the Shape tool pulls a star's inner corners in, as a fraction of its points' reach; nil keeps its

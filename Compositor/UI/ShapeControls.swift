@@ -37,6 +37,26 @@ struct ShapeControls: View {
                                     change: { session.shapeLineWidth = min(5000, max(1, $0)) })
                         .unitSuffix("px")
                 }
+                HStack(spacing: 6) {
+                    Text("Style")
+                    Picker("Style", selection: $session.shapeLineStyle) {
+                        ForEach(ShapeLineStyle.allCases, id: \.self) { style in
+                            Image(nsImage: LineSample.style(style)).accessibilityLabel(style.rawValue).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden().fixedSize()
+                }
+                .help("Solid, dashed or dotted; dashes grow with the line's width")
+                HStack(spacing: 6) {
+                    Text("Cap")
+                    Picker("Cap", selection: $session.shapeLineCap) {
+                        ForEach(ShapeLineCap.allCases, id: \.self) { cap in
+                            Label { Text(cap.rawValue) } icon: { Image(nsImage: LineSample.cap(cap)) }.tag(cap)
+                        }
+                    }
+                    .pickerStyle(.menu).labelsHidden().fixedSize()
+                }
+                .help("How the line's ends, and each of its dashes and dots, are finished")
             }
             if session.shapeKind == .rectangle {
                 HStack(spacing: 6) {
@@ -109,5 +129,50 @@ struct ShapeControls: View {
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
                 .arrowSteps(value: { amount.wrappedValue }, change: { amount.wrappedValue = $0 })
         }
+    }
+}
+
+/// Small drawings for the Line shape's menus. Template images, so a menu tints them with its text and highlight.
+@MainActor private enum LineSample {
+    private static var images: [String: NSImage] = [:]
+
+    /// A stretch of line in `style`, as it looks drawn.
+    static func style(_ style: ShapeLineStyle) -> NSImage {
+        image("style." + style.rawValue, size: NSSize(width: 84, height: 10)) { context in
+            context.setShapeLine(width: 2, style: style, cap: .round)
+            context.move(to: CGPoint(x: 2, y: 5))
+            context.addLine(to: CGPoint(x: 82, y: 5))
+            context.strokePath()
+        }
+    }
+
+    /// The end of a thick line in outline, with its center line running into the cap.
+    static func cap(_ cap: ShapeLineCap) -> NSImage {
+        image("cap." + cap.rawValue, size: NSSize(width: 18, height: 14)) { context in
+            let center = CGMutablePath()
+            center.move(to: CGPoint(x: 0, y: 7))
+            center.addLine(to: CGPoint(x: 10, y: 7))
+            context.addPath(center.copy(strokingWithWidth: 11, lineCap: cap.cgLineCap, lineJoin: .miter, miterLimit: 10))
+            context.setLineWidth(1.5)
+            context.strokePath()
+            context.addPath(center)
+            context.setLineWidth(1.5)
+            context.strokePath()
+            context.fillEllipse(in: CGRect(x: 8, y: 5, width: 4, height: 4))
+        }
+    }
+
+    private static func image(_ key: String, size: NSSize, draw: @escaping (CGContext) -> Void) -> NSImage {
+        if let image = images[key] { return image }
+        let image = NSImage(size: size, flipped: true) { _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setStrokeColor(.black)
+            context.setFillColor(.black)
+            draw(context)
+            return true
+        }
+        image.isTemplate = true
+        images[key] = image
+        return image
     }
 }

@@ -1097,8 +1097,7 @@ final class CanvasView: NSView {
             guard let ends = session.shapeLineEnds else { context.restoreGState(); return }
             let thickness = max(1, CGFloat(session.shapeLineWidth) * scale)
             context.setStrokeColor(session.foregroundColor.nsColor.cgColor)
-            context.setLineWidth(thickness)
-            context.setLineCap(.round)
+            context.setShapeLine(width: thickness, style: draft.lineStyle, cap: draft.lineCap)
             // Exactly the two points being dragged between, so the start never shifts.
             context.move(to: center(ends.start))
             context.addLine(to: center(ends.end))
