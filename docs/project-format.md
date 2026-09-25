@@ -1,8 +1,8 @@
-# Compositor project format, versions 1–9
+# Compositor project format, versions 1–10
 
 A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
-The manifest identifies `com.compositor.project`, version `9` for new saves (versions `1`–`8` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+The manifest identifies `com.compositor.project`, version `10` for new saves (versions `1`–`9` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 
 Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
 
@@ -32,12 +32,14 @@ Version 8 lets a folder carry its own `opacity`, which multiplies into every lay
 
 Version 9 adds three adjustment kinds that sample neighboring pixels: `Gaussian Blur` (`blurRadius`, 0.1–250 document pixels), `Motion Blur` (`motionAngle`, −90 to 90 degrees, and `motionDistance`, 1–2000) and `Add Noise` (`noiseAmount`, 0.1–400, `noiseGaussian`, `noiseMonochromatic` and `noiseSeed`, so the pattern is stable between sessions). Files declaring 1–8 cannot contain these kinds; the earlier adjustment kinds remain valid at version 7 and up.
 
+Version 10 adds two Shape tool kinds, `Star` and `Polygon`, to a layer's `shape` record. Both carry `points`: a star's points or a polygon's sides, 3–20. A star may also carry `inset` (0.01–0.99), how far its inner corners are pulled in toward the center as a fraction of its points' reach; without it each inner corner sits on the line joining the points either side of its neighbors, so the sides run even (stars of three or four points keep a five-point star's depth). They are drawn point-up, and stretched to touch every edge of the layer. Other shape kinds must omit `points`, and only stars take `inset`. Version 10 also lets a line carry `lineStyle` (`Solid`, `Dashed`, `Long Dash`, `Dash Dot`, `Long Dash Dot` or `Dotted`, with dashes measured in multiples of the line's width) and `lineCap` (`Round` or `Square`, applied to the line's ends and to every dash and dot); missing means solid with round caps, and other shape kinds cannot carry them. Files declaring 1–9 cannot contain these kinds; older app builds reject v10 rather than failing to read the unknown kind.
+
 ### Additive layer fields
 
 Later fields are optional and not gated on the version, so older readers ignore them and keep the pixels or the linked mask as they were:
 
 - `maskPlacement` and `maskLinked`: an unlinked mask (`maskLinked` false; missing means linked) keeps its own transform in `maskPlacement`, a document-space rectangle like the layer transform, and no longer follows the layer when it moves. Both require a `maskFile`.
-- `shape`: a layer made with the Shape tool keeps its style (`kind`, `red`/`green`/`blue`, `cornerRadius` in document pixels, and for lines `lineWidth` plus `start` and `end` as fractions of the layer box) so it redraws cleanly when scaled. Its PNG is still an ordinary raster; once anything else changes those pixels the metadata is dropped.
+- `shape`: a layer made with the Shape tool keeps its style (`kind`, for stars and polygons `points` and for stars an optional `inset` (version 10), `red`/`green`/`blue`, `cornerRadius` in document pixels, and for lines `lineWidth` plus `start` and `end` as fractions of the layer box, and optional `lineStyle` and `lineCap` (version 10)) so it redraws cleanly when scaled. Its PNG is still an ordinary raster; once anything else changes those pixels the metadata is dropped.
 
 ### Editable text
 
