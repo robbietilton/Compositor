@@ -90,6 +90,7 @@ struct NewCanvasSheet: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
                         .padding(12)
+                        .contentShape(RoundedRectangle(cornerRadius: 9))
                         .background(selected ? Color.accentColor.opacity(0.12) : Color.clear,
                                     in: RoundedRectangle(cornerRadius: 9))
                         .overlay {
