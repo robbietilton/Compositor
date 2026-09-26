@@ -115,7 +115,11 @@ nonisolated enum MagneticLasso {
             for y in 0..<image.height {
                 for x in 0..<image.width {
                     let offset = y * context.bytesPerRow + x * 4
-                    values[y * image.width + x] = UInt8((54 * Int(bytes[offset]) + 183 * Int(bytes[offset + 1]) + 19 * Int(bytes[offset + 2])) / 256)
+                    let red = Int(bytes[offset])
+                    let green = Int(bytes[offset + 1])
+                    let blue = Int(bytes[offset + 2])
+                    let luminance = (54 * red + 183 * green + 19 * blue) / 256
+                    values[y * image.width + x] = UInt8(clamping: luminance)
                 }
             }
             width = image.width
