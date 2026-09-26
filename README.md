@@ -76,6 +76,7 @@ brew install --cask robbietilton-compositor
 
 ### Works with AI agents
 - AI agents and scripts can build and edit projects directly: a `.comp` is a folder of PNG layers and a manifest, and an open project updates live as it's written. See [Writing Compositor projects](docs/writing-comp-files.md)
+- For Claude Code and other MCP clients, the community [compositor-mcp](https://github.com/Josusanz/compositor-mcp) server exposes this as tools: `claude mcp add compositor -- npx -y compositor-mcp`
 
 ## Requirements
 
