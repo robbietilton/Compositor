@@ -6,8 +6,9 @@ struct NewCanvasSheet: View {
     let session: EditorSession
     var onCreate: ((Int, Int) -> Void)? = nil
     var onOpen: (() -> Void)? = nil
-    @State private var width = "1920"
+    @State private var width = "1080"
     @State private var height = "1080"
+    @State private var presetCategory = CanvasPreset.Category.social
     @State private var suggestedClipboardSize = false
     @FocusState private var focusedField: Field?
     private enum Field { case width, height }
@@ -19,6 +20,43 @@ struct NewCanvasSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("New canvas").font(.title2.weight(.semibold))
                 Text("A blank space for your next composition.").foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Preset category", selection: $presetCategory) {
+                    ForEach(CanvasPreset.Category.allCases) { category in
+                        Text(category.title).tag(category)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(CanvasPreset.presets(in: presetCategory)) { preset in
+                        let selected = Int(width) == preset.width && Int(height) == preset.height
+                        Button {
+                            width = String(preset.width)
+                            height = String(preset.height)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(preset.title).font(.callout.weight(.medium))
+                                    .lineLimit(1)
+                                Text("\(preset.width) × \(preset.height) px · \(preset.detail)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(1).minimumScaleFactor(0.8)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(selected ? Color.accentColor.opacity(0.12) : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 8))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(selected ? Color.accentColor.opacity(0.65) : Color.secondary.opacity(0.2))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("canvasPreset_\(preset.id)")
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
             }
             HStack(spacing: 16) {
                 dimension("Width", text: $width, field: .width)
@@ -41,7 +79,7 @@ struct NewCanvasSheet: View {
                 .disabled(!valid).accessibilityIdentifier("createCanvas")
             }
         }
-        .padding(28).frame(maxWidth: 500)
+        .padding(28).frame(maxWidth: 560)
         .disabled(session.isImporting || session.showsBusy)
         .onAppear {
             if !suggestedClipboardSize {
@@ -54,6 +92,43 @@ struct NewCanvasSheet: View {
                 }
             }
             focusedField = .width
+        }
+    }
+    private struct CanvasPreset: Identifiable {
+        enum Category: String, CaseIterable, Identifiable {
+            case social, print, video
+            var id: Self { self }
+            var title: String {
+                switch self {
+                case .social: "Social"
+                case .print: "Print"
+                case .video: "Video"
+                }
+            }
+        }
+
+        let id: String
+        let title: String
+        let width: Int
+        let height: Int
+        let detail: String
+        let category: Category
+
+        static let all: [CanvasPreset] = [
+            .init(id: "instagram-square", title: "Instagram post · Square", width: 1080, height: 1080, detail: "1:1", category: .social),
+            .init(id: "instagram-portrait", title: "Instagram post · Portrait", width: 1080, height: 1350, detail: "4:5", category: .social),
+            .init(id: "instagram-reel", title: "Instagram Reel / Story", width: 1080, height: 1920, detail: "9:16", category: .social),
+            .init(id: "facebook-cover", title: "Facebook cover", width: 1640, height: 924, detail: "16:9", category: .social),
+            .init(id: "a4", title: "A4", width: 2480, height: 3508, detail: "300 dpi", category: .print),
+            .init(id: "a5", title: "A5", width: 1748, height: 2480, detail: "300 dpi", category: .print),
+            .init(id: "letter", title: "US Letter", width: 2550, height: 3300, detail: "300 dpi", category: .print),
+            .init(id: "full-hd", title: "Full HD", width: 1920, height: 1080, detail: "16:9", category: .video),
+            .init(id: "4k", title: "4K UHD", width: 3840, height: 2160, detail: "16:9", category: .video),
+            .init(id: "youtube-thumbnail", title: "YouTube thumbnail", width: 1280, height: 720, detail: "16:9", category: .video)
+        ]
+
+        static func presets(in category: Category) -> [CanvasPreset] {
+            all.filter { $0.category == category }
         }
     }
     static func clipboardDimensions(_ pasteboard: NSPasteboard = .general) -> (width: Int, height: Int)? {
