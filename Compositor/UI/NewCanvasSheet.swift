@@ -6,9 +6,11 @@ struct NewCanvasSheet: View {
     let session: EditorSession
     var onCreate: ((Int, Int) -> Void)? = nil
     var onOpen: (() -> Void)? = nil
-    @State private var width = "1080"
+    @State private var width = "1920"
     @State private var height = "1080"
     @State private var presetCategory = CanvasPreset.Category.social
+    @State private var selectedPresetID = "instagram-square"
+    @State private var showsPresets = false
     @State private var suggestedClipboardSize = false
     @FocusState private var focusedField: Field?
     private enum Field { case width, height }
@@ -21,43 +23,6 @@ struct NewCanvasSheet: View {
                 Text("New canvas").font(.title2.weight(.semibold))
                 Text("A blank space for your next composition.").foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: 12) {
-                Picker("Preset category", selection: $presetCategory) {
-                    ForEach(CanvasPreset.Category.allCases) { category in
-                        Text(category.title).tag(category)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(CanvasPreset.presets(in: presetCategory)) { preset in
-                        let selected = Int(width) == preset.width && Int(height) == preset.height
-                        Button {
-                            width = String(preset.width)
-                            height = String(preset.height)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(preset.title).font(.callout.weight(.medium))
-                                    .lineLimit(1)
-                                Text("\(preset.width) × \(preset.height) px · \(preset.detail)")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(selected ? Color.accentColor.opacity(0.12) : Color.clear,
-                                        in: RoundedRectangle(cornerRadius: 8))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(selected ? Color.accentColor.opacity(0.65) : Color.secondary.opacity(0.2))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("canvasPreset_\(preset.id)")
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-            }
             HStack(spacing: 16) {
                 dimension("Width", text: $width, field: .width)
                 Image(systemName: "multiply").foregroundStyle(.tertiary).padding(.top, 20)
@@ -69,11 +34,10 @@ struct NewCanvasSheet: View {
                 Button("Open project") { onOpen?() }.buttonStyle(.bordered)
                 Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
                 Spacer()
+                Button("Presets") { showsPresets = true }
+                    .buttonStyle(.bordered).accessibilityIdentifier("openCanvasPresets")
                 Button("Create canvas") {
-                    guard let w = CanvasDocument.validDimension(width),
-                          let h = CanvasDocument.validDimension(height) else { return }
-                    if let onCreate { onCreate(w, h) }
-                    else { session.createDocument(width: w, height: h, emptyLayer: true) }
+                    createCanvas(width: width, height: height)
                 }
                 .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
                 .disabled(!valid).accessibilityIdentifier("createCanvas")
@@ -81,6 +45,9 @@ struct NewCanvasSheet: View {
         }
         .padding(28).frame(maxWidth: 560)
         .disabled(session.isImporting || session.showsBusy)
+        .sheet(isPresented: $showsPresets) {
+            presetsSheet
+        }
         .onAppear {
             if !suggestedClipboardSize {
                 suggestedClipboardSize = true
@@ -93,6 +60,75 @@ struct NewCanvasSheet: View {
             }
             focusedField = .width
         }
+    }
+    private var presetsSheet: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Canvas presets").font(.title2.weight(.semibold))
+                Text("Choose a common size, or close this window to enter custom dimensions.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            Picker("Preset category", selection: $presetCategory) {
+                ForEach(CanvasPreset.Category.allCases) { category in
+                    Text(category.title).tag(category)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(CanvasPreset.presets(in: presetCategory)) { preset in
+                    let selected = selectedPresetID == preset.id
+                    Button {
+                        selectedPresetID = preset.id
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(preset.title).font(.callout.weight(.medium)).lineLimit(1)
+                            Text("\(preset.width) × \(preset.height) px")
+                                .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                            Text(preset.detail).font(.caption).foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+                        .padding(12)
+                        .background(selected ? Color.accentColor.opacity(0.12) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 9))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9)
+                                .strokeBorder(selected ? Color.accentColor.opacity(0.7) : Color.secondary.opacity(0.2))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("canvasPreset_\(preset.id)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+
+            Spacer(minLength: 0)
+            HStack {
+                if let preset = CanvasPreset.all.first(where: { $0.id == selectedPresetID }) {
+                    Text("\(preset.title) · \(preset.width) × \(preset.height) px")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancel") { showsPresets = false }.buttonStyle(.bordered)
+                Button("Create") {
+                    guard let preset = CanvasPreset.all.first(where: { $0.id == selectedPresetID }) else { return }
+                    createCanvas(width: String(preset.width), height: String(preset.height))
+                    showsPresets = false
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("createCanvasFromPreset")
+            }
+        }
+        .padding(24)
+        .frame(width: 560, height: 440)
+    }
+
+    private func createCanvas(width: String, height: String) {
+        guard let w = CanvasDocument.validDimension(width),
+              let h = CanvasDocument.validDimension(height) else { return }
+        if let onCreate { onCreate(w, h) }
+        else { session.createDocument(width: w, height: h, emptyLayer: true) }
     }
     private struct CanvasPreset: Identifiable {
         enum Category: String, CaseIterable, Identifiable {
