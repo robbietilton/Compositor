@@ -23,8 +23,28 @@ enum SelectionToolGroupChoice: String, CaseIterable {
     }
 }
 
-struct SelectionToolGroupControl: NSViewRepresentable {
+/// SwiftUI wrapper reads the observable tool state so the native button refreshes its
+/// active icon when Wand/Object mode changes without changing the selected tool.
+struct SelectionToolGroupControl: View {
     let session: EditorSession
+
+    private var choice: SelectionToolGroupChoice? {
+        switch session.tool {
+        case .quickSelection: return .quickSelection
+        case .magneticLasso: return .magneticLasso
+        case .wand: return session.wandMode == .object ? .object : .magic
+        default: return nil
+        }
+    }
+
+    var body: some View {
+        SelectionToolGroupRepresentable(session: session, choice: choice)
+    }
+}
+
+private struct SelectionToolGroupRepresentable: NSViewRepresentable {
+    let session: EditorSession
+    let choice: SelectionToolGroupChoice?
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
@@ -45,7 +65,7 @@ struct SelectionToolGroupControl: NSViewRepresentable {
         nsView.onOpenMenu = { [weak coordinator = context.coordinator] button in
             coordinator?.presentMenu(from: button)
         }
-        nsView.update(choice: context.coordinator.currentChoice)
+        nsView.update(choice: choice)
     }
 
     final class Coordinator: NSObject {

@@ -2231,6 +2231,18 @@ final class CanvasView: NSView {
                 }
             } else {
                 let mode = session.selectionMode(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+                if event.modifierFlags.contains(.command), session.canMoveSelection(at: pixel) {
+                    if session.beginPixelMove(duplicate: event.modifierFlags.contains(.option)) {
+                        pixelDragStart = pixel
+                        pixelDragCursor(duplicate: event.modifierFlags.contains(.option)).set()
+                    } else { NSSound.beep() }
+                    return
+                }
+                if mode == .replace, session.canMoveSelection(at: pixel), session.beginSelectionMove() {
+                    selectionDragStart = pixel
+                    Self.moveSelectionCursor.set()
+                    return
+                }
                 session.beginMagneticLasso(at: pixel, mode: mode)
             }
             synchronizeDisplay()

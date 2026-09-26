@@ -185,8 +185,14 @@ extension EditorSession {
     /// overlay can show the rubber-band segment without creating history on every pointer event.
     func addMagneticLassoPoint(at point: CGPoint) {
         guard tool == .magneticLasso, lassoDraft?.kind == .magnetic else { return }
-        extendLasso(to: point)
-        moveLassoCursor(to: point)
+        let anchor: CGPoint
+        if let draft = lassoDraft, let last = draft.points.last, let prepared = magneticLassoPrepared {
+            anchor = MagneticLasso.snap(in: prepared, from: last, to: point, settings: magneticLassoSettings) ?? point
+        } else {
+            anchor = point
+        }
+        extendLasso(to: anchor)
+        moveLassoCursor(to: anchor)
     }
 
     func beginMagneticLasso(at point: CGPoint, mode: SelectionMode) {
@@ -412,8 +418,9 @@ extension EditorSession {
             magneticLassoPrepared = nil
         }
         if draft.kind == .magnetic {
-            guard draft.points.count >= 3, let sample = magneticLassoSample ?? document.flatMap({ selectionSample($0, sampleAllLayers: wandSettings.sampleAllLayers) }),
-                  let outline = MagneticLasso.path(in: sample, anchors: draft.points, settings: magneticLassoSettings) else { return }
+            guard draft.points.count >= 3,
+                  let prepared = magneticLassoPrepared ?? magneticLassoSample.flatMap(MagneticLasso.prepare),
+                  let outline = MagneticLasso.path(in: prepared, anchors: draft.points, settings: magneticLassoSettings) else { return }
             applySelection(outline, mode: draft.mode, name: "Magnetic Lasso")
             return
         }

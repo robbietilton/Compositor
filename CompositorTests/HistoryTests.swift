@@ -176,4 +176,16 @@ struct HistoryTests {
         #expect(history.jump(to: 0)?.document == nil)
         #expect(history.currentStateIndex == 0)
     }
+
+    @Test func sessionCanJumpBackFromInitialHistoryState() {
+        let session = EditorSession()
+        session.createDocument(width: 40, height: 40)
+        #expect(session.history.states.map(\.name) == ["Initial", "New Canvas"])
+        session.undo()
+        #expect(session.document == nil)
+        #expect(session.canUseHistory)
+        #expect(session.jumpToHistoryState(1))
+        #expect(session.document != nil)
+        #expect(session.history.currentStateIndex == 1)
+    }
 }

@@ -50,7 +50,7 @@ struct HistoryPanel: View {
                                 .buttonStyle(.plain)
                                 .accessibilityIdentifier("historyState-\(state.index)")
                                 .accessibilityLabel(state.name)
-                                .disabled(!session.canEditLayers)
+                                .disabled(!session.canUseHistory)
                                 .id(state.id)
                             }
                         }

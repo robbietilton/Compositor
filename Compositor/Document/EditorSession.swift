@@ -607,7 +607,7 @@ final class EditorSession {
     /// Selects a visible History row, using the same restore path as Command-Z/Shift-Command-Z.
     @discardableResult
     func jumpToHistoryState(_ index: Int) -> Bool {
-        guard canEditLayers, let snapshot = history.jump(to: index) else { return false }
+        guard canUseHistory, let snapshot = history.jump(to: index) else { return false }
         restore(snapshot)
         return true
     }
