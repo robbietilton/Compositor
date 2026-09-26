@@ -326,7 +326,12 @@ extension EditorSession {
                       let sample = self.quickSelectionSample,
                       let settings = self.quickSelectionSettingsAtStart,
                       let document = self.document else { return }
-                try? await Task.sleep(nanoseconds: 40_000_000)
+                // The first dab is published as soon as its detached analysis finishes. Later
+                // points are coalesced for one display interval so a fast mouse stream cannot
+                // build an unbounded queue of stale previews.
+                if self.quickSelectionPreviewPointCount > 0 {
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
                 guard !Task.isCancelled else { return }
 
                 let generation = self.quickSelectionGeneration

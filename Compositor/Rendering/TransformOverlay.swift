@@ -282,8 +282,14 @@ final class TransformOverlay: NSView {
 
     /// Marching ants: a white line under an animated black dash.
     private func drawSelection() {
-        guard let selection = session.displayedSelection, !selection.isEmpty, var transform = documentToView,
-              let outline = antsOutline(for: selection.path),
+        let source: CGPath?
+        if session.quickSelectionDraft != nil {
+            source = session.quickSelectionPreviewOutline ?? session.displayedSelection?.path
+        } else {
+            source = session.displayedSelection?.path
+        }
+        guard let source, !source.isEmpty, var transform = documentToView,
+              let outline = antsOutline(for: source),
               let path = outline.copy(using: &transform), let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
         context.setLineWidth(1)

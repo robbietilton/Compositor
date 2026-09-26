@@ -5,7 +5,7 @@ struct LassoControls: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .marquee ? "Marquee" : session.tool == .wand ? "Magic" : "Lasso").font(ToolHeaderStyle.titleFont)
+            Text(session.tool == .marquee ? "Marquee" : session.tool == .wand ? "Magic" : session.tool == .quickSelection ? "Quick Selection" : "Lasso").font(ToolHeaderStyle.titleFont)
             if session.tool == .marquee {
                 Picker("Shape", selection: Binding(get: { session.marqueeKind }, set: { kind in
                     session.cancelLasso()
@@ -45,8 +45,9 @@ struct LassoControls: View {
             .help("Hold Shift to add or Option to subtract for one outline")
             if session.tool == .wand, session.wandMode == .wand { wandControls }
             if session.tool == .wand, session.wandMode == .object { objectSelectionControls }
+            if session.tool == .quickSelection { quickSelectionControls }
             // Rectangles snap to whole pixels, so smoothing doesn't apply (as in Photoshop); ellipses curve.
-            if session.tool == .lasso || session.tool == .wand || (session.tool == .marquee && session.marqueeKind == .ellipse) {
+            if session.tool == .lasso || session.tool == .wand || session.tool == .quickSelection || (session.tool == .marquee && session.marqueeKind == .ellipse) {
                 Toggle("Anti-alias", isOn: $session.selectionAntialiased)
                     .help(session.tool == .wand && session.wandMode == .object ? "Smooth the detected object outline; turn off for the raw pixel mask" : "Smooth selection edges; turn off for hard pixel edges")
             }
@@ -79,6 +80,50 @@ struct LassoControls: View {
         }
         .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
         .disabled(session.showsBusy || session.document == nil)
+    }
+
+    private var quickSelectionDiameter: Binding<Double> {
+        Binding(
+            get: { Double(min(500, max(1, session.quickSelectionSettings.diameter))) },
+            set: { session.quickSelectionSettings.diameter = CGFloat(min(500, max(1, $0))) }
+        )
+    }
+
+    private var quickSelectionControls: some View {
+        HStack(spacing: 10) {
+            Text("Diameter").scrubbable(sensitivity: 1.0, value: quickSelectionDiameter, range: 1...500, step: 1)
+            TextField("Diameter", value: quickSelectionDiameter,
+                      format: .number.precision(.fractionLength(0)))
+                .frame(width: 44).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                .unitSuffix("px", scrubValue: quickSelectionDiameter, sensitivity: 1.0, range: 1...500, step: 1)
+                .accessibilityIdentifier("quickSelectionDiameter")
+            Slider(value: quickSelectionDiameter, in: 1...500, step: 1)
+                .frame(width: 120)
+                .accessibilityIdentifier("quickSelectionDiameterSlider")
+                .help("Brush diameter for Quick Selection")
+            HStack(spacing: 6) {
+                Text("Tolerance").scrubbable(sensitivity: 1, value: $session.quickSelectionSettings.tolerance, range: 0...255)
+                TextField("Tolerance", value: $session.quickSelectionSettings.tolerance, format: .number)
+                    .frame(width: 44).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                    .arrowSteps(value: { Double(session.quickSelectionSettings.tolerance) },
+                                change: { session.quickSelectionSettings.tolerance = Int(min(255, max(0, $0.rounded()))) })
+            }
+            .help("How far colors may vary while the brush grows the selection")
+            HStack(spacing: 6) {
+                Text("Edge").scrubbable(sensitivity: 1, value: $session.quickSelectionSettings.edgeSensitivity, range: 0...255)
+                TextField("Edge", value: $session.quickSelectionSettings.edgeSensitivity, format: .number)
+                    .frame(width: 44).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                    .arrowSteps(value: { Double(session.quickSelectionSettings.edgeSensitivity) },
+                                change: { session.quickSelectionSettings.edgeSensitivity = Int(min(255, max(0, $0.rounded()))) })
+            }
+            .help("How strongly high-contrast edges stop the selection")
+            Picker("Sample", selection: $session.wandSettings.sampleAllLayers) {
+                Text("This Layer").tag(false)
+                Text("All Layers").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            .help("Read colors from the active layer only, or from every visible layer as shown")
+        }
     }
 
     /// Tolerance, sample size, which pixels to read, and whether matches must connect.

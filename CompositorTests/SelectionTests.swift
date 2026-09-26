@@ -197,6 +197,22 @@ struct SelectionTests {
         session.cancelLasso()
     }
 
+    @Test func quickSelectionDiameterUsesIndependentBracketRange() {
+        let session = makeSession()
+        session.selectTool(.quickSelection)
+        session.quickSelectionSettings.diameter = 40
+        session.brushSettings.diameter = 80
+        session.changeQuickSelectionDiameter(increase: true)
+        #expect(session.quickSelectionSettings.diameter == 48)
+        #expect(session.brushSettings.diameter == 80)
+        session.quickSelectionSettings.diameter = 1
+        session.changeQuickSelectionDiameter(increase: false)
+        #expect(session.quickSelectionSettings.diameter == 1)
+        session.quickSelectionSettings.diameter = 500
+        session.changeQuickSelectionDiameter(increase: true)
+        #expect(session.quickSelectionSettings.diameter == 500)
+    }
+
     @Test func cancellingQuickSelectionLeavesSelectionAndHistoryUnchanged() throws {
         let session = makeSession()
         let source = try BrushRaster.context(width: 100, height: 100, mask: false)

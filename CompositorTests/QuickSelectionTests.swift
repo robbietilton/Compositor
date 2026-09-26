@@ -59,6 +59,7 @@ struct QuickSelectionTests {
         session.extendQuickSelection(to: CGPoint(x: 40, y: 40))
         await session.finishQuickSelection()
         #expect(session.history.undoCount == before + 1)
+    }
 
     private func makeSplitImage(width: Int, height: Int, splitX: Int) throws -> CGImage {
         let context = try BrushRaster.context(width: width, height: height, mask: false)

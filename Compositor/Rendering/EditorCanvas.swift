@@ -708,9 +708,13 @@ final class CanvasView: NSView {
                 return nil
             }
             // Brush size ([ ]) and hardness (Shift-[ ]); with focus on the canvas its own keyDown handles them.
-            guard (self.session.tool.isBrushTool), self.session.levels == nil, window.firstResponder !== self,
+            guard (self.session.tool.isBrushTool || self.session.tool == .quickSelection), self.session.levels == nil, window.firstResponder !== self,
                   ["[", "]", "{", "}"].contains(key) else { return originalEvent }
-            if key == "[" || key == "]" { self.session.changeBrushSize(increase: key == "]") }
+            if self.session.tool == .quickSelection {
+                guard key == "[" || key == "]" else { return originalEvent }
+                self.session.changeQuickSelectionDiameter(increase: key == "]")
+                self.updateBrushCursor()
+            } else if key == "[" || key == "]" { self.session.changeBrushSize(increase: key == "]") }
             else { self.session.changeBrushHardness(increase: key == "}") }
             return nil
         }
@@ -751,6 +755,7 @@ final class CanvasView: NSView {
             return flags.contains(.command) ? pixelDragCursor(duplicate: flags.contains(.option)) : Self.moveSelectionCursor
         }
         if session.tool == .wand, session.wandMode == .wand { return Self.wandCursors[mode] ?? .crosshair }
+        if session.tool == .quickSelection { return .crosshair }
         let icon: SelectionIcon = session.tool == .wand ? .objectSelection : session.tool == .marquee
             ? (session.marqueeKind == .ellipse ? .ellipseMarquee : .rectangleMarquee)
             : (session.lassoKind == .polygonal ? .polygonalLasso : .freehandLasso)
@@ -1343,8 +1348,9 @@ final class CanvasView: NSView {
         hoverTrackingArea = area
     }
     private func updateBrushCursor() {
-        let shows = session.tool.isBrushTool && !spaceHeld && !picking && middlePanPoint == nil
-        let diameter = session.brushStroke?.settings.diameter ?? session.brushSettings.diameter
+        let shows = (session.tool.isBrushTool || session.tool == .quickSelection) && !spaceHeld && !picking && middlePanPoint == nil
+        let diameter = session.tool == .quickSelection ? session.quickSelectionSettings.diameter
+            : (session.brushStroke?.settings.diameter ?? session.brushSettings.diameter)
         // Clone Stamp also marks where it is copying from and, between strokes, previews inside
         // the circle what a click would stamp there.
         var sample: CGPoint?
@@ -1445,6 +1451,13 @@ final class CanvasView: NSView {
         }
         optionHeld = event.modifierFlags.contains(.option)
         if picking { Self.eyedropperCursor.set(); return }
+        if session.tool == .quickSelection {
+            brushPointer = convert(event.locationInWindow, from: nil)
+            updateBrushCursor()
+            session.updateHeldSelectionKeys(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+            lassoCursor(flags: event.modifierFlags, at: brushPointer).set()
+            return
+        }
         if session.tool.isSelectionTool {
             // Keys may have changed while the app was in the background.
             session.updateHeldSelectionKeys(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
@@ -1653,6 +1666,13 @@ final class CanvasView: NSView {
             brushAxisHorizontal = nil
             brushLastPixel = pixel
             synchronizeDisplay()
+        } else if session.tool == .quickSelection, let document = session.document {
+            brushPointer = point
+            let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+            let mode = session.selectionMode(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+            session.beginQuickSelection(at: pixel, mode: mode)
+            updateBrushCursor()
+            synchronizeDisplay()
         } else if session.tool.isSelectionTool {
             lassoMouseDown(at: point, event: event)
             refreshLassoCursor()
@@ -1711,6 +1731,13 @@ final class CanvasView: NSView {
             dragSelection(to: point, flags: event.modifierFlags)
             updateMarqueeAutoscroll(at: point)
             Self.moveSelectionCursor.set()
+            synchronizeDisplay()
+            return
+        }
+        if session.tool == .quickSelection, lastDragPoint == nil, let document = session.document {
+            brushPointer = point
+            session.continueQuickSelection(to: session.viewport.documentPoint(from: point, documentSize: document.size))
+            updateBrushCursor()
             synchronizeDisplay()
             return
         }
@@ -1881,6 +1908,11 @@ final class CanvasView: NSView {
         if session.shapeDraft != nil {
             session.finishShape()
             synchronizeDisplay()
+        }
+        if session.tool == .quickSelection, session.quickSelectionDraft != nil {
+            brushPointer = convert(event.locationInWindow, from: nil)
+            Task { await session.finishQuickSelection(); synchronizeDisplay(); refreshLassoCursor() }
+            updateBrushCursor()
         }
         if hueTargetStart != nil {
             hueTargetStart = nil
@@ -2053,6 +2085,8 @@ final class CanvasView: NSView {
                 session.typeOpacityDigit(Int(key) ?? 0)
             case "[" where session.tool.isBrushTool: session.changeBrushSize(increase: false)
             case "]" where session.tool.isBrushTool: session.changeBrushSize(increase: true)
+            case "[" where session.tool == .quickSelection: session.changeQuickSelectionDiameter(increase: false)
+            case "]" where session.tool == .quickSelection: session.changeQuickSelectionDiameter(increase: true)
             // Shift turns [ and ] into { and }.
             case "{" where session.tool.isBrushTool: session.changeBrushHardness(increase: false)
             case "}" where session.tool.isBrushTool: session.changeBrushHardness(increase: true)
