@@ -9,7 +9,7 @@ struct NewCanvasSheet: View {
     @State private var width = "1920"
     @State private var height = "1080"
     @State private var presetCategory = CanvasPreset.Category.social
-    @State private var selectedPresetID = "instagram-square"
+    @State private var selectedPresetID: String?
     @State private var showsPresets = false
     @State private var suggestedClipboardSize = false
     @FocusState private var focusedField: Field?
@@ -108,6 +108,8 @@ struct NewCanvasSheet: View {
                 if let preset = CanvasPreset.all.first(where: { $0.id == selectedPresetID }) {
                     Text("\(preset.title) · \(preset.width) × \(preset.height) px")
                         .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text("Select a size to continue.").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Cancel") { showsPresets = false }.buttonStyle(.bordered)
@@ -118,6 +120,7 @@ struct NewCanvasSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("createCanvasFromPreset")
+                .disabled(selectedPresetID == nil)
             }
         }
         .padding(24)
