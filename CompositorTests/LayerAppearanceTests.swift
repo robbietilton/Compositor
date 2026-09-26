@@ -124,7 +124,7 @@ struct LayerAppearanceTests {
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)
         let loaded = try await ProjectStore.shared.load(from: url)
-        #expect(loaded.manifest.version == 10)
+        #expect(loaded.manifest.version == 11)
         let resized = try await ImageResizer.shared.resize(loaded, to: ImageSizeOptions(width: 8, height: 8, resolution: 72))
         let canvas = try await CanvasResizer.shared.resize(resized, to: CanvasSizeOptions(width: 12, height: 12))
         let record = try #require(canvas.manifest.layers.first { $0.id == id })

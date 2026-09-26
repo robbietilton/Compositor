@@ -16,7 +16,24 @@ private final class SeeThroughSelectionLayout: NSLayoutManager {
 final class CanvasTextView: NSTextView {
     weak var editor: InlineTextEditor?
     private let textUndo = UndoManager()
+    /// Set when the font menu takes the focus, so a collapsed caret does not replace the letters that were selected.
+    var holdsSelection = false
     override var undoManager: UndoManager? { textUndo }
+    override func resignFirstResponder() -> Bool {
+        // The font menu takes the focus and can collapse the highlight. The letters stay selected, so the face
+        // applies to them.
+        let range = selectedRange()
+        let resigned = super.resignFirstResponder()
+        if range.length > 0 {
+            holdsSelection = true
+            editor?.keepSelection(range)
+        }
+        return resigned
+    }
+    override func mouseDown(with event: NSEvent) {
+        holdsSelection = false
+        super.mouseDown(with: event)
+    }
     override func keyDown(with event: NSEvent) {
         guard let event = ShortcutSettings.shared.textEvent(event) else { return }
         if event.keyCode == 53 { editor?.canvas?.session.cancelText(); return }
@@ -38,6 +55,7 @@ final class CanvasTextView: NSTextView {
             _ = editor?.canvas?.session.finishText()
             return
         }
+        holdsSelection = false
         super.keyDown(with: event)
         // Text views hide the pointer while typing; on the canvas it stays, so you can see where you'll click next.
         NSCursor.setHiddenUntilMouseMoves(false)
@@ -53,7 +71,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     let textView = CanvasTextView(frame: .zero)
     fileprivate var draftID: UUID?
     private var shownStyle: LayerTextStyle?
-    /// The style after an edit NSTextView has accepted but not yet made, with its color runs moved to fit.
+    /// The style after an edit NSTextView has accepted but not yet made, with its color and font runs moved to fit.
     private var pendingStyle: LayerTextStyle?
     private var synchronizing = false
     private var logicalSize = CGSize(width: 360, height: 160)
@@ -164,16 +182,25 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         }
         if shownStyle != style {
             synchronizing = true
-            let selection = textView.selectedRange()
+            let live = textView.selectedRange()
+            let kept = canvas.session.textDraft?.selection ?? live
+            let selection = textView.holdsSelection && kept.length > 0 ? kept : live
             if textView.string != style.content { textView.string = style.content }
             var attributes = EditorSession.textAttributes(style)
             attributes[.foregroundColor] = NSColor.clear
-            textView.typingAttributes = attributes
             if !textView.hasMarkedText() {
                 textView.textStorage?.setAttributes(attributes, range: NSRange(location: 0, length: textView.string.utf16.count))
+                for run in style.fontRuns ?? [] where EditorSession.containsTextRun(run.location, run.length, in: textView.string.utf16.count) {
+                    let font = NSFont(name: run.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
+                    textView.textStorage?.addAttribute(.font, value: font, range: NSRange(location: run.location, length: run.length))
+                }
                 textView.setSelectedRange(NSRange(location: min(selection.location, textView.string.utf16.count),
                     length: min(selection.length, max(0, textView.string.utf16.count - selection.location))))
             }
+            let caret = selection.length > 0 ? selection.location : max(0, selection.location - 1)
+            let face = style.fontName(at: caret)
+            attributes[.font] = NSFont(name: face, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
+            textView.typingAttributes = attributes
             shownStyle = style
             updateInsertionPointColor(style)
             synchronizing = false
@@ -196,11 +223,14 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         guard !synchronizing, let session = canvas?.session, var draft = session.textDraft else { return }
-        if let pendingStyle, pendingStyle.content == textView.string { draft.style.colorRuns = pendingStyle.colorRuns }
+        if let pendingStyle, pendingStyle.content == textView.string {
+            draft.style.colorRuns = pendingStyle.colorRuns
+            draft.style.fontRuns = pendingStyle.fontRuns
+        }
         pendingStyle = nil
         draft.style.content = textView.string
-        // Text NSTextView changed without saying how can't keep its colors letter for letter.
-        if !draft.style.isValid { draft.style.colorRuns = nil }
+        // Text NSTextView changed without saying how can't keep its colors and faces letter for letter.
+        if !draft.style.isValid { draft.style.colorRuns = nil; draft.style.fontRuns = nil }
         draft.selection = textView.selectedRange()
         shownStyle = draft.style
         session.textDraft = draft
@@ -211,7 +241,8 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let length = replacementString?.utf16.count ?? 0
         guard textView.string.utf16.count - affectedCharRange.length + length <= 100_000 else { return false }
-        if !synchronizing, let draft = canvas?.session.textDraft, draft.style.colorRuns != nil {
+        if !synchronizing, let draft = canvas?.session.textDraft,
+           draft.style.colorRuns != nil || draft.style.fontRuns != nil {
             var style = pendingStyle ?? draft.style
             guard NSMaxRange(affectedCharRange) <= style.content.utf16.count else { return true }
             style.replaceCharacters(in: affectedCharRange, withLength: length)
@@ -223,8 +254,15 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     func textViewDidChangeSelection(_ notification: Notification) {
         guard !synchronizing, let session = canvas?.session, session.textDraft?.id == draftID else { return }
         let selection = textView.selectedRange()
+        if textView.holdsSelection, selection.length == 0, (session.textDraft?.selection.length ?? 0) > 0 { return }
+        textView.holdsSelection = false
         if session.textDraft?.selection != selection { session.textDraft?.selection = selection }
         if let style = session.textDraft?.style { updateInsertionPointColor(style) }
+    }
+    /// Puts back a selection a focus change wiped, so the font menu still edits those letters.
+    func keepSelection(_ range: NSRange) {
+        guard range.length > 0, let session = canvas?.session, session.textDraft?.id == draftID else { return }
+        if session.textDraft?.selection != range { session.textDraft?.selection = range }
     }
     private func updateInsertionPointColor(_ style: LayerTextStyle) {
         let location = textView.selectedRange().location

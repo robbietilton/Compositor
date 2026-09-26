@@ -30,13 +30,15 @@ nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
     /// Letters painted in a color other than `red`/`green`/`blue`, in UTF-16 offsets into `content`, sorted and not
     /// overlapping. Nil when the whole text is one color.
     var colorRuns: [LayerTextColorRun]? = nil
+    /// Letters set in a face other than `fontName`, in the same offsets. Nil when the whole text is one face.
+    var fontRuns: [LayerTextFontRun]? = nil
     var isValid: Bool {
         content.utf16.count <= 100_000 && boxIsValid
         && fontSize.isFinite && (1...2000).contains(fontSize)
         && [red, green, blue].allSatisfy { $0.isFinite && (0...1).contains($0) }
         && tracking.isFinite && (-100...1000).contains(tracking)
         && leading.isFinite && (0...5000).contains(leading)
-        && colorRunsAreValid
+        && colorRunsAreValid && fontRunsAreValid
     }
     private var colorRunsAreValid: Bool {
         guard let colorRuns else { return true }
@@ -47,6 +49,16 @@ nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
             end = run.location + run.length
         }
         return !colorRuns.isEmpty && end <= content.utf16.count
+    }
+    private var fontRunsAreValid: Bool {
+        guard let fontRuns else { return true }
+        var end = 0
+        for run in fontRuns {
+            guard run.location >= end, run.length > 0, run.location <= Int.max - run.length,
+                  !run.fontName.isEmpty, run.fontName.count <= 200, !run.fontName.contains(where: \.isNewline) else { return false }
+            end = run.location + run.length
+        }
+        return !fontRuns.isEmpty && end <= content.utf16.count
     }
 
     /// The color of the UTF-16 unit at `index`.
@@ -69,15 +81,60 @@ nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
         setUnitColors(colors)
     }
 
-    /// Keeps the colors on their letters when `range` of `content` is replaced by `length` new UTF-16 units, which
-    /// take the color of the letter before them, as typing does. Call before `content` changes.
+    /// The face of the UTF-16 unit at `index`.
+    func fontName(at index: Int) -> String {
+        fontRuns?.first { $0.location <= index && index < $0.location + $0.length }?.fontName ?? fontName
+    }
+
+    /// The one face covering `range`, or nil when that range is empty or uses more than one.
+    func uniformFontName(in range: NSRange) -> String? {
+        let count = content.utf16.count
+        let start = max(0, min(range.location, count))
+        let end = max(start, min(range.location + range.length, count))
+        guard end > start else { return nil }
+        let face = fontName(at: start)
+        var index = start
+        for run in fontRuns ?? [] where run.location < end && run.location + run.length > index {
+            if run.location > index, fontName != face { return nil }
+            if run.fontName != face { return nil }
+            index = min(end, max(index, run.location + run.length))
+        }
+        if index < end, fontName != face { return nil }
+        return face
+    }
+
+    /// Sets the face of `range`. An empty range, or one covering the whole text, changes all of it.
+    mutating func setFont(_ name: String, in range: NSRange) {
+        guard !name.isEmpty, name.count <= 200, !name.contains(where: \.isNewline) else { return }
+        let count = content.utf16.count
+        let start = max(0, min(range.location, count)), end = max(start, min(range.location + range.length, count))
+        if start == end || (start == 0 && end == count) {
+            fontName = name
+            fontRuns = nil
+            return
+        }
+        var fonts = unitFonts
+        for index in start..<end { fonts[index] = name }
+        setUnitFonts(fonts)
+    }
+
+    /// Keeps each letter's color and face when `range` of `content` is replaced by `length` new UTF-16 units, which
+    /// take them from the letter before, as typing does. Call before `content` changes.
     mutating func replaceCharacters(in range: NSRange, withLength length: Int) {
-        guard colorRuns != nil else { return }
-        var colors = unitColors
-        let start = max(0, min(range.location, colors.count)), end = max(start, min(range.location + range.length, colors.count))
-        let inherited = start > 0 ? colors[start - 1] : (end > start ? colors[start] : colors.first ?? PaletteColor(red: red, green: green, blue: blue))
-        colors.replaceSubrange(start..<end, with: repeatElement(inherited, count: max(0, length)))
-        setUnitColors(colors)
+        let count = content.utf16.count
+        let start = max(0, min(range.location, count)), end = max(start, min(range.location + range.length, count))
+        if colorRuns != nil {
+            var colors = unitColors
+            let inherited = start > 0 ? colors[start - 1] : (end > start ? colors[start] : colors.first ?? PaletteColor(red: red, green: green, blue: blue))
+            colors.replaceSubrange(start..<end, with: repeatElement(inherited, count: max(0, length)))
+            setUnitColors(colors)
+        }
+        if fontRuns != nil {
+            var fonts = unitFonts
+            let inherited = start > 0 ? fonts[start - 1] : (end > start ? fonts[start] : fonts.first ?? fontName)
+            fonts.replaceSubrange(start..<end, with: repeatElement(inherited, count: max(0, length)))
+            setUnitFonts(fonts)
+        }
     }
 
     private var unitColors: [PaletteColor] {
@@ -103,6 +160,31 @@ nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
         }
         colorRuns = runs.isEmpty ? nil : runs
     }
+
+    private var unitFonts: [String] {
+        var fonts = Array(repeating: fontName, count: content.utf16.count)
+        for run in fontRuns ?? [] {
+            for index in max(0, run.location)..<min(fonts.count, run.location + run.length) { fonts[index] = run.fontName }
+        }
+        return fonts
+    }
+
+    private mutating func setUnitFonts(_ fonts: [String]) {
+        if let first = fonts.first, fonts.allSatisfy({ $0 == first }) {
+            fontName = first
+            fontRuns = nil
+            return
+        }
+        var runs: [LayerTextFontRun] = []
+        for (index, name) in fonts.enumerated() where name != fontName {
+            if let last = runs.last, last.location + last.length == index, last.fontName == name {
+                runs[runs.count - 1].length += 1
+            } else {
+                runs.append(LayerTextFontRun(location: index, length: 1, fontName: name))
+            }
+        }
+        fontRuns = runs.isEmpty ? nil : runs
+    }
 }
 
 nonisolated struct LayerTextColorRun: Codable, Equatable, Sendable {
@@ -111,6 +193,12 @@ nonisolated struct LayerTextColorRun: Codable, Equatable, Sendable {
     var red: CGFloat
     var green: CGFloat
     var blue: CGFloat
+}
+
+nonisolated struct LayerTextFontRun: Codable, Equatable, Sendable {
+    var location: Int
+    var length: Int
+    var fontName: String
 }
 
 /// The cached raster participates in the existing compositor. Pixel edits rasterize the layer;
@@ -139,7 +227,7 @@ struct TextDraft: Identifiable {
     var origin: CGPoint
     var transform: LayerTransform? = nil
     var style: LayerTextStyle
-    /// What is selected in the on-canvas editor, in UTF-16 offsets into `style.content`. Color applies to it alone.
+    /// What is selected in the on-canvas editor, in UTF-16 offsets into `style.content`. Color and font apply to it.
     var selection = NSRange(location: 0, length: 0)
 }
 
@@ -155,6 +243,7 @@ extension EditorSession {
         if target == nil {
             style.content = ""
             style.colorRuns = nil
+            style.fontRuns = nil
             // New text starts in the foreground color, the same as every other tool that lays down color.
             if !isMaskSelected {
                 style.red = foregroundColor.red; style.green = foregroundColor.green; style.blue = foregroundColor.blue
@@ -222,6 +311,7 @@ extension EditorSession {
             succeeded = true
             textDefaults = draft.style
             textDefaults.colorRuns = nil
+            textDefaults.fontRuns = nil
             textDraft = nil
             canvasFocusRequest += 1
             return true
@@ -309,7 +399,7 @@ extension EditorSession {
     /// has somewhere to type.
     static func textBoxSize(_ style: LayerTextStyle) -> CGSize {
         if let boxSize = style.boxSize { return boxSize }
-        let string = NSAttributedString(string: style.content, attributes: textAttributes(style))
+        let string = attributedText(style)
         let padding = LayerTextStyle.padding
         let measured = string.boundingRect(with: CGSize(width: 100_000, height: 100_000),
                                            options: [.usesLineFragmentOrigin, .usesFontLeading])
@@ -318,13 +408,27 @@ extension EditorSession {
                       height: max(16, ceil(max(measured.height, line) + padding * 2)))
     }
 
-    static func textImage(_ style: LayerTextStyle) throws -> CGImage {
-        guard style.isValid else { throw ProjectError.invalid }
+    /// The text as it is drawn and measured, with each letter's own face and color.
+    static func attributedText(_ style: LayerTextStyle) -> NSMutableAttributedString {
         let string = NSMutableAttributedString(string: style.content, attributes: textAttributes(style))
-        for run in style.colorRuns ?? [] {
+        for run in style.fontRuns ?? [] where Self.containsTextRun(run.location, run.length, in: string.length) {
+            let font = NSFont(name: run.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
+            string.addAttribute(.font, value: font, range: NSRange(location: run.location, length: run.length))
+        }
+        for run in style.colorRuns ?? [] where Self.containsTextRun(run.location, run.length, in: string.length) {
             string.addAttribute(.foregroundColor, value: NSColor(srgbRed: run.red, green: run.green, blue: run.blue, alpha: 1),
                                 range: NSRange(location: run.location, length: run.length))
         }
+        return string
+    }
+
+    static func containsTextRun(_ location: Int, _ length: Int, in total: Int) -> Bool {
+        length > 0 && location >= 0 && location <= total - length
+    }
+
+    static func textImage(_ style: LayerTextStyle) throws -> CGImage {
+        guard style.isValid else { throw ProjectError.invalid }
+        let string = attributedText(style)
         let padding = LayerTextStyle.padding
         let size = textBoxSize(style)
         let width = ceil(size.width), height = ceil(size.height)

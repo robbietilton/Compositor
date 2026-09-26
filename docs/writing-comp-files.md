@@ -28,7 +28,7 @@ A minimal manifest with one full-canvas image layer:
 ```json
 {
   "format": "com.compositor.project",
-  "version": 10,
+  "version": 11,
   "colorSpace": "sRGB",
   "documentID": "0C5E7A91-3B2D-4F6A-8E1C-9D0B7A6F5E4D",
   "width": 1920,
