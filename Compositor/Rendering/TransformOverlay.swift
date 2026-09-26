@@ -282,8 +282,14 @@ final class TransformOverlay: NSView {
 
     /// Marching ants: a white line under an animated black dash.
     private func drawSelection() {
-        guard let selection = session.displayedSelection, !selection.isEmpty, var transform = documentToView,
-              let outline = antsOutline(for: selection.path),
+        let source: CGPath?
+        if session.quickSelectionDraft != nil {
+            source = session.quickSelectionPreviewOutline ?? session.displayedSelection?.path
+        } else {
+            source = session.displayedSelection?.path
+        }
+        guard let source, !source.isEmpty, var transform = documentToView,
+              let outline = antsOutline(for: source),
               let path = outline.copy(using: &transform), let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
         context.setLineWidth(1)
@@ -302,7 +308,7 @@ final class TransformOverlay: NSView {
         guard let draft = session.lassoDraft, let transform = documentToView,
               let context = NSGraphicsContext.current?.cgContext else { return }
         var points = draft.points.map { $0.applying(transform) }
-        if draft.kind == .polygonal, let cursor = draft.cursor { points.append(cursor.applying(transform)) }
+        if (draft.kind == .polygonal || draft.kind == .magnetic), let cursor = draft.cursor { points.append(cursor.applying(transform)) }
         guard let first = points.first else { return }
         context.saveGState()
         let path = CGMutablePath()
@@ -321,7 +327,7 @@ final class TransformOverlay: NSView {
         context.setStrokeColor(NSColor.white.cgColor)
         context.setLineWidth(1)
         context.strokePath()
-        if draft.kind == .polygonal {
+        if draft.kind == .polygonal || draft.kind == .magnetic {
             // The first corner: click it to close the outline.
             let handle = CGRect(x: first.x - 4, y: first.y - 4, width: 8, height: 8)
             context.setFillColor(NSColor.white.cgColor)

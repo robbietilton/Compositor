@@ -88,15 +88,15 @@ struct CanvasDocument: Equatable {
 }
 
 enum NavigationTool: String, CaseIterable {
-    case move, marquee, lasso, wand, crop, brush, spotHealing, cloneStamp, blur, gradient, shape, type, eyedropper, hand, zoom
+    case move, marquee, lasso, wand, quickSelection, magneticLasso, crop, brush, spotHealing, cloneStamp, blur, gradient, shape, type, eyedropper, hand, zoom
     /// No tool (A): nothing in the tool rail is selected and canvas clicks do nothing.
     case idle
     /// Tools that paint with the brush tip, sharing its size, hardness, opacity, and keys.
     var isBrushTool: Bool { self == .brush || self == .spotHealing || self == .cloneStamp || self == .blur }
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
-    var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
-    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand || self == .quickSelection || self == .magneticLasso }
+    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .quickSelection ? "scope" : self == .magneticLasso ? "lasso" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
+    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .quickSelection ? "Quick Selection (W)" : self == .magneticLasso ? "Magnetic Lasso (L)" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
 }
 
 @Observable
@@ -229,6 +229,23 @@ final class EditorSession {
     var gradientSettings = GradientSettings() { didSet { refreshGradient() } }
     var gradientEdit: GradientEdit?
     var lassoDraft: LassoDraft?
+    /// Reusable edge data and settings for a Magnetic Lasso gesture.
+    var magneticLassoSettings = MagneticLassoSettings()
+    @ObservationIgnored var magneticLassoSample: CGImage?
+    @ObservationIgnored var magneticLassoPrepared: MagneticLasso.PreparedImage?
+    /// The live, non-document state of a Quick Selection drag.
+    var quickSelectionDraft: QuickSelectionDraft?
+    /// Preview state is observed so the canvas can repaint before mouse-up.
+    var quickSelectionPreviewMask: [UInt8]?
+    var quickSelectionPreviewOutline: CGPath?
+    @ObservationIgnored var quickSelectionSample: CGImage?
+    @ObservationIgnored var quickSelectionPrepared: QuickSelection.PreparedImage?
+    @ObservationIgnored var quickSelectionSettingsAtStart: QuickSelectionSettings?
+    @ObservationIgnored var quickSelectionPreviewTask: Task<Void, Never>?
+    @ObservationIgnored var quickSelectionPreviewPointCount = 0
+    /// Monotonically increasing token used to coalesce rapid pointer updates into one worker.
+    @ObservationIgnored var quickSelectionPreviewRequest = 0
+    @ObservationIgnored var quickSelectionGeneration = 0
     var lassoKind = LassoKind.freehand
     var marqueeKind = LassoKind.rectangle
     var textDraft: TextDraft? { didSet { if oldValue != nil && textDraft == nil { resumeFileRequests() } } }
@@ -265,6 +282,7 @@ final class EditorSession {
     var selectionAmountOperation: SelectionAmountOperation? { didSet { resumeFileRequests() } }
     var selectionFeatherAmount = 2
     var wandSettings = WandSettings()
+    var quickSelectionSettings = QuickSelectionSettings()
     var objectSelectionSettings = ObjectSelectionSettings()
     var showsPixelGrid = ToolDefaults.bool("pixelGrid", true) { didSet { ToolDefaults.set(showsPixelGrid, "pixelGrid") } }
     /// Layout grid (View > Show > Grid). Off until turned on; independent of the 800% pixel grid.
@@ -371,6 +389,7 @@ final class EditorSession {
         case .marquee: toggleMarqueeKind()
         case .wand: wandMode = next(wandMode)
         case .lasso: toggleLassoKind()
+        case .magneticLasso: break
         case .shape: toggleShapeKind()
         case .brush: brushMode = next(brushMode)
         case .blur: blurMode = next(blurMode)
@@ -583,6 +602,14 @@ final class EditorSession {
     func redo() {
         guard canRedo, let snapshot = history.redo() else { return }
         restore(snapshot)
+    }
+
+    /// Selects a visible History row, using the same restore path as Command-Z/Shift-Command-Z.
+    @discardableResult
+    func jumpToHistoryState(_ index: Int) -> Bool {
+        guard canUseHistory, let snapshot = history.jump(to: index) else { return false }
+        restore(snapshot)
+        return true
     }
 
     private func restore(_ snapshot: DocumentHistory.Snapshot) {
@@ -911,6 +938,9 @@ final class EditorSession {
     /// `emptyLayer` starts the canvas with a selected blank "Layer 1", as File > New does.
     func createDocument(width: Int, height: Int, emptyLayer: Bool = false) {
         guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
+        // A new canvas replaces the document, so discard any in-flight selection preview
+        // before the old document becomes unreachable.
+        cancelLasso()
         commitTransform()
         beginEdit("New Canvas")
         defer { endEdit() }

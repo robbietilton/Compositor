@@ -252,7 +252,7 @@ final class CanvasView: NSView {
         return NSCursor(image: image, hotSpot: base.hotSpot)
     }
     /// Which selection tool a crosshair names: the tool rail's icon, small, beneath and right of the crosshair.
-    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, rectangleMarquee, ellipseMarquee, objectSelection }
+    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, magneticLasso, rectangleMarquee, ellipseMarquee, objectSelection }
 
     /// Crosshair with the tool's icon, and a "+" (add) or "−" (subtract) beside the icon, as Photoshop shows.
     static let selectionCursors: [SelectionIcon: [SelectionMode: NSCursor]] = Dictionary(uniqueKeysWithValues:
@@ -343,6 +343,27 @@ final class CanvasView: NSView {
             cursor.stroke()
             NSColor.black.setFill()
             cursor.fill()
+            return
+        }
+        if icon == .magneticLasso {
+            let unit = box.width / 18
+            func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: box.minX + x * unit, y: box.minY + y * unit) }
+            let loop = NSBezierPath()
+            loop.move(to: point(2, 8)); loop.curve(to: point(4, 2), controlPoint1: point(1, 2), controlPoint2: point(8, 0))
+            loop.curve(to: point(15, 7), controlPoint1: point(11, 1), controlPoint2: point(17, 3))
+            loop.curve(to: point(10, 12), controlPoint1: point(15, 12), controlPoint2: point(12, 13))
+            loop.line(to: point(7, 10))
+            loop.line(to: point(2, 8))
+            loop.lineCapStyle = .round
+            loop.lineJoinStyle = .round
+            NSColor.white.setStroke(); loop.lineWidth = 1.4 * unit + 2; loop.stroke()
+            NSColor.black.setStroke(); loop.lineWidth = 1.4 * unit; loop.stroke()
+            let magnet = NSBezierPath()
+            magnet.move(to: point(11.8, 14.2)); magnet.line(to: point(14.8, 17.2))
+            magnet.move(to: point(12.4, 12.8)); magnet.line(to: point(15.8, 16.2))
+            magnet.lineCapStyle = .round
+            NSColor.white.setStroke(); magnet.lineWidth = 2.6; magnet.stroke()
+            NSColor.systemRed.setStroke(); magnet.lineWidth = 1.2; magnet.stroke()
             return
         }
         let name = icon == .freehandLasso ? "lasso" : icon == .ellipseMarquee ? "circle.dashed" : "rectangle.dashed"
@@ -708,9 +729,13 @@ final class CanvasView: NSView {
                 return nil
             }
             // Brush size ([ ]) and hardness (Shift-[ ]); with focus on the canvas its own keyDown handles them.
-            guard (self.session.tool.isBrushTool), self.session.levels == nil, window.firstResponder !== self,
+            guard (self.session.tool.isBrushTool || self.session.tool == .quickSelection), self.session.levels == nil, window.firstResponder !== self,
                   ["[", "]", "{", "}"].contains(key) else { return originalEvent }
-            if key == "[" || key == "]" { self.session.changeBrushSize(increase: key == "]") }
+            if self.session.tool == .quickSelection {
+                guard key == "[" || key == "]" else { return originalEvent }
+                self.session.changeQuickSelectionDiameter(increase: key == "]")
+                self.updateBrushCursor()
+            } else if key == "[" || key == "]" { self.session.changeBrushSize(increase: key == "]") }
             else { self.session.changeBrushHardness(increase: key == "}") }
             return nil
         }
@@ -751,7 +776,8 @@ final class CanvasView: NSView {
             return flags.contains(.command) ? pixelDragCursor(duplicate: flags.contains(.option)) : Self.moveSelectionCursor
         }
         if session.tool == .wand, session.wandMode == .wand { return Self.wandCursors[mode] ?? .crosshair }
-        let icon: SelectionIcon = session.tool == .wand ? .objectSelection : session.tool == .marquee
+        if session.tool == .quickSelection { return .crosshair }
+        let icon: SelectionIcon = session.tool == .wand ? .objectSelection : session.tool == .magneticLasso ? .magneticLasso : session.tool == .marquee
             ? (session.marqueeKind == .ellipse ? .ellipseMarquee : .rectangleMarquee)
             : (session.lassoKind == .polygonal ? .polygonalLasso : .freehandLasso)
         return Self.selectionCursors[icon]?[mode] ?? .crosshair
@@ -1343,8 +1369,9 @@ final class CanvasView: NSView {
         hoverTrackingArea = area
     }
     private func updateBrushCursor() {
-        let shows = session.tool.isBrushTool && !spaceHeld && !picking && middlePanPoint == nil
-        let diameter = session.brushStroke?.settings.diameter ?? session.brushSettings.diameter
+        let shows = (session.tool.isBrushTool || session.tool == .quickSelection) && !spaceHeld && !picking && middlePanPoint == nil
+        let diameter = session.tool == .quickSelection ? session.quickSelectionSettings.diameter
+            : (session.brushStroke?.settings.diameter ?? session.brushSettings.diameter)
         // Clone Stamp also marks where it is copying from and, between strokes, previews inside
         // the circle what a click would stamp there.
         var sample: CGPoint?
@@ -1445,12 +1472,21 @@ final class CanvasView: NSView {
         }
         optionHeld = event.modifierFlags.contains(.option)
         if picking { Self.eyedropperCursor.set(); return }
+        if session.tool == .quickSelection {
+            brushPointer = convert(event.locationInWindow, from: nil)
+            updateBrushCursor()
+            session.updateHeldSelectionKeys(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+            lassoCursor(flags: event.modifierFlags, at: brushPointer).set()
+            return
+        }
         if session.tool.isSelectionTool {
             // Keys may have changed while the app was in the background.
             session.updateHeldSelectionKeys(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
             lassoCursor(flags: event.modifierFlags, at: convert(event.locationInWindow, from: nil)).set()
-            if session.lassoDraft?.kind == .polygonal, let document = session.document {
-                session.moveLassoCursor(to: session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size))
+            if let kind = session.lassoDraft?.kind, (kind == .polygonal || kind == .magnetic), let document = session.document {
+                let pixel = session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size)
+                if kind == .magnetic { session.continueMagneticLasso(to: pixel) }
+                else { session.moveLassoCursor(to: pixel) }
                 synchronizeDisplay()
             }
             return
@@ -1653,6 +1689,13 @@ final class CanvasView: NSView {
             brushAxisHorizontal = nil
             brushLastPixel = pixel
             synchronizeDisplay()
+        } else if session.tool == .quickSelection, let document = session.document {
+            brushPointer = point
+            let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+            let mode = session.selectionMode(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+            session.beginQuickSelection(at: pixel, mode: mode)
+            updateBrushCursor()
+            synchronizeDisplay()
         } else if session.tool.isSelectionTool {
             lassoMouseDown(at: point, event: event)
             refreshLassoCursor()
@@ -1714,11 +1757,19 @@ final class CanvasView: NSView {
             synchronizeDisplay()
             return
         }
+        if session.tool == .quickSelection, lastDragPoint == nil, let document = session.document {
+            brushPointer = point
+            session.continueQuickSelection(to: session.viewport.documentPoint(from: point, documentSize: document.size))
+            updateBrushCursor()
+            synchronizeDisplay()
+            return
+        }
         if session.tool.isSelectionTool, lastDragPoint == nil, let draft = session.lassoDraft, let document = session.document {
             let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
             switch draft.kind {
             case .freehand: session.extendLasso(to: pixel)
             case .polygonal: session.moveLassoCursor(to: pixel)
+            case .magnetic: session.continueMagneticLasso(to: pixel)
             case .rectangle, .ellipse:
                 dragMarqueeDraft(to: pixel, flags: event.modifierFlags)
                 updateMarqueeAutoscroll(at: point)
@@ -1882,6 +1933,11 @@ final class CanvasView: NSView {
             session.finishShape()
             synchronizeDisplay()
         }
+        if session.tool == .quickSelection, session.quickSelectionDraft != nil {
+            brushPointer = convert(event.locationInWindow, from: nil)
+            Task { await session.finishQuickSelection(); synchronizeDisplay(); refreshLassoCursor() }
+            updateBrushCursor()
+        }
         if hueTargetStart != nil {
             hueTargetStart = nil
             session.endHueTargeting()
@@ -1906,7 +1962,7 @@ final class CanvasView: NSView {
             synchronizeDisplay()
             refreshLassoCursor()
         }
-        if session.tool.isSelectionTool, let kind = session.lassoDraft?.kind, kind != .polygonal {
+        if session.tool.isSelectionTool, let kind = session.lassoDraft?.kind, kind != .polygonal && kind != .magnetic {
             session.finishLasso()
             synchronizeDisplay()
             refreshLassoCursor()
@@ -2053,6 +2109,8 @@ final class CanvasView: NSView {
                 session.typeOpacityDigit(Int(key) ?? 0)
             case "[" where session.tool.isBrushTool: session.changeBrushSize(increase: false)
             case "]" where session.tool.isBrushTool: session.changeBrushSize(increase: true)
+            case "[" where session.tool == .quickSelection: session.changeQuickSelectionDiameter(increase: false)
+            case "]" where session.tool == .quickSelection: session.changeQuickSelectionDiameter(increase: true)
             // Shift turns [ and ] into { and }.
             case "{" where session.tool.isBrushTool: session.changeBrushHardness(increase: false)
             case "}" where session.tool.isBrushTool: session.changeBrushHardness(increase: true)
@@ -2163,6 +2221,33 @@ final class CanvasView: NSView {
         marqueeConstrainArmed = !event.modifierFlags.contains(.shift)
         marqueeDragPixel = nil
         let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+        if session.tool == .magneticLasso {
+            if let draft = session.lassoDraft, draft.kind == .magnetic {
+                let first = session.viewport.viewPoint(from: draft.points[0], documentSize: document.size)
+                if event.clickCount >= 2 || (draft.points.count >= 3 && hypot(point.x - first.x, point.y - first.y) <= 8) {
+                    session.finishLasso()
+                } else {
+                    session.addMagneticLassoPoint(at: pixel)
+                }
+            } else {
+                let mode = session.selectionMode(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+                if event.modifierFlags.contains(.command), session.canMoveSelection(at: pixel) {
+                    if session.beginPixelMove(duplicate: event.modifierFlags.contains(.option)) {
+                        pixelDragStart = pixel
+                        pixelDragCursor(duplicate: event.modifierFlags.contains(.option)).set()
+                    } else { NSSound.beep() }
+                    return
+                }
+                if mode == .replace, session.canMoveSelection(at: pixel), session.beginSelectionMove() {
+                    selectionDragStart = pixel
+                    Self.moveSelectionCursor.set()
+                    return
+                }
+                session.beginMagneticLasso(at: pixel, mode: mode)
+            }
+            synchronizeDisplay()
+            return
+        }
         guard let draft = session.lassoDraft, draft.kind == .polygonal else {
             // Cmd-drag inside the selection cuts and moves its pixels (Photoshop's temporary Move tool).
             if event.modifierFlags.contains(.command), session.canMoveSelection(at: pixel) {

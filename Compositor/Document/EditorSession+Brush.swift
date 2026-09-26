@@ -1,6 +1,15 @@
 import AppKit
 
 extension EditorSession {
+    /// Photoshop-style bracket stepping for the Quick Selection brush. This setting is
+    /// deliberately independent from the ordinary paint-brush diameter.
+    func changeQuickSelectionDiameter(increase: Bool) {
+        let current = min(500, max(1, quickSelectionSettings.diameter.isFinite ? quickSelectionSettings.diameter : 40))
+        let next = increase ? max(current + 1, (current * 1.2).rounded())
+                            : min(current - 1, (current / 1.2).rounded())
+        quickSelectionSettings.diameter = min(500, max(1, next))
+    }
+
     /// An explicitly empty selection leaves nothing paintable, so painting never starts.
     var canPaint: Bool {
         // A folder has no pixels of its own, so only its mask can be painted.

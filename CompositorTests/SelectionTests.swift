@@ -144,6 +144,141 @@ struct SelectionTests {
         #expect(CanvasView.selectionCursors.values.allSatisfy { $0.count == 3 && $0[.replace] != nil })
     }
 
+    @Test func quickSelectionCommitsOneHistoryEntryAndSupportsSubtract() async throws {
+        let session = makeSession()
+        let source = try BrushRaster.context(width: 100, height: 100, mask: false)
+        source.setFillColor(CGColor(srgbRed: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(source.makeImage())
+        session.document?.layers[0].asset = ImportedImage(image: image, thumbnail: image, name: "Selection source")
+        let sample = try #require(session.document.flatMap { session.selectionSample($0, sampleAllLayers: false) })
+        let mask = try #require(QuickSelection.mask(in: sample, points: [CGPoint(x: 50, y: 50)], settings: session.quickSelectionSettings))
+        #expect(mask.contains(255))
+        session.selectTool(.quickSelection)
+        let before = session.history.undoCount
+
+        session.beginQuickSelection(at: CGPoint(x: 50, y: 50), mode: .replace)
+        session.continueQuickSelection(to: CGPoint(x: 55, y: 50))
+        await session.finishQuickSelection()
+
+        #expect(session.quickSelectionDraft == nil)
+        #expect(session.selection?.isEmpty == false)
+        #expect(session.history.undoCount == before + 1)
+        #expect(session.history.undoName == "Quick Selection")
+
+        session.beginQuickSelection(at: CGPoint(x: 50, y: 50), mode: .subtract)
+        await session.finishQuickSelection()
+        #expect(try coverage(session, 50, 50) == 0)
+        #expect(session.selection?.isEmpty == true)
+    }
+
+    @Test func quickSelectionShowsPreviewsWhilePointerKeepsMoving() async throws {
+        let session = makeSession()
+        let source = try BrushRaster.context(width: 100, height: 100, mask: false)
+        source.setFillColor(CGColor(srgbRed: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(source.makeImage())
+        session.document?.layers[0].asset = ImportedImage(image: image, thumbnail: image, name: "Preview source")
+        session.selectTool(.quickSelection)
+        session.beginQuickSelection(at: CGPoint(x: 40, y: 40), mode: .replace)
+
+        var draggingFinished = false
+        let dragging = Task { @MainActor in
+            for offset in 1...100 {
+                session.continueQuickSelection(to: CGPoint(x: 40 + offset, y: 40))
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            draggingFinished = true
+        }
+        // Keep the pointer moving while waiting, but do not make the assertion depend on
+        // one fixed machine-dependent frame time.
+        for _ in 0..<400 where !draggingFinished && session.quickSelectionPreviewMask == nil {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(session.quickSelectionPreviewMask != nil,
+                "The contour should appear during a continuous drag, not only after mouse-up")
+        #expect(session.quickSelectionPreviewOutline?.isEmpty == false,
+                "The visible marching-ants outline should update before mouse-up")
+        await dragging.value
+        session.cancelLasso()
+    }
+
+    @Test func quickSelectionDiameterUsesIndependentBracketRange() {
+        let session = makeSession()
+        session.selectTool(.quickSelection)
+        session.quickSelectionSettings.diameter = 40
+        session.brushSettings.diameter = 80
+        session.changeQuickSelectionDiameter(increase: true)
+        #expect(session.quickSelectionSettings.diameter == 48)
+        #expect(session.brushSettings.diameter == 80)
+        session.quickSelectionSettings.diameter = 1
+        session.changeQuickSelectionDiameter(increase: false)
+        #expect(session.quickSelectionSettings.diameter == 1)
+        session.quickSelectionSettings.diameter = 500
+        session.changeQuickSelectionDiameter(increase: true)
+        #expect(session.quickSelectionSettings.diameter == 500)
+    }
+
+    @Test func cancellingQuickSelectionLeavesSelectionAndHistoryUnchanged() throws {
+        let session = makeSession()
+        let source = try BrushRaster.context(width: 100, height: 100, mask: false)
+        source.setFillColor(CGColor(srgbRed: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(source.makeImage())
+        session.document?.layers[0].asset = ImportedImage(image: image, thumbnail: image, name: "Quick selection cancel source")
+        session.selectTool(.quickSelection)
+        let before = session.history.undoCount
+
+        session.beginQuickSelection(at: CGPoint(x: 50, y: 50), mode: .replace)
+        session.continueQuickSelection(to: CGPoint(x: 60, y: 50))
+        session.cancelLasso()
+
+        #expect(session.quickSelectionDraft == nil)
+        #expect(session.selection == nil)
+        #expect(session.history.undoCount == before)
+    }
+
+    @Test func quickSelectionPublishesPreviewAndCancelClearsIt() async throws {
+        let session = makeSession()
+        let source = try BrushRaster.context(width: 100, height: 100, mask: false)
+        source.setFillColor(CGColor(srgbRed: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(source.makeImage())
+        session.document?.layers[0].asset = ImportedImage(image: image, thumbnail: image, name: "Quick selection preview source")
+        session.selectTool(.quickSelection)
+
+        session.beginQuickSelection(at: CGPoint(x: 50, y: 50), mode: .replace)
+        session.continueQuickSelection(to: CGPoint(x: 60, y: 50))
+        if let previewTask = session.quickSelectionPreviewTask { await previewTask.value }
+
+        #expect(session.quickSelectionDraft != nil)
+        #expect(session.quickSelectionPreviewMask?.contains(255) == true)
+        #expect(session.quickSelectionPreviewOutline != nil)
+
+        session.cancelLasso()
+        #expect(session.quickSelectionPreviewMask == nil)
+        #expect(session.quickSelectionPreviewOutline == nil)
+    }
+
+    @Test func replacingDocumentCancelsQuickSelectionPreview() async throws {
+        let session = makeSession()
+        let source = try BrushRaster.context(width: 100, height: 100, mask: false)
+        source.setFillColor(CGColor(srgbRed: 0.2, green: 0.6, blue: 0.9, alpha: 1))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(source.makeImage())
+        session.document?.layers[0].asset = ImportedImage(image: image, thumbnail: image, name: "Quick selection replacement source")
+        session.selectTool(.quickSelection)
+
+        session.beginQuickSelection(at: CGPoint(x: 50, y: 50), mode: .replace)
+        if let previewTask = session.quickSelectionPreviewTask { await previewTask.value }
+        #expect(session.quickSelectionPreviewMask != nil)
+
+        session.createDocument(width: 80, height: 80, emptyLayer: true)
+        #expect(session.quickSelectionDraft == nil)
+        #expect(session.quickSelectionPreviewMask == nil)
+        #expect(session.quickSelectionPreviewOutline == nil)
+    }
+
     @Test func draggingMovesTheOutlineInWholePixelsAsOneUndo() throws {
         let session = makeSession()
         lasso(session, square(10, 10, 20))
