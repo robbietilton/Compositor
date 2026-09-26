@@ -54,6 +54,7 @@ struct QuickSelectionTests {
     @Test func quickSelectionCommitsOneHistoryEntryPerDrag() async throws {
         let session = EditorSession()
         session.createDocument(width: 100, height: 100, emptyLayer: true)
+        session.selectTool(.quickSelection)
         let before = session.history.undoCount
         session.beginQuickSelection(at: CGPoint(x: 20, y: 20), mode: .replace)
         session.extendQuickSelection(to: CGPoint(x: 40, y: 40))

@@ -938,6 +938,9 @@ final class EditorSession {
     /// `emptyLayer` starts the canvas with a selected blank "Layer 1", as File > New does.
     func createDocument(width: Int, height: Int, emptyLayer: Bool = false) {
         guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
+        // A new canvas replaces the document, so discard any in-flight selection preview
+        // before the old document becomes unreachable.
+        cancelLasso()
         commitTransform()
         beginEdit("New Canvas")
         defer { endEdit() }

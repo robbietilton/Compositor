@@ -182,13 +182,19 @@ struct SelectionTests {
         session.selectTool(.quickSelection)
         session.beginQuickSelection(at: CGPoint(x: 40, y: 40), mode: .replace)
 
+        var draggingFinished = false
         let dragging = Task { @MainActor in
-            for offset in 1...20 {
+            for offset in 1...100 {
                 session.continueQuickSelection(to: CGPoint(x: 40 + offset, y: 40))
                 try? await Task.sleep(nanoseconds: 10_000_000)
             }
+            draggingFinished = true
         }
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        // Keep the pointer moving while waiting, but do not make the assertion depend on
+        // one fixed machine-dependent frame time.
+        for _ in 0..<400 where !draggingFinished && session.quickSelectionPreviewMask == nil {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
         #expect(session.quickSelectionPreviewMask != nil,
                 "The contour should appear during a continuous drag, not only after mouse-up")
         #expect(session.quickSelectionPreviewOutline?.isEmpty == false,
