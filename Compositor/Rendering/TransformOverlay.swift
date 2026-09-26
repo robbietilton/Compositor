@@ -308,7 +308,7 @@ final class TransformOverlay: NSView {
         guard let draft = session.lassoDraft, let transform = documentToView,
               let context = NSGraphicsContext.current?.cgContext else { return }
         var points = draft.points.map { $0.applying(transform) }
-        if draft.kind == .polygonal, let cursor = draft.cursor { points.append(cursor.applying(transform)) }
+        if (draft.kind == .polygonal || draft.kind == .magnetic), let cursor = draft.cursor { points.append(cursor.applying(transform)) }
         guard let first = points.first else { return }
         context.saveGState()
         let path = CGMutablePath()
@@ -327,7 +327,7 @@ final class TransformOverlay: NSView {
         context.setStrokeColor(NSColor.white.cgColor)
         context.setLineWidth(1)
         context.strokePath()
-        if draft.kind == .polygonal {
+        if draft.kind == .polygonal || draft.kind == .magnetic {
             // The first corner: click it to close the outline.
             let handle = CGRect(x: first.x - 4, y: first.y - 4, width: 8, height: 8)
             context.setFillColor(NSColor.white.cgColor)

@@ -5,7 +5,7 @@ struct LassoControls: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .marquee ? "Marquee" : session.tool == .wand ? "Magic" : session.tool == .quickSelection ? "Quick Selection" : "Lasso").font(ToolHeaderStyle.titleFont)
+            Text(session.tool == .marquee ? "Marquee" : session.tool == .wand ? "Magic" : session.tool == .quickSelection ? "Quick Selection" : session.tool == .magneticLasso ? "Magnetic Lasso" : "Lasso").font(ToolHeaderStyle.titleFont)
             if session.tool == .marquee {
                 Picker("Shape", selection: Binding(get: { session.marqueeKind }, set: { kind in
                     session.cancelLasso()
@@ -46,8 +46,9 @@ struct LassoControls: View {
             if session.tool == .wand, session.wandMode == .wand { wandControls }
             if session.tool == .wand, session.wandMode == .object { objectSelectionControls }
             if session.tool == .quickSelection { quickSelectionControls }
+            if session.tool == .magneticLasso { magneticLassoControls }
             // Rectangles snap to whole pixels, so smoothing doesn't apply (as in Photoshop); ellipses curve.
-            if session.tool == .lasso || session.tool == .wand || session.tool == .quickSelection || (session.tool == .marquee && session.marqueeKind == .ellipse) {
+            if session.tool == .lasso || session.tool == .wand || session.tool == .quickSelection || session.tool == .magneticLasso || (session.tool == .marquee && session.marqueeKind == .ellipse) {
                 Toggle("Anti-alias", isOn: $session.selectionAntialiased)
                     .help(session.tool == .wand && session.wandMode == .object ? "Smooth the detected object outline; turn off for the raw pixel mask" : "Smooth selection edges; turn off for hard pixel edges")
             }
@@ -153,6 +154,47 @@ struct LassoControls: View {
             .help("Read colors from the active layer only, or from every visible layer as shown")
             Toggle("Contiguous", isOn: $session.wandSettings.contiguous)
                 .help("Select only similar pixels connected to the one you click; off selects them everywhere")
+        }
+    }
+
+    private var magneticLassoControls: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Text("Search").scrubbable(sensitivity: 1, value: Binding(
+                    get: { Double(session.magneticLassoSettings.searchRadius) },
+                    set: { session.magneticLassoSettings.searchRadius = min(64, max(1, Int($0.rounded()))) }),
+                    range: 1...64)
+                TextField("Search", value: Binding(
+                    get: { session.magneticLassoSettings.searchRadius },
+                    set: { session.magneticLassoSettings.searchRadius = min(64, max(1, $0)) }),
+                    format: .number)
+                    .frame(width: 44).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                    .arrowSteps(value: { Double(session.magneticLassoSettings.searchRadius) },
+                                change: { session.magneticLassoSettings.searchRadius = min(64, max(1, Int($0.rounded()))) })
+                    .unitSuffix("px")
+            }
+            .help("Distance around the pointer in which the Magnetic Lasso searches for an edge")
+            HStack(spacing: 6) {
+                Text("Edge").scrubbable(sensitivity: 1, value: Binding(
+                    get: { Double(session.magneticLassoSettings.edgeSensitivity) },
+                    set: { session.magneticLassoSettings.edgeSensitivity = min(255, max(0, Int($0.rounded()))) }),
+                    range: 0...255)
+                TextField("Edge", value: Binding(
+                    get: { session.magneticLassoSettings.edgeSensitivity },
+                    set: { session.magneticLassoSettings.edgeSensitivity = min(255, max(0, $0)) }),
+                    format: .number)
+                    .frame(width: 44).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                    .arrowSteps(value: { Double(session.magneticLassoSettings.edgeSensitivity) },
+                                change: { session.magneticLassoSettings.edgeSensitivity = min(255, max(0, Int($0.rounded()))) })
+                    .unitSuffix("px")
+            }
+            .help("Minimum contrast required for an edge to attract the lasso")
+            Picker("Sample", selection: $session.wandSettings.sampleAllLayers) {
+                Text("This Layer").tag(false)
+                Text("All Layers").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            .help("Read edges from the active layer only, or from every visible layer as shown")
         }
     }
 

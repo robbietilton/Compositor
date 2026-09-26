@@ -14,14 +14,38 @@ nonisolated struct MagneticLassoSettings: Equatable, Sendable {
 
 /// Deterministic, macOS 12-compatible edge sampling for Magnetic Lasso.
 nonisolated enum MagneticLasso {
+    /// Reusable luminance data for live pointer updates. Building this once per gesture avoids
+    /// converting the full document image for every mouse-moved event.
+    struct PreparedImage: Sendable {
+        fileprivate let width: Int
+        fileprivate let height: Int
+        fileprivate let values: [UInt8]
+
+        fileprivate func value(x: Int, y: Int) -> Int { Int(values[y * width + x]) }
+
+        fileprivate func gradient(atX x: Int, y: Int) -> Int {
+            let horizontal = abs(value(x: x + 1, y: y) - value(x: x - 1, y: y))
+            let vertical = abs(value(x: x, y: y + 1) - value(x: x, y: y - 1))
+            return max(horizontal, vertical)
+        }
+    }
+
+    static func prepare(_ image: CGImage) -> PreparedImage? {
+        LuminanceBuffer(image: image).map { PreparedImage(width: $0.width, height: $0.height, values: $0.values) }
+    }
+
     /// Finds the strongest edge in a corridor around the segment ending at `to`.
     static func snap(in image: CGImage, from: CGPoint, to: CGPoint, settings: MagneticLassoSettings) -> CGPoint? {
+        guard let prepared = prepare(image) else { return nil }
+        return snap(in: prepared, from: from, to: to, settings: settings)
+    }
+
+    static func snap(in image: PreparedImage, from: CGPoint, to: CGPoint, settings: MagneticLassoSettings) -> CGPoint? {
         guard image.width > 2, image.height > 2,
               from.x.isFinite, from.y.isFinite, to.x.isFinite, to.y.isFinite,
               from.x >= 0, from.y >= 0, to.x >= 0, to.y >= 0,
               from.x < CGFloat(image.width), from.y < CGFloat(image.height),
-              to.x < CGFloat(image.width), to.y < CGFloat(image.height),
-              let pixels = LuminanceBuffer(image: image) else { return nil }
+              to.x < CGFloat(image.width), to.y < CGFloat(image.height) else { return nil }
 
         let radius = min(64, max(1, settings.searchRadius))
         let threshold = min(255, max(0, settings.edgeSensitivity))
@@ -47,7 +71,7 @@ nonisolated enum MagneticLasso {
                 let corridorDistance = hypot(candidate.x - onSegment.x, candidate.y - onSegment.y)
                 guard corridorDistance <= CGFloat(radius) else { continue }
 
-                let score = pixels.gradient(atX: x, y: y)
+                let score = image.gradient(atX: x, y: y)
                 guard score >= threshold else { continue }
                 let distance = hypot(candidate.x - to.x, candidate.y - to.y)
                 if best == nil || score > best!.score || (score == best!.score && distance < best!.distance) {
@@ -60,6 +84,11 @@ nonisolated enum MagneticLasso {
 
     /// Snaps each segment in an anchor list and closes the resulting outline.
     static func path(in image: CGImage, anchors: [CGPoint], settings: MagneticLassoSettings) -> CGPath? {
+        guard let prepared = prepare(image) else { return nil }
+        return path(in: prepared, anchors: anchors, settings: settings)
+    }
+
+    static func path(in image: PreparedImage, anchors: [CGPoint], settings: MagneticLassoSettings) -> CGPath? {
         guard anchors.count >= 3 else { return nil }
         var snapped = [anchors[0]]
         for index in 1..<anchors.count {

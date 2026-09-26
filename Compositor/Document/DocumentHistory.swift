@@ -25,6 +25,13 @@ final class DocumentHistory {
     let entryLimit: Int
     let retainedByteLimit: Int
 
+    struct State: Identifiable {
+        let id: Int
+        let index: Int
+        let name: String
+        let isCurrent: Bool
+    }
+
     init(entryLimit: Int = 100, retainedByteLimit: Int = 256 * 1024 * 1024) {
         self.entryLimit = max(0, entryLimit)
         self.retainedByteLimit = max(0, retainedByteLimit)
@@ -37,6 +44,31 @@ final class DocumentHistory {
     var redoName: String { future.last?.name ?? "" }
     var isModified: Bool { revision != savedRevision }
     var undoCount: Int { past.count }
+    /// All reachable states in chronological order. The current state is selected by `past.count`;
+    /// redo states remain visible so the panel behaves like Photoshop's History list.
+    var currentStateIndex: Int { past.count }
+    var states: [State] {
+        guard let initial = initialSnapshot else { return [] }
+        var names = ["Initial"]
+        names.append(contentsOf: past.map(\.name))
+        names.append(contentsOf: future.reversed().map(\.name))
+        _ = initial
+        return names.enumerated().map { State(id: $0.offset, index: $0.offset, name: $0.element, isCurrent: $0.offset == currentStateIndex) }
+    }
+
+    private var initialSnapshot: Snapshot? {
+        past.first?.before ?? future.last?.before
+    }
+
+    /// Moves the history cursor to a visible state by applying ordinary undo/redo transitions.
+    func jump(to index: Int) -> Snapshot? {
+        guard let initialSnapshot, (0..<states.count).contains(index) else { return nil }
+        while currentStateIndex > index { _ = undo() }
+        while currentStateIndex < index { _ = redo() }
+        if index == 0 { return initialSnapshot }
+        if let entry = past.last { return entry.after }
+        return future.last?.before
+    }
     func markSaved() { savedRevision = revision }
     /// The document as it stands, for a save that captures it now and finishes later.
     var currentRevision: UUID { revision }

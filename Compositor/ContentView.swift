@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    private enum SidePanel: Hashable { case layers, history }
     /// The Layers panel's width, remembered across launches.
     @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
     @Bindable var session: EditorSession
@@ -13,6 +14,7 @@ struct ContentView: View {
     @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel")
     @State private var filterPanel = FloatingPanelController(name: "filterPanel")
     @State private var effectsPanel = FloatingPanelController(name: "effectsPanel")
+    @State private var sidePanel: SidePanel = .layers
     @State private var isDropTargeted = false
     /// The window's width, so the tab strip can use the toolbar's free space.
     @State private var windowWidth: CGFloat = 1180
@@ -102,7 +104,24 @@ struct ContentView: View {
                     }
                 }
                 PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                LayersPanel(session: session, width: layersPanelWidth)
+                VStack(spacing: 0) {
+                    Picker("Panel", selection: $sidePanel) {
+                        Text("Layers").tag(SidePanel.layers)
+                        Text("History").tag(SidePanel.history)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .accessibilityIdentifier("sidePanelPicker")
+                    Divider()
+                    if sidePanel == .history {
+                        HistoryPanel(session: session, width: layersPanelWidth)
+                    } else {
+                        LayersPanel(session: session, width: layersPanelWidth)
+                    }
+                }
+                .frame(width: layersPanelWidth)
             }
             Divider()
             // Keeps its own height however short the window gets; the tools scroll instead.
@@ -273,7 +292,13 @@ struct ContentView: View {
         // Scrolls when the window is too short for every tool, rather than pushing the bars above and below away.
         IndicatorlessScrollView {
         VStack(spacing: 10) {
-            ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
+            ForEach(NavigationTool.allCases.filter { $0 != .idle && $0 != .wand && $0 != .quickSelection && $0 != .magneticLasso }, id: \.self) { tool in
+                if tool == .crop {
+                    SelectionToolGroupControl(session: session)
+                        .frame(width: 36, height: 36)
+                        .help("Magic Wand, Quick Selection, Object Selection, Magnetic Lasso")
+                        .padding(.bottom, 1)
+                }
                 Button { session.selectTool(tool) } label: {
                     Group {
                         if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }

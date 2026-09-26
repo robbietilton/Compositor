@@ -156,4 +156,24 @@ struct HistoryTests {
         #expect(history.undoCount == 0)
         #expect(history.retainedBytes(current: doc) == 0)
     }
+
+    @Test func historyExposesSelectableChronologicalStates() {
+        let history = DocumentHistory()
+        var first = CanvasDocument(width: 20, height: 20)
+        history.begin("First", document: nil, selection: nil)
+        history.end(document: first, selection: nil)
+        history.begin("Second", document: first, selection: nil)
+        first.resolution = 96
+        history.end(document: first, selection: nil)
+
+        #expect(history.states.map(\.name) == ["Initial", "First", "Second"])
+        #expect(history.currentStateIndex == 2)
+        _ = history.undo()
+        #expect(history.states[1].isCurrent)
+        #expect(history.states[2].name == "Second")
+        _ = history.redo()
+        #expect(history.states[2].isCurrent)
+        #expect(history.jump(to: 0)?.document == nil)
+        #expect(history.currentStateIndex == 0)
+    }
 }

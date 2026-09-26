@@ -75,6 +75,7 @@ nonisolated enum WandMode: String, CaseIterable, Sendable {
 nonisolated enum LassoKind: String, CaseIterable, Sendable {
     case freehand = "Freehand"
     case polygonal = "Polygonal"
+    case magnetic = "Magnetic"
     /// The Marquee's outlines; not offered in the Lasso's Freehand/Polygonal choice.
     case rectangle = "Rectangle"
     case ellipse = "Ellipse"
@@ -151,6 +152,10 @@ extension EditorSession {
         if tool == .marquee {
             let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
             lassoDraft = LassoDraft(points: [anchor], cursor: nil, mode: mode, kind: marqueeKind, anchor: anchor)
+        } else if tool == .magneticLasso {
+            lassoDraft = LassoDraft(points: [point], cursor: point, mode: mode, kind: .magnetic)
+            magneticLassoSample = document.flatMap { selectionSample($0, sampleAllLayers: wandSettings.sampleAllLayers) }
+            magneticLassoPrepared = magneticLassoSample.flatMap(MagneticLasso.prepare)
         } else {
             lassoDraft = LassoDraft(points: [point], cursor: nil, mode: mode, kind: lassoKind)
         }
@@ -176,6 +181,30 @@ extension EditorSession {
         lassoDraft = draft
     }
 
+    /// Adds a click anchor to the Magnetic Lasso. The moving cursor is kept separately so the
+    /// overlay can show the rubber-band segment without creating history on every pointer event.
+    func addMagneticLassoPoint(at point: CGPoint) {
+        guard tool == .magneticLasso, lassoDraft?.kind == .magnetic else { return }
+        extendLasso(to: point)
+        moveLassoCursor(to: point)
+    }
+
+    func beginMagneticLasso(at point: CGPoint, mode: SelectionMode) {
+        guard tool == .magneticLasso else { return }
+        beginLasso(at: point, mode: mode)
+    }
+
+    /// Updates the live Magnetic Lasso segment by snapping it to the strongest nearby edge.
+    func continueMagneticLasso(to point: CGPoint) {
+        guard tool == .magneticLasso, let draft = lassoDraft, draft.kind == .magnetic,
+              let last = draft.points.last, let prepared = magneticLassoPrepared else {
+            moveLassoCursor(to: point)
+            return
+        }
+        let snapped = MagneticLasso.snap(in: prepared, from: last, to: point, settings: magneticLassoSettings) ?? point
+        moveLassoCursor(to: snapped)
+    }
+
     func moveLassoCursor(to point: CGPoint?) { lassoDraft?.cursor = point }
 
     func removeLastLassoPoint() {
@@ -186,6 +215,8 @@ extension EditorSession {
 
     func cancelLasso() {
         lassoDraft = nil
+        magneticLassoSample = nil
+        magneticLassoPrepared = nil
         cancelQuickSelectionAnalysis()
     }
 
@@ -376,6 +407,16 @@ extension EditorSession {
     func finishLasso() {
         guard let draft = lassoDraft else { return }
         lassoDraft = nil
+        defer {
+            magneticLassoSample = nil
+            magneticLassoPrepared = nil
+        }
+        if draft.kind == .magnetic {
+            guard draft.points.count >= 3, let sample = magneticLassoSample ?? document.flatMap({ selectionSample($0, sampleAllLayers: wandSettings.sampleAllLayers) }),
+                  let outline = MagneticLasso.path(in: sample, anchors: draft.points, settings: magneticLassoSettings) else { return }
+            applySelection(outline, mode: draft.mode, name: "Magnetic Lasso")
+            return
+        }
         let outline = CGMutablePath()
         if draft.kind == .ellipse, draft.points.count == 4 {
             // The drag's box, whole pixels like a rectangle; the oval fills it.
@@ -392,6 +433,7 @@ extension EditorSession {
         }
         applySelection(outline, mode: draft.mode,
                        name: draft.kind == .freehand ? "Lasso" : draft.kind == .polygonal ? "Polygonal Lasso"
+                           : draft.kind == .magnetic ? "Magnetic Lasso"
                            : draft.kind == .ellipse ? "Elliptical Marquee" : "Rectangular Marquee")
     }
 

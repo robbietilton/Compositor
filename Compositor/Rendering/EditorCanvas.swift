@@ -252,7 +252,7 @@ final class CanvasView: NSView {
         return NSCursor(image: image, hotSpot: base.hotSpot)
     }
     /// Which selection tool a crosshair names: the tool rail's icon, small, beneath and right of the crosshair.
-    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, rectangleMarquee, ellipseMarquee, objectSelection }
+    enum SelectionIcon: CaseIterable { case freehandLasso, polygonalLasso, magneticLasso, rectangleMarquee, ellipseMarquee, objectSelection }
 
     /// Crosshair with the tool's icon, and a "+" (add) or "−" (subtract) beside the icon, as Photoshop shows.
     static let selectionCursors: [SelectionIcon: [SelectionMode: NSCursor]] = Dictionary(uniqueKeysWithValues:
@@ -343,6 +343,27 @@ final class CanvasView: NSView {
             cursor.stroke()
             NSColor.black.setFill()
             cursor.fill()
+            return
+        }
+        if icon == .magneticLasso {
+            let unit = box.width / 18
+            func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: box.minX + x * unit, y: box.minY + y * unit) }
+            let loop = NSBezierPath()
+            loop.move(to: point(2, 8)); loop.curve(to: point(4, 2), controlPoint1: point(1, 2), controlPoint2: point(8, 0))
+            loop.curve(to: point(15, 7), controlPoint1: point(11, 1), controlPoint2: point(17, 3))
+            loop.curve(to: point(10, 12), controlPoint1: point(15, 12), controlPoint2: point(12, 13))
+            loop.line(to: point(7, 10))
+            loop.line(to: point(2, 8))
+            loop.lineCapStyle = .round
+            loop.lineJoinStyle = .round
+            NSColor.white.setStroke(); loop.lineWidth = 1.4 * unit + 2; loop.stroke()
+            NSColor.black.setStroke(); loop.lineWidth = 1.4 * unit; loop.stroke()
+            let magnet = NSBezierPath()
+            magnet.move(to: point(11.8, 14.2)); magnet.line(to: point(14.8, 17.2))
+            magnet.move(to: point(12.4, 12.8)); magnet.line(to: point(15.8, 16.2))
+            magnet.lineCapStyle = .round
+            NSColor.white.setStroke(); magnet.lineWidth = 2.6; magnet.stroke()
+            NSColor.systemRed.setStroke(); magnet.lineWidth = 1.2; magnet.stroke()
             return
         }
         let name = icon == .freehandLasso ? "lasso" : icon == .ellipseMarquee ? "circle.dashed" : "rectangle.dashed"
@@ -756,7 +777,7 @@ final class CanvasView: NSView {
         }
         if session.tool == .wand, session.wandMode == .wand { return Self.wandCursors[mode] ?? .crosshair }
         if session.tool == .quickSelection { return .crosshair }
-        let icon: SelectionIcon = session.tool == .wand ? .objectSelection : session.tool == .marquee
+        let icon: SelectionIcon = session.tool == .wand ? .objectSelection : session.tool == .magneticLasso ? .magneticLasso : session.tool == .marquee
             ? (session.marqueeKind == .ellipse ? .ellipseMarquee : .rectangleMarquee)
             : (session.lassoKind == .polygonal ? .polygonalLasso : .freehandLasso)
         return Self.selectionCursors[icon]?[mode] ?? .crosshair
@@ -1462,8 +1483,10 @@ final class CanvasView: NSView {
             // Keys may have changed while the app was in the background.
             session.updateHeldSelectionKeys(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
             lassoCursor(flags: event.modifierFlags, at: convert(event.locationInWindow, from: nil)).set()
-            if session.lassoDraft?.kind == .polygonal, let document = session.document {
-                session.moveLassoCursor(to: session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size))
+            if let kind = session.lassoDraft?.kind, (kind == .polygonal || kind == .magnetic), let document = session.document {
+                let pixel = session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size)
+                if kind == .magnetic { session.continueMagneticLasso(to: pixel) }
+                else { session.moveLassoCursor(to: pixel) }
                 synchronizeDisplay()
             }
             return
@@ -1746,6 +1769,7 @@ final class CanvasView: NSView {
             switch draft.kind {
             case .freehand: session.extendLasso(to: pixel)
             case .polygonal: session.moveLassoCursor(to: pixel)
+            case .magnetic: session.continueMagneticLasso(to: pixel)
             case .rectangle, .ellipse:
                 dragMarqueeDraft(to: pixel, flags: event.modifierFlags)
                 updateMarqueeAutoscroll(at: point)
@@ -1938,7 +1962,7 @@ final class CanvasView: NSView {
             synchronizeDisplay()
             refreshLassoCursor()
         }
-        if session.tool.isSelectionTool, let kind = session.lassoDraft?.kind, kind != .polygonal {
+        if session.tool.isSelectionTool, let kind = session.lassoDraft?.kind, kind != .polygonal && kind != .magnetic {
             session.finishLasso()
             synchronizeDisplay()
             refreshLassoCursor()
@@ -2197,6 +2221,21 @@ final class CanvasView: NSView {
         marqueeConstrainArmed = !event.modifierFlags.contains(.shift)
         marqueeDragPixel = nil
         let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+        if session.tool == .magneticLasso {
+            if let draft = session.lassoDraft, draft.kind == .magnetic {
+                let first = session.viewport.viewPoint(from: draft.points[0], documentSize: document.size)
+                if event.clickCount >= 2 || (draft.points.count >= 3 && hypot(point.x - first.x, point.y - first.y) <= 8) {
+                    session.finishLasso()
+                } else {
+                    session.addMagneticLassoPoint(at: pixel)
+                }
+            } else {
+                let mode = session.selectionMode(shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option))
+                session.beginMagneticLasso(at: pixel, mode: mode)
+            }
+            synchronizeDisplay()
+            return
+        }
         guard let draft = session.lassoDraft, draft.kind == .polygonal else {
             // Cmd-drag inside the selection cuts and moves its pixels (Photoshop's temporary Move tool).
             if event.modifierFlags.contains(.command), session.canMoveSelection(at: pixel) {
