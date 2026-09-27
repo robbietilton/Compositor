@@ -30,7 +30,7 @@ final class ProjectWorkspace {
             && s.gradientEdit == nil && s.pixelMove == nil && s.colorPicker == nil
     }
     init() {
-        let first = ProjectTab(name: "Untitled")
+        let first = ProjectTab(name: "Untitled".localizedName)
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
         first.controller.workspace = self
@@ -94,6 +94,11 @@ final class ProjectWorkspace {
         tab.controller.window = window
         guard await tab.controller.confirmQuit() else { return }
         removeTab(id)
+    }
+    /// Closes every tab but this one, which is what the tab menu's "Close Other Tabs" means. Each close
+    /// keeps its own chance to save, so an unsaved tab cancels the rest of the sweep.
+    func closeOthers(keeping id: UUID) async {
+        for tab in tabs where tab.id != id { await close(tab.id) }
     }
     func removeTab(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }

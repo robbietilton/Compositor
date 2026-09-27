@@ -57,8 +57,8 @@ struct TypeControls: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 4))
                             }
                             .buttonStyle(.plain)
-                            .help("Align " + alignment.rawValue.lowercased())
-                            .accessibilityLabel("Align " + alignment.rawValue.lowercased())
+                            .help(("Align " + alignment.rawValue.lowercased()).localizedName)
+                            .accessibilityLabel(("Align " + alignment.rawValue.lowercased()).localizedName)
                             .accessibilityAddTraits(selected ? .isSelected : [])
                         }
                     }
@@ -110,7 +110,7 @@ private struct TypeFontPicker: NSViewRepresentable {
         button.cell?.lineBreakMode = .byTruncatingTail
         button.cell?.usesSingleLineMode = true
         button.cell?.alignment = .left
-        button.setAccessibilityLabel("Font")
+        button.setAccessibilityLabel("Font".localizedName)
         button.target = context.coordinator
         button.action = #selector(Coordinator.choose(_:))
         button.menu?.delegate = context.coordinator

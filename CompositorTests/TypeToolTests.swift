@@ -214,7 +214,7 @@ struct TypeToolTests {
         }
         let sheet = try #require(alertWindow)
         func button(in view: NSView) -> NSButton? {
-            if let button = view as? NSButton, button.title == "Don’t Save" { return button }
+            if let button = view as? NSButton, button.title == "Don’t Save".localizedName { return button }
             for child in view.subviews {
                 if let button = button(in: child) { return button }
             }
@@ -254,7 +254,7 @@ struct TypeToolTests {
         }
         let sheet = try #require(alertWindow)
         func button(in view: NSView) -> NSButton? {
-            if let button = view as? NSButton, button.title == "Don’t Save" { return button }
+            if let button = view as? NSButton, button.title == "Don’t Save".localizedName { return button }
             for child in view.subviews {
                 if let button = button(in: child) { return button }
             }

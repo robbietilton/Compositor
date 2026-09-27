@@ -651,7 +651,7 @@ final class CanvasView: NSView {
         clipsToBounds = true
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Canvas")
+        setAccessibilityLabel("Canvas".localizedName)
         setAccessibilityIdentifier("editorCanvas")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1610,6 +1610,11 @@ final class CanvasView: NSView {
     /// Right-drag with a brush tool: left and right resize the brush from its size at the press, or with Shift
     /// change its hardness. The brush circle stays where the press was.
     private var brushTipDrag: (start: CGPoint, diameter: CGFloat, hardness: CGFloat, hardnessShown: Bool)?
+    /// The commands that fit the tool in hand (see canvasContextMenu). Brush tools reach the menu from
+    /// rightMouseUp instead, because a right-drag there already resizes the brush.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        session.document == nil ? nil : canvasContextMenu()
+    }
     override func rightMouseDown(with event: NSEvent) {
         guard session.tool.isBrushTool, session.brushStroke == nil, session.warpStroke == nil, !spaceHeld else {
             super.rightMouseDown(with: event); return
@@ -1637,10 +1642,16 @@ final class CanvasView: NSView {
         updateBrushCursor()
     }
     override func rightMouseUp(with event: NSEvent) {
-        guard brushTipDrag != nil else { super.rightMouseUp(with: event); return }
+        guard let drag = brushTipDrag else { super.rightMouseUp(with: event); return }
         brushTipDrag = nil
-        brushPointer = convert(event.locationInWindow, from: nil)
+        let point = convert(event.locationInWindow, from: nil)
+        brushPointer = point
         updateBrushCursor()
+        // A press that never moved is a plain right-click, so it earns the same menu every other tool
+        // opens, while the drag keeps resizing the brush.
+        if hypot(point.x - drag.start.x, point.y - drag.start.y) < 3, let menu = menu(for: event) {
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        }
     }
     override func mouseDown(with event: NSEvent) {
         session.effectSelection = nil

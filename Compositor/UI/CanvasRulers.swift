@@ -48,12 +48,26 @@ final class CanvasRulerNSView: NSView {
         super.init(frame: .zero)
         setAccessibilityElement(true)
         setAccessibilityRole(.unknown)
-        setAccessibilityLabel(axis == .horizontal ? "Horizontal ruler" : "Vertical ruler")
+        setAccessibilityLabel((axis == .horizontal ? "Horizontal ruler" : "Vertical ruler").localizedName)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
+
+    /// Right-clicking a ruler reaches the guide commands, which otherwise sit in the View menu, and the
+    /// two toggles that decide whether the ruler and its guides are on screen at all.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let session = session
+        let menu = ClosureMenu()
+        menu.add("Show Grid", state: session.showsGrid ? .on : .off) { session.showsGrid.toggle() }
+        menu.add("Show Guides", state: session.showsGuides ? .on : .off) { session.showsGuides.toggle() }
+        menu.add("Show Rulers", state: session.showsRulers ? .on : .off) { session.showsRulers.toggle() }
+        menu.separator()
+        menu.add("Lock Guides", state: session.locksGuides ? .on : .off) { session.locksGuides.toggle() }
+        menu.add("Clear Guides", enabled: session.canClearGuides, state: .off) { session.clearGuides() }
+        return menu.nsMenu
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor(white: 0.2, alpha: 1).setFill()

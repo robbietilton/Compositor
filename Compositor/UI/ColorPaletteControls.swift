@@ -39,7 +39,7 @@ struct ColorPaletteControls: View {
         .disabled(!session.canEditPalette)
         .popover(isPresented: Binding(get: { choosingMaskBackground != nil }, set: { if !$0 { choosingMaskBackground = nil } })) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(choosingMaskBackground == true ? "Mask background" : "Mask foreground").font(.headline)
+                Text((choosingMaskBackground == true ? "Mask background" : "Mask foreground").localizedName).font(.headline)
                 HStack {
                     Button("Black · Hide") { chooseMask(.black) }
                     Button("White · Reveal") { chooseMask(.white) }
@@ -56,11 +56,10 @@ struct ColorPaletteControls: View {
         }
     }
     private func swatch(background: Bool) -> some View {
-        let label = background ? "Background color" : "Foreground color"
+        let label = (background ? "Background color" : "Foreground color").localizedName
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return Button {
-            if session.isMaskSelected { choosingMaskBackground = background }
-            else { session.openColorPicker(background: background) }
+            edit(background: background)
         } label: {
             shape
                 .fill(Color(nsColor: session.paletteColor(background: background).nsColor))
@@ -70,6 +69,18 @@ struct ColorPaletteControls: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain).help(label).accessibilityLabel(label)
+        .contextMenu {
+            Button("Edit Color…") { edit(background: background) }
+            Divider()
+            Button("Swap Colors") { session.swapPaletteColors() }
+            Button("Default Colors") { session.resetPaletteColors() }
+        }
+    }
+    /// Clicking a swatch opens the picker, or the mask choice while a mask is selected. The right-click
+    /// menu asks for the same thing, so the two can never disagree about what a swatch does.
+    private func edit(background: Bool) {
+        if session.isMaskSelected { choosingMaskBackground = background }
+        else { session.openColorPicker(background: background) }
     }
     private func chooseMask(_ color: PaletteColor) {
         guard let background = choosingMaskBackground else { return }
