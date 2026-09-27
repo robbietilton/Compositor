@@ -41,26 +41,6 @@ final class ProjectController {
     private var writing: Task<Bool, Never>?
     func finishWriting() async { if let writing { _ = await writing.value } }
 
-    func exportPNG() async {
-        guard session.document != nil, begin() else { return }
-        defer { session.isProjectBusy = false }
-        guard let snapshot = session.projectSnapshot() else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.canCreateDirectories = true
-        panel.isExtensionHidden = false
-        panel.title = "Export PNG"
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".png"
-        let response: NSApplication.ModalResponse
-        if let window { response = await panel.beginSheetModal(for: window) }
-        else { response = await panel.begin() }
-        guard response == .OK, let url = panel.url else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try await ImageExporter.shared.exportPNG(snapshot, to: url) }
-        catch { await showError("Couldn’t export PNG", error: error) }
-    }
-
     func canvasSize() async {
         guard let window, let document = session.document, begin() else { return }
         defer { session.isProjectBusy = false }
@@ -129,17 +109,17 @@ final class ProjectController {
         } catch { await showError("Couldn’t trim image", error: error) }
     }
 
-    func exportJPEG() async {
+    func exportImage() async {
         guard let window, session.document != nil, begin() else { return }
         defer { session.isProjectBusy = false }
         guard let snapshot = session.projectSnapshot() else { return }
         do {
             let raster = try await ImageExporter.shared.render(snapshot)
-            let data: Data? = await withCheckedContinuation { continuation in
+            let selection: (format: ExportFormat, data: Data)? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export JPEG"
-                sheet.contentViewController = NSHostingController(rootView: JPEGExportSheet(raster: raster) { data in
+                sheet.title = "Export Image"
+                sheet.contentViewController = NSHostingController(rootView: ExportSheet(raster: raster) { data in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
                     // Release the hosted view and its closure after dismissal.
@@ -148,18 +128,19 @@ final class ProjectController {
                 })
                 window.beginSheet(sheet)
             }
-            guard let data else { return }
+            guard let selection else { return }
             let panel = NSSavePanel()
-            panel.allowedContentTypes = [.jpeg]
+            panel.allowedContentTypes = [selection.format.type]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.title = "Export JPEG"
-            panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".jpg"
+            panel.title = "Export Image"
+            panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + "." + selection.format.fileExtension
             guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            try await ImageExporter.shared.write(data, to: url)
-        } catch { await showError("Couldn’t export JPEG", error: error) }
+            try await ImageExporter.shared.write(selection.data, to: url)
+            UserDefaults.standard.set(selection.format.rawValue, forKey: ExportSheet.formatKey)
+        } catch { await showError("Couldn’t export image", error: error) }
     }
 
     private func saveCurrent(asNew: Bool = false) async -> Bool {

@@ -75,7 +75,7 @@ struct ShortcutDefinition: Identifiable {
             entry("Undo", "z", 1, menu: true), entry("Redo", "z", 9, menu: true),
             entry("New Canvas", "n", 1, menu: true), entry("Open Project", "o", 1, menu: true),
             entry("Save", "s", 1, menu: true), entry("Save As", "s", 9, menu: true),
-            entry("Export PNG", "e", 9, menu: true), entry("Export JPEG", "s", 11, menu: true),
+            entry("Export", "e", 9, menu: true),
             entry("Close Project", "w", 1, menu: true), entry("Fit Canvas", "0", 1, menu: true),
             entry("Actual Pixels", "1", 1, menu: true), entry("Zoom In", "=", 1, menu: true),
             entry("Zoom Out", "-", 1, menu: true), entry("Show Transform Controls", "h", 1, menu: true),
@@ -134,8 +134,12 @@ final class ShortcutSettings {
     private static let storageKey = "keyboardShortcuts.v1"
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.storageKey),
-           let saved = try? JSONDecoder().decode([String: ShortcutChord].self, from: data),
-           Self.problem(in: saved) == nil { overrides = saved }
+           var saved = try? JSONDecoder().decode([String: ShortcutChord].self, from: data) {
+            let previousExport = saved.removeValue(forKey: "Menus:Export PNG")
+            if saved["Menus:Export"] == nil { saved["Menus:Export"] = previousExport }
+            saved.removeValue(forKey: "Menus:Export JPEG")
+            if Self.problem(in: saved) == nil { overrides = saved }
+        }
     }
     func chord(_ definition: ShortcutDefinition) -> ShortcutChord { overrides[definition.id] ?? definition.original }
     func menu(_ key: KeyEquivalent, modifiers: EventModifiers) -> ShortcutChord {

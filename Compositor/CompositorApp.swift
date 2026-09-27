@@ -77,11 +77,8 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("s", modifiers: [.command, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
-                    Button("Export PNG…") { Task { await applicationDelegate.projects.exportPNG() } }
+                    Button("Export…") { Task { await applicationDelegate.projects.exportImage() } }
                         .configuredKeyboardShortcut("e", modifiers: [.command, .shift])
-                        .disabled(session.document == nil || !applicationDelegate.projects.canStart)
-                    Button("Export JPEG…") { Task { await applicationDelegate.projects.exportJPEG() } }
-                        .configuredKeyboardShortcut("s", modifiers: [.command, .option, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
                     Button("Close Project") {
