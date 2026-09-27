@@ -94,9 +94,40 @@ struct TypeControls: View {
     }
 }
 
+/// The installed faces, named the way the system names them: “苹方-简 常规体” rather than “PingFangSC-Regular”.
+///
+/// A project stores a face's PostScript name — the one `NSFont(name:size:)` takes and a `.comp` file records — so
+/// the menu shows the readable name and keeps the PostScript one as the item's value. The catalog is built on the
+/// first menu that opens, not with the view: enumerating 600 faces is not something a keystroke should pay for.
+enum FontCatalog {
+    /// One face: what the menu says, and what the project stores.
+    struct Face: Equatable {
+        let title: String
+        let postScriptName: String
+    }
+
+    static let faces: [Face] = {
+        let faces = NSFontManager.shared.availableFonts.map { name in
+            Face(title: NSFont(name: name, size: 13)?.displayName ?? name, postScriptName: name)
+        }
+        // In the order the names are read: Han faces come out by pinyin on a Chinese Mac, and a family's faces stay
+        // together, since a face's name starts with its family's.
+        return faces.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }()
+
+    private static let titles = Dictionary(faces.map { ($0.postScriptName, $0.title) },
+                                           uniquingKeysWith: { first, _ in first })
+
+    /// The name to show for a face, including one this Mac doesn't have: an imported project can name a font that
+    /// isn't installed, and the menu still has to say what the text is set in.
+    static func title(for postScriptName: String) -> String {
+        titles[postScriptName] ?? NSFont(name: postScriptName, size: 13)?.displayName ?? postScriptName
+    }
+}
+
 /// Keep the installed-font catalog out of SwiftUI's per-keystroke view updates.
-/// The closed control needs only the current name; populate its menu on demand.
-private struct TypeFontPicker: NSViewRepresentable {
+/// The closed control shows one name; populate its menu on demand.
+struct TypeFontPicker: NSViewRepresentable {
     @Binding var fontName: String
     @Environment(\.isEnabled) private var isEnabled
 
@@ -104,7 +135,7 @@ private struct TypeFontPicker: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = FixedWidthPopUpButton(frame: .zero, pullsDown: false)
-        if !fontName.isEmpty { button.addItem(withTitle: fontName) }
+        if !fontName.isEmpty { Self.add(fontName, to: button) }
         button.borderShape = .capsule
         // A long font name is cut off at its end rather than widening the control or scrolling its start away.
         button.cell?.lineBreakMode = .byTruncatingTail
@@ -124,17 +155,39 @@ private struct TypeFontPicker: NSViewRepresentable {
         guard !context.coordinator.tracking else { return }
         if fontName.isEmpty { Self.showMultiple(in: button); return }
         Self.hideMultiple(in: button)
-        guard button.titleOfSelectedItem != fontName else { return }
-        if button.item(withTitle: fontName) == nil { button.addItem(withTitle: fontName) }
-        button.selectItem(withTitle: fontName)
+        guard Self.postScriptName(of: button.selectedItem) != fontName else { return }
+        Self.select(fontName, in: button)
+    }
+
+    /// Adds a face to the menu: the title is the name to read, the value the PostScript name a project keeps.
+    static func add(_ postScriptName: String, to button: NSPopUpButton, title: String? = nil) {
+        button.addItem(withTitle: title ?? FontCatalog.title(for: postScriptName))
+        button.lastItem?.representedObject = postScriptName
+    }
+
+    /// Points the menu at a face, adding an item for a face this Mac doesn't have, so the menu shows what the text
+    /// in the project is set in even though the control can't draw it.
+    static func select(_ postScriptName: String, in button: NSPopUpButton) {
+        if let index = button.itemArray.firstIndex(where: { Self.postScriptName(of: $0) == postScriptName }) {
+            if button.indexOfSelectedItem != index { button.selectItem(at: index) }
+            return
+        }
+        add(postScriptName, to: button)
+        button.selectItem(at: button.numberOfItems - 1)
+    }
+
+    /// The face an item stands for. Nil for the item that means “several faces”, which isn't a face.
+    static func postScriptName(of item: NSMenuItem?) -> String? {
+        isMultiple(item) ? nil : item?.representedObject as? String
     }
 
     /// Selected letters in more than one face: the menu says so with an item of its own at the top, which isn't a font.
-    private static let multiple = "(Multiple)"
-    private static func isMultiple(_ item: NSMenuItem?) -> Bool { item?.representedObject as? String == multiple }
+    final class MultipleMarker {}
+    private static let multiple = MultipleMarker()
+    static func isMultiple(_ item: NSMenuItem?) -> Bool { item?.representedObject is MultipleMarker }
     static func showMultiple(in button: NSPopUpButton) {
         if !isMultiple(button.item(at: 0)) {
-            let item = NSMenuItem(title: multiple, action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "(Multiple)".localizedName, action: nil, keyEquivalent: "")
             item.representedObject = multiple
             button.menu?.insertItem(item, at: 0)
         }
@@ -168,12 +221,11 @@ private struct TypeFontPicker: NSViewRepresentable {
         func menuNeedsUpdate(_ menu: NSMenu) {
             guard !loaded, let button else { return }
             let selected = fontName.wrappedValue
-            var names = NSFontManager.shared.availableFonts
-            if !selected.isEmpty, !names.contains(selected) { names.append(selected) }
-            names.sort()
             button.removeAllItems()
-            button.addItems(withTitles: names)
-            if selected.isEmpty { TypeFontPicker.showMultiple(in: button) } else { button.selectItem(withTitle: selected) }
+            for face in FontCatalog.faces {
+                TypeFontPicker.add(face.postScriptName, to: button, title: face.title)
+            }
+            if selected.isEmpty { TypeFontPicker.showMultiple(in: button) } else { TypeFontPicker.select(selected, in: button) }
             loaded = true
         }
 
@@ -181,8 +233,8 @@ private struct TypeFontPicker: NSViewRepresentable {
         func menuDidClose(_ menu: NSMenu) { tracking = false }
 
         @objc func choose(_ button: NSPopUpButton) {
-            guard !TypeFontPicker.isMultiple(button.selectedItem),
-                  let selected = button.titleOfSelectedItem, selected != fontName.wrappedValue else { return }
+            guard let selected = TypeFontPicker.postScriptName(of: button.selectedItem),
+                  selected != fontName.wrappedValue else { return }
             fontName.wrappedValue = selected
         }
     }

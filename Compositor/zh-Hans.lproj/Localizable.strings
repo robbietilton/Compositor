@@ -7,6 +7,7 @@
 */
 
 "#" = "#";
+"(Multiple)" = "（多种字体）";
 "A blank space for your next composition." = "空白画布，等你开始下一幅合成。";
 "Actual Pixels" = "实际像素";
 "Actual pixels (⌘1)" = "实际像素（⌘1）";
