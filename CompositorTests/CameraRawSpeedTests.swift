@@ -96,6 +96,23 @@ struct CameraRawSpeedTests {
         return best
     }
 
+
+
+    /// Blurs wider than the picture, on a single pixel, a single row and a single column.
+    @Test(arguments: [(1, 1, UInt64(5558979605539197941)), (97, 1, UInt64(15426182781399563245)), (1, 61, UInt64(5994485904874808949))])
+    func effectsOnTinyPictures(_ width: Int, _ height: Int, _ expected: UInt64) throws {
+        var settings = CameraRawSettings()
+        Self.effects(&settings)
+        settings.detail.noiseLuminance = 60; settings.detail.sharpenAmount = 50
+        let hash = try Self.hash(try settings.apply(try Self.picture(width: width, height: height)))
+        #expect(hash == expected, "\(width) × \(height): \(hash)")
+    }
+
+}
+
+/// How long the kernels take, one test at a time: run side by side, each would get only part of the cores.
+@Suite(.serialized)
+struct CameraRawTimingTests {
     /// Code coverage counts every branch in counters all threads share, so under it threads wait on each other and
     /// timings say nothing about the app. Xcode points `LLVM_PROFILE_FILE` at /dev/null when coverage is off.
     static let measuresTime = ProcessInfo.processInfo.environment["LLVM_PROFILE_FILE"].map { $0 == "/dev/null" } ?? true
@@ -104,10 +121,20 @@ struct CameraRawSpeedTests {
     @Test(.enabled(if: measuresTime, "timings under code coverage don't reflect the app"))
     func lightAndColorKeepUpWithASlider() throws {
         var settings = CameraRawSettings()
-        Self.light(&settings)
-        let photo = try Self.photo()
-        let time = try Self.milliseconds { _ = try settings.apply(photo) }
+        CameraRawSpeedTests.light(&settings)
+        let photo = try CameraRawSpeedTests.photo()
+        let time = try CameraRawSpeedTests.milliseconds { _ = try settings.apply(photo) }
         // Alone it takes about 50 ms; the limit leaves room for other tests running at the same time.
         #expect(time < 200, "\(Int(time)) ms")
+    }
+
+    /// Texture, Clarity and Dehaze redraw this much for every slider step. On one core it took about 160 ms.
+    @Test(.enabled(if: measuresTime, "timings under code coverage don't reflect the app"))
+    func effectsKeepUpWithASlider() throws {
+        var settings = CameraRawSettings()
+        settings.texture = 35; settings.clarity = -25; settings.dehaze = 20
+        let photo = try CameraRawSpeedTests.photo()
+        let time = try CameraRawSpeedTests.milliseconds { _ = try settings.apply(photo) }
+        #expect(time < 100, "\(Int(time)) ms")
     }
 }

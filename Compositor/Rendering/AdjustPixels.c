@@ -397,24 +397,40 @@ static int box_blur_plane(const float *src, float *dst, size_t width, size_t hei
     float *temp = malloc(width * height * sizeof(float));
     if (!temp) return 0;
     int window = radius * 2 + 1;
-    for (size_t y = 0; y < height; ++y) {
-        double sum = 0;
-        for (int k = -radius; k <= radius; ++k) sum += src[y * width + clamped_index(k, width)];
-        for (size_t x = 0; x < width; ++x) {
-            temp[y * width + x] = (float)(sum / window);
-            sum += src[y * width + clamped_index((int)x + radius + 1, width)];
-            sum -= src[y * width + clamped_index((int)x - radius, width)];
+    parallel_rows(height, ^(size_t start, size_t end) {
+        for (size_t y = start; y < end; ++y) {
+            double sum = 0;
+            for (int k = -radius; k <= radius; ++k) sum += src[y * width + clamped_index(k, width)];
+            for (size_t x = 0; x < width; ++x) {
+                temp[y * width + x] = (float)(sum / window);
+                sum += src[y * width + clamped_index((int)x + radius + 1, width)];
+                sum -= src[y * width + clamped_index((int)x - radius, width)];
+            }
         }
-    }
-    for (size_t x = 0; x < width; ++x) {
-        double sum = 0;
-        for (int k = -radius; k <= radius; ++k) sum += temp[clamped_index(k, height) * width + x];
+    });
+    // Down the columns, a band of them at a time and row by row, so memory is read in order. Each column keeps its
+    // own running sum, added and taken from in the same order as one column at a time would.
+    enum { band = 64 };
+    dispatch_apply((width + band - 1) / band, DISPATCH_APPLY_AUTO, ^(size_t index) {
+        size_t first = index * band, last = first + band < width ? first + band : width;
+        double sums[band];
+        for (size_t x = first; x < last; ++x) {
+            double sum = 0;
+            for (int k = -radius; k <= radius; ++k) sum += temp[clamped_index(k, height) * width + x];
+            sums[x - first] = sum;
+        }
         for (size_t y = 0; y < height; ++y) {
-            dst[y * width + x] = (float)(sum / window);
-            sum += temp[clamped_index((int)y + radius + 1, height) * width + x];
-            sum -= temp[clamped_index((int)y - radius, height) * width + x];
+            const float *ahead = temp + clamped_index((int)y + radius + 1, height) * width;
+            const float *behind = temp + clamped_index((int)y - radius, height) * width;
+            for (size_t x = first; x < last; ++x) {
+                double sum = sums[x - first];
+                dst[y * width + x] = (float)(sum / window);
+                sum += ahead[x];
+                sum -= behind[x];
+                sums[x - first] = sum;
+            }
         }
-    }
+    });
     free(temp);
     return 1;
 }
@@ -570,18 +586,20 @@ void adjust_camera_raw_effects(uint8_t *rgba, size_t width, size_t height, size_
     if (texture != 0 || clarity != 0 || glow > 0) {
         luma = malloc(count * sizeof(float));
         if (!luma) return;
-        for (size_t y = 0; y < height; ++y) {
-            uint8_t *row = rgba + y * stride;
-            for (size_t x = 0; x < width; ++x) {
-                uint8_t *p = row + x * 4;
-                double alpha = p[3];
-                if (!alpha) { luma[y * width + x] = 0; continue; }
-                double r = fmin(1.0, p[0] / alpha);
-                double g = fmin(1.0, p[1] / alpha);
-                double b = fmin(1.0, p[2] / alpha);
-                luma[y * width + x] = (float)rec709(r, g, b);
+        parallel_rows(height, ^(size_t start, size_t end) {
+            for (size_t y = start; y < end; ++y) {
+                uint8_t *row = rgba + y * stride;
+                for (size_t x = 0; x < width; ++x) {
+                    uint8_t *p = row + x * 4;
+                    double alpha = p[3];
+                    if (!alpha) { luma[y * width + x] = 0; continue; }
+                    double r = fmin(1.0, p[0] / alpha);
+                    double g = fmin(1.0, p[1] / alpha);
+                    double b = fmin(1.0, p[2] / alpha);
+                    luma[y * width + x] = (float)rec709(r, g, b);
+                }
             }
-        }
+        });
         if (texture != 0) {
             fine = malloc(count * sizeof(float));
             if (!fine || !box_blur_plane(luma, fine, width, height, effects_radius(1, scale))) failed = 1;
@@ -632,35 +650,37 @@ void adjust_camera_raw_effects(uint8_t *rgba, size_t width, size_t height, size_
         glowBlue = 0.75 - 0.6 * warmth;
         glowGain = glowStyle == 1 ? 1.4 : 1;
     }
-    for (size_t y = 0; y < height; ++y) {
-        uint8_t *row = rgba + y * stride;
-        for (size_t x = 0; x < width; ++x) {
-            uint8_t *p = row + x * 4;
-            double alpha = p[3];
-            if (!alpha) continue;
-            size_t index = y * width + x;
-            double r = fmin(1.0, p[0] / alpha);
-            double g = fmin(1.0, p[1] / alpha);
-            double b = fmin(1.0, p[2] / alpha);
-            if (fine || coarse) {
-                double tone = rec709(r, g, b);
-                double detail = 0;
-                if (fine) detail += (texture / 100.0) * (tone - fine[index]);
-                if (coarse) detail += (clarity / 100.0) * (tone - coarse[index]);
-                if (detail != 0) scale_luminance(&r, &g, &b, camera_clamp(tone + detail));
+    parallel_rows(height, ^(size_t start, size_t end) {
+        for (size_t y = start; y < end; ++y) {
+            uint8_t *row = rgba + y * stride;
+            for (size_t x = 0; x < width; ++x) {
+                uint8_t *p = row + x * 4;
+                double alpha = p[3];
+                if (!alpha) continue;
+                size_t index = y * width + x;
+                double r = fmin(1.0, p[0] / alpha);
+                double g = fmin(1.0, p[1] / alpha);
+                double b = fmin(1.0, p[2] / alpha);
+                if (fine || coarse) {
+                    double tone = rec709(r, g, b);
+                    double detail = 0;
+                    if (fine) detail += (texture / 100.0) * (tone - fine[index]);
+                    if (coarse) detail += (clarity / 100.0) * (tone - coarse[index]);
+                    if (detail != 0) scale_luminance(&r, &g, &b, camera_clamp(tone + detail));
+                }
+                if (dehaze != 0) effects_dehaze(&r, &g, &b, dehaze);
+                if (glowPlane && glow > 0) {
+                    double add = glowPlane[index] * (glow / 100.0) * glowGain;
+                    r = camera_clamp(r + add * glowRed);
+                    g = camera_clamp(g + add * glowGreen);
+                    b = camera_clamp(b + add * glowBlue);
+                }
+                effects_vignette(&r, &g, &b, x, y, width, height, vignetteAmount, vignetteMidpoint, vignetteRoundness,
+                                 vignetteFeather, vignetteHighlights, vignetteStyle);
+                write_premultiplied(p, r, g, b, alpha);
             }
-            if (dehaze != 0) effects_dehaze(&r, &g, &b, dehaze);
-            if (glowPlane && glow > 0) {
-                double add = glowPlane[index] * (glow / 100.0) * glowGain;
-                r = camera_clamp(r + add * glowRed);
-                g = camera_clamp(g + add * glowGreen);
-                b = camera_clamp(b + add * glowBlue);
-            }
-            effects_vignette(&r, &g, &b, x, y, width, height, vignetteAmount, vignetteMidpoint, vignetteRoundness,
-                             vignetteFeather, vignetteHighlights, vignetteStyle);
-            write_premultiplied(p, r, g, b, alpha);
         }
-    }
+    });
     free(luma);
     free(fine);
     free(coarse);
