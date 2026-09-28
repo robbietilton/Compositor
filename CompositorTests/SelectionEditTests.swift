@@ -154,7 +154,7 @@ struct SelectionEditTests {
         #expect(edge.contains { $0 > 0 && $0 < 255 })
     }
 
-    @Test func maskButtonAddsWhiteMaskOrHidesTheSelection() async throws {
+    @Test func maskButtonAddsWhiteMaskOrRevealsTheSelection() async throws {
         let session = makeSession()
         session.setPaletteColor(red, background: false)
         await session.fillSelection(with: .foreground) // Whole layer red.
@@ -166,27 +166,27 @@ struct SelectionEditTests {
 
         select(session, CGRect(x: 20, y: 10, width: 30, height: 20))
         session.addMask()
-        #expect(session.history.undoName == "Add Mask from Selection")
+        #expect(session.history.undoName == "Reveal Selection")
         #expect(session.selection == nil && session.isMaskSelected)
         let result = try await render(session)
-        #expect(try pixel(result, x: 30, y: 20)[3] == 0)     // Selected area: black, hidden.
-        #expect(try pixel(result, x: 5, y: 5)[3] == 255)     // Everything else: white, visible.
+        #expect(try pixel(result, x: 30, y: 20)[3] == 255)   // Selected area: white, visible.
+        #expect(try pixel(result, x: 5, y: 5)[3] == 0)       // Everything else: black, hidden.
         session.undo()
         #expect(session.activeLayer?.mask == nil && session.selection != nil)
     }
 
-    /// A layer's Add White Mask / Add Black Mask use the selection too: white hides it, black shows only it.
-    @Test func layerMenuMasksUseTheSelection() async throws {
+    /// Option-click on the mask button (and Hide All / Hide Selection) is the opposite: black hides the selection.
+    @Test func hidingMasksUseTheSelection() async throws {
         let session = makeSession()
         session.setPaletteColor(red, background: false)
         await session.fillSelection(with: .foreground) // Whole layer red.
         select(session, CGRect(x: 20, y: 10, width: 30, height: 20))
         session.addMask(revealing: false)
-        #expect(session.history.undoName == "Add Mask from Selection")
+        #expect(session.history.undoName == "Hide Selection")
         #expect(session.selection == nil && session.isMaskSelected)
         let result = try await render(session)
-        #expect(try pixel(result, x: 30, y: 20)[3] == 255)   // Selected area: white, visible.
-        #expect(try pixel(result, x: 5, y: 5)[3] == 0)       // Everything else: black, hidden.
+        #expect(try pixel(result, x: 30, y: 20)[3] == 0)     // Selected area: black, hidden.
+        #expect(try pixel(result, x: 5, y: 5)[3] == 255)     // Everything else: white, visible.
         session.undo()
         #expect(session.activeLayer?.mask == nil && session.selection != nil)
 
@@ -207,7 +207,7 @@ struct SelectionEditTests {
         let index = try #require(session.document?.layers.firstIndex { $0.id == id })
         session.document?.layers[index].transform = LayerTransform(origin: .zero, size: CGSize(width: 100, height: 100))
         select(session, CGRect(x: 0, y: 0, width: 50, height: 50))
-        session.addMask()
+        session.addMask(revealing: false)
         #expect(session.activeLayer?.mask?.asset.image.width == 50) // Mask uses the layer's pixel grid.
         let result = try await render(session)
         #expect(try pixel(result, x: 25, y: 25)[3] == 0)

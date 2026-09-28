@@ -138,8 +138,10 @@ import QuartzCore
             guard let texture = texture(width: stroke.width, height: stroke.height, mask: stroke.isMask),
                   let image = wrap(texture, mask: stroke.isMask), let buffer = queue.makeCommandBuffer() else { return nil }
             let grid = CGRect(x: 0, y: 0, width: stroke.width, height: stroke.height)
-            // Transparent past the old pixels; a mask reveals past its old values.
-            var start = (stroke.isMask ? CIImage(color: .white) : CIImage.clear).cropped(to: grid)
+            // Transparent past the old pixels; a mask is its background past its old values (see LayerMask.background),
+            // as the stroke's own tiles start and as it's committed. White there showed a hiding mask's edges revealing.
+            let edge = stroke.maskBackground
+            var start = (stroke.isMask ? CIImage(color: CIColor(red: edge, green: edge, blue: edge)) : CIImage.clear).cropped(to: grid)
             if let base {
                 let placed = base.clampedToExtent().transformed(by: CGAffineTransform(
                     scaleX: stroke.sourceRect.width / base.extent.width, y: stroke.sourceRect.height / base.extent.height)

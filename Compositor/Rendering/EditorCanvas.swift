@@ -540,6 +540,8 @@ final class CanvasView: NSView {
         /// The text being typed, which the canvas draws as pixels.
         let textStyle: LayerTextStyle?
         let textTransform: LayerTransform?
+        /// The mask shown by itself, which may be one the composite doesn't draw (disabled, or a folder's).
+        let maskAlone: ObjectIdentifier?
     }
 
     @discardableResult
@@ -572,7 +574,8 @@ final class CanvasView: NSView {
             folderMasks: (document?.layers ?? []).filter { $0.isGroup && $0.mask != nil }.map {
                 DisplayState.FolderMask(id: $0.id, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) },
                                         transform: session.displayedTransform(for: $0))
-            }, textStyle: session.textDraft?.style, textTransform: session.textDraft == nil ? nil : inlineTextEditor?.shownTransform)
+            }, textStyle: session.textDraft?.style, textTransform: session.textDraft == nil ? nil : inlineTextEditor?.shownTransform,
+            maskAlone: session.maskAloneLayer?.mask.map { ObjectIdentifier($0.asset.image) })
         var changed = false
         if displayedState != state {
             if let previous = displayedState, previous.documentID == state.documentID,
@@ -923,6 +926,25 @@ final class CanvasView: NSView {
         DownsampleCache.shared.image(image, drawnAt: drawnWidth * LayerRenderer.deviceScale(of: context) / CGFloat(max(1, image.width)))
     }
 
+    /// The mask as Photoshop shows it after an Option-click: grayscale across the whole canvas, white revealing and
+    /// black hiding, with what a stroke has painted into it so far. Past its pixels, a mask is its edge tone.
+    private func drawMaskAlone(_ mask: LayerMask, of layer: ImageLayer, document: CanvasDocument, scale: CGFloat,
+                               center: (CGPoint) -> CGPoint, in context: CGContext) {
+        let origin = center(.zero)
+        context.setFillColor(gray: LayerMask.background(of: mask.asset.thumbnail), alpha: 1)
+        context.fill(CGRect(x: origin.x, y: origin.y, width: document.size.width * scale, height: document.size.height * scale))
+        if let stroke = session.brushStroke ?? session.gradientEdit?.raster, stroke.isMask, stroke.layer.id == layer.id {
+            let placed = stroke.paintTransform
+            LayerRenderer.drawBrushPreview(mask.asset.image, transform: placed, center: center(placed.center), scale: scale,
+                opacity: 1, blendMode: .normal, mask: nil, patches: stroke.patches, pixelWidth: stroke.width,
+                pixelHeight: stroke.height, paintingMask: false, sourceRect: stroke.sourceRect, in: context)
+            return
+        }
+        // Where it shows while a transform is being dragged, as in the composite.
+        let placed = session.displayedMaskPlacement(for: layer) ?? session.displayedTransform(for: layer)
+        LayerRenderer.draw(mask.asset.image, transform: placed, center: center(placed.center), scale: scale, in: context)
+    }
+
     private func drawLayers(_ document: CanvasDocument, scale: CGFloat, center: @escaping (CGPoint) -> CGPoint, in context: CGContext, onSurface: Bool = false) {
         // Pixels being moved, or a gradient: the tiles drawn below follow the drag only once something reads them (see
         // PixelMove and GradientEdit).
@@ -943,6 +965,10 @@ final class CanvasView: NSView {
                     self?.session.brushError = message
                 }
             }
+        }
+        if let layer = session.maskAloneLayer, let mask = layer.mask {
+            drawMaskAlone(mask, of: layer, document: document, scale: scale, center: center, in: context)
+            return
         }
         handOffTextEffects(document)
         session.effectsPreviews.prepare(layers: document.layers)
@@ -2724,6 +2750,24 @@ extension CanvasView {
                 width: stroke.layer.asset?.image.width ?? Int(base.size.width.rounded()),
                 height: stroke.layer.asset?.image.height ?? Int(base.size.height.rounded()),
                 limit: session.transformEdit != nil ? min(2048, steady) : steady)
+        }
+        // Option-click on a mask thumbnail: that mask by itself, gray across the canvas (its edge tone past its pixels),
+        // with a stroke or gradient being laid into it, as `drawMaskAlone` draws it on the Core Graphics canvas.
+        if let layer = session.maskAloneLayer, let mask = layer.mask {
+            let edge = LayerMask.background(of: mask.asset.thumbnail)
+            let back = CIImage(color: CIColor(red: edge, green: edge, blue: edge))
+                .cropped(to: CGRect(origin: .zero, size: document.size).applying(placement.mapping))
+            let placed: CIImage?
+            if let stroke = session.brushStroke ?? session.gradientEdit?.raster, stroke.isMask, stroke.layer.id == layer.id {
+                placed = paintedMask(stroke)
+            } else {
+                placed = placement.place(mask.asset.image, transform: session.displayedMaskPlacement(for: layer)
+                    ?? session.displayedTransform(for: layer), mask: true)
+            }
+            // A mask's values are in its red channel; shown, they're gray.
+            let gray = placed?.applyingFilter("CIColorMatrix", parameters: ["inputGVector": CIVector(x: 1, y: 0, z: 0, w: 0),
+                                                                            "inputBVector": CIVector(x: 1, y: 0, z: 0, w: 0)])
+            return gray.map { $0.composited(over: back) } ?? back
         }
         // A layer being painted, or given a gradient: its grid as the stroke leaves it (painting its mask, its old pixels
         // through the mask as it's being left), through its own mask where its old pixels were — paint past them shows.

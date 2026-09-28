@@ -917,7 +917,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
             : "Unlink layer and mask to move or transform them separately"
         linkButton.setAccessibilityLabel(layer.mask?.isLinked == false ? "Link mask: \(layer.name)" : "Unlink mask: \(layer.name)")
         thumbnail.toolTip = editableText ? "Editable text layer" : "Select image pixels"
-        maskThumbnail.toolTip = "Select layer mask; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
+        maskThumbnail.toolTip = "Select layer mask; Option-click to view it alone; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
         thumbnail.setAccessibilityLabel("Select \(editableText ? "text" : "image"): \(layer.name)")
         maskThumbnail.setAccessibilityLabel("Select mask: \(layer.name)")
         updateTarget()
@@ -958,6 +958,8 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         maskThumbnail.layer?.borderColor = NSColor.controlAccentColor.cgColor
         thumbnail.layer?.borderWidth = active && !mask ? 2 : 0
         maskThumbnail.layer?.borderWidth = active && mask ? 2 : 0
+        // Shown alone on the canvas, the mask is outlined in white rather than the accent.
+        if active, session?.maskAloneLayer?.id == layerID { maskThumbnail.layer?.borderColor = NSColor.white.cgColor }
     }
     /// Types the layer's name in the row: Return keeps it, Escape leaves it as it was, as does clicking away.
     func beginRenaming() {
@@ -1023,6 +1025,10 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     private static var loadMode: SelectionMode {
         let flags = NSApp.currentEvent?.modifierFlags ?? []
         return flags.contains(.option) ? .subtract : flags.contains(.shift) ? .add : .replace
+    }
+    @objc func toggleMaskAlone() {
+        guard let layerID else { return }
+        session?.toggleMaskAlone(layerID)
     }
     @objc private func selectMask() {
         guard let layerID else { return }
@@ -1254,12 +1260,12 @@ private final class LayerThumbnailButton: NSButton, NSDraggingSource {
 }
 
 extension LayerThumbnailButton {
-    /// Option-drag from a mask thumbnail carries a copy of the mask to another row; a click without a drag just
-    /// selects the mask.
+    /// Option-drag from a mask thumbnail carries a copy of the mask to another row; a click without a drag shows
+    /// the mask alone on the canvas, or the composite again, as in Photoshop.
     fileprivate func dragMaskCopy(_ down: NSEvent) {
         guard let window, let layerID else { return }
         while let event = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            if event.type == .leftMouseUp { sendAction(action, to: target); return }
+            if event.type == .leftMouseUp { _ = target?.perform(#selector(LayerCell.toggleMaskAlone)); return }
             let dx = event.locationInWindow.x - down.locationInWindow.x, dy = event.locationInWindow.y - down.locationInWindow.y
             guard dx * dx + dy * dy >= 9 else { continue }
             let item = NSPasteboardItem()

@@ -98,6 +98,12 @@ struct ContentView: View {
                         ZStack {
                             EditorCanvas(session: session)
                             if session.document == nil { welcome }
+                            if let layer = session.maskAloneLayer {
+                                // At the foot of the canvas, clear of the transform box's rotation handle.
+                                MaskAloneBadge(session: session, layer: layer).fixedSize()
+                                    .padding(.bottom, 14)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            }
                         }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }

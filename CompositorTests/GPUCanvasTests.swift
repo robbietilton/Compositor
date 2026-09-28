@@ -356,6 +356,24 @@ import Testing
         #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
     }
 
+    /// Option-click on a mask: the mask by itself, drawn alike on both canvases — as it is, and while a stroke paints it.
+    @Test func matchesAMaskShownAlone() throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = try session(zoom: 1)
+        let masked = try #require(session.document?.layers.first { $0.name == "Masked" }?.id)
+        session.toggleMaskAlone(masked)
+        #expect(session.maskAloneLayer?.id == masked)
+        var difference = try compare(session, name: "mask-alone")
+        #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+        session.selectTool(.brush)
+        session.brushSettings = BrushSettings(diameter: 40, hardness: 1, red: 0, green: 0, blue: 0)
+        session.beginBrush(at: CGPoint(x: 320, y: 300))
+        session.continueBrush(at: CGPoint(x: 480, y: 330))
+        difference = try compare(session, name: "mask-alone-painting")
+        #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+        session.finishBrushImmediately()
+    }
+
     /// A distortion being dragged, on a masked layer: in perspective (convex), and folded over (warped on the CPU).
     @Test(arguments: [false, true])
     func matchesWhileDistorting(folded: Bool) throws {
