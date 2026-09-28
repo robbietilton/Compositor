@@ -1,8 +1,24 @@
 #include "AdjustPixels.h"
 #include "LensPixels.h"
+#include <dispatch/dispatch.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+/// Runs `body` over [start, end) row ranges on every core. Each row is done by exactly one call, with the same
+/// arithmetic a single loop would do, so the pixels come out the same.
+static void parallel_rows(size_t height, void (^body)(size_t start, size_t end)) {
+    const size_t chunk = 16;
+    size_t chunks = (height + chunk - 1) / chunk;
+    if (chunks <= 1) {
+        body(0, height);
+        return;
+    }
+    dispatch_apply(chunks, DISPATCH_APPLY_AUTO, ^(size_t index) {
+        size_t start = index * chunk;
+        body(start, start + chunk < height ? start + chunk : height);
+    });
+}
 
 void adjust_gradient_map(uint8_t *rgba, size_t width, size_t height, size_t stride, const uint8_t *table) {
     for (size_t y = 0; y < height; y++) {
@@ -206,6 +222,17 @@ static double srgb_to_linear(double encoded) {
     return pow((encoded + 0.055) / 1.055, 2.4);
 }
 
+/// `srgb_to_linear` of each 8-bit level, computed with the expression the Camera Raw loop uses for an opaque pixel,
+/// so a lookup gives exactly what the call would.
+static const double *opaque_linear_table(void) {
+    static double table[256];
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        for (int i = 0; i < 256; ++i) table[i] = srgb_to_linear(fmin(255.0, i * 255.0 / 255.0) / 255.0);
+    });
+    return table;
+}
+
 static double linear_to_srgb(double linear) {
     if (linear <= 0) return 0;
     if (linear >= 1) return 1;
@@ -308,44 +335,51 @@ void adjust_camera_raw(uint8_t *rgba, size_t width, size_t height, size_t stride
     double blackAmount = blacks / 100.0;
     double vibranceAmount = vibrance / 100.0;
     double saturationAmount = saturation / 100.0;
-    for (size_t y = 0; y < height; ++y) {
-        uint8_t *row = rgba + y * stride;
-        for (size_t x = 0; x < width; ++x) {
-            uint8_t *p = row + x * 4;
-            double alpha = p[3];
-            if (!alpha) continue;
-            double r = fmin(255.0, p[0] * 255.0 / alpha) / 255.0;
-            double g = fmin(255.0, p[1] * 255.0 / alpha) / 255.0;
-            double b = fmin(255.0, p[2] * 255.0 / alpha) / 255.0;
-            r = camera_clamp(srgb_to_linear(r) * redGain * light);
-            g = camera_clamp(srgb_to_linear(g) * greenGain * light);
-            b = camera_clamp(srgb_to_linear(b) * blueGain * light);
-            r = camera_clamp(0.5 + (linear_to_srgb(r) - 0.5) * contrastScale);
-            g = camera_clamp(0.5 + (linear_to_srgb(g) - 0.5) * contrastScale);
-            b = camera_clamp(0.5 + (linear_to_srgb(b) - 0.5) * contrastScale);
-            scale_luminance(&r, &g, &b, tone_highlights(rec709(r, g, b), highlightAmount));
-            scale_luminance(&r, &g, &b, tone_shadows(rec709(r, g, b), shadowAmount));
-            scale_luminance(&r, &g, &b, tone_whites(rec709(r, g, b), whiteAmount));
-            scale_luminance(&r, &g, &b, tone_blacks(rec709(r, g, b), blackAmount));
-            vibrance_and_saturation(&r, &g, &b, vibranceAmount, saturationAmount);
-            if (clipping == 1) {
-                int rc = r >= 254.5 / 255.0, gc = g >= 254.5 / 255.0, bc = b >= 254.5 / 255.0;
-                r = rc ? 1 : 0;
-                g = gc ? 1 : 0;
-                b = bc ? 1 : 0;
-            } else if (clipping == 2) {
-                int rc = r <= 0.5 / 255.0, gc = g <= 0.5 / 255.0, bc = b <= 0.5 / 255.0;
-                if (rc || gc || bc) {
-                    r = rc ? 0 : 1;
-                    g = gc ? 0 : 1;
-                    b = bc ? 0 : 1;
+    const double *opaque = opaque_linear_table();
+    parallel_rows(height, ^(size_t start, size_t end) {
+        for (size_t y = start; y < end; ++y) {
+            uint8_t *row = rgba + y * stride;
+            for (size_t x = 0; x < width; ++x) {
+                uint8_t *p = row + x * 4;
+                double alpha = p[3];
+                if (!alpha) continue;
+                double r, g, b;
+                if (p[3] == 255) {
+                    r = camera_clamp(opaque[p[0]] * redGain * light);
+                    g = camera_clamp(opaque[p[1]] * greenGain * light);
+                    b = camera_clamp(opaque[p[2]] * blueGain * light);
                 } else {
-                    r = g = b = 1;
+                    r = camera_clamp(srgb_to_linear(fmin(255.0, p[0] * 255.0 / alpha) / 255.0) * redGain * light);
+                    g = camera_clamp(srgb_to_linear(fmin(255.0, p[1] * 255.0 / alpha) / 255.0) * greenGain * light);
+                    b = camera_clamp(srgb_to_linear(fmin(255.0, p[2] * 255.0 / alpha) / 255.0) * blueGain * light);
                 }
+                r = camera_clamp(0.5 + (linear_to_srgb(r) - 0.5) * contrastScale);
+                g = camera_clamp(0.5 + (linear_to_srgb(g) - 0.5) * contrastScale);
+                b = camera_clamp(0.5 + (linear_to_srgb(b) - 0.5) * contrastScale);
+                scale_luminance(&r, &g, &b, tone_highlights(rec709(r, g, b), highlightAmount));
+                scale_luminance(&r, &g, &b, tone_shadows(rec709(r, g, b), shadowAmount));
+                scale_luminance(&r, &g, &b, tone_whites(rec709(r, g, b), whiteAmount));
+                scale_luminance(&r, &g, &b, tone_blacks(rec709(r, g, b), blackAmount));
+                vibrance_and_saturation(&r, &g, &b, vibranceAmount, saturationAmount);
+                if (clipping == 1) {
+                    int rc = r >= 254.5 / 255.0, gc = g >= 254.5 / 255.0, bc = b >= 254.5 / 255.0;
+                    r = rc ? 1 : 0;
+                    g = gc ? 1 : 0;
+                    b = bc ? 1 : 0;
+                } else if (clipping == 2) {
+                    int rc = r <= 0.5 / 255.0, gc = g <= 0.5 / 255.0, bc = b <= 0.5 / 255.0;
+                    if (rc || gc || bc) {
+                        r = rc ? 0 : 1;
+                        g = gc ? 0 : 1;
+                        b = bc ? 0 : 1;
+                    } else {
+                        r = g = b = 1;
+                    }
+                }
+                write_premultiplied(p, r, g, b, alpha);
             }
-            write_premultiplied(p, r, g, b, alpha);
         }
-    }
+    });
 }
 
 static size_t clamped_index(int index, size_t limit) {

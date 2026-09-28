@@ -68,4 +68,46 @@ struct CameraRawSpeedTests {
         let hash = try Self.hash(result)
         #expect(hash == expected, "\(name): \(hash)")
     }
+
+    /// An opaque picture the size of the preview cap, like a photo.
+    static func photo() throws -> CGImage {
+        let width = 2048, height = 1365
+        let context = try BrushRaster.context(width: width, height: height, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        for y in 0..<height {
+            for x in 0..<width {
+                let p = y * context.bytesPerRow + x * 4
+                bytes[p] = UInt8((x / 8 + y) % 256); bytes[p + 1] = UInt8((x + y / 4) % 256)
+                bytes[p + 2] = UInt8((x * y / 64) % 256); bytes[p + 3] = 255
+            }
+        }
+        return try #require(context.makeImage())
+    }
+
+    /// The best of three runs, in milliseconds: the least disturbed by whatever else the machine is doing.
+    static func milliseconds(_ body: () throws -> Void) rethrows -> Double {
+        var best = Double.infinity
+        for _ in 0..<3 {
+            let start = ContinuousClock.now
+            try body()
+            let elapsed = ContinuousClock.now - start
+            best = min(best, Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15)
+        }
+        return best
+    }
+
+    /// Code coverage counts every branch in counters all threads share, so under it threads wait on each other and
+    /// timings say nothing about the app. Xcode points `LLVM_PROFILE_FILE` at /dev/null when coverage is off.
+    static let measuresTime = ProcessInfo.processInfo.environment["LLVM_PROFILE_FILE"].map { $0 == "/dev/null" } ?? true
+
+    /// Dragging a Light or Color slider redraws this much for every step. On one core it took about 370 ms.
+    @Test(.enabled(if: measuresTime, "timings under code coverage don't reflect the app"))
+    func lightAndColorKeepUpWithASlider() throws {
+        var settings = CameraRawSettings()
+        Self.light(&settings)
+        let photo = try Self.photo()
+        let time = try Self.milliseconds { _ = try settings.apply(photo) }
+        // Alone it takes about 50 ms; the limit leaves room for other tests running at the same time.
+        #expect(time < 200, "\(Int(time)) ms")
+    }
 }
