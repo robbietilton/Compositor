@@ -94,6 +94,87 @@ struct GroupTests {
         #expect(try await ProjectStore.shared.load(from: url).manifest.version == 1)
     }
 
+    @Test func ungroupLayersRestoresChildrenAtTheFoldersSpotAndUndoes() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 100)
+        session.addBlankLayer()
+        let below = try #require(session.activeLayerID)
+        #expect(!session.canUngroupLayers, "a plain layer has nothing to unwrap")
+        session.addGroup()
+        let group = try #require(session.activeLayerID)
+        session.addBlankLayer()
+        let childA = try #require(session.activeLayerID)
+        session.addBlankLayer()
+        let childB = try #require(session.activeLayerID)
+        session.selectLayer(nil)
+        session.addBlankLayer()
+        let above = try #require(session.activeLayerID)
+        #expect(session.document?.layers.map(\.parentID) == [nil, nil, group, group, nil])
+
+        session.selectLayer(group)
+        #expect(session.canUngroupLayers)
+        let undoCount = session.history.undoCount
+        session.ungroupLayers()
+        let layers = try #require(session.document?.layers)
+        #expect(!layers.contains { $0.id == group }, "the folder itself goes")
+        #expect(layers.first { $0.id == childA }?.parentID == nil)
+        #expect(layers.first { $0.id == childB }?.parentID == nil)
+        // Spliced in where the folder sat: below stays below both children, above stays above both.
+        let order = layers.map(\.id)
+        #expect(order.firstIndex(of: below)! < order.firstIndex(of: childA)!)
+        #expect(order.firstIndex(of: childA)! < order.firstIndex(of: childB)!)
+        #expect(order.firstIndex(of: childB)! < order.firstIndex(of: above)!)
+        #expect(session.selectedLayerIDs == [childA, childB])
+        #expect(session.history.undoCount == undoCount + 1)
+        #expect(session.history.undoName == "Ungroup Layers")
+
+        session.undo()
+        #expect(session.document?.layers.first { $0.id == childA }?.parentID == group)
+        #expect(session.document?.layers.first { $0.id == group }?.isGroup == true)
+        session.redo()
+        #expect(session.document?.layers.count == 4)
+    }
+
+    @Test func ungroupPreservesClippingBetweenTwoOfAFoldersOwnChildren() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 100)
+        session.addBlankLayer()
+        let base = try #require(session.activeLayerID)
+        session.addBlankLayer()
+        let clipped = try #require(session.activeLayerID)
+        session.linkMask(source: base, target: clipped)
+        session.selectLayers([base, clipped], primary: base)
+        session.groupSelectedLayers()
+        let group = try #require(session.activeLayerID)
+
+        session.ungroupLayers()
+        // Spliced in together at the folder's old spot, so the pair stays adjacent.
+        #expect(session.document?.layers.first { $0.id == clipped }?.maskSourceID == base)
+    }
+
+    @Test func ungroupingReleasesClippingThatNoLongerMakesSense() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 100)
+        session.addBlankLayer()
+        let outsideBase = try #require(session.activeLayerID)
+        session.addBlankLayer()
+        let between = try #require(session.activeLayerID)
+        session.addBlankLayer()
+        let childSource = try #require(session.activeLayerID)
+        // A clip can be set up across a folder boundary — `linkMask` doesn't forbid it — even though the two
+        // layers aren't really adjacent once the folder is in between.
+        session.linkMask(source: outsideBase, target: childSource)
+        session.selectLayer(childSource)
+        session.groupSelectedLayers()
+        let group = try #require(session.activeLayerID)
+        #expect(session.document?.layers.map(\.id) == [outsideBase, between, group, childSource])
+
+        session.ungroupLayers()
+        // Ungrouped, `childSource` lands right after `between` — no longer next to its base — so the clip goes.
+        #expect(session.document?.layers.map(\.id) == [outsideBase, between, childSource])
+        #expect(session.document?.layers.first { $0.id == childSource }?.maskSourceID == nil)
+    }
+
     @Test func malformedParentLinksAndCyclesAreRejected() throws {
         let id = UUID(), child = UUID()
         let transform = LayerTransform(origin: .zero, size: CGSize(width: 10, height: 10))

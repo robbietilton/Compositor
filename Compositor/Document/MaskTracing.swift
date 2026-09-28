@@ -71,25 +71,52 @@ nonisolated enum MaskTracing {
 }
 
 extension EditorSession {
+    /// The document-space outline of a layer's mask's black (hidden) areas, or nil when it can't be traced.
+    private func maskSelectionOutline(layerID: UUID) -> CGPath? {
+        guard let layer = document?.layers.first(where: { $0.id == layerID }), let mask = layer.mask?.asset.image,
+              let traced = MaskTracing.darkPixels(in: mask) else { return nil }
+        var toDocument = BrushRaster.pixelToDocument(layer.maskTransform, width: mask.width, height: mask.height)
+        return traced.copy(using: &toDocument)
+    }
+    /// The document-space outline of a layer's visible (≥ 50% opaque) pixels, or nil when it can't be traced.
+    private func layerSelectionOutline(layerID: UUID) -> CGPath? {
+        guard let layer = document?.layers.first(where: { $0.id == layerID }), !layer.isGroup,
+              let image = layer.asset?.image, let traced = MaskTracing.opaquePixels(in: image) else { return nil }
+        var toDocument = BrushRaster.pixelToDocument(layer.transform, width: image.width, height: image.height)
+        return traced.copy(using: &toDocument)
+    }
+
     /// Cmd-click on a mask thumbnail: the mask's black (hidden) areas become the
     /// selection. Shift adds to the current selection; Option subtracts from it.
     func loadMaskSelection(layerID: UUID, mode: SelectionMode = .replace) {
-        guard canEditSelection, let layer = document?.layers.first(where: { $0.id == layerID }),
-              let mask = layer.mask?.asset.image else { return }
-        guard let traced = MaskTracing.darkPixels(in: mask) else { NSSound.beep(); return }
-        var toDocument = BrushRaster.pixelToDocument(layer.maskTransform, width: mask.width, height: mask.height)
-        guard let outline = traced.copy(using: &toDocument) else { return }
+        guard canEditSelection else { return }
+        guard let outline = maskSelectionOutline(layerID: layerID) else { NSSound.beep(); return }
         applySelection(outline, mode: mode, name: "Load Mask Selection")
     }
 
     /// Cmd-click on a layer thumbnail: the layer's visible (≥ 50% opaque) pixels become
     /// the selection, ignoring its mask, as in Photoshop. Shift adds; Option subtracts.
     func loadLayerSelection(layerID: UUID, mode: SelectionMode = .replace) {
-        guard canEditSelection, let layer = document?.layers.first(where: { $0.id == layerID }), !layer.isGroup,
-              let image = layer.asset?.image else { NSSound.beep(); return }
-        guard let traced = MaskTracing.opaquePixels(in: image) else { NSSound.beep(); return }
-        var toDocument = BrushRaster.pixelToDocument(layer.transform, width: image.width, height: image.height)
-        guard let outline = traced.copy(using: &toDocument) else { return }
+        guard canEditSelection else { return }
+        guard let outline = layerSelectionOutline(layerID: layerID) else { NSSound.beep(); return }
         applySelection(outline, mode: mode, name: "Load Layer Selection")
+    }
+
+    /// Intersect Mask/Pixels with Selection, from the Layers panel's context menu. Not a marquee/lasso mode —
+    /// nothing there offers an intersect — so it stands apart from `SelectionMode` and combines paths directly.
+    func intersectMaskSelection(layerID: UUID) {
+        guard canEditSelection, let outline = maskSelectionOutline(layerID: layerID) else { return }
+        intersectSelection(with: outline, name: "Intersect Mask Selection")
+    }
+    func intersectLayerSelection(layerID: UUID) {
+        guard canEditSelection, let outline = layerSelectionOutline(layerID: layerID) else { return }
+        intersectSelection(with: outline, name: "Intersect Layer Selection")
+    }
+    private func intersectSelection(with outline: CGPath, name: String) {
+        guard let current = selection else { return }
+        let result = DocumentSelection(path: current.path.intersection(outline, using: .winding), antialiased: current.antialiased,
+                                       feather: current.feather)
+        // Nothing in common is no selection at all, as in Photoshop — not an invisible empty one.
+        setSelection(result.isEmpty ? nil : result, name: name)
     }
 }

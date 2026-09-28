@@ -70,3 +70,79 @@ extension EditorSession {
         endEdit()
     }
 }
+
+extension EditorSession {
+    /// Whether Merge Visible has anything to combine: some visible layer actually carrying pixels.
+    var canMergeVisible: Bool { canEditLayers && document?.renderLayers.contains { $0.asset != nil } == true }
+
+    /// Composites every visible layer — groups, opacity, blend modes, masks, clipping and adjustments all taken
+    /// into account, exactly as `mergeLayers` composites its own selection — into one pixel layer left in the
+    /// topmost visible layer's place, as a top-level layer. Hidden layers are untouched; one left behind inside a
+    /// folder that itself merged away moves up to the nearest folder that's still there.
+    func mergeVisible() {
+        commitTransform()
+        guard canMergeVisible, let document, let topmost = document.renderLayers.last else { return }
+        guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return }
+        drawLiveComposite(document, in: context)
+        let canvas = LayerTransform(origin: .zero, size: CGSize(width: document.width, height: document.height))
+        guard let full = context.makeImage(),
+              let trimmed = try? PixelFilter.trimmed(full, placed: canvas),
+              let thumbnail = try? PixelAdjust.thumbnail(of: trimmed.image) else { NSSound.beep(); return }
+        var merged = ImageLayer(asset: ImportedImage(image: trimmed.image, thumbnail: thumbnail, name: topmost.name),
+                                origin: trimmed.transform.origin)
+        merged.transform = trimmed.transform
+        merged.name = topmost.name
+        let removed = document.effectiveVisibleIDs
+        let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
+        func survivingParent(of id: UUID?) -> UUID? {
+            var current = id, steps = 0
+            while let candidate = current, removed.contains(candidate), steps < 64 {
+                current = byID[candidate]?.parentID
+                steps += 1
+            }
+            return current
+        }
+        // Rebuilt in stacking order — the array orders only siblings — so the merged layer takes the top of the
+        // visible stack, and a hidden layer left behind stays where it was in it, now at the top level.
+        var next: [ImageLayer] = []
+        for id in document.hierarchy.order {
+            if id == topmost.id { next.append(merged) }
+            guard !removed.contains(id), var layer = byID[id] else { continue }
+            layer.parentID = survivingParent(of: layer.parentID)
+            next.append(layer)
+        }
+        Self.releaseDetachedClipping(in: &next)
+        guard (try? LayerHierarchy.validate(next.map(\.hierarchyRecord))) != nil else { NSSound.beep(); return }
+        finishOpacityEdit()
+        beginEdit("Merge Visible")
+        self.document?.layers = next
+        activeLayerID = merged.id
+        endEdit()
+    }
+
+    /// Whether there's anything for Flatten Image to do.
+    var canFlattenImage: Bool { canEditLayers && !(document?.layers.isEmpty ?? true) }
+
+    /// Composites every visible layer into one layer named "Background" and discards hidden layers outright —
+    /// unlike Merge Visible, which leaves them alone. It doesn't ask first: one Undo brings them all back.
+    func flattenImage() {
+        commitTransform()
+        guard canFlattenImage, let document else { return }
+        guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return }
+        drawLiveComposite(document, in: context)
+        let canvas = LayerTransform(origin: .zero, size: CGSize(width: document.width, height: document.height))
+        guard let full = context.makeImage(),
+              let trimmed = try? PixelFilter.trimmed(full, placed: canvas),
+              let thumbnail = try? PixelAdjust.thumbnail(of: trimmed.image) else { NSSound.beep(); return }
+        var flat = ImageLayer(asset: ImportedImage(image: trimmed.image, thumbnail: thumbnail, name: "Background"),
+                              origin: trimmed.transform.origin)
+        flat.transform = trimmed.transform
+        flat.name = "Background"
+        finishOpacityEdit()
+        beginEdit("Flatten Image")
+        self.document?.layers = [flat]
+        activeLayerID = flat.id
+        collapsedGroupIDs = []
+        endEdit()
+    }
+}

@@ -279,6 +279,105 @@ struct LayerMaskTests {
         }
         window.orderOut(nil)
     }
+    @Test func applyLayerMaskBakesAtNativeResolutionNotDocumentSizeAndUndoes() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 100)
+        // A 1000 × 1000 native asset, placed on the document scaled down to 10% (100 × 100) — applying must not
+        // resample it down to the document's own size.
+        let native = 1000
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let pixels = try #require(CGContext(data: nil, width: native, height: native, bitsPerComponent: 8,
+            bytesPerRow: native * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        pixels.setFillColor(CGColor(colorSpace: space, components: [1, 0, 0, 1])!)
+        pixels.fill(CGRect(x: 0, y: 0, width: native, height: native))
+        let original = try #require(pixels.makeImage())
+        session.insert(ImportedImage(image: original, thumbnail: original, name: "Big"))
+        let id = try #require(session.activeLayerID)
+        session.document?.layers[0].transform.size = CGSize(width: 100, height: 100)
+        session.document?.layers[0].transform.sampling = .nearest
+
+        // A mask that covers the layer's own grid (`placement == nil`), left half reveal, right half hide.
+        let maskProvider = try #require(CGDataProvider(data: Data([255, 0]) as CFData))
+        let maskImage = try #require(CGImage(width: 2, height: 1, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: 2,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: 0), provider: maskProvider,
+            decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        session.document?.layers[0].mask = LayerMask(asset: try LayerMask.asset(from: maskImage))
+        #expect(session.canApplyLayerMask)
+
+        let undoCount = session.history.undoCount
+        session.applyLayerMask()
+        let layer = try #require(session.activeLayer)
+        #expect(layer.id == id)
+        #expect(layer.mask == nil)
+        #expect(layer.asset?.image.width == native && layer.asset?.image.height == native,
+                "the asset keeps its full native resolution")
+        #expect(layer.transform.size == CGSize(width: 100, height: 100), "the on-canvas placement is untouched")
+        #expect(session.history.undoCount == undoCount + 1)
+        #expect(session.history.undoName == "Apply Layer Mask")
+
+        // Sampled coarsely: the left half stays opaque, the right half — where the mask was black — is transparent.
+        let baked = try #require(layer.asset?.image)
+        let grid = 4
+        let context = try #require(CGContext(data: nil, width: grid, height: grid, bitsPerComponent: 8,
+            bytesPerRow: grid * 4, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        context.draw(baked, in: CGRect(x: 0, y: 0, width: grid, height: grid))
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        for row in 0..<grid {
+            #expect(bytes[(row * grid + 0) * 4 + 3] > 200, "row \(row): left stays visible")
+            #expect(bytes[(row * grid + grid - 1) * 4 + 3] < 50, "row \(row): right is hidden")
+        }
+
+        session.undo()
+        #expect(session.activeLayer?.mask != nil)
+        #expect(session.activeLayer?.asset?.image === original, "undo restores the original asset object")
+    }
+
+    @Test func applyLayerMaskRendersAMovedMaskThroughItsOwnPlacement() throws {
+        let session = try session()
+        // Move the mask apart from the layer, covering only its left half; the rest falls back to the mask's
+        // own background (its thumbnail's edge color).
+        var mask = try coverage()
+        mask.placement = LayerTransform(origin: .zero, size: CGSize(width: 1, height: 2))
+        session.document?.layers[0].mask = mask
+        #expect(session.canApplyLayerMask)
+        session.applyLayerMask()
+        let layer = try #require(session.activeLayer)
+        #expect(layer.mask == nil)
+        #expect(layer.asset?.image.width == 2 && layer.asset?.image.height == 2, "still the layer's own 2 × 2 grid")
+        #expect(try alphas(try #require(layer.asset?.image)) != [255, 255, 255, 255], "the moved mask actually changed something")
+    }
+
+    @Test func applyLayerMaskIsUnavailableForGroupsAdjustmentsLiveTextAndDisabledMasks() throws {
+        let session = try session()
+        #expect(!session.canApplyLayerMask, "no mask yet")
+        session.addLayerMask()
+        #expect(session.canApplyLayerMask)
+        session.toggleLayerMask()
+        #expect(!session.canApplyLayerMask, "Photoshop asks before applying a disabled mask; here it's just left off")
+        session.toggleLayerMask()
+        #expect(session.canApplyLayerMask)
+
+        session.addGroup()
+        session.addLayerMask()
+        #expect(session.activeLayer?.isGroup == true && session.activeLayer?.mask != nil)
+        #expect(!session.canApplyLayerMask, "a folder has no pixels of its own to bake into")
+
+        session.addAdjustment(.invert)
+        session.addLayerMask()
+        #expect(session.activeLayer?.adjustment != nil && session.activeLayer?.mask != nil)
+        #expect(!session.canApplyLayerMask, "an adjustment layer has no pixels of its own either")
+
+        session.createDocument(width: 400, height: 300, emptyLayer: true)
+        session.selectTool(.type)
+        session.beginText(at: CGPoint(x: 20, y: 20))
+        session.textDraft?.style.content = "Text"
+        #expect(session.applyText(try #require(session.textDraft)))
+        #expect(session.activeLayer?.liveText != nil)
+        session.addLayerMask()
+        #expect(!session.canApplyLayerMask, "still live text — baking would throw away its editable source")
+    }
+
     @Test func folderMasksSaveResizeAndNeedTheNewFormat() async throws {
         let (session, folder, _) = try folderSession()
         let folderIndex = try #require(session.document?.layers.firstIndex { $0.id == folder })

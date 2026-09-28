@@ -90,6 +90,7 @@ struct ShortcutDefinition: Identifiable {
             entry("Canvas Size", "c", 3, menu: true), entry("Image Size", "i", 3, menu: true),
             entry("Transform Layer / Selection", "t", 1, menu: true), entry("Duplicate / Layer via Copy", "j", 1, menu: true),
             entry("Toggle Clipping Mask", "g", 3, menu: true), entry("Group Layers", "g", 1, menu: true),
+            entry("Ungroup Layers", "g", 9, menu: true),
             entry("New Blank Layer", "n", 9, menu: true), entry("Move Layer Up", "]", 1, menu: true),
             entry("Move Layer Down", "[", 1, menu: true), entry("Merge Layers", "e", 1, menu: true),
             entry("Show Grid", "'", 1, menu: true), entry("Show Guides", ";", 1, menu: true),

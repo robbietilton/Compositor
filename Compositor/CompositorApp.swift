@@ -306,9 +306,13 @@ struct CompositorApp: App {
                     }
                     .configuredKeyboardShortcut("g", modifiers: [.command, .option])
                     .disabled(session.activeLayerID.map { !session.canToggleClippingMask($0) } ?? true)
+                    Button("Apply Layer Mask") { session.applyLayerMask() }
+                        .disabled(!session.canApplyLayerMask)
                     Divider()
                     Button("Group Selected Layers") { session.groupSelectedLayers() }
                         .configuredKeyboardShortcut("g").disabled(!session.canEditLayers)
+                    Button("Ungroup Layers") { session.ungroupLayers() }
+                        .configuredKeyboardShortcut("g", modifiers: [.command, .shift]).disabled(!session.canUngroupLayers)
                     Button("Move Out of Folder") { session.moveActiveLayerOutOfGroup() }
                         .disabled(!session.canEditLayers || session.activeLayer?.parentID == nil)
                     Button("New Blank Layer") { session.addBlankLayer() }
@@ -326,11 +330,24 @@ struct CompositorApp: App {
                     Group {
                         Button(session.mergeTitle) { session.mergeLayers() }
                             .configuredKeyboardShortcut("e").disabled(!session.canMergeLayers)
+                        // ⇧⌘E is already Export PNG's shortcut, so Merge Visible goes unbound rather than steal it.
+                        Button("Merge Visible") { session.mergeVisible() }
+                            .disabled(!session.canMergeVisible)
+                        Button("Flatten Image") { session.flattenImage() }
+                            .disabled(!session.canFlattenImage)
                         Divider()
                         Button("Flip Layer Horizontal") { session.flipLayers(horizontally: true) }
                             .disabled(!session.canTransform)
                         Button("Flip Layer Vertical") { session.flipLayers(horizontally: false) }
                             .disabled(!session.canTransform)
+                    }
+                    Menu("Layer Style") {
+                        Button("Copy Layer Style") { session.copyLayerStyle() }
+                            .disabled(!session.canCopyLayerStyle)
+                        Button("Paste Layer Style") { session.pasteLayerStyle() }
+                            .disabled(!session.canPasteLayerStyle)
+                        Button("Clear Layer Style") { session.clearLayerStyle() }
+                            .disabled(!session.canClearLayerStyle)
                     }
                     Divider()
                     Button(session.selectedEffect != nil ? "Delete " + session.selectedEffect!.kind.rawValue : session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {

@@ -211,6 +211,33 @@ extension EditorSession {
         endEdit()
     }
 
+    /// The active layer must be a folder, so there is something to unwrap.
+    var canUngroupLayers: Bool { canEditLayers && activeLayer?.isGroup == true }
+
+    /// Reverses Group from Layers: the folder's direct children take its place among its own siblings, in the
+    /// order they had inside it, and the folder goes. Its own opacity, blend mode, mask and effects are
+    /// discarded along with it, as Photoshop's Ungroup does.
+    func ungroupLayers() {
+        guard canUngroupLayers, let group = activeLayer, let document else { return }
+        let childIDs = Set(document.layers.filter { $0.parentID == group.id }.map(\.id))
+        var children = document.layers.filter { childIDs.contains($0.id) }
+        for i in children.indices { children[i].parentID = group.parentID }
+        // Spliced in at the folder's own spot, so they land exactly where it sat among its siblings.
+        var layers: [ImageLayer] = []
+        for layer in document.layers {
+            if layer.id == group.id { layers.append(contentsOf: children) }
+            else if !childIDs.contains(layer.id) { layers.append(layer) }
+        }
+        Self.releaseDetachedClipping(in: &layers)
+        guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return }
+        finishOpacityEdit()
+        beginEdit("Ungroup Layers")
+        self.document?.layers = layers
+        selectLayers(childIDs, primary: children.first?.id)
+        collapsedGroupIDs.remove(group.id)
+        endEdit()
+    }
+
     var layerRows: [LayerHierarchy.Entry] {
         LayerHierarchy.entries(document?.layers.map(\.hierarchyRecord) ?? [], topFirst: true, collapsed: collapsedGroupIDs)
     }
