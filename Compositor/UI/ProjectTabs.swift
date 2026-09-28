@@ -18,68 +18,190 @@ struct ProjectWorkspaceView: View {
     }
 }
 
+/// A tab mid-drag: `id` is being reordered, `translation` is how far the pointer has moved from where the
+/// press started, and `others`/`compactedX` are the rest of the visible tabs laid out as if `id` weren't
+/// there — the row they slide into as the drop target changes. Captured once at drag start; `order` in
+/// `projectTabOverflow` doesn't change again until the drag commits.
+private struct TabReorderState {
+    let id: UUID
+    let others: [UUID]
+    let widths: [UUID: CGFloat]
+    let compactedX: [UUID: CGFloat]
+    let startX: CGFloat
+    let originX: CGFloat
+    var translation: CGFloat = 0
+    var targetIndex: Int = 0
+
+    /// The gap the dragged tab is closest to: where it would land if let go now. Slot `k` opens where the k-th of
+    /// the other tabs sits, or after the last one.
+    func nearestSlot() -> Int {
+        let x = originX + translation
+        let end = others.last.map { (compactedX[$0] ?? startX) + (widths[$0] ?? 0) + projectTabSpacing } ?? startX
+        let slots = others.map { compactedX[$0] ?? startX } + [end]
+        return slots.indices.min { abs(slots[$0] - x) < abs(slots[$1] - x) } ?? 0
+    }
+}
+
+private enum TabDragPhase {
+    case changed(CGFloat)
+    case ended(CGFloat)
+}
+
 struct ProjectTabStrip: View {
     let workspace: ProjectWorkspace
+    /// An external pasteboard drag (a file, or a layer from the panel) is in the air over the app.
     @State private var dragging = false
-    /// Scrolled away from the first tab, so the left edge fades too.
-    @State private var scrolledFromStart = false
-    /// The tabs' own width, so the strip claims only the room it draws into.
-    @State private var contentWidth: CGFloat?
-    /// Width offered to the whole strip, including the empty title bar beside the tabs.
-    @State private var slotWidth: CGFloat = 0
     @State private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private let dragTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    /// Each project's window content builds its own strip, so a new tab starts one that hasn't measured yet. Until
-    /// it has, the fade stays on: over full tabs it is where it was, and over a short strip, still as wide as its
-    /// slot, it sits on empty title bar. Turning it off for that moment made it flicker on every new tab.
-    private var clipped: Bool {
-        guard let contentWidth, slotWidth > 1 else { return true }
-        return contentWidth > slotWidth + 1
+    /// The "New" drop slot's own natural width, measured once it appears.
+    @State private var dropSlotWidth: CGFloat = 0
+    /// A tab being reordered by drag, if any.
+    @State private var reorder: TabReorderState?
+    /// Mirrors the width `GeometryReader` offers `body`, for gesture handlers — they run outside a body
+    /// evaluation and can't read its proxy directly. Never read *inside* the reader itself: the tabs it lays
+    /// out have their own exact width, and sizing the reader's own budget from a value that a wider child
+    /// could inflate would let it feed back into itself and get stuck believing it has unlimited room.
+    @State private var slotWidth: CGFloat = 0
+
+    private func widths() -> [UUID: CGFloat] {
+        Dictionary(uniqueKeysWithValues: workspace.tabs.map { ($0.id, projectTabPillWidth($0, active: workspace.selectedID == $0.id)) })
     }
+    private func overflow(availableWidth: CGFloat) -> ProjectTabOverflow {
+        projectTabOverflow(order: workspace.tabs.map(\.id), widths: widths(), selectedID: workspace.selectedID,
+                           availableWidth: availableWidth, pillWidth: projectTabOverflowPillWidth)
+    }
+    private func contentWidth(_ layout: ProjectTabOverflow) -> CGFloat {
+        layout.contentWidth + (dragging ? dropSlotWidth + projectTabSpacing : 0)
+    }
+    /// Gesture handlers run between body evaluations, so they work off the last width `GeometryReader` reported.
+    private var currentLayout: ProjectTabOverflow { overflow(availableWidth: slotWidth) }
+
     var body: some View {
-        HStack(spacing: 0) {
-            // Only as wide as the tabs. A scroll view hit-tests its whole frame however little it holds, and on
-            // macOS 26 that click does not pass through to the title bar (macOS 27 often does). The remainder
-            // is an explicit window drag, so the middle of the title bar moves the window on both.
-            tabs
-                .frame(maxWidth: contentWidth ?? .infinity, alignment: .leading)
-                .layoutPriority(1)
-            TitleBarDragArea()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(height: 34, alignment: .leading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidth = $0 }
-    }
-    private var tabs: some View {
-        ProjectTabScroller(workspace: workspace, dragging: dragging,
-                           onScrollFromStart: { scrolledFromStart = $0 },
-                           onContentWidth: { contentWidth = $0 })
-        .frame(height: 34, alignment: .center)
-        // Tabs fade out where they scroll under an edge instead of being cut off — the right edge when they
-        // overflow the space they were given, the left once scrolled away from the first tab. A mask rather than
-        // a painted gradient, so whatever the toolbar shows behind them shows through.
-        .mask {
+        GeometryReader { proxy in
+            let layout = overflow(availableWidth: proxy.size.width)
+            let width = contentWidth(layout)
             HStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: scrolledFromStart ? 28 : 0)
-                Rectangle()
-                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                    .frame(width: clipped ? 28 : 0)
+                // Only as wide as the tabs actually drawn. A view that claims more than that hit-tests the
+                // whole frame it's given even over the part with nothing in it, and on macOS 26 that click
+                // does not pass through to the title bar (macOS 27 often does). The remainder is an explicit
+                // window drag, so the middle of the title bar moves the window on both.
+                tabs(layout: layout, contentWidth: width)
+                    .frame(maxWidth: width, alignment: .leading)
+                    .layoutPriority(1)
+                TitleBarDragArea()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .animation(.easeOut(duration: 0.15), value: scrolledFromStart)
+            .frame(height: 34, alignment: .leading)
+            .onAppear { slotWidth = proxy.size.width }
+            .onChange(of: proxy.size.width) { _, new in slotWidth = new }
         }
+        .frame(height: 34)
+    }
+
+    private func tabs(layout: ProjectTabOverflow, contentWidth: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            if let pill = layout.pill {
+                OverflowTabsPill(workspace: workspace, hiddenIDs: layout.hiddenIDs)
+                    .frame(width: pill.width, height: 28)
+                    .offset(x: pill.x, y: 3)
+            }
+            ForEach(layout.visible) { slot in tabView(for: slot, contentWidth: contentWidth) }
+            if dragging {
+                NewTabDropSlot(workspace: workspace)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { dropSlotWidth = $0 }
+                    .offset(x: layout.contentWidth + projectTabSpacing, y: 3)
+            }
+        }
+        .frame(width: contentWidth, height: 34, alignment: .topLeading)
         .accessibilityLabel("Project tabs")
         .onReceive(dragTimer) { _ in
             // External drags don't deliver mouse-down to our window. Track the
             // drag pasteboard's new session, and clear on release/cancel.
             let pasteboard = NSPasteboard(name: .drag)
             if NSEvent.pressedMouseButtons == 0 {
+                // A tab drag whose gesture was cancelled rather than ended (its tab closed under it) is over too.
+                if reorder != nil { reorder = nil }
                 dragging = false
                 dragChangeCount = pasteboard.changeCount
             } else if pasteboard.changeCount != dragChangeCount {
                 dragging = pasteboard.availableType(from: [.fileURL, .png, .tiff, NSPasteboard.PasteboardType(ProjectWorkspace.layerType)]) != nil
             }
         }
+    }
+
+    @ViewBuilder private func tabView(for slot: ProjectTabSlot, contentWidth: CGFloat) -> some View {
+        if let tab = workspace.tabs.first(where: { $0.id == slot.id }) {
+            let isDragged = reorder?.id == slot.id
+            ProjectTabButton(workspace: workspace, tab: tab) { handleReorder(tab.id, $0) }
+                .frame(width: slot.width, height: 28)
+                .offset(x: renderX(for: slot, contentWidth: contentWidth), y: 3)
+                .zIndex(isDragged ? 1 : 0)
+                // The dragged tab tracks the pointer with no lag; the tabs it's crossing ease into their new
+                // slot. Scoping the animation to this one value keeps it off the dragged tab's own offset.
+                .animation(isDragged ? nil : .easeOut(duration: 0.15), value: reorder?.targetIndex)
+        }
+    }
+
+    /// Where a slot actually renders: its static layout position, or — mid-drag — the dragged tab following
+    /// the pointer (clamped to the row) and the rest opening a gap at the current drop target.
+    private func renderX(for slot: ProjectTabSlot, contentWidth: CGFloat) -> CGFloat {
+        guard let reorder else { return slot.x }
+        if slot.id == reorder.id {
+            return min(max(reorder.originX + reorder.translation, reorder.startX), max(reorder.startX, contentWidth - slot.width))
+        }
+        guard let x = reorder.compactedX[slot.id], let index = reorder.others.firstIndex(of: slot.id) else { return slot.x }
+        let draggedWidth = reorder.widths[reorder.id] ?? 0
+        return index >= reorder.targetIndex ? x + draggedWidth + projectTabSpacing : x
+    }
+
+    private func handleReorder(_ id: UUID, _ phase: TabDragPhase) {
+        switch phase {
+        case .changed(let translation):
+            if reorder == nil {
+                guard workspace.canSwitch, abs(translation) >= 3 else { return }
+                workspace.select(id) // dragging a tab selects it, as it does in Safari and Chrome
+                reorder = makeReorderState(for: id)
+            }
+            guard reorder?.id == id else { return }
+            reorder?.translation = translation
+            if let state = reorder { reorder?.targetIndex = state.nearestSlot() }
+        case .ended:
+            // Busy by the time the drag ends (a reload from disk, say): the tabs just go back where they were.
+            if let state = reorder, state.id == id, workspace.canSwitch { commitReorder(state) }
+            reorder = nil
+        }
+    }
+
+    private func makeReorderState(for id: UUID) -> TabReorderState {
+        let layout = currentLayout
+        let tabWidths = widths()
+        let others = layout.visible.map(\.id).filter { $0 != id }
+        let startX = layout.visible.first?.x ?? 0
+        var x = startX
+        var compactedX: [UUID: CGFloat] = [:]
+        for otherID in others {
+            compactedX[otherID] = x
+            x += (tabWidths[otherID] ?? 0) + projectTabSpacing
+        }
+        let originX = layout.visible.first { $0.id == id }?.x ?? startX
+        return TabReorderState(id: id, others: others, widths: tabWidths, compactedX: compactedX, startX: startX, originX: originX)
+    }
+
+    /// Applies the drag's final drop target to the workspace's real order. Only the tabs that were visible
+    /// when the drag started ever move; everything else stays exactly where it was.
+    private func commitReorder(_ state: TabReorderState) {
+        let order = workspace.tabs.map(\.id)
+        guard let from = order.firstIndex(of: state.id) else { return }
+        var target: Int
+        if state.targetIndex < state.others.count, let neighbor = order.firstIndex(of: state.others[state.targetIndex]) {
+            target = neighbor
+        } else if let last = state.others.last, let lastIndex = order.firstIndex(of: last) {
+            target = lastIndex + 1
+        } else {
+            target = from
+        }
+        if from < target { target -= 1 }
+        workspace.moveTab(state.id, to: target)
     }
 }
 
@@ -95,7 +217,15 @@ private func projectTabPillWidth(_ tab: ProjectTab, active: Bool) -> CGFloat {
     projectTabLabelWidth(tab, active: active) + 40
 }
 
-/// The title-bar gap beside the tabs. A click here would otherwise land on the tab scroller,
+/// Sized the same way the tab pills are: text measured at the same weight, plus the chevron and padding.
+private func projectTabOverflowPillWidth(hiddenCount: Int) -> CGFloat {
+    let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    let text = projectTabOverflowLabel(for: hiddenCount)
+    let textWidth = (text as NSString).size(withAttributes: [.font: font]).width
+    return ceil(textWidth) + 11 + 4 + 10 + 11 // leading, gap before chevron, chevron, trailing
+}
+
+/// The title-bar gap beside the tabs. A click here would otherwise land on the tabs' own container,
 /// and on macOS 26 that mouse-down does not pass through to the window.
 final class TitleBarDragView: NSView {
     override var isOpaque: Bool { false }
@@ -110,143 +240,6 @@ private struct TitleBarDragArea: NSViewRepresentable {
     func updateNSView(_ view: TitleBarDragView, context: Context) {}
 }
 
-/// Lay out tabs from x = 0 so a title or unsaved dot only moves tabs after it.
-/// The document view has no scroller, so its viewport never gains a scrollbar inset.
-private struct ProjectTabScroller: NSViewRepresentable {
-    let workspace: ProjectWorkspace
-    let dragging: Bool
-    let onScrollFromStart: (Bool) -> Void
-    let onContentWidth: (CGFloat) -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> TabScrollView {
-        let view = TabScrollView()
-        view.contentView.postsBoundsChangedNotifications = true
-        context.coordinator.observer = NotificationCenter.default.addObserver(
-            forName: NSView.boundsDidChangeNotification, object: view.contentView, queue: .main
-        ) { [weak view, weak coordinator = context.coordinator] _ in
-            guard let view, let coordinator else { return }
-            let scrolled = view.contentView.bounds.minX > 1
-            DispatchQueue.main.async { coordinator.onScrollFromStart?(scrolled) }
-        }
-        return view
-    }
-
-    func updateNSView(_ view: TabScrollView, context: Context) {
-        let coordinator = context.coordinator
-        coordinator.onScrollFromStart = onScrollFromStart
-        let oldOffset = view.contentView.bounds.minX
-        let currentIDs = Set(workspace.tabs.map(\.id))
-        for id in coordinator.tabHosts.keys.filter({ !currentIDs.contains($0) }) {
-            coordinator.tabHosts[id]?.removeFromSuperview()
-            coordinator.tabHosts.removeValue(forKey: id)
-        }
-
-        var x: CGFloat = 0
-        for tab in workspace.tabs {
-            let host: NSHostingView<ProjectTabButton>
-            if let existing = coordinator.tabHosts[tab.id] {
-                host = existing
-                host.rootView = ProjectTabButton(workspace: workspace, tab: tab)
-            } else {
-                host = NSHostingView(rootView: ProjectTabButton(workspace: workspace, tab: tab))
-                coordinator.tabHosts[tab.id] = host
-                view.tabsDocument.addSubview(host)
-            }
-            let width = projectTabPillWidth(tab, active: workspace.selectedID == tab.id)
-            host.frame = NSRect(x: x, y: 3, width: width, height: 28)
-            x += width + 6
-        }
-
-        if dragging {
-            let host: NSHostingView<NewTabDropSlot>
-            if let existing = coordinator.dropHost {
-                host = existing
-                host.rootView = NewTabDropSlot(workspace: workspace)
-            } else {
-                host = NSHostingView(rootView: NewTabDropSlot(workspace: workspace))
-                coordinator.dropHost = host
-                view.tabsDocument.addSubview(host)
-            }
-            host.invalidateIntrinsicContentSize()
-            let width = ceil(host.fittingSize.width)
-            host.frame = NSRect(x: x, y: 3, width: width, height: 28)
-            x += width + 6
-        } else {
-            coordinator.dropHost?.removeFromSuperview()
-            coordinator.dropHost = nil
-        }
-
-        let contentWidth = max(0, x - 6)
-        view.tabsDocument.setFrameSize(NSSize(width: contentWidth, height: 34))
-        if abs(contentWidth - coordinator.reportedWidth) > 0.5 {
-            coordinator.reportedWidth = contentWidth
-            let onContentWidth = onContentWidth
-            DispatchQueue.main.async { onContentWidth(contentWidth) }
-        }
-        let maxOffset = max(0, view.tabsDocument.frame.width - view.contentView.bounds.width)
-        view.horizontalScrollElasticity = maxOffset > 1 ? .allowed : .none
-        view.contentView.scroll(to: NSPoint(x: min(oldOffset, maxOffset), y: 0))
-        view.reflectScrolledClipView(view.contentView)
-
-        if dragging != coordinator.wasDragging || workspace.selectedID != coordinator.lastSelectedID {
-            coordinator.wasDragging = dragging
-            coordinator.lastSelectedID = workspace.selectedID
-            DispatchQueue.main.async { [weak view] in
-                guard let view else { return }
-                if dragging, let drop = coordinator.dropHost {
-                    view.reveal(drop.frame, trailing: true)
-                } else if let selected = coordinator.tabHosts[workspace.selectedID] {
-                    view.reveal(selected.frame, trailing: false)
-                }
-            }
-        }
-    }
-
-    final class Coordinator {
-        var tabHosts: [UUID: NSHostingView<ProjectTabButton>] = [:]
-        var dropHost: NSHostingView<NewTabDropSlot>?
-        var lastSelectedID: UUID?
-        var wasDragging = false
-        var reportedWidth: CGFloat = -1
-        var onScrollFromStart: ((Bool) -> Void)?
-        var observer: NSObjectProtocol?
-        deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
-    }
-
-    final class TabScrollView: NSScrollView {
-        let tabsDocument = FlippedTabDocument()
-
-        init() {
-            super.init(frame: .zero)
-            drawsBackground = false
-            borderType = .noBorder
-            hasVerticalScroller = false
-            hasHorizontalScroller = false
-            verticalScrollElasticity = .none
-            horizontalScrollElasticity = .none
-            documentView = tabsDocument
-        }
-
-        required init?(coder: NSCoder) { nil }
-
-        func reveal(_ rect: NSRect, trailing: Bool) {
-            let viewport = contentView.bounds
-            let x = trailing ? rect.maxX - viewport.width :
-                rect.minX < viewport.minX ? rect.minX :
-                rect.maxX > viewport.maxX ? rect.maxX - viewport.width : viewport.minX
-            let maxOffset = max(0, tabsDocument.frame.width - viewport.width)
-            contentView.scroll(to: NSPoint(x: min(max(0, x), maxOffset), y: 0))
-            reflectScrolledClipView(contentView)
-        }
-    }
-
-    final class FlippedTabDocument: NSView {
-        override var isFlipped: Bool { true }
-    }
-}
-
 private struct NewTabDropSlot: View {
     let workspace: ProjectWorkspace
     @State private var targeted = false
@@ -258,6 +251,7 @@ private struct NewTabDropSlot: View {
             .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.secondary,
                 style: StrokeStyle(lineWidth: targeted ? 2 : 1, dash: targeted ? [] : [4, 3])))
             .contentShape(Capsule())
+            .fixedSize()
             .help("Drop to open in a new canvas")
             .accessibilityLabel("Drop into new canvas")
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
@@ -265,9 +259,76 @@ private struct NewTabDropSlot: View {
     }
 }
 
+/// The far-left pill standing in for the tabs that don't fit. Styled like an inactive tab pill; clicking it
+/// drops a native menu below it listing the hidden tabs in their real order.
+private struct OverflowTabsPill: View {
+    let workspace: ProjectWorkspace
+    let hiddenIDs: [UUID]
+    private var label: String { projectTabOverflowLabel(for: hiddenIDs.count) }
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(label).font(.system(size: 12, weight: .medium))
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium))
+        }
+        .padding(.horizontal, 11)
+        .frame(height: 28)
+        .opacity(workspace.canSwitch ? 1 : 0.5)
+        .background(Color.white.opacity(0.035), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        // A SwiftUI Menu draws its own label, chevron first; this keeps the pill reading "3 more tabs ⌄".
+        .overlay(OverflowMenuAnchor(label: label) {
+            guard workspace.canSwitch else { return [] }
+            return hiddenIDs.compactMap { id in
+                workspace.tabs.first { $0.id == id }.map { tab in
+                    ((tab.session.isModified ? "• " : "") + tab.title, { workspace.select(tab.id) })
+                }
+            }
+        })
+        .help(label)
+        .accessibilityIdentifier("projectTabsOverflow")
+    }
+}
+
+/// Clicking the overflow pill opens its menu just below it, as a pop-up button does.
+private struct OverflowMenuAnchor: NSViewRepresentable {
+    let label: String
+    let items: () -> [(title: String, action: () -> Void)]
+    func makeNSView(context: Context) -> AnchorView { AnchorView() }
+    func updateNSView(_ view: AnchorView, context: Context) {
+        view.items = items
+        view.setAccessibilityLabel(label)
+    }
+    final class AnchorView: NSView {
+        var items: () -> [(title: String, action: () -> Void)] = { [] }
+        private var actions: [() -> Void] = []
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func isAccessibilityElement() -> Bool { true }
+        override func accessibilityRole() -> NSAccessibility.Role? { .popUpButton }
+        override func accessibilityPerformPress() -> Bool { showMenu(); return true }
+        override func mouseDown(with event: NSEvent) { showMenu() }
+        private func showMenu() {
+            let entries = items()
+            guard !entries.isEmpty else { return }
+            actions = entries.map(\.action)
+            let menu = NSMenu()
+            for (index, entry) in entries.enumerated() {
+                let item = NSMenuItem(title: entry.title, action: #selector(choose(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = index
+                menu.addItem(item)
+            }
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.maxY + 4 : -4), in: self)
+        }
+        @objc private func choose(_ item: NSMenuItem) {
+            if actions.indices.contains(item.tag) { actions[item.tag]() }
+        }
+    }
+}
+
 private struct ProjectTabButton: View {
     let workspace: ProjectWorkspace
     let tab: ProjectTab
+    let onReorder: (TabDragPhase) -> Void
     @State private var targeted = false
     private var active: Bool { workspace.selectedID == tab.id }
     var body: some View {
@@ -283,7 +344,15 @@ private struct ProjectTabButton: View {
                 .padding(.leading, 11).padding(.trailing, 8)
                 .frame(height: 28)
                 .contentShape(Rectangle())
-            }.buttonStyle(.plain).disabled(!workspace.canSwitch && !active)
+            }
+            .buttonStyle(.plain).disabled(!workspace.canSwitch && !active)
+            // A press that moves more than a few points reorders the tab instead of selecting it; either way
+            // it selects, same as dragging a tab in Safari or Chrome.
+            // Measured in the window, not the tab: the tab moves with the pointer, and measuring from a space that
+            // moves along with it made the tab outrun the pointer.
+            .simultaneousGesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
+                .onChanged { onReorder(.changed($0.translation.width)) }
+                .onEnded { onReorder(.ended($0.translation.width)) })
             Button { Task { await workspace.close(tab.id) } } label: {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
                     .frame(width: 16, height: 28)
@@ -292,7 +361,7 @@ private struct ProjectTabButton: View {
             }.buttonStyle(.plain).help("Close \(tab.title)").disabled(!workspace.canSwitch)
                 .accessibilityLabel("Close \(tab.title)")
         }
-        .frame(width: projectTabPillWidth(tab, active: active), height: 28, alignment: .leading)
+        .frame(height: 28)
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
         .help(targeted ? "Add to \(tab.title)" : tab.title)
