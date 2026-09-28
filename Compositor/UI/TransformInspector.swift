@@ -10,8 +10,10 @@ struct TransformInspector: View {
         HStack(spacing: 12) {
           Text(session.transformTargetsMask ? "Transform Mask" : "Transform").font(ToolHeaderStyle.titleFont)
               .padding(.leading, 18)
-          Toggle("Auto Select", isOn: $session.transformAutoSelect)
-              .help("Select layers by clicking the canvas. When off, hold Command to select a layer.")
+          // Command flips Auto Select while it's held, and the box shows it flipped (see HeldModifiers).
+          Toggle("Auto Select", isOn: Binding(get: { session.transformAutoSelect != held.contains(.command) },
+                                              set: { session.transformAutoSelect = $0 != held.contains(.command) }))
+              .help("Select layers by clicking the canvas. Hold Command to turn it the other way while you click.")
               .accessibilityIdentifier("transformAutoSelect")
           Toggle("Show Controls", isOn: $session.showsTransformControls)
               .help("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.")
@@ -21,8 +23,10 @@ struct TransformInspector: View {
                 field("Y", value: value.origin.y) { $0.origin.y = $1 }.frame(width: 85)
                 TransformValueField(label: "W", value: value.size.width, range: 1...30_000) { resize($0, width: true) }.frame(width: 85)
                 TransformValueField(label: "H", value: value.size.height, range: 1...30_000) { resize($0, width: false) }.frame(width: 85)
-                Toggle(isOn: $session.locksTransformRatio) { Image(systemName: "link") }
-                    .toggleStyle(.button).help("Lock aspect ratio")
+                // Shift flips the lock while dragging a handle, and the button shows it flipped.
+                Toggle(isOn: Binding(get: { session.locksTransformRatio != held.contains(.shift) },
+                                     set: { session.locksTransformRatio = $0 != held.contains(.shift) })) { Image(systemName: "link") }
+                    .toggleStyle(.button).help("Lock aspect ratio. Hold Shift while dragging a handle to turn it the other way.")
                 TransformValueField(label: "Scale", suffix: "%", value: value.scalePercent(pixelSize: pixelSize), range: 0.1...30_000) { number in
                     change { value in
                         guard number > 0 else { return }
@@ -50,6 +54,7 @@ struct TransformInspector: View {
     }
 
     /// 100% scale: the layer's pixels (a blank layer's size before this edit, so typing doesn't compound).
+    private var held: NSEvent.ModifierFlags { HeldModifiers.shared.flags }
     private var pixelSize: CGSize { session.transformPixelSize ?? session.activeLayer?.size ?? value.size }
     private func field(_ label: String, value: CGFloat, range: ClosedRange<CGFloat> = -30_000...30_000,
                        set: @escaping (inout LayerTransform, CGFloat) -> Void) -> some View {
