@@ -4,6 +4,7 @@ import Sparkle
 @main
 struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
+    @AppStorage("toolRail.columns") private var toolRailColumns = 1
     private var session: EditorSession { applicationDelegate.session }
     var body: some Scene {
         Window("Compositor", id: "editor") {
@@ -113,6 +114,8 @@ struct CompositorApp: App {
                             if let preview = session.previewZoom { preview(.zoomOut) } else { session.zoomKeyboard(by: -1) }
                         }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
+                        Toggle("Tools in Two Columns", isOn: Binding(get: { toolRailColumns >= 2 },
+                                                                    set: { toolRailColumns = $0 ? 2 : 1 }))
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
                         Toggle("Snap", isOn: Binding(get: { session.snappingEnabled },
