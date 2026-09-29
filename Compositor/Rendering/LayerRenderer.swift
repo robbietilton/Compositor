@@ -14,7 +14,8 @@ nonisolated enum LayerRenderer {
         context.setAlpha(opacity)
         context.setBlendMode(blendMode.cgMode)
         context.interpolationQuality = interpolation(transform.sampling,
-            finalFactor: width * device / CGFloat(max(1, image.width)) * CGFloat(1 << source.level))
+            finalFactor: width * device / CGFloat(max(1, image.width)) * CGFloat(1 << source.level),
+            upright: transform.radians == 0)
         context.setShouldAntialias(transform.sampling != .nearest)
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: transform.radians)
@@ -36,11 +37,13 @@ nonisolated enum LayerRenderer {
     }
 
     /// Core Graphics's filter for the last resample, `finalFactor` device pixels per (reduced) image pixel.
+    /// An `upright` layer drawn pixel for pixel copies its pixels straight across.
     /// Shrinking uses Low: Medium and High prefilter by the image's own size and position, so a piece of an
     /// image would come out different from the whole (painted layers draw in pieces), and the sharp halvings
     /// have already done the heavy reduction. Enlarging keeps the layer's own setting.
-    static func interpolation(_ sampling: LayerSampling, finalFactor: CGFloat) -> CGInterpolationQuality {
-        sampling == .nearest ? .none : finalFactor <= 1 ? .low : sampling.quality
+    static func interpolation(_ sampling: LayerSampling, finalFactor: CGFloat, upright: Bool = false) -> CGInterpolationQuality {
+        if sampling == .nearest || (upright && abs(finalFactor - 1) < 0.001) { return .none }
+        return finalFactor <= 1 ? .low : sampling.quality
     }
     static func reduced(_ image: CGImage, width: CGFloat, device: CGFloat, sampling: LayerSampling) -> Reduced {
         guard sampling != .nearest else { return Reduced(image: image, level: 0, widthScale: 1, heightScale: 1) }

@@ -49,11 +49,13 @@ nonisolated enum LayerBlendMode: String, Codable, CaseIterable, Sendable {
     }
 
     /// The Core Image filter that computes this mode, for the ones Core Graphics has no equivalent
-    /// for — or computes wrongly, as it does for Color Burn and Color Dodge.
+    /// for — or computes wrongly, as it does for Color Burn and Color Dodge, and for Soft Light, whose formula is up to
+    /// 25 levels off Photoshop's with a light blend color (Core Image's is within 5).
     var coreImageFilter: String? {
         switch self {
         case .colorBurn: "CIColorBurnBlendMode"
         case .colorDodge: "CIColorDodgeBlendMode"
+        case .softLight: "CISoftLightBlendMode"
         case .linearBurn: "CILinearBurnBlendMode"
         case .linearDodge: "CILinearDodgeBlendMode"
         case .vividLight: "CIVividLightBlendMode"

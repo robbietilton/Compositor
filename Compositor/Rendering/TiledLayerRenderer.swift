@@ -205,7 +205,7 @@ nonisolated enum TiledLayerRenderer {
         context.setAlpha(opacity)
         context.setBlendMode(blendMode.cgMode)
         context.interpolationQuality = LayerRenderer.interpolation(transform.sampling,
-            finalFactor: width * device / CGFloat(pixelWidth) * CGFloat(1 << level))
+            finalFactor: width * device / CGFloat(pixelWidth) * CGFloat(1 << level), upright: transform.radians == 0)
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: transform.radians)
         context.scaleBy(x: transform.flipX ? -1 : 1, y: transform.flipY ? 1 : -1)

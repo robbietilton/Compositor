@@ -49,6 +49,17 @@ struct CameraRawSliderTests {
         #expect(!slider.isOnKnob(NSPoint(x: 2, y: knob.midY)))
     }
 
+    @Test func colorBalanceTracksRunFromEachColorToItsOpposite() throws {
+        let cyanRed = try #require(FilterSheet.cyanRedTrack.colors)
+        #expect(cyanRed[0].blueComponent > cyanRed[0].redComponent && cyanRed[1].redComponent > cyanRed[1].blueComponent)
+        let magentaGreen = try #require(FilterSheet.magentaGreenTrack.colors)
+        #expect(magentaGreen[0].redComponent > magentaGreen[0].greenComponent && magentaGreen[1].greenComponent > magentaGreen[1].redComponent)
+        let yellowBlue = try #require(FilterSheet.yellowBlueTrack.colors)
+        #expect(yellowBlue[0].greenComponent > yellowBlue[0].blueComponent && yellowBlue[1].blueComponent > yellowBlue[1].greenComponent)
+        let greens = try #require(CameraRawSliderTrack.luminance(120).colors?.last?.usingColorSpace(.sRGB))
+        #expect(greens.greenComponent > greens.redComponent && greens.greenComponent > greens.blueComponent)
+    }
+
     @Test func trackClickValueMatchesTheClickedPosition() {
         let slider = CameraRawSliderView(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
         slider.minValue = -100

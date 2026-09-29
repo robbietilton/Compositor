@@ -226,10 +226,17 @@ extension EditorSession {
         selectLayer(id)
         isMaskSelected = mask && activeLayer?.mask != nil
     }
-    /// Adding a mask from the Layers panel (the footer button, or a layer's Add White/Black Mask):
-    /// with no selection, a mask all white (reveal) or all black (hide); with a selection, that
-    /// color with the selected area painted the opposite, so a white mask hides the selection. The
-    /// selection is used up and deselected in the same undo step, as Photoshop does.
+    /// Option-click on a mask thumbnail: shows that mask alone on the canvas, or, when it already is, the
+    /// composite again. Either way the mask stays the paint target.
+    func toggleMaskAlone(_ id: UUID) {
+        let showing = maskAloneLayer?.id == id
+        selectLayerTarget(id, mask: true)
+        guard activeLayerID == id, isMaskSelected else { return }
+        viewsMaskAlone = !showing
+    }
+    /// Adding a mask from the Layers panel, as Photoshop's Add Layer Mask button does: with no selection, a mask
+    /// all white (reveal) or all black (hide); with a selection, Reveal Selection (white inside, black outside) or,
+    /// for Option-click, Hide Selection. The selection is used up and deselected in the same undo step.
     func addMask(revealing: Bool = true) {
         guard let selection else { addLayerMask(revealing: revealing); return }
         guard canEditMask, let layer = activeLayer, layer.mask == nil,
@@ -240,18 +247,18 @@ extension EditorSession {
         do {
             guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
             let context = try BrushRaster.context(width: width, height: height, mask: true)
-            context.setFillColor(gray: revealing ? 1 : 0, alpha: 1)
+            context.setFillColor(gray: revealing ? 0 : 1, alpha: 1)
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             guard let canvasSize = document?.size else { return }
             let clip = try selection.clip(canvas: canvasSize)
             context.concatenate(BrushRaster.pixelToDocument(layer.transform, width: width, height: height).inverted())
             clip.apply(to: context)
-            context.setFillColor(gray: revealing ? 0 : 1, alpha: 1)
+            context.setFillColor(gray: revealing ? 1 : 0, alpha: 1)
             context.fill(clip.rect)
             guard let image = context.makeImage() else { throw ExportError.render }
             let mask = LayerMask(asset: try LayerMask.asset(from: image))
             finishOpacityEdit()
-            beginEdit("Add Mask from Selection")
+            beginEdit(revealing ? "Reveal Selection" : "Hide Selection")
             document?.layers[index].mask = mask
             document?.selection = nil
             isMaskSelected = true
@@ -324,7 +331,7 @@ extension EditorSession {
     func displayedMaskPlacement(for layer: ImageLayer) -> LayerTransform? {
         guard let mask = layer.mask else { return nil }
         // Content-Aware Fill previewing on a grown layer: the mask keeps covering the layer's old bounds.
-        if let edit = filterEdit, edit.grownTransform != nil, edit.previewImage(for: layer.id) != nil { return mask.placement ?? layer.transform }
+        if let edit = filterEdit, edit.preparedTransform != nil, edit.previewImage(for: layer.id) != nil { return mask.placement ?? layer.transform }
         if let edit = transformEdit, let group = edit.group {
             guard let original = group.originals[layer.id] else { return mask.placement }
             if edit.corners != nil { return mask.isLinked && mask.placement == nil ? nil : mask.placement ?? layer.transform }

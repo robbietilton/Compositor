@@ -15,13 +15,25 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         // Reopening a window that's already showing makes SwiftUI rebuild it, so the app blinks out and back:
         // only a closed editor is reopened.
         if !application.windows.contains(where: { $0.isVisible && $0.identifier?.rawValue.hasPrefix("editor") == true }) {
-            showEditor?()
+            if let showEditor { showEditor() }
+            // Launched to open a file, SwiftUI makes no window, and the editor that would set `showEditor` never
+            // appears. A Dock click's reopen event makes the window, so the app sends itself one once launched.
+            else { DispatchQueue.main.async { Self.reopen() } }
         }
         application.activate()
         Task { await workspace.receive(urls) }
     }
 
+    private static func reopen() {
+        let event = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEReopenApplication),
+                                           targetDescriptor: .currentProcess(), returnID: AEReturnID(kAutoGenerateReturnID),
+                                           transactionID: AETransactionID(kAnyTransactionID))
+        _ = try? event.sendEvent(options: .noReply, timeout: 1)
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Always dark, alerts and open/save panels included, whatever the Mac is set to.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         // Slider knobs snap to a click on the track instead of gliding there.
         SliderSnap.install()
     }

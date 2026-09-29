@@ -184,7 +184,19 @@ struct TiledLayerTests {
                 TiledLayerRenderer.drawMaskStroke(width: 3360, height: 1812, sourceRect: grid, patches: [reveal], oldMask: mask,
                     image: image, raster: nil, transform: transform, center: center, scale: s, opacity: 1, blendMode: .normal, in: $0)
             }
-            #expect(largest(masked, maskPainting) <= 2, "painting a mask at \(Int(origin.x)),\(Int(origin.y)) at \(zoom)× zoom")
+            let worst = largest(masked, maskPainting)
+            if worst > 2 {
+                // Where they part, and how: the first differing pixel, the extent of them, and both values there.
+                var count = 0, first = -1, box = (minX: Int.max, minY: Int.max, maxX: 0, maxY: 0)
+                for i in stride(from: 0, to: masked.count, by: 4) where (0..<4).contains(where: { abs(Int(masked[i + $0]) - Int(maskPainting[i + $0])) > 2 }) {
+                    count += 1
+                    if first < 0 { first = i }
+                    let x = (i / 4) % pixels, y = (i / 4) / pixels
+                    box = (min(box.minX, x), min(box.minY, y), max(box.maxX, x), max(box.maxY, y))
+                }
+                Issue.record(Comment(rawValue: "DIAG \(count) pixels differ, in x \(box.minX)...\(box.maxX) y \(box.minY)...\(box.maxY); first at \((first / 4) % pixels),\((first / 4) / pixels): masked \(Array(masked[first..<first + 4])) painting \(Array(maskPainting[first..<first + 4]))"))
+            }
+            #expect(worst <= 2, "painting a mask at \(Int(origin.x)),\(Int(origin.y)) at \(zoom)× zoom")
         }
     }
 

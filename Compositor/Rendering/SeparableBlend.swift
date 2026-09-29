@@ -44,4 +44,17 @@ nonisolated enum SeparableBlend {
         context.restoreGState()
         return true
     }
+
+    /// `top` blended over what `bottom` holds (the same size), written back into `bottom`, for the modes Core Graphics
+    /// can't draw. False for the rest, which the caller draws with Core Graphics.
+    static func blend(_ top: CGImage, over bottom: CGContext, mode: LayerBlendMode) -> Bool {
+        guard let name = mode.coreImageFilter, let data = bottom.data, let under = bottom.makeImage(),
+              let filter = CIFilter(name: name) else { return false }
+        filter.setValue(CIImage(cgImage: top), forKey: kCIInputImageKey)
+        filter.setValue(CIImage(cgImage: under), forKey: kCIInputBackgroundImageKey)
+        guard let output = filter.outputImage else { return false }
+        ciContext.render(output, toBitmap: data, rowBytes: bottom.bytesPerRow,
+                         bounds: CGRect(x: 0, y: 0, width: bottom.width, height: bottom.height), format: .RGBA8, colorSpace: space)
+        return true
+    }
 }

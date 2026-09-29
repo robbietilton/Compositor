@@ -235,12 +235,19 @@ nonisolated enum HueSaturationFilter {
 
     static func run(_ job: HueSaturationJob) throws -> AdjustedPixels {
         let width = job.image.width, height = job.image.height
-        // CIColorCube unpremultiplies and premultiplies around its lookup itself. Doing it again here darkened
-        // every translucent pixel (half-transparent blue came out at 94 of 128), which turned soft edges black.
-        let adjusted = CIImage(cgImage: job.image)
-            .applyingFilter("CIColorCube", parameters: ["inputCubeDimension": dimension,
-                                                        "inputCubeData": cube(job.settings)])
-        var result = try PixelAdjust.render(adjusted, width: width, height: height, isMask: false)
+        // On the CPU across the cores rather than Core Image: a Hue/Saturation layer runs on the whole canvas view every
+        // frame, and the trip to the GPU and back cost more than the lookup. The lookup unpremultiplies around itself.
+        let context = try BrushRaster.copy(job.image)
+        guard let data = context.data else { throw ExportError.render }
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
+        let table = cube(job.settings)
+        table.withUnsafeBytes { raw in
+            let entries = raw.assumingMemoryBound(to: Float.self).baseAddress!
+            BrushRaster.inBands(count: width * height) { start, length in
+                cube_apply(pixels + start * 4, length, entries, Int32(dimension))
+            }
+        }
+        guard var result = context.makeImage() else { throw ExportError.render }
         if let selection = job.selection {
             let original = try PixelAdjust.bitmap(width: width, height: height, mask: false)
             original.draw(job.image, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -270,8 +277,24 @@ nonisolated enum HueSaturationFilter {
         }
     }
 
+    /// The last few tables built: a Hue/Saturation layer redraws with the same settings on every canvas frame,
+    /// and building one takes longer than applying it.
+    private static let cubeLock = NSLock()
+    nonisolated(unsafe) private static var cubes: [(settings: HueSaturationSettings, data: Data)] = []
+
     /// The lookup table: every cube corner converted to HSL, adjusted, and back.
     static func cube(_ settings: HueSaturationSettings) -> Data {
+        if let cached = cubeLock.withLock({ cubes.first { $0.settings == settings }?.data }) { return cached }
+        let data = buildCube(settings)
+        cubeLock.withLock {
+            cubes.removeAll { $0.settings == settings }
+            cubes.insert((settings, data), at: 0)
+            if cubes.count > 8 { cubes.removeLast() }
+        }
+        return data
+    }
+
+    private static func buildCube(_ settings: HueSaturationSettings) -> Data {
         let response = hueResponse(settings)
         var values = [Float](repeating: 0, count: dimension * dimension * dimension * 4)
         var index = 0
@@ -307,8 +330,7 @@ nonisolated enum HueSaturationFilter {
             lightnessAmount = sampled.lightness / 100
             hue = (hue + sampled.shift).truncatingRemainder(dividingBy: 360)
             if hue < 0 { hue += 360 }
-            // Multiplicative, so neutral grays stay neutral.
-            saturation = min(1, max(0, saturation * (1 + sampled.saturation / 100)))
+            saturation = adjustedSaturation(saturation, by: sampled.saturation)
         }
         // Lightness pulls toward white above 0 and toward black below, reaching either at ±100.
         let amount = min(1, max(-1, lightnessAmount))
@@ -317,6 +339,14 @@ nonisolated enum HueSaturationFilter {
     }
 
     /// The hue a spectrum swatch becomes, for the "after" bar.
+    /// Photoshop's Saturation: below 0 it scales toward gray (−100 is gray); above 0 it divides by what's left, so
+    /// +50 doubles it and +100 takes any color all the way. Multiplicative both ways, so neutral grays stay neutral.
+    static func adjustedSaturation(_ saturation: Double, by amount: Double) -> Double {
+        let amount = min(1, max(-1, amount / 100))
+        guard amount > 0 else { return max(0, saturation * (1 + amount)) }
+        return amount >= 1 ? (saturation > 0 ? 1 : 0) : min(1, saturation / (1 - amount))
+    }
+
     static func shiftedHue(_ hue: Double, settings: HueSaturationSettings) -> Double {
         var shift = 0.0
         for (colorRange, adjustment) in settings.adjustments where adjustment.hue != 0 {
@@ -420,7 +450,8 @@ extension EditorSession {
     var canAdjustColors: Bool { canAdjust(allowingEmpty: false) }
     private func canAdjust(allowingEmpty: Bool) -> Bool {
         _ = showsBusy
-        guard levels == nil, filterEdit == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
+        // Text being edited is drawn by its editor, not the layer, so a filter's preview of it would be wrong: commit it first.
+        guard levels == nil, filterEdit == nil, textDraft == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
               pixelMove == nil, renamingLayerID == nil, !showsNewDocument, !showsImporter,
               selectedLayerIDs.count == 1, !layer.isGroup, !isMaskSelected, layer.asset != nil || allowingEmpty,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }

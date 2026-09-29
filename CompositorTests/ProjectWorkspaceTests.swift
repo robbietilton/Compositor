@@ -89,6 +89,27 @@ import Testing
         #expect(workspace.tabs[1].session.document?.layers.count == 1)
     }
 
+    @Test func moveTabReordersWithoutTouchingSelectionOrDocuments() {
+        let workspace = ProjectWorkspace()
+        let a = workspace.current
+        let b = workspace.addTab(reuseEmpty: false)
+        let c = workspace.addTab(reuseEmpty: false)
+        #expect(workspace.tabs.map(\.id) == [a.id, b.id, c.id])
+        workspace.moveTab(c.id, to: 0)
+        #expect(workspace.tabs.map(\.id) == [c.id, a.id, b.id])
+        workspace.moveTab(a.id, to: 2)
+        #expect(workspace.tabs.map(\.id) == [c.id, b.id, a.id])
+        // An out-of-range target clamps to the array's bounds instead of crashing.
+        workspace.moveTab(c.id, to: 99)
+        #expect(workspace.tabs.map(\.id) == [b.id, a.id, c.id])
+        // Moving to where a tab already is, or moving an id that isn't a tab, does nothing.
+        let unchanged = workspace.tabs.map(\.id)
+        workspace.moveTab(c.id, to: 2)
+        workspace.moveTab(UUID(), to: 0)
+        #expect(workspace.tabs.map(\.id) == unchanged)
+        #expect(workspace.current === c) // reordering is chrome — it never moves the selection
+    }
+
     /// Quit asks about the project on screen first, then the others left to right.
     @Test @MainActor func quitAsksAboutTheActiveTabFirst() {
         let workspace = ProjectWorkspace()

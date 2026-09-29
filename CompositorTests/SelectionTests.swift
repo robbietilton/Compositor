@@ -123,6 +123,16 @@ struct SelectionTests {
         #expect(session.lassoDraft == nil)
     }
 
+    /// Select All then Inverse leaves nothing selected, as in Photoshop, so painting works everywhere again.
+    @Test func inverseOfEverythingDeselects() throws {
+        let session = makeSession()
+        session.selectAll()
+        session.invertSelection()
+        #expect(session.selection == nil)
+        session.undo()
+        #expect(session.selection?.isEmpty == false)
+    }
+
     @Test func cursorBadgeFollowsModifiersButKeepsAnOutlinesStartingMode() {
         let session = makeSession()
         #expect(session.lassoCursorMode(shift: false, option: false) == .replace)

@@ -44,6 +44,15 @@ final class ProjectWorkspace {
         tabs.append(tab); selectedID = tab.id
         return tab
     }
+    /// Reorders a tab by dragging it in the strip. Chrome, not a document edit, so it never touches undo.
+    /// `index` is where the tab should land in the final order, clamped to the array's bounds.
+    func moveTab(_ id: UUID, to index: Int) {
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let target = min(max(0, index), tabs.count - 1)
+        guard target != from else { return }
+        let tab = tabs.remove(at: from)
+        tabs.insert(tab, at: target)
+    }
     func select(_ id: UUID) {
         guard id != selectedID, canSwitch, tabs.contains(where: { $0.id == id }) else { return }
         current.session.commitTransform()

@@ -52,7 +52,7 @@ final class ProjectWatcher {
     }
 
     /// The dispatch sources, kept outside the actor so `deinit` can cancel them from any context.
-    private final class SourceBox: @unchecked Sendable {
+    private nonisolated final class SourceBox: @unchecked Sendable {
         private let lock = NSLock()
         private var list: [DispatchSourceFileSystemObject] = []
         var count: Int { lock.withLock { list.count } }

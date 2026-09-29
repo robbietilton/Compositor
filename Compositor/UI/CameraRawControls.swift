@@ -1,11 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Camera Raw Filter's adjustment column: the histogram, then Light, Color, Effects, Curve, Color Mixer,
-/// Color Grading, Detail, Optics, Geometry, and Calibration.
+/// Camera Raw Filter's adjustment column: the histogram, then Light, Color, Color Grading, Effects, Curve,
+/// Color Mixer, Detail, Optics, Geometry, and Calibration.
 struct CameraRawControls: View {
     @Bindable var session: EditorSession
-    @State private var expanded: Set<Section> = [.light, .color]
+    @State private var expanded: Set<Section> = [.light, .color, .colorGrading]
     @State private var optionMonitor: Any?
 
     private var settings: FilterSettings { session.filterEdit?.settings ?? FilterSettings() }
@@ -373,10 +373,10 @@ struct CameraRawControls: View {
     private enum Section: String, CaseIterable, Identifiable {
         case light = "Light"
         case color = "Color"
+        case colorGrading = "Color Grading"
         case effects = "Effects"
         case curve = "Curve"
         case colorMixer = "Color Mixer"
-        case colorGrading = "Color Grading"
         case detail = "Detail"
         case optics = "Optics"
         case geometry = "Geometry"

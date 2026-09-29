@@ -172,7 +172,9 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
             return try PixelFilter.run(FilterJob(kind: filterKind, image: image, settings: settings,
                                                   scale: scale, selection: nil, mapping: .identity,
                                                   seed: resolvedNoiseSeed,
-                                                  noiseOrigin: region?.origin ?? .zero))
+                                                  // The region's origin in the image's own pixels.
+                                                  noiseOrigin: region.map { CGPoint(x: $0.minX * CGFloat(image.width) / max(1, $0.width),
+                                                                                    y: $0.minY * CGFloat(image.height) / max(1, $0.height)) } ?? .zero))
         case .invert:
             return try PixelInvert.run(PixelInvert.Job(image: image, isMask: false,
                                                        pixelToDocument: .identity, selection: nil))

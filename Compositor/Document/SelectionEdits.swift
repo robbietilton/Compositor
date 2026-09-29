@@ -16,6 +16,19 @@ final class PixelMove {
     let origin: DocumentSelection
     let duplicate: Bool
     var offset = CGSize.zero
+    /// The offset the raster's tiles were last rebuilt for. They're rebuilt only when something reads them — the Core
+    /// Graphics canvas, or the commit — as the GPU canvas draws the move from the lifted pixels as they are.
+    private var applied = CGSize.zero
+    func applyOffset() throws {
+        guard offset != applied else { return }
+        try raster.moveLifted(by: offset, duplicate: duplicate)
+        applied = offset
+    }
+    /// Whether the GPU canvas can draw this move: not a layer with a mask or effects, which the Core Graphics canvas draws.
+    var drawsOnGPU: Bool {
+        raster.layer.mask == nil && raster.layer.effects?.visible.isEmpty != false
+            && (duplicate ? raster.original : raster.holed) != nil
+    }
     var movedSelection: DocumentSelection {
         var shift = CGAffineTransform(translationX: offset.width, y: offset.height)
         guard let path = origin.path.copy(using: &shift) else { return origin }
@@ -81,7 +94,7 @@ extension EditorSession {
     /// first, and the Crop tool's rectangle doesn't block it.
     var canInvert: Bool {
         _ = showsBusy
-        guard document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil, pixelMove == nil,
+        guard document != nil, textDraft == nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil, pixelMove == nil,
               renamingLayerID == nil, !showsNewDocument, !showsImporter, selectedLayerIDs.count == 1, !layer.isGroup || isMaskSelected,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }
         return isMaskSelected ? layer.mask?.isEnabled == true : layer.asset != nil
@@ -154,9 +167,7 @@ extension EditorSession {
     /// selection stays put until commit; the outline is drawn from `displayedSelection`.
     func movePixels(by offset: CGSize) {
         guard let move = pixelMove else { return }
-        let rounded = CGSize(width: offset.width.rounded(), height: offset.height.rounded())
-        do { try move.raster.moveLifted(by: rounded, duplicate: move.duplicate) } catch { cancelPixelMove(); brushError = error.localizedDescription; return }
-        move.offset = rounded
+        move.offset = CGSize(width: offset.width.rounded(), height: offset.height.rounded())
         brushRevision += 1
     }
 
@@ -177,8 +188,10 @@ extension EditorSession {
         guard let move = pixelMove, !isProjectBusy else { return }
         if move.offset != .zero {
             let moved = move.movedSelection
-            do { try await commitRasterEdit(move.raster, name: move.duplicate ? "Duplicate Pixels" : "Move Pixels") { self.document?.selection = moved } }
-            catch { brushError = error.localizedDescription }
+            do {
+                try move.applyOffset()
+                try await commitRasterEdit(move.raster, name: move.duplicate ? "Duplicate Pixels" : "Move Pixels") { self.document?.selection = moved }
+            } catch { brushError = error.localizedDescription }
         }
         pixelMove = nil
         brushRevision += 1

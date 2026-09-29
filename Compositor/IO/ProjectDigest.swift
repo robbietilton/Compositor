@@ -24,8 +24,8 @@ nonisolated struct ProjectDigest: Equatable, Sendable {
             let values = try images.appendingPathComponent(name).resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true else { continue }
             hasher.update(data: Data(name.utf8))
-            var count = UInt64(values.fileSize ?? 0)
-            hasher.update(bufferPointer: UnsafeRawBufferPointer(start: &count, count: MemoryLayout<UInt64>.size))
+            let count = UInt64(values.fileSize ?? 0)
+            withUnsafeBytes(of: count) { hasher.update(bufferPointer: $0) }
         }
         return ProjectDigest(value: Data(hasher.finalize()))
     }

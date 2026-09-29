@@ -3,16 +3,18 @@ import SwiftUI
 struct CanvasSizeSheet: View {
     let foreground: PaletteColor
     let background: PaletteColor
+    let session: EditorSession
     let finish: (CanvasSizeOptions?) -> Void
     @State private var draft: CanvasSizeDraft
     @State private var anchor = 4
     @State private var extensionChoice = "Transparent"
-    @State private var customColor = Color.white
+    @State private var customColor = PaletteColor.white
     private let anchorNames = ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"]
 
-    init(document: CanvasDocument, foreground: PaletteColor = .black, background: PaletteColor = .white, finish: @escaping (CanvasSizeOptions?) -> Void) {
-        self.foreground = foreground
-        self.background = background
+    init(document: CanvasDocument, session: EditorSession, finish: @escaping (CanvasSizeOptions?) -> Void) {
+        self.foreground = session.foregroundColor
+        self.background = session.backgroundColor
+        self.session = session
         self.finish = finish
         _draft = State(initialValue: CanvasSizeDraft(width: document.width, height: document.height, resolution: document.resolution))
     }
@@ -55,7 +57,7 @@ struct CanvasSizeSheet: View {
         case "Foreground": color = foreground.nsColor
         case "White": color = .white
         case "Background": color = background.nsColor
-        default: color = NSColor(customColor)
+        default: color = customColor.nsColor
         }
         guard let rgb = color.usingColorSpace(.sRGB) else { return nil }
         return CanvasExtensionColor(red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent)
@@ -124,13 +126,18 @@ struct CanvasSizeSheet: View {
                 ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text($0) }
             }
             if extensionChoice == "Custom" {
-                ColorPicker("Extension color", selection: $customColor, supportsOpacity: false)
+                HStack(spacing: 8) {
+                    Text("Extension color")
+                    DialogColorSwatch(title: "Extension Color", color: $customColor, session: session)
+                        .help("Color for the added canvas")
+                }
             }
             HStack {
-                Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)
+                Button("Cancel") { DialogColorSwatch.closePicker(session); finish(nil) }.configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") {
                     guard draft.valid else { return }
+                    DialogColorSwatch.closePicker(session)
                     finish(CanvasSizeOptions(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()), anchor: anchor, fill: fill))
                 }.configuredNativeShortcut(.return).disabled(!draft.valid)
             }

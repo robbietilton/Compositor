@@ -170,6 +170,41 @@ struct ImageAdjustmentTests {
         #expect(FilterKind.exposure.isImageAdjustment && !FilterKind.gaussianBlur.isImageAdjustment)
     }
 
+    /// A double-click on a Black & White or Color Balance slider puts back the filter's default, and the
+    /// result is the one the default settings give, with Preview left as it was.
+    @Test func resettingAColoredFilterSliderRestoresTheDefault() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 4, height: 4)
+        let base = try image(red: 0.8, green: 0.3, blue: 0.2)
+        session.insert(ImportedImage(image: base, thumbnail: base, name: "Color"))
+
+        session.beginFilter(.blackWhite)
+        var settings = try #require(session.filterEdit).settings
+        settings.blackWhite.reds = 250
+        settings.blackWhite.blues = -100
+        session.updateFilter(settings, preview: true)
+        settings = FilterSheet.resetting(\.blackWhite.reds, in: settings)
+        #expect(settings.blackWhite.reds == BlackWhiteSettings().reds)
+        #expect(settings.blackWhite.blues == -100, "only the double-clicked slider resets")
+        session.updateFilter(FilterSheet.resetting(\.blackWhite.blues, in: settings), preview: true)
+        #expect(try #require(session.filterEdit).settings.blackWhite == BlackWhiteSettings())
+        #expect(try #require(session.filterEdit).preview)
+        await session.commitFilter()
+        let gray = try pixels(try #require(session.activeLayer?.asset?.image))
+        #expect(gray == (try pixels(BlackWhiteSettings().apply(base))))
+        session.undo()
+
+        session.beginFilter(.colorBalance)
+        var balance = try #require(session.filterEdit).settings
+        balance.colorBalance.midCyanRed = -80
+        session.updateFilter(balance, preview: false)
+        session.updateFilter(FilterSheet.resetting(\.colorBalance.midCyanRed, in: balance), preview: false)
+        #expect(try #require(session.filterEdit).settings.colorBalance == ColorBalanceSettings())
+        #expect(try #require(session.filterEdit).preview == false, "a reset leaves Preview off")
+        session.cancelFilter()
+        #expect(try pixels(try #require(session.activeLayer?.asset?.image)) == pixels(base))
+    }
+
     /// Gradient Map's colors open the app's color picker: the gradient previews the working color,
     /// Cancel restores it, OK keeps it, and the palette is left alone.
     @Test func gradientMapColorsUseTheAppColorPicker() throws {

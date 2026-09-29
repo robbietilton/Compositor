@@ -30,6 +30,24 @@ final class GradientEdit {
         end = start
     }
     var hasLine: Bool { hypot(end.x - start.x, end.y - start.y) >= 0.5 }
+
+    /// What the gradient is filled with, as it's dragged and set.
+    struct Fill: Equatable {
+        let shape: GradientShape
+        let start: CGPoint
+        let end: CGPoint
+        let colors: [CGColor]
+        let opacity: CGFloat
+    }
+    var fill: Fill?
+    /// The fill the raster's tiles hold. They're filled only when something reads them — the Core Graphics canvas, or
+    /// the commit — as the GPU canvas draws the gradient itself.
+    private var filled: Fill?
+    func applyFill() throws {
+        guard let fill, fill != filled else { return }
+        try raster.fillGradient(fill.shape, from: fill.start, to: fill.end, colors: fill.colors, opacity: fill.opacity)
+        filled = fill
+    }
 }
 
 extension EditorSession {
@@ -42,7 +60,7 @@ extension EditorSession {
             refreshGradient()
             return
         }
-        guard canPaint else { return }
+        guard canPaint else { brushError = paintRefusal; return }
         finishOpacityEdit()
         do {
             gradientEdit = GradientEdit(raster: try makeRasterEdit(for: layer, growsMask: true), start: point)
@@ -61,10 +79,8 @@ extension EditorSession {
     func refreshGradient() {
         guard let edit = gradientEdit else { return }
         if edit.hasLine {
-            do {
-                try edit.raster.fillGradient(gradientSettings.shape, from: edit.start, to: edit.end,
-                    colors: gradientColors(mask: edit.raster.isMask), opacity: gradientSettings.opacity)
-            } catch { cancelGradient(); brushError = error.localizedDescription; return }
+            edit.fill = GradientEdit.Fill(shape: gradientSettings.shape, start: edit.start, end: edit.end,
+                                          colors: gradientColors(mask: edit.raster.isMask), opacity: gradientSettings.opacity)
         }
         brushRevision += 1
     }
@@ -96,6 +112,7 @@ extension EditorSession {
         guard let edit = gradientEdit, !isProjectBusy else { return }
         guard edit.hasLine else { cancelGradient(); return }
         do {
+            try edit.applyFill()
             try await commitRasterEdit(edit.raster, name: edit.raster.isMask ? "Gradient Mask" : "Gradient")
         } catch { brushError = error.localizedDescription }
         if gradientEdit === edit { cancelGradient() }

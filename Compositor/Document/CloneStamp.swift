@@ -34,16 +34,16 @@ extension EditorSession {
         return CGPoint(x: point.x + cloneOffset.width, y: point.y + cloneOffset.height)
     }
 
-    /// What a stroke copies from, at document size, taken when it starts: the active layer's own
-    /// pixels, or every visible layer as the canvas shows them.
-    func cloneSample(_ document: CanvasDocument) -> CGImage? {
-        guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return nil }
-        if cloneSettings.sampleAllLayers {
-            drawLiveComposite(document, in: context)
-        } else if let layer = activeLayer, let image = layer.asset?.image {
-            let transform = displayedTransform(for: layer)
-            LayerRenderer.draw(image, transform: transform, center: transform.center, in: context)
+    /// What `stroke` copies from, taken when it starts, placed `offset` document pixels from where it paints: the
+    /// layer's own pixels, at their own resolution; or, sampling all layers, the canvas as it shows them.
+    func cloneSample(_ document: CanvasDocument, for stroke: BrushStroke, offset: CGSize) -> (image: CGImage, placed: CGRect, inGrid: Bool)? {
+        guard cloneSettings.sampleAllLayers else {
+            guard let image = stroke.layer.asset?.image else { return nil }
+            return (image, stroke.gridRect(stroke.sourceRect, copyingFrom: offset), true)
         }
-        return context.makeImage()
+        guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return nil }
+        drawLiveComposite(document, in: context)
+        guard let image = context.makeImage() else { return nil }
+        return (image, CGRect(x: -offset.width, y: -offset.height, width: CGFloat(image.width), height: CGFloat(image.height)), false)
     }
 }

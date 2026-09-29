@@ -196,8 +196,8 @@ struct ShapeToolTests {
         } catch {}
     }
 
-    /// Stars and polygons keep their corner count through a save, and need format version 10.
-    @Test func starsRoundTripAndNeedVersionTen() async throws {
+    /// Stars and polygons keep their corner count through a save, and need format version 12.
+    @Test func starsRoundTripAndNeedVersionTwelve() async throws {
         let session = makeSession()
         session.shapeKind = .star
         session.shapeStarPoints = 7
@@ -209,15 +209,15 @@ struct ShapeToolTests {
         let snapshot = try #require(session.projectSnapshot())
         try await ProjectStore.shared.save(snapshot, to: url)
         let loaded = try await ProjectStore.shared.load(from: url)
-        #expect(loaded.manifest.version == 10)
+        #expect(loaded.manifest.version == 12)
         let shape = try #require(loaded.manifest.layers.last?.shape)
         #expect(shape.kind == .star && shape.points == 7)
 
         var older = snapshot.manifest
-        older.version = 9
+        older.version = 11
         do {
             try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: root.appendingPathComponent("Old.comp"))
-            Issue.record("A star was saved as version 9")
+            Issue.record("A star was saved as version 11")
         } catch {}
         var tooMany = snapshot.manifest
         tooMany.layers[tooMany.layers.count - 1].shape?.points = 21
@@ -261,14 +261,14 @@ struct ShapeToolTests {
         #expect(abs(size.width - (20 + reach * 2)) < 0.001 && abs(size.height - (20 + reach * 2)) < 0.001)
     }
 
-    @Test func lineStylesBelongToVersionTenLines() {
+    @Test func lineStylesBelongToVersionTwelveLines() {
         var line = LayerShapeStyle(kind: .line, red: 0, green: 0, blue: 0, cornerRadius: 0, lineWidth: 4)
-        #expect(line.isValid(version: 9))
+        #expect(line.isValid(version: 11))
         line.lineStyle = .dotted
         line.lineCap = .square
-        #expect(line.isValid(version: 10) && !line.isValid(version: 9))
+        #expect(line.isValid(version: 12) && !line.isValid(version: 11))
         var rectangle = LayerShapeStyle(kind: .rectangle, red: 0, green: 0, blue: 0, cornerRadius: 0)
         rectangle.lineCap = .square
-        #expect(!rectangle.isValid(version: 10))
+        #expect(!rectangle.isValid(version: 12))
     }
 }

@@ -150,7 +150,7 @@ final class EditorSession {
     private var fileRequestWaiters: [CheckedContinuation<Void, Never>] = []
     var canStartProjectOperation: Bool {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
+        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
     }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
@@ -273,12 +273,40 @@ final class EditorSession {
     var selectionAntialiased = true
     /// How far Feather softens the selection's edge each time it is applied, in document pixels.
     var selectionAmountOperation: SelectionAmountOperation? { didSet { resumeFileRequests() } }
+    /// Select > Color Range's panel is open; the selection shown is its preview until OK.
+    var colorRange: ColorRangeEdit? { didSet { resumeFileRequests() } }
+    /// The dialog whose color the picker is open on (`ColorPickerTarget.dialog`).
+    @ObservationIgnored var dialogColorChange: ((PaletteColor) -> Void)?
+    /// A dialog with its own zoomable preview (Export JPEG) is open: the View menu's zoom commands zoom that instead.
+    @ObservationIgnored var previewZoom: ((PreviewZoomCommand) -> Void)?
+    /// The text's style before the font menu started previewing faces on it (see `previewFont`).
+    @ObservationIgnored var fontPreviewOriginal: LayerTextStyle?
     var selectionFeatherAmount = 2
     var wandSettings = WandSettings()
     var objectSelectionSettings = ObjectSelectionSettings()
     var showsPixelGrid = ToolDefaults.bool("pixelGrid", true) { didSet { ToolDefaults.set(showsPixelGrid, "pixelGrid") } }
     /// Layout grid (View > Show > Grid). Off until turned on; independent of the 800% pixel grid.
     var showsGrid = ToolDefaults.bool("grid", false) { didSet { ToolDefaults.set(showsGrid, "grid") } }
+    /// The layout grid's spacing and subdivisions (View > Grid Settings…). The person's, not the project's.
+    var layoutGrid = LayoutGrid(spacing: ToolDefaults.int("gridSpacing", 64), subdivisions: ToolDefaults.int("gridSubdivisions", 8)) {
+        didSet {
+            ToolDefaults.set(layoutGrid.spacing, "gridSpacing")
+            ToolDefaults.set(layoutGrid.subdivisions, "gridSubdivisions")
+        }
+    }
+    /// The layout grid's color, line style and opacity (View > Grid Settings…), also the person's.
+    var gridAppearance = GridAppearance(
+        preset: GridAppearance.Preset(rawValue: ToolDefaults.string("gridColor", "")) ?? .lightGray,
+        customColor: PaletteColor(hex: ToolDefaults.string("gridCustomColor", "")) ?? GridAppearance().customColor,
+        style: GridAppearance.Style(rawValue: ToolDefaults.string("gridStyle", "")) ?? .lines,
+        opacity: ToolDefaults.int("gridOpacity", GridAppearance().opacity)) {
+        didSet {
+            ToolDefaults.set(gridAppearance.preset.rawValue, "gridColor")
+            ToolDefaults.set(gridAppearance.customColor.hex, "gridCustomColor")
+            ToolDefaults.set(gridAppearance.style.rawValue, "gridStyle")
+            ToolDefaults.set(gridAppearance.opacity, "gridOpacity")
+        }
+    }
     /// User guides. Hidden extras do not snap.
     var showsGuides = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(showsGuides, "guides") } }
     var showsRulers = ToolDefaults.bool("rulers", false) { didSet { ToolDefaults.set(showsRulers, "rulers") } }
@@ -498,7 +526,7 @@ final class EditorSession {
     func displayedTransform(for layer: ImageLayer) -> LayerTransform {
         if let pending = pendingTransform(for: layer) { return pending }
         // Content-Aware Fill past the layer's edge previews on the grown layer.
-        if let edit = filterEdit, let grown = edit.grownTransform, edit.previewImage(for: layer.id) != nil { return grown }
+        if let edit = filterEdit, let grown = edit.preparedTransform, edit.previewImage(for: layer.id) != nil { return grown }
         return layer.transform
     }
     /// Whether transforming places only the active layer's mask (an unlinked mask selected in the Layers panel).
@@ -565,7 +593,15 @@ final class EditorSession {
     var opacityEditLayerID: UUID?
     var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
-    var isMaskSelected = false
+    var isMaskSelected = false { didSet { if !isMaskSelected { viewsMaskAlone = false } } }
+    /// Option-click on a mask thumbnail: the canvas shows the targeted mask by itself, in grayscale, so it can be
+    /// painted with nothing else in the way, as in Photoshop. Targeting the layer's pixels, or another layer, ends it.
+    var viewsMaskAlone = false
+    /// The layer whose mask the canvas is showing by itself; nil for the ordinary composite.
+    var maskAloneLayer: ImageLayer? {
+        guard viewsMaskAlone, isMaskSelected, let layer = activeLayer, layer.mask != nil else { return nil }
+        return layer
+    }
     var selectedLayerIDs: Set<UUID> = []
     var activeLayerID: UUID? {
         didSet {
@@ -578,7 +614,7 @@ final class EditorSession {
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
+        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
     }
     var canUndo: Bool { canUseHistory && (history.canUndo || gradientEdit != nil) }
     var canRedo: Bool { canUseHistory && history.canRedo }
@@ -615,7 +651,7 @@ final class EditorSession {
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
     var canEditLayers: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
 
     func addBlankLayer() {
@@ -945,6 +981,8 @@ final class EditorSession {
     }
 
     /// Step through stable keyboard zoom levels while keeping the viewport center fixed.
+    enum PreviewZoomCommand { case zoomIn, zoomOut, fit, actual }
+
     func zoomKeyboard(by step: Int) {
         guard let document, step != 0 else { return }
         let target = viewport.keyboardZoomTarget(by: step)

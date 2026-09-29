@@ -372,6 +372,9 @@ nonisolated enum PSDReader {
                 remaining = max(0, remaining - raster.image.width * raster.image.height)
             }
             record.mask = layer.maskFromRender ? nil : layer.maskImage
+            record.maskBounds = CGRect(x: layer.maskLeft, y: layer.maskTop,
+                                       width: layer.maskRight - layer.maskLeft, height: layer.maskBottom - layer.maskTop)
+            record.maskDefault = layer.maskDefault
             record.maskEnabled = !layer.maskDisabled
             record.maskLinked = layer.maskLinked
             if !isGroup { record.adjustment = PSDAdjustments.parse(layer.extra) }
@@ -465,7 +468,9 @@ nonisolated enum PSDAdjustments {
         return nil
     }
 
-    private static func levels(_ data: Data) -> LayerAdjustment? {
+    /// Photoshop's 'levl': a version, then records of input black, input white, output black, output white and gamma
+    /// in hundredths (100 is 1.00), for RGB, then red, green and blue.
+    static func levels(_ data: Data) -> LayerAdjustment? {
         guard data.count >= 292 else { return nil }
         var settings = LevelsSettings()
         for channel in 0..<4 {
@@ -474,7 +479,7 @@ nonisolated enum PSDAdjustments {
             let inputWhite = Double(u16(data, base + 2))
             let outputBlack = Double(u16(data, base + 4))
             let outputWhite = Double(u16(data, base + 6))
-            let gamma = Double(u16(data, base + 8)) / 256
+            let gamma = Double(u16(data, base + 8)) / 100
             settings.ranges[channel] = LevelRange(black: inputBlack, gamma: gamma, white: inputWhite,
                                                   outputBlack: outputBlack, outputWhite: outputWhite).normalized
         }
@@ -516,19 +521,31 @@ nonisolated enum PSDAdjustments {
         return LayerAdjustment(kind: .curves, curves: settings)
     }
 
-    private static func hue(_ data: Data) -> LayerAdjustment? {
-        guard data.count >= 4 else { return nil }
+    /// Photoshop's 'hue2': a version, the Colorize switch and a pad byte, the Colorize hue, saturation and lightness,
+    /// the Master's, then for Reds through Magentas the band (where the range fades in, is full, and fades out, in
+    /// degrees) and its hue, saturation and lightness.
+    static func hue(_ data: Data) -> LayerAdjustment? {
+        guard data.count >= 16 else { return nil }
         let colorize = data[2] != 0
         var settings = HueSaturationSettings(colorize: colorize)
-        let ranges = [ColorRange.master, .reds, .yellows, .greens, .cyans, .blues, .magentas]
-        var offset = 4
-        for range in ranges {
-            guard offset + 6 <= data.count else { break }
-            let hue = i16(data, offset)
-            let saturation = i16(data, offset + 2)
-            let lightness = i16(data, offset + 4)
-            offset += 6
-            settings.adjustments[range] = RangeAdjustment(hue: Double(hue), saturation: Double(saturation), lightness: Double(lightness))
+        func values(at offset: Int) -> RangeAdjustment {
+            RangeAdjustment(hue: Double(i16(data, offset)), saturation: Double(i16(data, offset + 2)),
+                            lightness: Double(i16(data, offset + 4)))
+        }
+        // Colorize has values of its own; the Master applies otherwise.
+        settings.adjustments[.master] = values(at: colorize ? 4 : 10)
+        guard !colorize else { return LayerAdjustment(kind: .hsv, hsvSettings: settings) }
+        var offset = 16
+        for range in ColorRange.colorRanges {
+            guard offset + 14 <= data.count else { break }
+            func degrees(_ at: Int) -> Double {
+                let value = Double(i16(data, at)).truncatingRemainder(dividingBy: 360)
+                return value < 0 ? value + 360 : value
+            }
+            settings.bands[range] = HueBand(falloffStart: degrees(offset), rangeStart: degrees(offset + 2),
+                                            rangeEnd: degrees(offset + 4), falloffEnd: degrees(offset + 6))
+            settings.adjustments[range] = values(at: offset + 8)
+            offset += 14
         }
         return LayerAdjustment(kind: .hsv, hsvSettings: settings)
     }

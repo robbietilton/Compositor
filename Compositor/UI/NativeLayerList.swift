@@ -156,6 +156,14 @@ struct NativeLayerList: NSViewRepresentable {
             groupItem.isEnabled = validateMenuItem(groupItem)
             menu.addItem(groupItem)
 
+            // A folder right-clicked can be ungrouped: its layers stay where they are, and the folder goes.
+            if rows[row].isGroup {
+                let ungroupItem = NSMenuItem(title: "Ungroup Layers", action: #selector(ungroupLayersAction), keyEquivalent: "")
+                ungroupItem.target = self
+                ungroupItem.isEnabled = validateMenuItem(ungroupItem)
+                menu.addItem(ungroupItem)
+            }
+
             // 6. Move Out of Folder
             let moveOutItem = NSMenuItem(title: "Move Out of Folder", action: #selector(moveOutOfFolderAction), keyEquivalent: "")
             moveOutItem.target = self
@@ -229,6 +237,8 @@ struct NativeLayerList: NSViewRepresentable {
                 return session.activeLayerID.map { session.canToggleClippingMask($0) } ?? false
             case #selector(groupSelectedLayersAction):
                 return session.canEditLayers && session.document != nil && (session.document?.layers.count ?? 0) < 10_000 && !session.selectedLayerIDs.isEmpty
+            case #selector(ungroupLayersAction):
+                return session.canUngroupLayers
             case #selector(moveOutOfFolderAction):
                 return session.canEditLayers && session.activeLayer?.parentID != nil
             case #selector(mergeLayersAction):
@@ -270,6 +280,10 @@ struct NativeLayerList: NSViewRepresentable {
 
         @objc func groupSelectedLayersAction(_ sender: Any?) {
             session.groupSelectedLayers()
+        }
+
+        @objc func ungroupLayersAction(_ sender: Any?) {
+            session.ungroupLayers()
         }
 
         @objc func moveOutOfFolderAction(_ sender: Any?) {
@@ -471,6 +485,13 @@ final class LayerTableView: NSTableView {
     private var clippingMonitor: Any?
     private var clippingCursorActive = false
 
+    /// Cmd-A selects the whole canvas, as Select > All does, even with the Layers panel just clicked — never every layer.
+    /// A layer's name being edited keeps its own Select All: its field editor answers first.
+    override func selectAll(_ sender: Any?) {
+        guard let session = session ?? (delegate as? NativeLayerList.Coordinator)?.session, session.document != nil else { return }
+        session.selectAll()
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
         let row = row(at: point)
@@ -530,6 +551,29 @@ final class LayerTableView: NSTableView {
     }
     private static let createClippingCursor = clippingCursor(releasing: false)
     private static let releaseClippingCursor = clippingCursor(releasing: true)
+    /// Option over a mask thumbnail: the duplicate pointer with a small eye at its lower right — an Option-click shows
+    /// the mask alone on the canvas, and an Option-drag still copies it onto another layer.
+    private static let showMaskCursor: NSCursor = {
+        let base = CanvasView.duplicateCursor
+        let eye = NSRect(x: base.hotSpot.x + 15, y: base.hotSpot.y + 18, width: 7.5, height: 5.5)
+        let size = NSSize(width: max(base.image.size.width, eye.maxX + 2), height: max(base.image.size.height, eye.maxY + 2))
+        let image = NSImage(size: size, flipped: true) { _ in
+            // The eye first, so the arrows sit in front of it.
+            let symbol = NSImage(systemSymbolName: "eye.fill", accessibilityDescription: nil)!
+            let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
+            let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
+            for step in 0..<16 {
+                let angle = CGFloat(step) * .pi / 8
+                white.draw(in: eye.offsetBy(dx: cos(angle), dy: sin(angle)))
+            }
+            black.draw(in: eye)
+            base.image.draw(in: NSRect(origin: .zero, size: base.image.size), from: .zero, operation: .sourceOver,
+                            fraction: 1, respectFlipped: true, hints: nil)
+            return true
+        }
+        image.accessibilityDescription = "Show mask alone"
+        return NSCursor(image: image, hotSpot: base.hotSpot)
+    }()
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let clippingTracking { removeTrackingArea(clippingTracking) }
@@ -551,7 +595,7 @@ final class LayerTableView: NSTableView {
         }
     }
     /// Keeps the cursor right over the layer list: with Option held, the clipping cursor over the bottom quarter
-    /// of a row, as in Photoshop, and the duplicate cursor over the rest of it (a mask thumbnail copies the mask); a thumbnail's own cursor with Command held over
+    /// of a row, as in Photoshop, and the duplicate cursor over the rest of it (a mask thumbnail shows the mask alone); a thumbnail's own cursor with Command held over
     /// it; otherwise the arrow — even when a
     /// tool's cursor followed the mouse in. `location` is in window coordinates; without one
     /// (a modifier change) the current mouse position is used.
@@ -570,13 +614,14 @@ final class LayerTableView: NSTableView {
     }
 
     /// With Option held, the cursor for whatever is under `point`: the clipping cursor over the bottom of a row,
-    /// the duplicate cursor over the rest of it and over a mask thumbnail an Option-drag can copy.
+    /// the duplicate cursor over the rest of it, and over a mask thumbnail the one for showing the mask alone.
     private func clippingCursor(at point: NSPoint) -> NSCursor? {
         let index = row(at: point)
         guard let session, session.layerRows.indices.contains(index) else { return nil }
         let layer = session.layerRows[index].layer
+        // Option-click on a mask shows it alone (Option-dragging it onto another layer still copies it).
         if let thumbnail = thumbnail(at: point), thumbnail.isMaskTarget, !thumbnail.isHidden {
-            return session.canEditLayers ? CanvasView.duplicateCursor : NSCursor.arrow
+            return Self.showMaskCursor
         }
         guard isClippingZone(point, row: index) else {
             return session.canEditLayers ? CanvasView.duplicateCursor : NSCursor.arrow
@@ -910,7 +955,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
             : "Unlink layer and mask to move or transform them separately"
         linkButton.setAccessibilityLabel(layer.mask?.isLinked == false ? "Link mask: \(layer.name)" : "Unlink mask: \(layer.name)")
         thumbnail.toolTip = editableText ? "Editable text layer" : "Select image pixels"
-        maskThumbnail.toolTip = "Select layer mask; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
+        maskThumbnail.toolTip = "Select layer mask; Option-click to view it alone; Shift-click to enable/disable; Cmd-click to select its black areas (Cmd-Shift adds, Cmd-Option subtracts)"
         thumbnail.setAccessibilityLabel("Select \(editableText ? "text" : "image"): \(layer.name)")
         maskThumbnail.setAccessibilityLabel("Select mask: \(layer.name)")
         updateTarget()
@@ -918,7 +963,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         // A reused cell must not carry another row's half-finished rename.
         if renaming, layerID != layer.id { restoreLabel() }
         if !renaming { nameLabel.stringValue = (layer.maskSourceID == nil ? "" : "↳ ") + layer.name }
-        dimensions.stringValue = layer.liveText != nil ? "Text · Double-click to edit" : layer.adjustment != nil ? "Adjustment · Double-click to edit" : layer.isGroup ? "Folder" : "\(Int(layer.size.width.rounded())) × \(Int(layer.size.height.rounded())) px"
+        dimensions.stringValue = layer.liveText != nil ? "Text · Double-click to edit" : layer.adjustment != nil ? "Adjustment · Double-click to edit" : layer.isGroup ? "Folder" : layer.sizeLabel
         if let source = layer.maskSourceID {
             let sourceName = session.document?.layers.first(where: { $0.id == source })?.name ?? "Missing source"
             dimensions.stringValue = "Clipped to \(sourceName)"
@@ -951,6 +996,8 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         maskThumbnail.layer?.borderColor = NSColor.controlAccentColor.cgColor
         thumbnail.layer?.borderWidth = active && !mask ? 2 : 0
         maskThumbnail.layer?.borderWidth = active && mask ? 2 : 0
+        // Shown alone on the canvas, the mask is outlined in white rather than the accent.
+        if active, session?.maskAloneLayer?.id == layerID { maskThumbnail.layer?.borderColor = NSColor.white.cgColor }
     }
     /// Types the layer's name in the row: Return keeps it, Escape leaves it as it was, as does clicking away.
     func beginRenaming() {
@@ -1016,6 +1063,10 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     private static var loadMode: SelectionMode {
         let flags = NSApp.currentEvent?.modifierFlags ?? []
         return flags.contains(.option) ? .subtract : flags.contains(.shift) ? .add : .replace
+    }
+    @objc func toggleMaskAlone() {
+        guard let layerID else { return }
+        session?.toggleMaskAlone(layerID)
     }
     @objc private func selectMask() {
         guard let layerID else { return }
@@ -1247,12 +1298,12 @@ private final class LayerThumbnailButton: NSButton, NSDraggingSource {
 }
 
 extension LayerThumbnailButton {
-    /// Option-drag from a mask thumbnail carries a copy of the mask to another row; a click without a drag just
-    /// selects the mask.
+    /// Option-drag from a mask thumbnail carries a copy of the mask to another row; a click without a drag shows
+    /// the mask alone on the canvas, or the composite again, as in Photoshop.
     fileprivate func dragMaskCopy(_ down: NSEvent) {
         guard let window, let layerID else { return }
         while let event = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            if event.type == .leftMouseUp { sendAction(action, to: target); return }
+            if event.type == .leftMouseUp { _ = target?.perform(#selector(LayerCell.toggleMaskAlone)); return }
             let dx = event.locationInWindow.x - down.locationInWindow.x, dy = event.locationInWindow.y - down.locationInWindow.y
             guard dx * dx + dy * dy >= 9 else { continue }
             let item = NSPasteboardItem()
@@ -1315,4 +1366,17 @@ private struct ThumbnailKey: Equatable {
     let transform: LayerTransform
     let canvas: CGSize
     var editableText = false
+}
+
+extension ImageLayer {
+    /// The layer's size on the canvas and, once it's scaled, by how much, for its row. A photo shrunk to 5% keeps
+    /// every one of its pixels; the percentage says so, where the size alone reads as if it had been resampled small.
+    var sizeLabel: String {
+        let text = "\(Int(size.width.rounded())) × \(Int(size.height.rounded())) px"
+        guard let pixels = asset?.image.width, pixels > 0 else { return text }
+        // Measured across the width, as the Transform bar's Scale field is.
+        let percent = Double(size.width) / Double(pixels) * 100
+        guard abs(percent - 100) >= 0.05 else { return text }
+        return text + " · " + percent.formatted(.number.precision(.fractionLength(0...1))) + "%"
+    }
 }

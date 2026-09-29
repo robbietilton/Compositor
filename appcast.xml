@@ -3,13 +3,13 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.3.1</title>
-      <pubDate>Fri, 25 Sep 2026 17:01:23 +0000</pubDate>
-      <sparkle:version>28</sparkle:version>
-      <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.3.1</link>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.3.1/Compositor.dmg" sparkle:edSignature="d4B2ST3czerDQjvM+uTLpj7LNWv8eJq3bwbx5vRRqSXlOKeB4KkyZ3zaYWUyJv+usMlD+fTJYIpe+lV+eSBqAw==" length="9078917" type="application/octet-stream"/>
+      <title>Version 1.4.1</title>
+      <pubDate>Tue, 29 Sep 2026 05:21:06 +0000</pubDate>
+      <sparkle:version>36</sparkle:version>
+      <sparkle:shortVersionString>1.4.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.4.1</link>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.4.1/Compositor.dmg" sparkle:edSignature="IG8TtlscQV13dXFnBDd9ZEsCtRz3kIXt1IvqpWLurtAzcKuoAlU7BPjd7h4IGyhA/fmT5ggSpt8Vr/kxu16vCA==" length="6727516" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>

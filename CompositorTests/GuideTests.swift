@@ -56,7 +56,7 @@ struct GuideTests {
         session.addGuide(vertical)
         session.addGuide(horizontal)
         let snapshot = try #require(session.projectSnapshot())
-        #expect(snapshot.manifest.version == 10)
+        #expect(snapshot.manifest.version == 12)
         #expect(snapshot.manifest.guides == [vertical, horizontal])
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Guides-\(UUID()).comp")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -131,10 +131,57 @@ struct GuideTests {
     }
 
     @Test func layoutGridLinesIncludeMajorsAndSubdivisions() {
-        let lines = LayoutGrid.lines(along: 64)
+        let grid = LayoutGrid()
+        let lines = grid.lines(along: 64)
         #expect(lines.first == 0 && lines.last == 64)
         #expect(lines.contains(8) && lines.contains(64))
-        #expect(LayoutGrid.isMajor(0) && LayoutGrid.isMajor(64) && !LayoutGrid.isMajor(8))
+        #expect(grid.isMajor(0) && grid.isMajor(64) && !grid.isMajor(8))
+    }
+
+    @Test func layoutGridTakesItsSpacingAndSubdivisions() {
+        let grid = LayoutGrid(spacing: 100, subdivisions: 4)
+        #expect(grid.lines(along: 200) == [0, 25, 50, 75, 100, 125, 150, 175, 200])
+        #expect(grid.isMajor(100) && !grid.isMajor(50))
+        // An uneven step still lands on every major line.
+        let thirds = LayoutGrid(spacing: 100, subdivisions: 3)
+        #expect(thirds.lines(along: 300).filter(thirds.isMajor) == [0, 100, 200, 300])
+        #expect(LayoutGrid(spacing: 50, subdivisions: 1).lines(along: 120) == [0, 50, 100])
+    }
+
+    @Test func layoutGridKeepsToItsLimits() {
+        #expect(LayoutGrid(spacing: 0, subdivisions: 0) == LayoutGrid(spacing: 2, subdivisions: 1))
+        #expect(LayoutGrid(spacing: 10, subdivisions: 40).subdivisions == 10, "no finer than a pixel")
+        #expect(LayoutGrid(spacing: 1_000_000, subdivisions: 1_000).spacing == LayoutGrid.spacingRange.upperBound)
+        #expect(LayoutGrid(spacing: 1_000_000, subdivisions: 1_000).subdivisions == LayoutGrid.subdivisionRange.upperBound)
+    }
+
+    @Test func gridAppearanceColorsAndStyles() {
+        let standard = GridAppearance()
+        #expect(standard.preset == .lightGray && standard.style == .lines)
+        #expect(standard.color == PaletteColor(red: 0.7, green: 0.7, blue: 0.7), "the grid looks as it did before it had settings")
+        #expect(GridAppearance.Style.lines.dashes.isEmpty && !GridAppearance.Style.dashedLines.dashes.isEmpty)
+        var appearance = GridAppearance(preset: .cyan, customColor: .black, style: .dots)
+        #expect(appearance.color == PaletteColor(red: 0, green: 1, blue: 1))
+        appearance.preset = .custom
+        #expect(appearance.color == .black)
+        #expect(GridAppearance.Preset.allCases.allSatisfy { ($0.color == nil) == ($0 == .custom) })
+        #expect(PaletteColor(hex: appearance.customColor.hex) == appearance.customColor, "the Custom color survives being saved")
+        #expect(abs(standard.majorAlpha - 0.45) < 0.001 && abs(standard.subdivisionAlpha - 0.28) < 0.001)
+        appearance.opacity = 100
+        #expect(appearance.majorAlpha == 1 && appearance.subdivisionAlpha < 1)
+        appearance.opacity = 0
+        #expect(appearance.majorAlpha == 0.01, "a grid that's on never disappears")
+    }
+
+    @Test func gridSnapFollowsTheGridSettings() throws {
+        let session = try paintedSession()
+        session.snapToLayers = false
+        session.snapToDocumentBounds = false
+        session.showsGrid = true
+        session.snapToGrid = true
+        session.layoutGrid = LayoutGrid(spacing: 100, subdivisions: 2)
+        #expect(Set(session.cropSnapTargets().xs) == Set<CGFloat>([0, 50, 100, 150, 200, 250, 300, 350, 400]))
+        #expect(session.snappedGuidePosition(52, axis: .vertical, excluding: nil) == 50)
     }
 
     @Test func moveToolDragsAGuideAndRulerDropDeletesIt() throws {
@@ -172,5 +219,22 @@ struct GuideTests {
         #expect(CanvasRulerNSView.majorStep(pointsPerPixel: 8) == 10)
         #expect(CanvasRulerNSView.label(0) as String == "0")
         #expect(CanvasRulerNSView.label(250) as String == "250")
+    }
+
+    @Test func drawnPointsSnapToTheSnapToTargets() throws {
+        let session = try paintedSession()
+        session.snapToLayers = false
+        session.showsGrid = true
+        session.snapToGrid = true
+        // Each axis on its own, to the nearest line within reach: grid lines every 8 px, the canvas edge at 400.
+        #expect(session.snappedPoint(CGPoint(x: 62, y: 20), tolerance: 3) == CGPoint(x: 64, y: 20))
+        #expect(session.snappedPoint(CGPoint(x: 397.5, y: 9), tolerance: 3) == CGPoint(x: 400, y: 8))
+        #expect(session.snapGuides.xs == [400] && session.snapGuides.ys == [8], "the lines met are shown")
+        session.snappingEnabled = false
+        #expect(session.snappedPoint(CGPoint(x: 62, y: 20), tolerance: 3) == CGPoint(x: 62, y: 20))
+        session.snappingEnabled = true
+        session.snapEnabled = false
+        #expect(session.snappedPoint(CGPoint(x: 62, y: 20), tolerance: 3) == CGPoint(x: 62, y: 20))
+        #expect(session.snapGuides.xs.isEmpty && session.snapGuides.ys.isEmpty)
     }
 }

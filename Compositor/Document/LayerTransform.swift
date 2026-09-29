@@ -118,6 +118,9 @@ struct TransformEdit {
     var mask = false
     /// Set when several layers are selected: the draft is the box around them all, and each follows it.
     var group: TransformGroup? = nil
+    /// Opened by the Move bar's fields, for a value being typed or dragged: applied, one undo step, once they're done
+    /// with it — the drag let go, or the field left.
+    var fromFields = false
 }
 
 struct TransformDrag {

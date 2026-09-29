@@ -72,4 +72,21 @@ import UniformTypeIdentifiers
         #expect(window.firstResponder === canvas)
         window.contentView = nil
     }
+
+    /// Cmd-A with the Layers panel just clicked selects the whole canvas, not every layer.
+    @Test func selectAllInTheLayersPanelSelectsTheCanvas() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 80)
+        let context = try BrushRaster.context(width: 10, height: 10, mask: false)
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "One"))
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Two"))
+        let selected = session.selectedLayerIDs
+        let table = LayerTableView()
+        table.session = session
+        #expect(session.selection == nil)
+        table.selectAll(nil)
+        #expect(session.selection != nil, "the canvas is selected")
+        #expect(session.selectedLayerIDs == selected, "and the layers stay as they were")
+    }
 }

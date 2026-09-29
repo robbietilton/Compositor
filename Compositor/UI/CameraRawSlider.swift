@@ -13,6 +13,10 @@ enum CameraRawSliderTrack {
     case saturation(Double)
     /// Dark to light in that family's hue.
     case luminance(Double)
+    /// One color to its opposite, as Color Balance's Cyan / Red.
+    case opposing(NSColor, NSColor)
+    /// The whole hue circle, with that hue in the middle.
+    case spectrum(Double)
 
     /// Left-to-right track colors. Nil keeps the system track.
     var colors: [NSColor]? {
@@ -37,6 +41,10 @@ enum CameraRawSliderTrack {
         case .luminance(let degrees):
             return [Self.color(degrees: degrees, saturation: 0.55, brightness: 0.18),
                     Self.color(degrees: degrees, saturation: 0.35, brightness: 0.95)]
+        case .opposing(let from, let to):
+            return [from, to]
+        case .spectrum(let degrees):
+            return stride(from: -180.0, through: 180, by: 30).map { Self.color(degrees: degrees + $0, saturation: 0.85, brightness: 0.9) }
         }
     }
 

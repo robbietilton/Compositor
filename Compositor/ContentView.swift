@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var levelsPanel = FloatingPanelController(name: "levelsPanel")
     @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel")
     @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel")
+    @State private var colorRangePanel = FloatingPanelController(name: "colorRangePanel")
     @State private var filterPanel = FloatingPanelController(name: "filterPanel")
     @State private var effectsPanel = FloatingPanelController(name: "effectsPanel")
     @State private var isDropTargeted = false
@@ -97,6 +98,12 @@ struct ContentView: View {
                         ZStack {
                             EditorCanvas(session: session)
                             if session.document == nil { welcome }
+                            if let layer = session.maskAloneLayer {
+                                // At the foot of the canvas, clear of the transform box's rotation handle.
+                                MaskAloneBadge(session: session, layer: layer).fixedSize()
+                                    .padding(.bottom, 14)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            }
                         }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }
@@ -204,6 +211,13 @@ struct ContentView: View {
                 levelsPanel.show(title: "Levels", content: LevelsSheet(session: session))
             }
         }
+        .onChange(of: session.colorRange == nil) { _, closed in
+            if closed { colorRangePanel.close() }
+            else {
+                colorRangePanel.onClose = { session.cancelColorRange() }
+                colorRangePanel.show(title: "Color Range", content: ColorRangeSheet(session: session))
+            }
+        }
         .onChange(of: session.hueSaturation == nil) { _, closed in
             if closed { adjustmentPanel.close() }
             else {
@@ -254,7 +268,8 @@ struct ContentView: View {
         }
         .alert("Import couldn’t finish", isPresented: Binding(
             get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
-                Button("OK", role: .cancel) { session.importError = nil }
+                // No cancel role: an alert with only a cancel button gets a second OK of its own.
+                Button("OK") { session.importError = nil }
             } message: { Text(session.importError ?? "") }
         .alert("Couldn’t paint", isPresented: Binding(get: { session.brushError != nil },
             set: { if !$0 { session.brushError = nil } })) {

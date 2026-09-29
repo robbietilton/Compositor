@@ -270,4 +270,14 @@ struct HueSaturationTests {
         gray.sampleHueRange(at: CGPoint(x: 30, y: 5))
         #expect(gray.hueSaturation?.settings.band == before)
     }
+
+    /// Photoshop raises saturation by dividing by what's left: +50 doubles it, +100 takes any color all the way.
+    @Test func positiveSaturationMatchesPhotoshop() {
+        #expect(abs(HueSaturationFilter.adjustedSaturation(0.2, by: 50) - 0.4) < 1e-9)
+        #expect(abs(HueSaturationFilter.adjustedSaturation(0.3, by: 62) - 0.3 / 0.38) < 1e-9)
+        #expect(HueSaturationFilter.adjustedSaturation(0.1, by: 100) == 1)
+        #expect(HueSaturationFilter.adjustedSaturation(0.8, by: 50) == 1)
+        #expect(HueSaturationFilter.adjustedSaturation(0, by: 100) == 0)
+        #expect(abs(HueSaturationFilter.adjustedSaturation(0.6, by: -50) - 0.3) < 1e-9)
+    }
 }

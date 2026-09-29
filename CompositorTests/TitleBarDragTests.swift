@@ -4,24 +4,18 @@ import Testing
 @testable import Compositor
 
 /// The tab strip sits in the title bar. Empty space beside the tabs has to stay a window drag, on macOS 26
-/// where a scroll view keeps the mouse-down across its whole frame.
+/// where a view that claims more room than it draws into keeps the mouse-down across its whole frame.
 @MainActor
 @Suite(.serialized)
 struct TitleBarDragTests {
-    @Test func emptySpaceBesideOneTabIsOutsideTheScroller() async throws {
+    @Test func emptySpaceBesideOneTabIsOutsideTheDragArea() async throws {
         let workspace = ProjectWorkspace()
         let (window, hosting) = try await host(workspace, width: 800)
         defer { window.orderOut(nil) }
-        let scroll = try #require(scrollView(in: hosting))
-        #expect(abs(hosting.bounds.width - 800) < 2, "host \(hosting.bounds)")
-        #expect(scroll.frame.width < 220,
-                "one tab still owns frame \(scroll.frame) bounds \(scroll.bounds) in host \(hosting.bounds)")
-        let point = NSPoint(x: hosting.bounds.width - 40, y: hosting.bounds.midY)
-        let scrollFrame = scroll.convert(scroll.bounds, to: hosting)
-        #expect(scrollFrame.contains(point) == false, "empty title bar is still inside \(scrollFrame)")
-        let hit = hosting.hitTest(point)
-        #expect(hit is TitleBarDragView, "the empty title bar hit \(String(describing: hit.map { type(of: $0) }))")
-        try sendClick(at: point, in: hosting, window: window)
+        let dragArea = try #require(find(TitleBarDragView.self, in: hosting))
+        let frame = dragArea.convert(dragArea.bounds, to: hosting)
+        #expect(frame.width > 500, "one tab still leaves only \(frame.width) of drag area in \(hosting.bounds)")
+        try sendClick(at: NSPoint(x: frame.midX, y: frame.midY), in: hosting, window: window)
         #expect(window.dragCount == 1)
 
         window.dragCount = 0
@@ -29,16 +23,19 @@ struct TitleBarDragTests {
         #expect(window.dragCount == 0, "a tab click dragged the window")
     }
 
-    @Test func overflowingTabsStayInsideTheSlotAndCanScroll() async throws {
+    @Test func overflowingTabsStillLeaveTheRestOfTheTitleBarDraggable() async throws {
         let workspace = ProjectWorkspace()
         for _ in 0..<12 { workspace.newCanvas() }
         let (window, hosting) = try await host(workspace, width: 280)
         defer { window.orderOut(nil) }
-        let scroll = try #require(scrollView(in: hosting))
-        #expect(abs(scroll.bounds.width - 280) < 2, "the strip grew to \(scroll.bounds.width)")
-        let documentWidth = scroll.documentView?.frame.width ?? 0
-        #expect(documentWidth > scroll.bounds.width + 1, "tabs \(documentWidth) never overflowed \(scroll.bounds.width)")
-        #expect(scroll.horizontalScrollElasticity == .allowed)
+        // Far too many tabs to fit 280pt: they collapse behind the overflow pill instead of scrolling, and
+        // still only claim the width they draw into — there's no NSScrollView left to swallow the rest.
+        #expect(find(NSScrollView.self, in: hosting) == nil)
+        let dragArea = try #require(find(TitleBarDragView.self, in: hosting))
+        let frame = dragArea.convert(dragArea.bounds, to: hosting)
+        #expect(frame.width > 10, "the tabs claimed the whole slot again: drag area is \(frame)")
+        try sendClick(at: NSPoint(x: frame.midX, y: frame.midY), in: hosting, window: window)
+        #expect(window.dragCount == 1)
     }
 
     private func host(_ workspace: ProjectWorkspace, width: CGFloat) async throws -> (DragRecordingWindow, NSView) {
@@ -67,10 +64,10 @@ struct TitleBarDragTests {
         override func performDrag(with event: NSEvent) { dragCount += 1 }
     }
 
-    private func scrollView(in view: NSView) -> NSScrollView? {
-        if let scroll = view as? NSScrollView { return scroll }
+    private func find<T: NSView>(_ type: T.Type, in view: NSView) -> T? {
+        if let match = view as? T { return match }
         for subview in view.subviews {
-            if let scroll = scrollView(in: subview) { return scroll }
+            if let match = find(type, in: subview) { return match }
         }
         return nil
     }

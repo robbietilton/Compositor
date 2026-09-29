@@ -10,6 +10,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case addNoise = "Add Noise"
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
+    case dither = "Dither"
     case tonalContrast = "Tonal Contrast"
     case lensCorrection = "Lens Correction"
     case cameraRaw = "Camera Raw Filter"
@@ -75,6 +76,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var grain = GrainSettings()
     var blackWhite = BlackWhiteSettings()
     var colorBalance = ColorBalanceSettings()
+    var dither = DitherSettings()
     var cameraRaw = CameraRawSettings()
     /// Remove Background: Basic is the quick subject mask; Advanced refines it (see the three settings below).
     var backgroundQuality: BackgroundQuality = .basic
@@ -113,6 +115,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.exposure = exposure.normalized
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
+        result.dither = dither.normalized
         result.cameraRaw = cameraRaw.normalized
         return result
     }
@@ -192,6 +195,7 @@ nonisolated enum PixelFilter {
                                                                 visualizePointColor: job.visualizesPointColor, sharpenMask: job.showsSharpenMask)
         // Grain sits in layer pixels; the job's seed gives each application its own pattern.
         case .grain: image = try settings.grain.apply(job.image, unitsPerPixel: 1 / job.scale, seed: job.seed)
+        case .dither: image = try settings.dither.apply(job.image)
         case .removeBackground:
             image = try SubjectRemoval.run(job.image, settings: settings)
         case .contentAwareFill:
@@ -341,6 +345,11 @@ final class FilterEdit {
     /// The layer had no pixels yet (an empty layer); the filter started it from clear ones.
     @ObservationIgnored var startedEmpty = false
     @ObservationIgnored var preparedPreview: CGImage?
+    /// Where `preparedPreview` goes: the grown layer it was made from, or nil for the layer's own place. A blur grows
+    /// the layer as it gets bigger; the last preview stays up where it belongs until the next one replaces it.
+    @ObservationIgnored var preparedTransform: LayerTransform?
+    /// The grown layer `pending` is made from.
+    @ObservationIgnored var pendingTransform: LayerTransform?
     /// Reject a render started before the blur's padded pixel grid changed.
     @ObservationIgnored var previewSourceVersion: UInt64 = 0
     /// The settings `preparedPreview` was made with, for the automatic filters that have settings of their own.
@@ -417,8 +426,8 @@ final class FilterEdit {
     private static func prepared(kind: FilterKind, from source: CGImage, placed: LayerTransform) throws
         -> (mapping: CGAffineTransform, previewSource: CGImage, previewScale: CGFloat, previewMapping: CGAffineTransform) {
         let mapping = BrushRaster.pixelToDocument(placed, width: source.width, height: source.height)
-        // Noise and grain preview at full size: grain made on a smaller copy would look coarser once enlarged.
-        let factor = [.addNoise, .grain, .contentAwareFill, .removeBackground].contains(kind)
+        // Noise, grain and dither preview at full size: made on a smaller copy they would look coarser once enlarged.
+        let factor = [.addNoise, .grain, .dither, .contentAwareFill, .removeBackground].contains(kind)
             ? 1 : min(1, previewLimit / CGFloat(max(source.width, source.height)))
         guard factor < 1 else { return (mapping, source, 1, mapping) }
         let w = max(1, Int(CGFloat(source.width) * factor)), h = max(1, Int(CGFloat(source.height) * factor))
@@ -510,7 +519,7 @@ extension EditorSession {
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
         if FilterEdit.blurMargin(edit.kind, edit.settings) > edit.grownMargin {
-            do { try edit.growForBlur(); edit.preparedPreview = nil }
+            do { try edit.growForBlur() }
             catch { brushError = error.localizedDescription }
         }
         if previewAdjustmentEditing(preview: preview) { return }
@@ -520,6 +529,7 @@ extension EditorSession {
             return
         }
         edit.pending = edit.previewJob
+        edit.pendingTransform = edit.grownTransform
         renderFilterPreview(edit)
     }
 
@@ -528,6 +538,7 @@ extension EditorSession {
     private func renderFilterPreview(_ edit: FilterEdit) {
         guard filterEdit === edit, edit.previewTask == nil, let job = edit.pending else { return }
         edit.pending = nil
+        let placement = edit.pendingTransform
         let sourceVersion = edit.previewSourceVersion
         edit.preparing = true
         edit.previewError = nil
@@ -546,13 +557,17 @@ extension EditorSession {
             guard let self, let edit, self.filterEdit === edit, !Task.isCancelled else { return }
             edit.previewTask = nil
             edit.preparing = false
-            guard sourceVersion == edit.previewSourceVersion else {
-                self.renderFilterPreview(edit)
-                return
-            }
+            // Made before the layer grew for a bigger blur: it still shows, in the place it was made for, until the
+            // render from the grown layer replaces it.
+            let current = sourceVersion == edit.previewSourceVersion
             edit.previewError = result.2
             if let scope = result.1 { edit.cameraRawScope = scope }
-            if edit.preview || edit.kind.isAutomatic { edit.preparedPreview = result.0; edit.preparedSettings = job.settings; self.brushRevision += 1 }
+            if (edit.preview || edit.kind.isAutomatic), current || !edit.kind.isAutomatic {
+                edit.preparedPreview = result.0
+                edit.preparedTransform = placement
+                edit.preparedSettings = current ? job.settings : nil
+                self.brushRevision += 1
+            }
             self.renderFilterPreview(edit)
         }
     }
@@ -561,6 +576,7 @@ extension EditorSession {
         // A filter color still being picked goes with the panel.
         if case .gradientMap = colorPicker?.target { closeColorPicker(commit: false) }
         if case .vignette = colorPicker?.target { closeColorPicker(commit: false) }
+        if case .dither = colorPicker?.target { closeColorPicker(commit: false) }
         if finishAdjustmentEditing(commit: false) { return }
         guard let edit = filterEdit, !edit.committing else { return }
         edit.previewTask?.cancel()
@@ -571,6 +587,7 @@ extension EditorSession {
     func commitFilter() async {
         if case .gradientMap = colorPicker?.target { closeColorPicker(commit: true) }
         if case .vignette = colorPicker?.target { closeColorPicker(commit: true) }
+        if case .dither = colorPicker?.target { closeColorPicker(commit: true) }
         if finishAdjustmentEditing(commit: true) { return }
         guard let edit = filterEdit, !edit.committing else { return }
         if edit.kind.isAutomatic {

@@ -27,13 +27,13 @@ struct CompositorApp: App {
                     if session.textDraft != nil || session.levels != nil || session.isProjectBusy || session.showsNewDocument || session.showsImporter || session.renamingLayerID != nil || session.transformEdit?.persistent == true {
                         Button("Undo") {
                             if NSApp.keyWindow?.firstResponder is NSTextView {
-                                NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
+                                NSApp.sendAction(NSSelectorFromString("undo:"), to: nil, from: nil)
                             }
                         }
                             .configuredKeyboardShortcut("z")
                         Button("Redo") {
                             if NSApp.keyWindow?.firstResponder is NSTextView {
-                                NSApp.sendAction(Selector(("redo:")), to: nil, from: nil)
+                                NSApp.sendAction(NSSelectorFromString("redo:"), to: nil, from: nil)
                             }
                         }
                             .configuredKeyboardShortcut("z", modifiers: [.command, .shift])
@@ -55,6 +55,18 @@ struct CompositorApp: App {
                         Task { await applicationDelegate.projects.open() }
                     }
                         .configuredKeyboardShortcut("o").disabled(!applicationDelegate.projects.canStart)
+                    Menu("Open Recent") {
+                        ForEach(RecentProjects.shared.urls, id: \.self) { url in
+                            Button(url.deletingPathExtension().lastPathComponent) {
+                                applicationDelegate.showEditor?()
+                                Task { await applicationDelegate.projects.open(url) }
+                            }
+                        }
+                        Divider()
+                        Button("Clear Menu") { RecentProjects.shared.clear() }
+                            .disabled(RecentProjects.shared.urls.isEmpty)
+                    }
+                        .disabled(!applicationDelegate.projects.canStart)
                     Button("Import Images…") { session.showsImporter = true }
                         .disabled(session.levels != nil || session.showsBusy || session.isImporting || session.showsNewDocument)
                 }
@@ -84,16 +96,21 @@ struct CompositorApp: App {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates(nil) }
                     }
                     CommandGroup(after: .toolbar) {
-                        Button("Fit Canvas") { session.fit() }.configuredKeyboardShortcut("0").disabled(session.document == nil)
-                        Button("Actual Pixels") { session.zoom(to: 1) }.configuredKeyboardShortcut("1").disabled(session.document == nil)
+                        // With a dialog's preview open (Export JPEG), these zoom that preview rather than the canvas.
+                        Button("Fit Canvas") {
+                            if let preview = session.previewZoom { preview(.fit) } else { session.fit() }
+                        }.configuredKeyboardShortcut("0").disabled(session.document == nil)
+                        Button("Actual Pixels") {
+                            if let preview = session.previewZoom { preview(.actual) } else { session.zoom(to: 1) }
+                        }.configuredKeyboardShortcut("1").disabled(session.document == nil)
                         Button("Zoom In") {
                             guard !(NSApp.keyWindow?.firstResponder is NSText) else { return }
-                            session.zoomKeyboard(by: 1)
+                            if let preview = session.previewZoom { preview(.zoomIn) } else { session.zoomKeyboard(by: 1) }
                         }
                             .configuredKeyboardShortcut("=").disabled(session.document == nil)
                         Button("Zoom Out") {
                             guard !(NSApp.keyWindow?.firstResponder is NSText) else { return }
-                            session.zoomKeyboard(by: -1)
+                            if let preview = session.previewZoom { preview(.zoomOut) } else { session.zoomKeyboard(by: -1) }
                         }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
@@ -111,6 +128,8 @@ struct CompositorApp: App {
                                 Toggle("Guides", isOn: Binding(get: { session.showsGuides }, set: { session.showsGuides = $0 }))
                                     .configuredKeyboardShortcut(";").disabled(session.document == nil)
                             }
+                            Button("Grid Settings…") { Task { await applicationDelegate.projects.gridSettings() } }
+                                .disabled(session.document == nil)
                             Toggle("Rulers", isOn: Binding(get: { session.showsRulers }, set: { session.showsRulers = $0 }))
                                 .configuredKeyboardShortcut("r").disabled(session.document == nil)
                             Divider()
@@ -216,6 +235,8 @@ struct CompositorApp: App {
                     Button("Subject") { Task { await session.selectSubject() } }
                         .configuredKeyboardShortcut("a", modifiers: [.command, .option])
                         .disabled(!session.canSelectSubject)
+                    Button("Color Range…") { session.beginColorRange() }
+                        .disabled(!session.canSelectColorRange)
                     Button("Mask's Black Areas") {
                         if let id = session.activeLayerID { session.loadMaskSelection(layerID: id) }
                     }
@@ -288,6 +309,8 @@ struct CompositorApp: App {
                     Divider()
                     Button("Group Selected Layers") { session.groupSelectedLayers() }
                         .configuredKeyboardShortcut("g").disabled(!session.canEditLayers)
+                    Button("Ungroup Layers") { session.ungroupLayers() }
+                        .configuredKeyboardShortcut("g", modifiers: [.command, .shift]).disabled(!session.canUngroupLayers)
                     Button("Move Out of Folder") { session.moveActiveLayerOutOfGroup() }
                         .disabled(!session.canEditLayers || session.activeLayer?.parentID == nil)
                     Button("New Blank Layer") { session.addBlankLayer() }

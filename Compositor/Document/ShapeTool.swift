@@ -145,17 +145,17 @@ nonisolated struct LayerShapeStyle: Codable, Equatable, Sendable {
     /// How far a star's inner corners are pulled in, as a fraction of its points' reach. Nil keeps its sides even.
     var inset: CGFloat? = nil
     var color: PaletteColor { PaletteColor(red: red, green: green, blue: blue) }
-    /// Stars, polygons and a line's style and caps arrived in format version 10; stars and polygons must say how many
+    /// Stars, polygons and a line's style and caps arrived in format version 12; stars and polygons must say how many
     /// corners they have.
     func isValid(version: Int) -> Bool {
         let styled = lineStyle != nil || lineCap != nil
         switch kind {
         case .line:
-            return points == nil && inset == nil && (!styled || version >= 10)
+            return points == nil && inset == nil && (!styled || version >= 12)
         case .star:
-            return version >= 10 && points.map { (3...20).contains($0) } == true && !styled
+            return version >= 12 && points.map { (3...20).contains($0) } == true && !styled
                 && inset.map { $0.isFinite && ShapeKind.starInsets.contains($0) } != false
-        case .polygon: return version >= 10 && points.map { (3...20).contains($0) } == true && inset == nil && !styled
+        case .polygon: return version >= 12 && points.map { (3...20).contains($0) } == true && inset == nil && !styled
         case .rectangle, .ellipse: return points == nil && inset == nil && !styled
         }
     }

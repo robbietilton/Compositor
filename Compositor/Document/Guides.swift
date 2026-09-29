@@ -31,27 +31,92 @@ nonisolated struct CanvasGuide: Codable, Equatable, Sendable, Hashable {
     }
 }
 
-/// Non-printing layout grid: a major line every 64 px, eight subdivisions (every 8 px).
-enum LayoutGrid {
-    static let spacing: CGFloat = 64
-    static let subdivisions = 8
-    static var step: CGFloat { spacing / CGFloat(subdivisions) }
+/// Non-printing layout grid: a major line every `spacing` px, split into `subdivisions`
+/// (64 px and eight, every 8 px, until changed in View > Grid Settings…).
+struct LayoutGrid: Equatable {
+    static let spacingRange = 2...4096
+    static let subdivisionRange = 1...64
+
+    /// Pixels between major lines.
+    let spacing: Int
+    /// Parts each major square is split into; never finer than a pixel.
+    let subdivisions: Int
+    var step: CGFloat { CGFloat(spacing) / CGFloat(subdivisions) }
+
+    init(spacing: Int = 64, subdivisions: Int = 8) {
+        self.spacing = min(max(spacing, Self.spacingRange.lowerBound), Self.spacingRange.upperBound)
+        self.subdivisions = min(max(subdivisions, Self.subdivisionRange.lowerBound), Self.subdivisionRange.upperBound, self.spacing)
+    }
 
     /// Every grid line along a document edge, including subdivisions, in whole pixels.
-    static func lines(along length: CGFloat) -> [CGFloat] {
-        guard length >= 0, step > 0 else { return [0] }
-        var result: [CGFloat] = []
-        var value: CGFloat = 0
-        while value <= length + 0.001 {
-            result.append(value.rounded())
-            value += step
-        }
-        return result
+    /// Counted from the origin rather than added up, so an uneven step doesn't drift off the majors.
+    func lines(along length: CGFloat) -> [CGFloat] {
+        guard length >= 0 else { return [0] }
+        let count = Int((length / step + 0.001).rounded(.down))
+        return (0...count).map { (CGFloat($0) * step).rounded() }
     }
 
-    static func isMajor(_ value: CGFloat) -> Bool {
-        abs(value.rounded().truncatingRemainder(dividingBy: spacing)) < 0.001
+    func isMajor(_ value: CGFloat) -> Bool {
+        abs(value.rounded().truncatingRemainder(dividingBy: CGFloat(spacing))) < 0.001
     }
+}
+
+/// How the layout grid is drawn (View > Grid Settings…), after Photoshop's Guides, Grid & Slices settings.
+/// Lines are drawn at the chosen opacity; subdivisions are dotted and fainter still.
+struct GridAppearance: Equatable {
+    enum Preset: String, CaseIterable, Identifiable {
+        case lightGray = "Light Gray", lightBlue = "Light Blue", lightRed = "Light Red", green = "Green",
+             mediumBlue = "Medium Blue", yellow = "Yellow", magenta = "Magenta", cyan = "Cyan", black = "Black",
+             custom = "Custom"
+        var id: Self { self }
+
+        /// Nil for Custom, which uses the appearance's own color.
+        var color: PaletteColor? {
+            switch self {
+            case .lightGray: PaletteColor(red: 0.7, green: 0.7, blue: 0.7)
+            case .lightBlue: PaletteColor(red: 0.29, green: 0.78, blue: 1)
+            case .lightRed: PaletteColor(red: 1, green: 0.4, blue: 0.4)
+            case .green: PaletteColor(red: 0.25, green: 0.8, blue: 0.25)
+            case .mediumBlue: PaletteColor(red: 0.2, green: 0.4, blue: 1)
+            case .yellow: PaletteColor(red: 1, green: 1, blue: 0)
+            case .magenta: PaletteColor(red: 1, green: 0, blue: 1)
+            case .cyan: PaletteColor(red: 0, green: 1, blue: 1)
+            case .black: .black
+            case .custom: nil
+            }
+        }
+    }
+
+    /// The major lines' pattern; subdivisions stay dotted.
+    enum Style: String, CaseIterable, Identifiable {
+        case lines = "Lines", dashedLines = "Dashed Lines", dots = "Dots"
+        var id: Self { self }
+
+        /// On and off lengths in screen points; empty for a solid line.
+        var dashes: [CGFloat] {
+            switch self {
+            case .lines: []
+            case .dashedLines: [4, 3]
+            case .dots: [1, 2]
+            }
+        }
+    }
+
+    static let opacityRange = 1...100
+
+    var preset: Preset = .lightGray
+    /// Used while `preset` is Custom; kept when another preset is chosen, so switching back finds it.
+    var customColor = PaletteColor(red: 0.7, green: 0.7, blue: 0.7)
+    var style: Style = .lines
+    /// The major lines' opacity, in percent.
+    var opacity = 45
+
+    var color: PaletteColor { preset.color ?? customColor }
+    var majorAlpha: CGFloat {
+        CGFloat(min(max(opacity, Self.opacityRange.lowerBound), Self.opacityRange.upperBound)) / 100
+    }
+    /// Subdivisions at a little over half the majors' opacity: 28% beside the default 45%.
+    var subdivisionAlpha: CGFloat { majorAlpha * 28 / 45 }
 }
 
 /// In-progress create or move; the document is updated only when the drag finishes.
@@ -207,8 +272,8 @@ extension EditorSession {
         }
         // Hidden extras do not snap, matching Photoshop.
         if snapToGrid, showsGrid {
-            xs += LayoutGrid.lines(along: document.size.width)
-            ys += LayoutGrid.lines(along: document.size.height)
+            xs += layoutGrid.lines(along: document.size.width)
+            ys += layoutGrid.lines(along: document.size.height)
         }
         if snapToGuides, showsGuides {
             for guide in displayedGuides {
@@ -224,7 +289,7 @@ extension EditorSession {
         let tolerance = TransformSnap.distance / max(viewport.pointsPerPixel, 0.0001)
         var targets: [CGFloat] = []
         let length = axis == .vertical ? document.size.width : document.size.height
-        if snapToGrid, showsGrid { targets += LayoutGrid.lines(along: length) }
+        if snapToGrid, showsGrid { targets += layoutGrid.lines(along: length) }
         if snapToGuides, showsGuides {
             targets += displayedGuides.filter { $0.axis == axis && $0.id != excluding }.map { CGFloat($0.position) }
         }

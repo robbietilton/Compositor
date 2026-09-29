@@ -64,8 +64,7 @@ nonisolated struct LevelsJob: @unchecked Sendable {
 nonisolated enum LevelsFilter {
     static func run(_ job: LevelsJob) throws -> CGImage {
         if job.settings.isIdentity { return job.image }
-        let context = try BrushRaster.context(width: job.image.width, height: job.image.height, mask: false)
-        BrushRaster.draw(job.image, in: CGRect(x: 0, y: 0, width: job.image.width, height: job.image.height), mask: false, context: context)
+        let context = try BrushRaster.copy(job.image)
         let tables = [LevelsChannel.red, .green, .blue].flatMap { channel in
             (0...255).map { Float(job.settings.apply(Double($0) / 255, channel: channel)) }
         }
@@ -75,7 +74,8 @@ nonisolated enum LevelsFilter {
         // The tables are for colors, not colors already multiplied by their alpha, and `levels_apply` already
         // divides each channel by its alpha before the lookup and multiplies it back after. Doing it here as
         // well ran a soft edge through the conversion twice: 50% grey at half alpha came out at a quarter.
-        levels_apply(pixels, count, tables)
+        // A Levels layer runs on the whole canvas view every frame: split across the cores.
+        BrushRaster.inBands(count: count) { start, length in levels_apply(pixels + start * 4, length, tables) }
         guard let image = context.makeImage() else { throw ExportError.render }
         if let selection = job.selection {
             return try PixelAdjust.blend(image, over: job.image, through: selection, pixelToDocument: job.mapping, isMask: false)

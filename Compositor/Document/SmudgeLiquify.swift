@@ -28,13 +28,25 @@ final class WarpStroke {
     private let pixels: UnsafeMutablePointer<UInt8>
     /// Every dab's center, for painting the result into the layer.
     private(set) var points: [CGPoint] = []
-    private(set) var image: CGImage?
+    /// The working copy on the GPU, where the dabs run when there is one (see MetalWarp).
+    let gpu: MetalWarp?
+    private var cpuImage: CGImage?
+    /// The working copy as an image, fetched from the GPU the first time it's asked for after a dab.
+    var image: CGImage? {
+        guard let gpu else { return cpuImage }
+        if cpuImage == nil {
+            gpu.read(into: context)
+            cpuImage = context.makeImage()
+        }
+        return cpuImage
+    }
     private var last: CGPoint?
     /// Smudge: the color the brush carries, a (2r+1)² RGBA square.
     private var carried: [Float] = []
     private var scratch: [Float] = []
 
-    init(layer: ImageLayer, image: CGImage, transform: LayerTransform, canvas: CGSize, mode: BlurToolMode, settings: BrushSettings) throws {
+    init(layer: ImageLayer, image: CGImage, transform: LayerTransform, canvas: CGSize, mode: BlurToolMode, settings: BrushSettings,
+         useGPU: Bool = true) throws {
         self.layer = layer
         self.mode = mode
         diameter = max(2, settings.diameter)
@@ -46,7 +58,8 @@ final class WarpStroke {
         guard let data = context.data else { throw ExportError.render }
         // Top-left rows: a document point's row is its y.
         pixels = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
-        self.image = context.makeImage()
+        gpu = useGPU ? MetalWarp(pixels: context) : nil
+        cpuImage = context.makeImage()
     }
 
     private var radius: Int { Int((diameter / 2).rounded(.up)) }
@@ -63,7 +76,9 @@ final class WarpStroke {
     func append(_ point: CGPoint) {
         guard let from = last else {
             last = point
-            if mode == .smudge { pickUp(at: point) }
+            if mode == .smudge {
+                if let gpu { gpu.pickUp(at: point, radius: radius); gpu.commit() } else { pickUp(at: point) }
+            }
             return
         }
         let distance = hypot(point.x - from.x, point.y - from.y)
@@ -74,12 +89,20 @@ final class WarpStroke {
         for step in 1...steps {
             let t = CGFloat(step) / CGFloat(steps)
             let next = CGPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t)
-            if mode == .smudge { smudge(at: next) } else { push(from: previous, to: next) }
+            if let gpu {
+                if mode == .smudge { gpu.smudge(at: next, radius: radius, diameter: diameter, hardness: hardness, strength: strength) }
+                else { gpu.push(from: previous, to: next, radius: radius, diameter: diameter, hardness: hardness, strength: strength) }
+            } else if mode == .smudge { smudge(at: next) } else { push(from: previous, to: next) }
             points.append(next)
             previous = next
         }
         last = point
-        image = context.makeImage()
+        if let gpu {
+            gpu.commit()
+            cpuImage = nil
+        } else {
+            cpuImage = context.makeImage()
+        }
     }
 
     private func pickUp(at center: CGPoint) {
@@ -170,7 +193,7 @@ final class WarpStroke {
 extension EditorSession {
     func beginWarp(at point: CGPoint) {
         guard canPaint, !isMaskSelected, let layer = activeLayer, let image = layer.asset?.image, let document else {
-            if isMaskSelected { brushError = "Smudge and Liquify work on a layer's pixels, not its mask." }
+            brushError = isMaskSelected ? "Smudge and Liquify work on a layer's pixels, not its mask." : paintRefusal
             return
         }
         finishOpacityEdit()
@@ -199,7 +222,7 @@ extension EditorSession {
             settings.hardness = 1
             settings.opacity = 1
             let stroke = try makeRasterEdit(for: current, settings: settings)
-            stroke.clone = (result, .zero)
+            stroke.clone = (result, CGRect(x: 0, y: 0, width: result.width, height: result.height), false)
             stroke.replacesWithClone = true
             stroke.editName = warp.mode.rawValue
             for point in warp.points { try stroke.append(point) }

@@ -187,40 +187,44 @@ final class TransformOverlay: NSView {
         drawSnapGuides()
     }
 
-    /// Non-printing layout grid over the document: solid majors every 64 px, dotted 8 px subdivisions.
+    /// Non-printing layout grid over the document: majors in the chosen style, dotted subdivisions, both in the
+    /// chosen color.
     private func drawLayoutGrid() {
         guard session.showsGrid, let document = session.document, let transform = documentToView,
               let context = NSGraphicsContext.current?.cgContext else { return }
+        let grid = session.layoutGrid
+        let appearance = session.gridAppearance
+        let color = appearance.color.nsColor
         let size = document.size
         let scale = session.viewport.pointsPerPixel
         let hairline = 1 / max(session.viewport.backingScale, 1)
-        let subdivisionGap = LayoutGrid.step * scale
+        let subdivisionGap = grid.step * scale
         context.saveGState()
         context.concatenate(transform)
         context.setLineWidth(hairline / max(scale, 0.0001))
-        context.setStrokeColor(NSColor(white: 0.55, alpha: 0.28).cgColor)
+        context.setStrokeColor(color.withAlphaComponent(appearance.subdivisionAlpha).cgColor)
         if subdivisionGap >= 4 {
             context.setLineDash(phase: 0, lengths: [1 / max(scale, 0.0001), 2 / max(scale, 0.0001)])
             let path = CGMutablePath()
-            for x in LayoutGrid.lines(along: size.width) where !LayoutGrid.isMajor(x) {
+            for x in grid.lines(along: size.width) where !grid.isMajor(x) {
                 path.move(to: CGPoint(x: x, y: 0))
                 path.addLine(to: CGPoint(x: x, y: size.height))
             }
-            for y in LayoutGrid.lines(along: size.height) where !LayoutGrid.isMajor(y) {
+            for y in grid.lines(along: size.height) where !grid.isMajor(y) {
                 path.move(to: CGPoint(x: 0, y: y))
                 path.addLine(to: CGPoint(x: size.width, y: y))
             }
             context.addPath(path)
             context.strokePath()
         }
-        context.setLineDash(phase: 0, lengths: [])
-        context.setStrokeColor(NSColor(white: 0.7, alpha: 0.45).cgColor)
+        context.setLineDash(phase: 0, lengths: appearance.style.dashes.map { $0 / max(scale, 0.0001) })
+        context.setStrokeColor(color.withAlphaComponent(appearance.majorAlpha).cgColor)
         let majors = CGMutablePath()
-        for x in LayoutGrid.lines(along: size.width) where LayoutGrid.isMajor(x) {
+        for x in grid.lines(along: size.width) where grid.isMajor(x) {
             majors.move(to: CGPoint(x: x, y: 0))
             majors.addLine(to: CGPoint(x: x, y: size.height))
         }
-        for y in LayoutGrid.lines(along: size.height) where LayoutGrid.isMajor(y) {
+        for y in grid.lines(along: size.height) where grid.isMajor(y) {
             majors.move(to: CGPoint(x: 0, y: y))
             majors.addLine(to: CGPoint(x: size.width, y: y))
         }

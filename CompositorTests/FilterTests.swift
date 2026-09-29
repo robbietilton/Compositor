@@ -45,6 +45,34 @@ struct FilterTests {
         #expect(try #require(middle.last) < 20, "and it fades out on the far side")
     }
 
+    /// Dragging a blur bigger grows the layer to make room for it. The last preview stays on the canvas, in the place it
+    /// was made for, until the preview from the grown layer replaces it — it used to be dropped, and the unblurred layer
+    /// flashed up in between.
+    @Test func growingABlurKeepsThePreviewUpUntilTheNextOne() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 40, height: 20)
+        let context = try BrushRaster.context(width: 40, height: 20, mask: false)
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Half"))
+        let layer = try #require(session.activeLayer)
+        session.beginFilter(.gaussianBlur)
+        session.updateFilter(FilterSettings(radius: 2), preview: true)
+        await session.filterEdit?.previewTask?.value
+        let edit = try #require(session.filterEdit)
+        let first = try #require(edit.previewImage(for: layer.id))
+        let firstPlace = session.displayedTransform(for: layer)
+        session.updateFilter(FilterSettings(radius: 12), preview: true)
+        #expect(edit.previewImage(for: layer.id) === first, "the last preview stays up while the bigger blur renders")
+        #expect(session.displayedTransform(for: layer) == firstPlace, "where it was made for")
+        while edit.previewTask != nil { await edit.previewTask?.value }
+        let second = try #require(edit.previewImage(for: layer.id))
+        #expect(second !== first)
+        #expect(session.displayedTransform(for: layer).size.width > firstPlace.size.width, "the grown layer's preview, placed on it")
+        session.cancelFilter()
+    }
+
     @Test func motionBlurStreaksAlongItsAngleCounterclockwiseFromHorizontal() throws {
         // One opaque white dot in the middle of a transparent image.
         let context = try BrushRaster.context(width: 41, height: 41, mask: false)

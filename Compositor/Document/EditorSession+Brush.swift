@@ -9,6 +9,28 @@ extension EditorSession {
             && (!isMaskSelected || activeLayer?.mask?.isEnabled == true)
             && (isMaskSelected || activeLayer?.adjustment == nil)
     }
+    /// Why a stroke can't start on the target, for the alert, as Photoshop explains a brush it refuses. Nil when
+    /// nothing about the target is in the way; while the editor is busy (a transform, a dialog) a press just waits.
+    var paintRefusal: String? {
+        guard canEditLayers, let layer = activeLayer, !canPaint else { return nil }
+        if selectedLayerIDs.count > 1 { return "Several layers are selected. Select just one to paint on it." }
+        if layer.isGroup, !isMaskSelected {
+            return "“\(layer.name)” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask."
+        }
+        if document?.effectiveVisibleIDs.contains(layer.id) != true {
+            return "“\(layer.name)” is hidden, or inside a hidden folder. Show it to paint on it."
+        }
+        if isMaskSelected, layer.mask?.isEnabled != true {
+            return "The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint."
+        }
+        if !isMaskSelected, layer.adjustment != nil {
+            return "“\(layer.name)” is an adjustment layer, with no pixels to paint. Paint on its mask instead."
+        }
+        if selection?.isEmpty == true {
+            return "Nothing is selected, so there’s nowhere to paint. Choose Select › Deselect (⌘D) to paint anywhere."
+        }
+        return nil
+    }
     /// Tiled raster edit of the active layer's pixels or mask, within the shared pixel budgets.
     func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false) throws -> BrushStroke {
         guard let document else { throw ProjectError.tooLarge }
@@ -28,21 +50,15 @@ extension EditorSession {
     func beginBrush(at point: CGPoint) {
         // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
         if tool == .blur, blurMode != .blur { beginWarp(at: point); return }
-        guard tool == .brush || tool == .blur || (tool.isBrushTool && !isMaskSelected), canPaint, let layer = activeLayer, let document else { return }
-        var clone: (image: CGImage, offset: CGSize)?
+        guard tool == .brush || tool == .blur || (tool.isBrushTool && !isMaskSelected) else { return }
+        guard canPaint, let layer = activeLayer, let document else { brushError = paintRefusal; return }
+        var sourceOffset: CGSize?
         if tool == .cloneStamp {
             guard let offset = cloneStrokeOffset(at: point) else {
                 brushError = "Option-click where Clone Stamp should copy from first."
                 return
             }
-            guard let image = cloneSample(document) else { return }
-            cloneOffset = offset
-            clone = (image, offset)
-        }
-        // Blur paints a softened copy of the layer, in place, through the brush tip.
-        if tool == .blur {
-            guard let image = blurSample(document, mask: isMaskSelected) else { return }
-            clone = (image, .zero)
+            sourceOffset = offset
         }
         finishOpacityEdit()
         do {
@@ -52,7 +68,16 @@ extension EditorSession {
             settings.healingMode = spotHealingMode
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
-            stroke.clone = clone
+            if let offset = sourceOffset {
+                guard let sample = cloneSample(document, for: stroke, offset: offset) else { return }
+                cloneOffset = offset
+                stroke.clone = sample
+            }
+            // Blur paints a softened copy of the layer, in place, through the brush tip.
+            if tool == .blur {
+                guard let sample = blurSample(for: stroke) else { return }
+                stroke.clone = sample
+            }
             stroke.isBlur = tool == .blur
             brushStroke = stroke
             try stroke.append(point)

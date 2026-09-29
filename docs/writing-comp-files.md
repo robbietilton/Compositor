@@ -28,7 +28,7 @@ A minimal manifest with one full-canvas image layer:
 ```json
 {
   "format": "com.compositor.project",
-  "version": 10,
+  "version": 12,
   "colorSpace": "sRGB",
   "documentID": "0C5E7A91-3B2D-4F6A-8E1C-9D0B7A6F5E4D",
   "width": 1920,
@@ -71,7 +71,7 @@ Break one of these and Compositor refuses the whole file **without any message**
 - **Images are 8-bit PNGs** in `images/`. Layer images are RGBA; masks are 8-bit grayscale (white shows the layer, black hides it).
 - **Blend modes are spelled exactly** as Compositor names them: `Normal`, `Darken`, `Multiply`, `Color Burn`, `Linear Burn`, `Lighten`, `Screen`, `Color Dodge`, `Linear Dodge (Add)`, `Overlay`, `Soft Light`, `Hard Light`, `Vivid Light`, `Linear Light`, `Pin Light`, `Hard Mix`, `Difference`, `Exclusion`, `Subtract`, `Divide`, `Hue`, `Saturation`, `Color`, `Luminosity`.
 - **Every layer the manifest names has its image in place**, and the manifest is valid JSON.
-- **A `shape` of kind `Star` or `Polygon` needs `points`** (3–20) and a manifest `version` of at least 10; a star's optional `inset` is 0.01–0.99. Other shape kinds leave both out. A line may carry `lineStyle` (`Solid`, `Dashed`, `Long Dash`, `Dash Dot`, `Long Dash Dot`, `Dotted`) and `lineCap` (`Round`, `Square`), also version 10.
+- **A `shape` of kind `Star` or `Polygon` needs `points`** (3–20) and a manifest `version` of at least 12; a star's optional `inset` is 0.01–0.99. Other shape kinds leave both out. A line may carry `lineStyle` (`Solid`, `Dashed`, `Long Dash`, `Dash Dot`, `Long Dash Dot`, `Dotted`) and `lineCap` (`Round`, `Square`), also version 12.
 
 ## Writing safely while the project is open
 
@@ -84,13 +84,15 @@ To change an existing layer, keep its `id` and overwrite its PNG, then rewrite t
 
 Remove images you no longer reference once the manifest no longer lists them.
 
+A project Compositor saved also has a `QuickLook` folder (`Preview.jpg`), which Finder shows as its Space-bar preview. When you change a project, delete that folder, so Finder doesn't preview an out-of-date picture; Compositor writes it again the next time it saves.
+
 ## What the open app does
 
 - It reloads about a third of a second after writes stop. Several writes in quick succession arrive as one update, so pause briefly between steps if a viewer should see each one.
 - A reload keeps the zoom, scroll and selection, but clears undo, as reopening a file does.
 - If the person has unsaved changes of their own, Compositor asks them to revert to your version or keep theirs, and never replaces their work silently.
 - A write that fails to load is ignored until the next change, so a mistake you then fix will still show up.
-- Changes are noticed from the manifest's contents and from each image's name and size. Rewriting a PNG with different pixels changes its size in practice, but if you replace an image with one of exactly the same byte size, also rewrite the manifest.
+- Changes are noticed from the manifest's contents and from each image's name and size, not from when files were written. Rewriting a PNG with different pixels changes its size in practice. If you replace an image with one of exactly the same byte size, also make a change to the manifest, such as renaming the layer; writing identical manifest bytes back isn't enough.
 
 ## Masks
 

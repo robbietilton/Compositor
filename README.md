@@ -2,7 +2,7 @@
 
 Adobe Photoshop costs too much and tools like GIMP don’t feel familiar enough for me to stay in flow. That’s why I built Compositor.
 
-The goal was to create a full-featured image editor that is completely free and open source. I use Photoshop for compositing and post-processing, so Compositor is built around that workflow - with the tools needed to create a pixel-perfect final image.
+The goal was to create a full-featured image editor that is completely free and open source. I used to use Photoshop for compositing and post-processing, so Compositor is built around that workflow - with the tools needed to create a pixel-perfect final image.
 
 Because it’s open source, you can download the Xcode project and add, remove, or modify any feature to fit your workflow.
 
@@ -62,7 +62,7 @@ brew install --cask robbietilton-compositor
 
 ### Canvas and files
 - Multiple projects in tabs
-- Rulers (⌘R), guides dragged from them, a layout grid, and Snap To for guides, grid, layers and document bounds
+- Rulers (⌘R), guides dragged from them, a layout grid with adjustable spacing and subdivisions, and Snap To for guides, grid, layers and document bounds
 - Crop with snapping, ratios including 3:4 and 9:16, and Option for symmetric cropping; with a selection, the crop starts at it
 - Canvas Size, Image Size and Trim
 - Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
@@ -79,7 +79,7 @@ brew install --cask robbietilton-compositor
 
 ## Requirements
 
-- macOS 26.5 or later
+- macOS 26.0 or later on a Mac with Apple silicon
 - Xcode 26 or later (to build from source)
 
 ## Building

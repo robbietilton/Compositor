@@ -172,3 +172,34 @@ fail:
     free(lens);
     return -1;
 }
+
+static inline int color_near(const int *rgb, const uint8_t *colors, int count, int fuzziness) {
+    for (int i = 0; i < count; ++i) {
+        const uint8_t *c = colors + i * 3;
+        if (abs(rgb[0] - c[0]) <= fuzziness && abs(rgb[1] - c[1]) <= fuzziness && abs(rgb[2] - c[2]) <= fuzziness) return 1;
+    }
+    return 0;
+}
+
+long color_range_mask(const uint8_t *rgba, size_t width, size_t height, size_t stride,
+                      const uint8_t *include, int includeCount, const uint8_t *exclude, int excludeCount,
+                      int fuzziness, int invert, uint8_t *mask) {
+    long count = 0;
+    for (size_t y = 0; y < height; ++y) {
+        const uint8_t *row = rgba + y * stride;
+        uint8_t *out = mask + y * width;
+        for (size_t x = 0; x < width; ++x) {
+            const uint8_t *px = row + x * 4;
+            int matches = 0;
+            if (px[3]) {
+                int rgb[3];
+                for (int c = 0; c < 3; ++c) rgb[c] = (px[c] * 255 + px[3] / 2) / px[3];
+                matches = color_near(rgb, include, includeCount, fuzziness) && !color_near(rgb, exclude, excludeCount, fuzziness);
+            }
+            if (invert) matches = !matches;
+            out[x] = matches ? 255 : 0;
+            count += matches;
+        }
+    }
+    return count;
+}

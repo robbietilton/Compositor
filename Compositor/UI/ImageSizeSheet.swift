@@ -6,6 +6,9 @@ struct ImageSizeSheet: View {
     @State private var width: Double
     @State private var height: Double
     @State private var resolution: Double
+    /// The last usable resolution. Print sizes scale from it, so passing through a zero or negative entry
+    /// doesn't lose them.
+    @State private var lastResolution: Double
     @State private var locked = true
     @State private var resample = true
     @State private var unit = "Pixels"
@@ -18,6 +21,7 @@ struct ImageSizeSheet: View {
         _width = State(initialValue: Double(document.width))
         _height = State(initialValue: Double(document.height))
         _resolution = State(initialValue: document.resolution)
+        _lastResolution = State(initialValue: document.resolution)
     }
 
     private var valid: Bool {
@@ -36,6 +40,7 @@ struct ImageSizeSheet: View {
     private func dimension(isWidth: Bool) -> Binding<Double> {
         Binding(get: { display(isWidth ? width : height, original: isWidth ? document.width : document.height) }, set: { value in
             guard value.isFinite, value > 0 else { return }
+            if unit == "Inches" || unit == "Centimeters", !(resolution.isFinite && resolution > 0) { return }
             if !resample {
                 resolution = (isWidth ? width : height) / value * (unit == "Centimeters" ? 2.54 : 1)
                 return
@@ -122,12 +127,13 @@ struct ImageSizeSheet: View {
             HStack {
                 Text("Resolution").scrubbable(sensitivity: 1, value: $resolution, range: 1...9600, step: 1)
                 TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
-                    .onChange(of: resolution) { old, new in
-                        if resample, unit == "Inches" || unit == "Centimeters",
-                           old > 0, new > 0, new.isFinite {
-                            width *= new / old
-                            height *= new / old
+                    .onChange(of: resolution) { _, new in
+                        guard new.isFinite, new > 0 else { return }
+                        if resample, unit == "Inches" || unit == "Centimeters" {
+                            width *= new / lastResolution
+                            height *= new / lastResolution
                         }
+                        lastResolution = new
                     }
                 Text("pixels/inch").foregroundStyle(.secondary)
             }

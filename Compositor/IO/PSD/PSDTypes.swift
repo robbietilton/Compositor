@@ -47,6 +47,10 @@ nonisolated struct PSDRecord: @unchecked Sendable {
     var bounds = CGRect.zero
     var image: CGImage?
     var mask: CGImage?
+    /// Where `mask` sits on the document, and the value everywhere outside it: Photoshop stores only the part of a
+    /// mask that isn't that default.
+    var maskBounds = CGRect.zero
+    var maskDefault: UInt8 = 255
     var maskEnabled = true
     var maskLinked = true
     var adjustment: LayerAdjustment?

@@ -81,14 +81,62 @@ nonisolated extension ProjectLayerRecord {
 }
 extension CanvasDocument {
     var effectiveOpacities: [UUID: Double] {
-        let byID = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0) })
-        return Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0.effectiveOpacity(in: byID)) })
+        let folders = Dictionary(uniqueKeysWithValues: layers.lazy.map { ($0.id, (opacity: $0.opacity, parentID: $0.parentID)) })
+        return folders.mapValues { LayerOpacity.effective($0.opacity, parent: $0.parentID) { folders[$0] } }
     }
-    var hierarchyEntries: [LayerHierarchy.Entry] { LayerHierarchy.entries(layers.map(\.hierarchyRecord)) }
-    var effectiveVisibleIDs: Set<UUID> { Set(hierarchyEntries.filter(\.visible).map { $0.layer.id }) }
+    /// Every layer and folder in drawing order (each folder before what's inside it), and which of them show.
+    var hierarchy: LayerOrder.Result { LayerOrder.resolve(layers) }
+    var effectiveVisibleIDs: Set<UUID> { hierarchy.visible }
     var renderLayers: [ImageLayer] {
-        let byID = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0) })
-        return hierarchyEntries.filter { $0.visible && $0.layer.isGroup != true }.compactMap { byID[$0.layer.id] }
+        let order = hierarchy.drawn
+        guard !order.isEmpty else { return [] }
+        let index = Dictionary(uniqueKeysWithValues: layers.indices.lazy.map { (layers[$0].id, $0) })
+        return order.compactMap { index[$0].map { layers[$0] } }
+    }
+}
+
+/// The layer hierarchy worked out from only what shapes it — each layer's id, folder, and visibility — and kept until
+/// one of those changes. The canvas asks for it several times on every event; rebuilt each time from whole layer
+/// records, a document of hundreds of layers spent most of its time on it.
+nonisolated enum LayerOrder {
+    struct Node: Equatable {
+        let id: UUID
+        let parentID: UUID?
+        let isGroup: Bool
+        let isVisible: Bool
+    }
+    struct Result {
+        /// Every layer and folder, in the order `LayerHierarchy.entries` lists them.
+        let order: [UUID]
+        /// The ones that show: visible, in folders that are.
+        let visible: Set<UUID>
+        /// The layers that show, folders left out, bottom to top.
+        let drawn: [UUID]
+    }
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var last: (nodes: [Node], result: Result)?
+
+    static func resolve(_ layers: [ImageLayer]) -> Result {
+        let nodes = layers.map { Node(id: $0.id, parentID: $0.parentID, isGroup: $0.isGroup, isVisible: $0.isVisible) }
+        if let known = lock.withLock({ last }), known.nodes == nodes { return known.result }
+        let children = Dictionary(grouping: nodes, by: \.parentID)
+        var order: [UUID] = [], visible = Set<UUID>(), drawn: [UUID] = []
+        func visit(_ parent: UUID?, depth: Int, shown: Bool) {
+            guard depth <= 64 else { return }
+            for node in children[parent] ?? [] {
+                let effective = shown && node.isVisible
+                order.append(node.id)
+                if effective {
+                    visible.insert(node.id)
+                    if !node.isGroup { drawn.append(node.id) }
+                }
+                if node.isGroup { visit(node.id, depth: depth + 1, shown: effective) }
+            }
+        }
+        visit(nil, depth: 0, shown: true)
+        let result = Result(order: order, visible: visible, drawn: drawn)
+        lock.withLock { last = (nodes, result) }
+        return result
     }
 }
 
@@ -129,7 +177,7 @@ extension EditorSession {
         }
         // A selected folder carries its subtree; selected descendants must not be pulled out of it.
         let rootIDs = selected.filter { id in !ancestors(id).contains { $0.map(selected.contains) ?? false } }
-        let ordered = document.hierarchyEntries.map { $0.layer.id }.filter(rootIDs.contains)
+        let ordered = document.hierarchy.order.filter(rootIDs.contains)
         let parent: UUID? = ordered.first.flatMap { first in
             ancestors(first).first { candidate in ordered.allSatisfy { ancestors($0).contains(candidate) } } ?? nil
         }
@@ -160,6 +208,33 @@ extension EditorSession {
         self.document?.layers = layers
         activeLayerID = group.id
         if let parent { collapsedGroupIDs.remove(parent) }
+        endEdit()
+    }
+
+    /// The active layer must be a folder, so there is something to unwrap.
+    var canUngroupLayers: Bool { canEditLayers && activeLayer?.isGroup == true }
+
+    /// Reverses Group from Layers: the folder's direct children take its place among its own siblings, in the
+    /// order they had inside it, and the folder goes. Its own opacity, blend mode, mask and effects are
+    /// discarded along with it, as Photoshop's Ungroup does.
+    func ungroupLayers() {
+        guard canUngroupLayers, let group = activeLayer, let document else { return }
+        let childIDs = Set(document.layers.filter { $0.parentID == group.id }.map(\.id))
+        var children = document.layers.filter { childIDs.contains($0.id) }
+        for i in children.indices { children[i].parentID = group.parentID }
+        // Spliced in at the folder's own spot, so they land exactly where it sat among its siblings.
+        var layers: [ImageLayer] = []
+        for layer in document.layers {
+            if layer.id == group.id { layers.append(contentsOf: children) }
+            else if !childIDs.contains(layer.id) { layers.append(layer) }
+        }
+        Self.releaseDetachedClipping(in: &layers)
+        guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return }
+        finishOpacityEdit()
+        beginEdit("Ungroup Layers")
+        self.document?.layers = layers
+        selectLayers(childIDs, primary: children.first?.id)
+        collapsedGroupIDs.remove(group.id)
         endEdit()
     }
 
