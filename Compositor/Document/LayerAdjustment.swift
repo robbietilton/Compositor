@@ -12,7 +12,7 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
     /// The menus' two groups, each in the order of the menu it comes from: the Image menu's color adjustments, then
     /// the Filter menu's filters.
     static let imageAdjustments: [Self] = [.curves, .levels, .hsv, .blackWhite, .colorBalance, .exposure, .gradientMap, .grain, .invert]
-    static let filters: [Self] = [.gaussianBlur, .motionBlur, .progressiveBlur, .addNoise, .bloomGlow, .rgbSplit]
+    static let filters: [Self] = [.gaussianBlur, .motionBlur, .progressiveBlur, .addNoise, .bloomGlow, .rgbSplit, .structure]
     var symbol: String {
         switch self {
         case .curves: return "point.topleft.down.to.point.bottomright.curvepath"

@@ -349,6 +349,33 @@ import Testing
         #expect(try fixtures.pixels(decoded.apply(source)) == fixtures.pixels(source))
     }
 
+    /// A double-click on Structure's Amount or Radius knob uses the same reset as Camera Raw, and Amount's
+    /// default is the center of its slider, not the shared tonal-contrast default of 50.
+    @Test func doubleClickRestoresAmountToCenterAndRadiusToItsDefault() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 16)
+        let source = try stripes()
+        session.insert(ImportedImage(image: source, thumbnail: source, name: "Stripes"))
+        session.addAdjustment(.structure)
+        let id = try #require(session.activeLayerID)
+        await session.beginAdjustmentEditing(id)
+        var settings = try #require(session.filterEdit).settings
+        settings.tonalAmount = 70
+        settings.tonalRadius = 40
+        session.updateFilter(settings, preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 70)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 40)
+
+        session.updateFilter(FilterSheet.resetting(\.tonalAmount, in: settings, to: 0), preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 0)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 40)
+        settings = try #require(session.filterEdit).settings
+        session.updateFilter(FilterSheet.resetting(\.tonalRadius, in: settings, to: 16), preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 0)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 16)
+        #expect(FilterSheet.resetting(\.tonalAmount, in: settings).tonalAmount == 50)
+    }
+
     @Test func maskHidesTheEffectAndUndoRestoresTheSettings() async throws {
         let fixtures = AdjustmentLayerTests()
         let session = EditorSession()
