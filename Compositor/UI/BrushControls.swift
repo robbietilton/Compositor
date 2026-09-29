@@ -47,15 +47,23 @@ struct BrushControls: View {
                     session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                 }
                 .unitSuffix("px")
-            Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
-            Slider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
-            TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
-                set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
-                format: .number.precision(.fractionLength(0)))
-                .frame(width: 42).textFieldStyle(.roundedBorder)
-                .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
-                            change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
-                .unitSuffix("%")
+            if session.tool == .brush {
+                Toggle("Pixel", isOn: $session.brushSettings.pixelPerfect)
+                    .help("Paint and erase whole pixels in the exact color, with no soft edge")
+            }
+            Group {
+                Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
+                Slider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
+                TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
+                    set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
+                    format: .number.precision(.fractionLength(0)))
+                    .frame(width: 42).textFieldStyle(.roundedBorder)
+                    .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
+                                change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
+                    .unitSuffix("%")
+            }
+            // Pixel mode always paints with a hard tip.
+            .disabled(session.tool == .brush && session.brushSettings.pixelPerfect)
             Text(session.tool == .blur ? "Strength" : "Opacity")
                 .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
             Slider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)

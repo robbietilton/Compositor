@@ -66,6 +66,8 @@ extension EditorSession {
             settings.healing = tool == .spotHealing
             settings.erasing = tool == .brush && brushMode == .erase && !isMaskSelected
             settings.healingMode = spotHealingMode
+            // The other brush tools share the tip but have no pixel mode.
+            settings.pixelPerfect = tool == .brush && brushSettings.pixelPerfect
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
             if let offset = sourceOffset {

@@ -1516,7 +1516,32 @@ final class CanvasView: NSView {
         brushCursor.update(point: shows ? brushPointer : nil, diameter: max(1, diameter * session.viewport.pointsPerPixel),
                            sample: sample, preview: preview, previewOpacity: session.brushSettings.opacity,
                            tip: preview == nil ? nil : cloneTip(diameter: diameter, hardness: session.brushSettings.hardness),
-                           hardness: brushTipDrag?.hardnessShown == true ? session.brushSettings.hardness : nil)
+                           hardness: brushTipDrag?.hardnessShown == true ? session.brushSettings.hardness : nil,
+                           square: shows ? pixelSquare() : nil)
+    }
+
+    /// Pixel mode's cursor: the square of pixels a click would fill, in view points, snapped to the grid
+    /// the brush paints in. Nil for round tips.
+    private func pixelSquare() -> [CGPoint]? {
+        guard session.tool == .brush, let pointer = brushPointer, let document = session.document else { return nil }
+        let grid: CGAffineTransform
+        let diameter: CGFloat
+        if let stroke = session.brushStroke {
+            guard stroke.settings.pixelPerfect else { return nil }
+            grid = stroke.pixelToDocument
+            diameter = stroke.settings.diameter
+        } else {
+            guard session.brushSettings.pixelPerfect, let layer = session.activeLayer else { return nil }
+            let (placement, width, height) = BrushStroke.grid(of: layer, mask: session.isMaskSelected)
+            grid = BrushRaster.pixelToDocument(placement, width: width, height: height)
+            diameter = session.brushSettings.diameter
+        }
+        let point = session.viewport.documentPoint(from: pointer, documentSize: document.size)
+        let square = BrushStroke.pixelSquare(at: point, diameter: diameter, pixelToDocument: grid)
+        return [CGPoint(x: square.minX, y: square.minY), CGPoint(x: square.maxX, y: square.minY),
+                CGPoint(x: square.maxX, y: square.maxY), CGPoint(x: square.minX, y: square.maxY)].map {
+            session.viewport.viewPoint(from: $0.applying(grid), documentSize: document.size)
+        }
     }
 
     private var cloneTipCache: (diameter: CGFloat, hardness: CGFloat, image: CGImage?)?

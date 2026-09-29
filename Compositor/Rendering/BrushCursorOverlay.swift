@@ -2,6 +2,8 @@ import AppKit
 
 final class BrushCursorOverlay: NSView {
     private var circle: CGRect?
+    /// Pixel mode: the square of pixels a click would fill, in view points, drawn in place of the circle.
+    private var square: [CGPoint]?
     /// Clone Stamp's source crosshair, in view points.
     private var marker: CGPoint?
     /// Clone Stamp's preview of what a click would stamp, drawn inside the circle.
@@ -15,16 +17,17 @@ final class BrushCursorOverlay: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     func update(point: CGPoint?, diameter: CGFloat, sample: CGPoint? = nil, preview: CGImage? = nil,
-                previewOpacity: CGFloat = 1, tip: CGImage? = nil, hardness: CGFloat? = nil) {
+                previewOpacity: CGFloat = 1, tip: CGImage? = nil, hardness: CGFloat? = nil, square: [CGPoint]? = nil) {
         let next = point.map { CGRect(x: $0.x - diameter / 2, y: $0.y - diameter / 2, width: diameter, height: diameter) }
-        if circle != next || self.preview !== preview || self.previewOpacity != previewOpacity || self.tip !== tip || self.hardness != hardness {
-            if let circle { setNeedsDisplay(circle.insetBy(dx: -3, dy: -3)) }
+        if circle != next || self.square != square || self.preview !== preview || self.previewOpacity != previewOpacity || self.tip !== tip || self.hardness != hardness {
+            if let area = shownArea { setNeedsDisplay(area.insetBy(dx: -3, dy: -3)) }
             circle = next
+            self.square = point == nil ? nil : square
             self.preview = preview
             self.previewOpacity = previewOpacity
             self.tip = tip
             self.hardness = hardness
-            if let next { setNeedsDisplay(next.insetBy(dx: -3, dy: -3)) }
+            if let area = shownArea { setNeedsDisplay(area.insetBy(dx: -3, dy: -3)) }
         }
         if marker != sample {
             let reach = Self.markerReach + 3
@@ -33,9 +36,24 @@ final class BrushCursorOverlay: NSView {
             if let sample { setNeedsDisplay(CGRect(x: sample.x - reach, y: sample.y - reach, width: reach * 2, height: reach * 2)) }
         }
     }
+    /// What the cursor covers: the circle, or the square in its place.
+    private var shownArea: CGRect? {
+        guard let square, let first = square.first else { return circle }
+        return square.reduce(CGRect(origin: first, size: .zero)) { $0.union(CGRect(origin: $1, size: .zero)) }
+    }
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        if let circle {
+        if let square {
+            let outline = CGMutablePath()
+            outline.addLines(between: square)
+            outline.closeSubpath()
+            for (color, width) in [(NSColor.white, 2.5), (NSColor.black, 1)] {
+                context.addPath(outline)
+                context.setStrokeColor(color.cgColor)
+                context.setLineWidth(width)
+                context.strokePath()
+            }
+        } else if let circle {
             if let preview {
                 context.saveGState()
                 context.addEllipse(in: circle)

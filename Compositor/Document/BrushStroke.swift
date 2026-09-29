@@ -17,6 +17,9 @@ nonisolated struct BrushSettings: Sendable {
     /// 0–100. The brush trails the pointer on a string of this length, so a shaky hand
     /// draws a smooth line; 0 follows the pointer exactly.
     var smoothing: CGFloat = 0
+    /// Pixel mode, like Photoshop's Pencil: a pixel is painted in full, in the exact color, or not at all.
+    /// Hardness doesn't apply.
+    var pixelPerfect = false
     /// Spot-healing uses nearby source pixels instead of the foreground color.
     /// Erase: the stroke clears the layer's pixels instead of painting color on them.
     var erasing = false
@@ -180,20 +183,16 @@ final class BrushStroke {
     /// `growsMask`: a brush on a mask can paint anywhere on the canvas, as Photoshop's does, growing the mask past its
     /// layer. Other edits of a mask stay within it.
     init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false) throws {
-        gpu = useGPU ? MetalBrushCoverage.shared : nil
+        // Pixel mode fills whole pixels on the CPU; the GPU draws round tips only.
+        gpu = useGPU && !settings.pixelPerfect ? MetalBrushCoverage.shared : nil
         self.layer = layer
         isMask = mask
+        var settings = settings
+        // Pixel mode draws a hard tip; hardness is ignored.
+        if settings.pixelPerfect { settings.hardness = 1 }
         self.settings = settings
         self.canvas = CGRect(origin: .zero, size: canvas)
-        // A mask on its own placement is painted in its own pixel grid; otherwise the grid is the layer's.
-        let placedMask = mask ? layer.mask.flatMap { mask in mask.placement.map { (mask.asset.image, $0) } } : nil
-        let base = placedMask?.1 ?? layer.transform
-        // A solid mask is a single pixel stretched over its place; painted, it gets one pixel per document pixel.
-        let solidPlaced = placedMask.map { $0.0.width <= 2 && $0.0.height <= 2 } == true
-        let originalWidth = solidPlaced ? max(1, Int(base.size.width.rounded()))
-            : placedMask?.0.width ?? layer.asset?.image.width ?? Int(layer.size.width.rounded())
-        let originalHeight = solidPlaced ? max(1, Int(base.size.height.rounded()))
-            : placedMask?.0.height ?? layer.asset?.image.height ?? Int(layer.size.height.rounded())
+        let (base, originalWidth, originalHeight) = Self.grid(of: layer, mask: mask)
         let originalMapping = BrushRaster.pixelToDocument(base, width: originalWidth, height: originalHeight)
         let originalBounds = CGRect(x: 0, y: 0, width: originalWidth, height: originalHeight)
         let extent = mask && !growsMask ? originalBounds : originalBounds.union(self.canvas.applying(originalMapping.inverted()).integral)
@@ -227,13 +226,36 @@ final class BrushStroke {
         let square = abs(pixelToDocument.b) < 1e-9 && abs(pixelToDocument.c) < 1e-9
             && scaleX > 1e-9 && abs(scaleX - scaleY) < 1e-9
         let gridDiameter = settings.diameter / scaleX
-        gridTip = gpu == nil && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
+        gridTip = gpu == nil && !settings.pixelPerfect && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
             ? try Self.tip(diameter: gridDiameter, hardness: settings.hardness, falloff: falloff) : nil
         // Drawn through the tile transform, the stamp is rendered as finely as the layer's pixels: magnified onto
         // the finer grid of a scaled-down layer, it left blocky dabs that showed once the layer was scaled back up.
         let stampDiameter = settings.diameter / min(1, scaleX, scaleY)
-        stamp = gpu == nil && gridTip == nil && stampDiameter <= Self.stampLimit
+        stamp = gpu == nil && !settings.pixelPerfect && gridTip == nil && stampDiameter <= Self.stampLimit
             ? try Self.tip(diameter: stampDiameter, hardness: settings.hardness, falloff: falloff) : nil
+    }
+
+    /// The pixel grid a brush paints on the layer or its mask in: where it sits, and how many pixels it has.
+    static func grid(of layer: ImageLayer, mask: Bool) -> (placement: LayerTransform, width: Int, height: Int) {
+        // A mask on its own placement is painted in its own pixel grid; otherwise the grid is the layer's.
+        let placedMask = mask ? layer.mask.flatMap { mask in mask.placement.map { (mask.asset.image, $0) } } : nil
+        let base = placedMask?.1 ?? layer.transform
+        // A solid mask is a single pixel stretched over its place; painted, it gets one pixel per document pixel.
+        let solidPlaced = placedMask.map { $0.0.width <= 2 && $0.0.height <= 2 } == true
+        let width = solidPlaced ? max(1, Int(base.size.width.rounded()))
+            : placedMask?.0.width ?? layer.asset?.image.width ?? Int(layer.size.width.rounded())
+        let height = solidPlaced ? max(1, Int(base.size.height.rounded()))
+            : placedMask?.0.height ?? layer.asset?.image.height ?? Int(layer.size.height.rounded())
+        return (base, width, height)
+    }
+
+    /// Pixel mode's tip: the square of whole grid pixels a dab at `point` fills, in grid pixels. It's `diameter`
+    /// document pixels across, at least one pixel, and centered as nearly on `point` as the grid allows.
+    static func pixelSquare(at point: CGPoint, diameter: CGFloat, pixelToDocument: CGAffineTransform) -> CGRect {
+        let center = point.applying(pixelToDocument.inverted())
+        let columns = max(1, (diameter / hypot(pixelToDocument.a, pixelToDocument.b)).rounded())
+        let rows = max(1, (diameter / hypot(pixelToDocument.c, pixelToDocument.d)).rounded())
+        return CGRect(x: (center.x - columns / 2).rounded(), y: (center.y - rows / 2).rounded(), width: columns, height: rows)
     }
 
     /// The tip as grayscale coverage: white at full strength, fading to black at the rim.
@@ -394,7 +416,9 @@ final class BrushStroke {
     /// Draws a straight tail to the cursor, first saving the coverage it can touch and the
     /// dab spacing state, so `removeTail()` can put both back exactly.
     private func drawTail(from start: CGPoint, to end: CGPoint, changed: inout Set<Int>) throws {
-        let reach = settings.diameter / 2 + 2
+        // Pixel mode's square reaches into its corners, and snaps up to a pixel further.
+        let pixel = max(hypot(pixelToDocument.a, pixelToDocument.b), hypot(pixelToDocument.c, pixelToDocument.d))
+        let reach = settings.pixelPerfect ? settings.diameter * 0.75 + pixel * 1.5 + 2 : settings.diameter / 2 + 2
         let box = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
             .insetBy(dx: -reach, dy: -reach).intersection(canvas)
         if !box.isNull, !box.isEmpty {
@@ -452,7 +476,9 @@ final class BrushStroke {
 
     /// Lays evenly spaced dabs along a straight run from the previous dab position.
     private func walk(to point: CGPoint, changed: inout Set<Int>) throws {
-        let spacing = max(0.25, settings.diameter * Self.spacingFraction(settings.hardness))
+        var spacing = max(0.25, settings.diameter * Self.spacingFraction(settings.hardness))
+        // Pixel mode steps a pixel at most, so the squares always touch.
+        if settings.pixelPerfect { spacing = min(spacing, hypot(pixelToDocument.a, pixelToDocument.b), hypot(pixelToDocument.c, pixelToDocument.d)) }
         if let previous {
             let dx = point.x - previous.x, dy = point.y - previous.y
             let length = hypot(dx, dy)
@@ -542,7 +568,8 @@ final class BrushStroke {
     private func dab(_ point: CGPoint, changed: inout Set<Int>) throws {
         let radius = settings.diameter / 2
         let circle = CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)
-        let clipped = circle.intersection(canvas)
+        let square = settings.pixelPerfect ? Self.pixelSquare(at: point, diameter: settings.diameter, pixelToDocument: pixelToDocument) : nil
+        let clipped = (square?.applying(pixelToDocument) ?? circle).intersection(canvas)
         guard !clipped.isNull, !clipped.isEmpty else { return }
         let inverse = pixelToDocument.inverted()
         let pixelCanvas = canvas.applying(inverse)
@@ -555,7 +582,7 @@ final class BrushStroke {
                           y: (center.y - CGFloat(tip.height) / 2).rounded(),
                           width: CGFloat(tip.width), height: CGFloat(tip.height))
         }
-        let affected = (blit ?? clipped.applying(inverse)).intersection(pixelCanvas)
+        let affected = (square ?? blit ?? clipped.applying(inverse)).intersection(pixelCanvas)
             .integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
         guard !affected.isNull, !affected.isEmpty else { return }
         let columns = (width + Self.tileSize - 1) / Self.tileSize
@@ -575,6 +602,14 @@ final class BrushStroke {
                 }
                 guard let context = coverage[key] else { continue }
                 context.saveGState()
+                if let square {
+                    context.clip(to: pixelCanvas.offsetBy(dx: -tile.rect.minX, dy: -tile.rect.minY))
+                    context.setFillColor(gray: 1, alpha: 1)
+                    context.fill(square.offsetBy(dx: -tile.rect.minX, dy: -tile.rect.minY))
+                    context.restoreGState()
+                    changed.insert(key)
+                    continue
+                }
                 if let gridTip, let blit {
                     context.clip(to: pixelCanvas.offsetBy(dx: -tile.rect.minX, dy: -tile.rect.minY))
                     context.setBlendMode(settings.hardness >= 1 ? .lighten : .screen)
