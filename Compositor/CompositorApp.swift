@@ -68,6 +68,7 @@ struct CompositorApp: App {
                     }
                         .disabled(!applicationDelegate.projects.canStart)
                     Button("Import Images…") { session.showsImporter = true }
+                        .assignableShortcut("File › Import Images…")
                         .disabled(session.levels != nil || session.showsBusy || session.isImporting || session.showsNewDocument)
                 }
                 CommandGroup(replacing: .saveItem) {
@@ -115,8 +116,10 @@ struct CompositorApp: App {
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
+                            .assignableShortcut("View › Pixel Grid")
                         Toggle("Snap", isOn: Binding(get: { session.snappingEnabled },
                                                      set: { session.snappingEnabled = $0 }))
+                            .assignableShortcut("View › Snap")
                         Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },
                                                                           set: { session.showsTransformControls = $0 }))
                             .configuredKeyboardShortcut("h").disabled(session.tool != .move || session.document == nil)
@@ -129,6 +132,7 @@ struct CompositorApp: App {
                                     .configuredKeyboardShortcut(";").disabled(session.document == nil)
                             }
                             Button("Grid Settings…") { Task { await applicationDelegate.projects.gridSettings() } }
+                                .assignableShortcut("View › Grid Settings…")
                                 .disabled(session.document == nil)
                             Toggle("Rulers", isOn: Binding(get: { session.showsRulers }, set: { session.showsRulers = $0 }))
                                 .configuredKeyboardShortcut("r").disabled(session.document == nil)
@@ -137,19 +141,24 @@ struct CompositorApp: App {
                                 .configuredKeyboardShortcut(";", modifiers: [.command, .shift]).disabled(session.document == nil)
                             Menu("Snap To") {
                                 Toggle("Guides", isOn: Binding(get: { session.snapToGuides }, set: { session.snapToGuides = $0 }))
+                                    .assignableShortcut("View › Snap To › Guides")
                                     .disabled(session.document == nil)
                                 Toggle("Grid", isOn: Binding(get: { session.snapToGrid }, set: { session.snapToGrid = $0 }))
+                                    .assignableShortcut("View › Snap To › Grid")
                                     .disabled(session.document == nil)
                                 Toggle("Layers", isOn: Binding(get: { session.snapToLayers }, set: { session.snapToLayers = $0 }))
+                                    .assignableShortcut("View › Snap To › Layers")
                                     .disabled(session.document == nil)
                                 Toggle("Document Bounds", isOn: Binding(get: { session.snapToDocumentBounds },
                                                                         set: { session.snapToDocumentBounds = $0 }))
+                                    .assignableShortcut("View › Snap To › Document Bounds")
                                     .disabled(session.document == nil)
                             }
                             Divider()
                             Toggle("Lock Guides", isOn: Binding(get: { session.locksGuides }, set: { session.locksGuides = $0 }))
                                 .configuredKeyboardShortcut(";", modifiers: [.command, .option]).disabled(session.document == nil)
                             Button("Clear Guides") { session.clearGuides() }
+                                .assignableShortcut("View › Clear Guides")
                                 .disabled(!session.canClearGuides)
                         }
                     }
@@ -192,6 +201,7 @@ struct CompositorApp: App {
                 CommandGroup(after: .pasteboard) {
                     Divider()
                     Button("Keyboard Shortcuts…") { ShortcutSettings.shared.show() }
+                        .assignableShortcut("Edit › Keyboard Shortcuts…")
                     // Photoshop's fill shortcuts; in a text field they keep their text meaning.
                     Button("Fill with Foreground Color") {
                         if NSApp.keyWindow?.firstResponder is NSTextView {
@@ -206,6 +216,7 @@ struct CompositorApp: App {
                     }
                         .configuredKeyboardShortcut(.delete, modifiers: .command).disabled(!session.canEditPixels)
                     Button("Clear Selection Pixels") { Task { await session.clearSelectedPixels() } }
+                        .assignableShortcut("Edit › Clear Selection Pixels")
                         .disabled(session.selection == nil || !session.canEditPixels)
                     Button("Content-Aware Fill…") { session.beginFilter(.contentAwareFill) }
                         .configuredKeyboardShortcut(.delete, modifiers: .shift).disabled(!session.canContentAwareFill)
@@ -231,22 +242,28 @@ struct CompositorApp: App {
                     Button("Layer's Pixels") {
                         if let id = session.activeLayerID { session.loadLayerSelection(layerID: id) }
                     }
+                        .assignableShortcut("Select › Layer's Pixels")
                         .disabled(session.activeLayer?.asset == nil || !session.canEditSelection)
                     Button("Subject") { Task { await session.selectSubject() } }
                         .configuredKeyboardShortcut("a", modifiers: [.command, .option])
                         .disabled(!session.canSelectSubject)
                     Button("Color Range…") { session.beginColorRange() }
+                        .assignableShortcut("Select › Color Range…")
                         .disabled(!session.canSelectColorRange)
                     Button("Mask's Black Areas") {
                         if let id = session.activeLayerID { session.loadMaskSelection(layerID: id) }
                     }
+                        .assignableShortcut("Select › Mask's Black Areas")
                         .disabled(session.activeLayer?.mask == nil || !session.canEditSelection)
                     Divider()
                     Button("Expand…") { session.promptSelectionAmount(.expand) }
+                        .assignableShortcut("Select › Expand…")
                         .disabled(!session.canModifySelection)
                     Button("Contract…") { session.promptSelectionAmount(.contract) }
+                        .assignableShortcut("Select › Contract…")
                         .disabled(!session.canModifySelection)
                     Button("Feather…") { session.promptSelectionAmount(.feather) }
+                        .assignableShortcut("Select › Feather…")
                         .disabled(!session.canModifySelection)
                 }
                 CommandMenu("Image") {
@@ -258,6 +275,7 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("u").disabled(!session.canAdjustColors)
                     ForEach([FilterKind.blackWhite, .colorBalance, .exposure, .gradientMap, .grain], id: \.self) { kind in
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
+                            .assignableShortcut("Image › \(kind.rawValue)…")
                             .disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     }
                     Button(session.isMaskSelected ? "Invert Mask" : "Invert") { Task { await session.invertPixels() } }
@@ -271,18 +289,22 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("i", modifiers: [.command, .option])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Button("Trim…") { Task { await applicationDelegate.projects.trim() } }
+                        .assignableShortcut("Image › Trim…")
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Group {
                         Divider()
                         Button("Flip Canvas Horizontal") { session.flipCanvas(horizontally: true) }
+                            .assignableShortcut("Image › Flip Canvas Horizontal")
                             .disabled(!session.canEditLayers)
                         Button("Flip Canvas Vertical") { session.flipCanvas(horizontally: false) }
+                            .assignableShortcut("Image › Flip Canvas Vertical")
                             .disabled(!session.canEditLayers)
                     }
                 }
                 CommandMenu("Filter") {
                     ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }, id: \.self) { kind in
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
+                            .assignableShortcut("Filter › \(kind.rawValue)…")
                             .disabled(!(kind == .vignette ? session.canVignette : session.canAdjustColors) || session.hueSaturation != nil)
                     }
                 }
@@ -290,11 +312,12 @@ struct CompositorApp: App {
                     Menu("New Adjustment Layer") {
                         ForEach(AdjustmentKind.allCases, id: \.self) { kind in
                             Button(kind.rawValue + (kind.isEditable ? "…" : "")) { session.addAdjustment(kind) }
+                                .assignableShortcut("Layer › New Adjustment Layer › \(kind.rawValue)")
                         }
                     }.disabled(!session.canEditLayers || session.document == nil)
                     Button("Edit Adjustment…") {
                         session.adjustmentEditingID = session.activeLayerID
-                    }.disabled(!session.canEditLayers || session.activeLayer?.adjustment == nil)
+                    }.assignableShortcut("Layer › Edit Adjustment…").disabled(!session.canEditLayers || session.activeLayer?.adjustment == nil)
                     Divider()
                     Button(session.canTransformSelection ? "Transform Selection" : "Transform Layer") { session.transformCommand() }
                         .configuredKeyboardShortcut("t").disabled(!session.canTransform && !session.canTransformSelection)
@@ -312,14 +335,16 @@ struct CompositorApp: App {
                     Button("Ungroup Layers") { session.ungroupLayers() }
                         .configuredKeyboardShortcut("g", modifiers: [.command, .shift]).disabled(!session.canUngroupLayers)
                     Button("Move Out of Folder") { session.moveActiveLayerOutOfGroup() }
+                        .assignableShortcut("Layer › Move Out of Folder")
                         .disabled(!session.canEditLayers || session.activeLayer?.parentID == nil)
                     Button("New Blank Layer") { session.addBlankLayer() }
                         .configuredKeyboardShortcut("n", modifiers: [.command, .shift]).disabled(!session.canEditLayers)
                     Button("Rename Layer…") { session.renamingLayerID = session.activeLayerID }
+                        .assignableShortcut("Layer › Rename Layer…")
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                     Button(session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer") {
                         if let id = session.activeLayerID { session.toggleLayerVisibility(id) }
-                    }.disabled(!session.canEditLayers || session.activeLayer == nil)
+                    }.assignableShortcut("Layer › Show or Hide Layer").disabled(!session.canEditLayers || session.activeLayer == nil)
                     Divider()
                     Button("Move Layer Up") { session.moveActiveLayer(by: 1) }
                         .configuredKeyboardShortcut("]").disabled(!session.canMoveActiveLayer(by: 1))
@@ -330,14 +355,17 @@ struct CompositorApp: App {
                             .configuredKeyboardShortcut("e").disabled(!session.canMergeLayers)
                         Divider()
                         Button("Flip Layer Horizontal") { session.flipLayers(horizontally: true) }
+                            .assignableShortcut("Layer › Flip Layer Horizontal")
                             .disabled(!session.canTransform)
                         Button("Flip Layer Vertical") { session.flipLayers(horizontally: false) }
+                            .assignableShortcut("Layer › Flip Layer Vertical")
                             .disabled(!session.canTransform)
                     }
                     Divider()
                     Button(session.selectedEffect != nil ? "Delete " + session.selectedEffect!.kind.rawValue : session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {
                         session.deleteLayerOrMask()
                     }
+                        .assignableShortcut("Layer › Delete Layer")
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                 }
             }
