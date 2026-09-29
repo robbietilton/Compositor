@@ -17,7 +17,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 17
+    static let current = 18
     /// Every version `load` accepts: each one a release has written (1 through `current`), and 27 from the
     /// GIF branch's own builds. Leaving out 15 and 16 once locked out projects saved by 1.5.4 and 1.5.5.
     /// The package-header and manifest checks both read this, so they can't drift apart when `current` is bumped.
@@ -337,7 +337,7 @@ actor ProjectStore {
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
             if layer.shape?.smoothing == true {
-                guard manifest.version >= 14 else { throw ProjectError.invalid }
+                guard manifest.version >= 15 else { throw ProjectError.invalid }
             }
             if let gif = layer.gif {
                 let identityLimit = manifest.version >= 17 ? GIFTimelineLimits.frameIdentityLimit : GIFTimelineLimits.maxFrames
@@ -394,6 +394,9 @@ actor ProjectStore {
                 // Progressive Blur, Bloom / Glow and RGB Split layers arrived in version 16.
                 if [.progressiveBlur, .bloomGlow, .rgbSplit].contains(adjustment.kind) || adjustment.filterLayerSettings != nil {
                     guard manifest.version >= 16 else { throw ProjectError.invalid }
+                }
+                if adjustment.kind == .structure {
+                    guard manifest.version >= 18 else { throw ProjectError.invalid }
                 }
             }
             // Layer masks arrived in version 4, folder masks in version 6.

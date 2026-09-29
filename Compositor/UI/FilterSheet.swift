@@ -175,6 +175,11 @@ struct FilterSheet: View {
             case .bloomGlow:
                 control("Amount", \.bloomAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Radius", \.bloomRadius, range: 1...150, unit: "px", decimals: 0, logarithmic: true)
+            case .structure:
+                control("Amount", \.tonalAmount, range: -100...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("Bring out local detail, or soften it. Zero leaves the image unchanged")
+                control("Radius", \.tonalRadius, range: 1...100, unit: "px", decimals: 0, logarithmic: true)
+                    .help("The size of the detail, in document pixels")
             case .tonalContrast:
                 control("Amount", \.tonalAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Shadows", \.tonalShadows, range: -100...100, unit: "%", decimals: 0, logarithmic: false)
