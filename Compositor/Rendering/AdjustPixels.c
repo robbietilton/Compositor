@@ -945,7 +945,9 @@ void adjust_camera_raw_detail(uint8_t *rgba, size_t width, size_t height, size_t
             for (size_t x = 0; x < width; ++x) {
                 uint8_t *p = row + x * 4;
                 double alpha = p[3];
-                if (!alpha) continue;
+                // Clear pixels count as unsaturated, as they count as black in the luma plane; left unwritten they
+                // would feed the blur whatever the memory held.
+                if (!alpha) { chroma[y * width + x] = 0; continue; }
                 double r = fmin(1.0, p[0] / alpha), g = fmin(1.0, p[1] / alpha), b = fmin(1.0, p[2] / alpha);
                 double h, s, l;
                 rgb_to_hsl(r, g, b, &h, &s, &l);

@@ -699,4 +699,32 @@ struct CameraRawTests {
     private func peakIndex(_ bins: [Double]) -> Int {
         bins.enumerated().max { $0.element < $1.element }?.offset ?? -1
     }
+
+    /// Color noise reduction blurs a saturation plane in which clear pixels must count as zero, as the luma plane's
+    /// do. Left unwritten, they held whatever that memory held before, so the pixels beside a clear area changed from
+    /// run to run.
+    @Test func colorNoiseReductionIgnoresWhatClearPixelsHeld() throws {
+        var settings = CameraRawSettings()
+        settings.detail.noiseColor = 60
+        let context = try BrushRaster.context(width: 97, height: 61, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        for y in 0..<61 {
+            for x in 0..<97 {
+                let p = y * context.bytesPerRow + x * 4
+                let alpha = x < 30 ? 0 : 255
+                bytes[p] = UInt8((x * 7 + y * 3) % 256 * alpha / 255); bytes[p + 1] = UInt8((x * x + y * 5) % 256 * alpha / 255)
+                bytes[p + 2] = UInt8((x * 2 + y * y) % 256 * alpha / 255); bytes[p + 3] = UInt8(alpha)
+            }
+        }
+        let picture = try #require(context.makeImage())
+        func pixels(_ image: CGImage) throws -> Data { try #require(image.dataProvider?.data) as Data }
+        let first = try pixels(try settings.apply(picture))
+        // Leaves saturation values in freed memory the size of the kernel's planes.
+        let red = try BrushRaster.context(width: 97, height: 61, mask: false)
+        red.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0.2, alpha: 1))
+        red.fill(CGRect(x: 0, y: 0, width: 97, height: 61))
+        let saturated = try #require(red.makeImage())
+        for _ in 0..<4 { _ = try settings.apply(saturated) }
+        #expect(try pixels(try settings.apply(picture)) == first)
+    }
 }
