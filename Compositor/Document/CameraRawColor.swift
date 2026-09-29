@@ -16,7 +16,7 @@ struct CameraRawDrag {
 }
 
 /// Parametric regions and point curves. Amounts are −100…100. Curve points use 0…1 on both axes.
-nonisolated struct CameraRawCurveSettings: Equatable, Sendable {
+nonisolated struct CameraRawCurveSettings: Codable, Equatable, Sendable {
     var shadows: Double = 0
     var darks: Double = 0
     var lights: Double = 0
@@ -148,7 +148,7 @@ nonisolated struct CameraRawCurveSettings: Equatable, Sendable {
 }
 
 /// Eight color families, each with hue, saturation, and luminance shifts of −100…100.
-nonisolated struct CameraRawMixerSettings: Equatable, Sendable {
+nonisolated struct CameraRawMixerSettings: Codable, Equatable, Sendable {
     static let names = ["Reds", "Oranges", "Yellows", "Greens", "Aquas", "Blues", "Purples", "Magentas"]
     static let centers = [0.0, 30.0, 60.0, 120.0, 180.0, 240.0, 270.0, 300.0]
     var hue = Array(repeating: 0.0, count: 8)
@@ -193,7 +193,7 @@ nonisolated struct CameraRawMixerSettings: Equatable, Sendable {
 }
 
 /// One picked color and how far its adjustment reaches.
-nonisolated struct CameraRawPointColor: Equatable, Sendable {
+nonisolated struct CameraRawPointColor: Codable, Equatable, Sendable {
     var hue: Double = 0
     var saturation: Double = 0
     var luminance: Double = 0
@@ -221,7 +221,7 @@ nonisolated struct CameraRawPointColor: Equatable, Sendable {
 }
 
 /// Four color wheels plus how the three tonal wheels overlap and which end they favor.
-nonisolated struct CameraRawGradingSettings: Equatable, Sendable {
+nonisolated struct CameraRawGradingSettings: Codable, Equatable, Sendable {
     var shadows = CameraRawGradeWheel()
     var midtones = CameraRawGradeWheel()
     var highlights = CameraRawGradeWheel()
@@ -250,7 +250,7 @@ nonisolated struct CameraRawGradingSettings: Equatable, Sendable {
     }
 }
 
-nonisolated struct CameraRawGradeWheel: Equatable, Sendable {
+nonisolated struct CameraRawGradeWheel: Codable, Equatable, Sendable {
     var hue: Double = 0
     var saturation: Double = 0
     var luminance: Double = 0
