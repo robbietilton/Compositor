@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import UniformTypeIdentifiers
 @testable import Compositor
 
 /// Serialized: every test shares the one system pasteboard.
@@ -44,6 +45,39 @@ struct SelectionClipboardTests {
         defer { session.document = full }
         return try pixel(try await render(session), x: x, y: y)
     }
+    /// An image as a Retina screenshot saves it: 144 dpi, so it measures half its pixels in points.
+    /// Red on the left half, blue on the right, green in the bottom-left quarter.
+    private func screenshotPNG(width: Int = 30, height: Int = 20) throws -> Data {
+        let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+        context.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+        context.setFillColor(red: 0, green: 1, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height / 2)) // Context y runs up: the bottom quarter.
+        let data = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()),
+                                   [kCGImagePropertyDPIWidth: 144, kCGImagePropertyDPIHeight: 144] as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
+    /// Puts the screenshot on the clipboard as image data, with any text copied alongside.
+    private func copyScreenshot(width: Int = 30, height: Int = 20, text: String? = nil) throws {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setData(try screenshotPNG(width: width, height: height), forType: .png)
+        if let text { pasteboard.setString(text, forType: .string) }
+    }
+    /// Puts a file on the clipboard as Finder's Copy does: its URL, its name, and its icon.
+    private func copyInFinder(_ file: URL) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(file.absoluteString, forType: .fileURL)
+        pasteboard.setString(file.lastPathComponent, forType: .string)
+        pasteboard.setData(NSWorkspace.shared.icon(forFile: file.path).tiffRepresentation, forType: .tiff)
+    }
 
     @Test func copyAndPastePutsPixelsOnANewLayerInPlace() async throws {
         let session = await makeSession()
@@ -73,6 +107,76 @@ struct SelectionClipboardTests {
         #expect(try await layerPixel(session, source, x: 15, y: 15)[3] == 0)
         session.paste()
         #expect(try pixel(try await render(session), x: 15, y: 15) == [255, 0, 0, 255])
+    }
+
+    @Test func pasteOnAnEmptyProjectMakesACanvasTheImageSize() async throws {
+        try copyScreenshot()
+        #expect(NSImage(pasteboard: .general)?.size == CGSize(width: 15, height: 10)) // Points: the Retina case.
+        let session = EditorSession()
+        #expect(session.canPasteAsNewCanvas)
+        await session.pasteAsNewCanvas()
+        let document = try #require(session.document)
+        #expect(document.width == 30 && document.height == 20)
+        let pasted = try #require(session.activeLayer)
+        #expect(document.layers.map(\.id) == [pasted.id] && pasted.name == "Layer 1")
+        #expect(pasted.transform.origin == .zero && pasted.size == CGSize(width: 30, height: 20))
+        #expect(try await layerPixel(session, pasted.id, x: 5, y: 5) == [255, 0, 0, 255])
+        #expect(try await layerPixel(session, pasted.id, x: 5, y: 15) == [0, 255, 0, 255])
+        #expect(try await layerPixel(session, pasted.id, x: 25, y: 10) == [0, 0, 255, 255])
+        #expect(session.history.undoCount == 1 && session.history.undoName == "Paste")
+        session.undo()
+        #expect(session.document == nil)
+    }
+
+    @Test func pasteOnAnEmptyProjectImportsAFileCopiedInFinderNotItsIcon() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let photo = folder.appendingPathComponent("photo.png")
+        try screenshotPNG().write(to: photo)
+        copyInFinder(photo)
+        let session = EditorSession()
+        #expect(session.canPasteAsNewCanvas)
+        await session.pasteAsNewCanvas()
+        let document = try #require(session.document)
+        #expect(document.width == 30 && document.height == 20)
+        let imported = try #require(session.activeLayer)
+        #expect(document.layers.map(\.id) == [imported.id] && session.history.undoName == "Import Images")
+        #expect(try await layerPixel(session, imported.id, x: 5, y: 5) == [255, 0, 0, 255])
+        #expect(try await layerPixel(session, imported.id, x: 5, y: 15) == [0, 255, 0, 255])
+
+        // Any other file brings only its icon, which is no image to paste.
+        let notes = folder.appendingPathComponent("notes.txt")
+        try Data("Some notes".utf8).write(to: notes)
+        copyInFinder(notes)
+        #expect(!EditorSession().canPasteAsNewCanvas)
+    }
+
+    @Test func pasteAsNewCanvasLeavesNumbersAndOpenCanvasesAlone() async throws {
+        let empty = EditorSession()
+        try copyScreenshot(text: "1920") // A size for the Width field, copied along with an image.
+        #expect(!empty.canPasteAsNewCanvas)
+        try copyScreenshot(text: "1920\n") // A spreadsheet cell ends its number with a line break.
+        #expect(!empty.canPasteAsNewCanvas)
+        try copyScreenshot(text: "Sunset over the bay") // Other text, such as a web page's caption.
+        #expect(empty.canPasteAsNewCanvas)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("Some copied text", forType: .string)
+        #expect(!empty.canPasteAsNewCanvas)
+
+        try copyScreenshot()
+        let open = await makeSession()
+        let before = open.document
+        #expect(!open.canPasteAsNewCanvas)
+        await open.pasteAsNewCanvas()
+        #expect(open.document == before)
+    }
+
+    @Test func pasteAsNewCanvasRefusesAnImagePastTheSideLimit() async throws {
+        try copyScreenshot(width: DocumentLimits.maxSide + 1, height: 1)
+        let session = EditorSession()
+        await session.pasteAsNewCanvas()
+        #expect(session.document == nil && session.importError != nil)
     }
 
     @Test func layerViaCopyCopiesTheSelectionOrDuplicatesTheLayer() async throws {
