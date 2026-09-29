@@ -110,6 +110,51 @@ struct CameraRawSpeedTests {
 
 }
 
+extension CameraRawSpeedTests {
+    /// The histogram and vectorscope only need the shape of the tones, so they count a copy no larger than 512 px
+    /// rather than every pixel of the preview. A smaller picture is counted as it is.
+    @Test func scopesCountASmallCopy() throws {
+        var settings = FilterSettings()
+        settings.cameraRaw.exposure = 0.3
+        func counted(_ image: CGImage) throws -> Double {
+            let job = FilterJob(kind: .cameraRaw, image: image, settings: settings, scale: 1, selection: nil, mapping: .identity)
+            return try CameraRawScope.preview(job).scope.red.reduce(0, +)
+        }
+        let photo = try counted(try Self.photo())
+        #expect(photo <= 512 * 342 && photo > 512 * 340)
+        let context = try BrushRaster.context(width: 100, height: 60, mask: false)
+        context.setFillColor(CGColor(srgbRed: 0.4, green: 0.5, blue: 0.6, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 100, height: 60))
+        #expect(try counted(try #require(context.makeImage())) == 6000)
+    }
+}
+
+extension CameraRawSpeedTests {
+    /// Blown highlights scattered through the picture (specular glints, noise pushed past white) must still show as
+    /// the histogram's spike at white: the copy picks pixels rather than averaging them into their neighbors.
+    @Test func scopesStillShowScatteredClipping() throws {
+        let width = 2048, height = 1365
+        let context = try BrushRaster.context(width: width, height: height, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        var white = 0
+        for y in 0..<height {
+            for x in 0..<width {
+                let p = y * context.bytesPerRow + x * 4
+                let clipped = (x * 7 + y * 13) % 97 == 0
+                if clipped { white += 1 }
+                let level: UInt8 = clipped ? 255 : 110
+                bytes[p] = level; bytes[p + 1] = level; bytes[p + 2] = level; bytes[p + 3] = 255
+            }
+        }
+        let job = FilterJob(kind: .cameraRaw, image: try #require(context.makeImage()), settings: FilterSettings(), scale: 1,
+                            selection: nil, mapping: .identity)
+        let scope = try CameraRawScope.preview(job).scope
+        let share = scope.red[255] / scope.red.reduce(0, +)
+        let full = Double(white) / Double(width * height)
+        #expect(abs(share - full) < full * 0.3, "white in the scope \(share), in the picture \(full)")
+    }
+}
+
 /// How long the kernels take, one test at a time: run side by side, each would get only part of the cores.
 @Suite(.serialized)
 struct CameraRawTimingTests {
