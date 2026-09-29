@@ -2199,6 +2199,9 @@ final class CanvasView: NSView {
         } else if (event.keyCode == 51 || event.keyCode == 117),
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             session.deleteKeyPressed()
+        } else if event.keyCode == 48, session.textDraft == nil, event.modifierFlags.intersection([.command, .control, .option, .shift]) == .shift {
+            // Shift-Tab hides or shows the panels; plain Tab keeps cycling the tool's mode.
+            ScreenModeController.shared.showsPanels.toggle()
         } else if event.keyCode == 48, session.textDraft == nil, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
             // Tab switches the current tool's mode (Rectangle/Ellipse, Paint/Erase, and so on).
             session.cycleToolMode()
@@ -2240,6 +2243,7 @@ final class CanvasView: NSView {
             case "r": session.selectTool(.blur)
             case "c": session.selectTool(.crop)
             case "v": session.selectTool(.move)
+            case "f" where session.textDraft == nil: ScreenModeController.shared.cycle()
             case "h": session.selectTool(.hand)
             case "z": session.selectTool(.zoom)
             default: super.keyDown(with: event)
