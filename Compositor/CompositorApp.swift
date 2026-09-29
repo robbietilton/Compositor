@@ -182,7 +182,13 @@ struct CompositorApp: App {
                     Button("Copy Merged") { session.copyMergedSelection() }
                         .configuredKeyboardShortcut("c", modifiers: [.command, .shift]).disabled(!session.canCopyMerged)
                     Button("Paste") {
-                        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                        // No canvas open yet: Cmd-V creates one from the copied image. Checked first, since the
+                        // new-canvas screen's Width field has focus and would otherwise take the paste as text.
+                        if NSApp.keyWindow === applicationDelegate.workspace.window, applicationDelegate.projects.canStart,
+                           session.canPasteAsNewCanvas {
+                            if !applicationDelegate.workspace.pasteCopiedLayer() { Task { await session.pasteAsNewCanvas() } }
+                        }
+                        else if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
                         else if applicationDelegate.workspace.pasteCopiedLayer() { }
                         else if session.canPaste { session.paste() }
                         else { NSSound.beep() }

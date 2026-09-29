@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// Pixels copied from the canvas, with where they came from so Paste can put them back in place.
 struct PixelClipboard {
@@ -154,6 +155,45 @@ extension EditorSession {
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))
             addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste")
         } else { NSSound.beep() }
+    }
+
+    /// With no canvas yet, Cmd-V can start one from a copied image, or from image files copied in Finder. A copied
+    /// number is left for the size fields; other text that comes with an image doesn't stop it.
+    var canPasteAsNewCanvas: Bool {
+        guard document == nil, canStartProjectOperation else { return false }
+        let pasteboard = NSPasteboard.general
+        // Files copied in Finder bring their icons as image data: only the files themselves count.
+        if pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return !Self.copiedImageFiles(pasteboard).isEmpty
+        }
+        return pasteboard.canReadObject(forClasses: [NSImage.self], options: nil)
+            && pasteboard.string(forType: .string).flatMap {
+                CanvasDocument.validDimension($0.trimmingCharacters(in: .whitespacesAndNewlines))
+            } == nil
+    }
+
+    /// Cmd-V on an empty project: image files import as Import Image does; an image makes a canvas exactly its size,
+    /// holding it as "Layer 1", in one undo step.
+    func pasteAsNewCanvas() async {
+        guard canPasteAsNewCanvas else { return }
+        let files = Self.copiedImageFiles(.general)
+        guard files.isEmpty else { await importImages(files); return }
+        guard let external = NSImage(pasteboard: .general)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { NSSound.beep(); return }
+        guard external.width <= DocumentLimits.maxSide, external.height <= DocumentLimits.maxSide,
+              external.width * external.height <= DocumentLimits.documentPixelBudget
+        else { importError = ImageImportError.tooLarge.localizedDescription; return }
+        guard let image = try? Self.sRGBCopy(of: external) else { NSSound.beep(); return }
+        clearProject()
+        beginEdit("Paste")
+        createDocument(width: image.width, height: image.height)
+        addPixelLayer(image, at: .zero, name: nextLayerName(), editName: "Paste")
+        endEdit()
+    }
+
+    private static func copiedImageFiles(_ pasteboard: NSPasteboard) -> [URL] {
+        pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true,
+            .urlReadingContentsConformToTypes: [UTType.image.identifier]]) as? [URL] ?? []
     }
 
     /// Cmd-J (Layer via Copy): the selection's pixels become a new layer in place; with no
