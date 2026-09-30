@@ -105,12 +105,12 @@ struct ShortcutDefinition: Identifiable {
             ("Swap foreground/background", "x"), ("Reset colors", "d"), ("Cycle tool mode", "\t"),
             ("Temporary Hand tool (hold)", " "), ("Delete selection / layer / effect / lasso point", "\u{7f}"),
             ("Apply current canvas operation", "\r"), ("Cancel current canvas operation", "\u{1b}"),
-            ("Decrease brush size", "["), ("Increase brush size", "]")] {
+            ("Decrease brush size", "["), ("Increase brush size", "]"), ("Cycle screen mode", "f")] {
             result.append(entry(title, key))
         }
         result += [entry("Decrease brush hardness", "[", 8), entry("Increase brush hardness", "]", 8),
                    entry("Previous blend mode", "-", 8), entry("Next blend mode", "=", 8),
-                   entry("Cycle shape kind", "u", 8)]
+                   entry("Cycle shape kind", "u", 8), entry("Hide or show panels", "\t", 8)]
         for digit in 0...9 { result.append(entry("Opacity digit \(digit) (type two for exact %)", String(digit))) }
         for (direction, key) in [("Left", "\u{f702}"), ("Right", "\u{f703}"), ("Up", "\u{f700}"), ("Down", "\u{f701}")] {
             result += [entry("Nudge \(direction) 1 px", key), entry("Nudge \(direction) 10 px", key, 8),

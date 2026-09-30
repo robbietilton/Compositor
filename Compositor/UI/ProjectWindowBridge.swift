@@ -27,6 +27,7 @@ final class ProjectWindowView: NSView {
         proxy.controller = controller
         controller.window = window
         controller.workspace?.window = window
+        if let window { ScreenModeController.shared.attach(window) }
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -34,6 +35,7 @@ final class ProjectWindowView: NSView {
             guard let self, let window = self.window else { return }
             self.controller.window = window
             self.controller.workspace?.window = window
+            ScreenModeController.shared.attach(window)
             if window.delegate !== self.proxy {
                 self.proxy.previous = window.delegate
                 window.delegate = self.proxy

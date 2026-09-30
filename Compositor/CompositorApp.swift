@@ -113,6 +113,15 @@ struct CompositorApp: App {
                             if let preview = session.previewZoom { preview(.zoomOut) } else { session.zoomKeyboard(by: -1) }
                         }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
+                        Divider()
+                        Menu("Screen Mode") {
+                            ForEach(ScreenMode.allCases, id: \.self) { mode in
+                                Toggle(mode.title, isOn: Binding(get: { ScreenModeController.shared.mode == mode },
+                                                                 set: { _ in ScreenModeController.shared.set(mode) }))
+                            }
+                        }
+                        Toggle("Show Panels", isOn: Binding(get: { ScreenModeController.shared.showsPanels },
+                                                           set: { ScreenModeController.shared.showsPanels = $0 }))
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
                         Toggle("Snap", isOn: Binding(get: { session.snappingEnabled },

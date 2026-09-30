@@ -77,11 +77,15 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var editorStack: some View {
+        // Shift-Tab (or View › Show Panels) hides everything around the canvas.
+        let panels = ScreenModeController.shared.showsPanels
         VStack(spacing: 0) {
-            toolHeaders
+            if panels { toolHeaders }
             HStack(spacing: 0) {
-                toolRail
-                Divider()
+                if panels {
+                    toolRail
+                    Divider()
+                }
                 VStack(spacing: 0) {
                     if session.showsRulers, session.document != nil {
                         HStack(spacing: 0) {
@@ -108,14 +112,19 @@ struct ContentView: View {
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }
                 }
-                PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                LayersPanel(session: session, width: layersPanelWidth)
+                if panels {
+                    PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
+                    LayersPanel(session: session, width: layersPanelWidth)
+                }
             }
-            Divider()
-            // Keeps its own height however short the window gets; the tools scroll instead.
-            statusBar.fixedSize(horizontal: false, vertical: true)
-                .modifier(WidthReader(width: $windowWidth))
+            if panels {
+                Divider()
+                // Keeps its own height however short the window gets; the tools scroll instead.
+                statusBar.fixedSize(horizontal: false, vertical: true)
+            }
         }
+        // On the whole stack, which is always there: with the panels hidden the tab strip still follows the width.
+        .modifier(WidthReader(width: $windowWidth))
     }
 
     // Split again for 1.1: the chain outgrew the type checker once more.
