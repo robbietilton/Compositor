@@ -104,7 +104,12 @@ struct ContentView: View {
                                     .padding(.bottom, 14)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                             }
+                            if let job = session.externalEdit {
+                                ExternalEditBanner(session: session, job: job)
+                                    .frame(maxHeight: .infinity, alignment: .top)
+                            }
                         }
+                        .modifier(ExternalEditAlert(session: session))
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }
                 }

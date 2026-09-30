@@ -6,6 +6,9 @@
     <true/>
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
+    <!-- Edit in External App keeps the folder it shares with the other app as a security-scoped bookmark. -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
     <key>com.apple.security.network.client</key>
     <true/>
     <!-- Sparkle installs updates through its helper services, which a sandboxed app reaches by name. -->

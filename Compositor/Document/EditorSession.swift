@@ -61,8 +61,8 @@ struct ImageLayer: Identifiable, Equatable {
 
 struct CanvasDocument: Equatable {
     let id: UUID
-    let width: Int
-    let height: Int
+    var width: Int
+    var height: Int
     var resolution: Double = 72
     var layers: [ImageLayer] = [] // Bottom to top.
     /// User-placed alignment lines. Saved with the project; undo covers them.
@@ -314,6 +314,10 @@ final class EditorSession {
     @ObservationIgnored var pendingOpacityDigit: (digit: Int, time: TimeInterval)?
     var colorPicker: ColorPickerState?
     var brushError: String?
+    /// A layer out for editing in another app; see EditorSession+ExternalEdit.
+    var externalEdit: ExternalEditJob?
+    var externalEditError: String?
+    @ObservationIgnored var externalEditTask: Task<Void, Never>?
     var brushRevision = 0
     /// Not observed by the UI, so controls don't dim for the length of every stroke;
     /// a stroke keeps the settings it started with, so edits made mid-stroke are harmless.
