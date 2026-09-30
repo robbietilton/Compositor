@@ -129,6 +129,26 @@ final class ProjectController {
         } catch { await showError("Couldn’t trim image", error: error) }
     }
 
+    /// Edit > Stroke…: asks for the line's settings, then paints it along the selection's outline as one undo step.
+    func stroke() async {
+        guard let window, window.attachedSheet == nil, session.canStrokeSelection else { return }
+        let options: StrokeOptions? = await withCheckedContinuation { continuation in
+            let sheet = NSWindow()
+            sheet.styleMask = [.titled, .fullSizeContentView]
+            sheet.title = "Stroke"
+            sheet.contentViewController = NSHostingController(rootView: StrokeSheet(options: session.strokeOptions) { options in
+                window.endSheet(sheet)
+                sheet.orderOut(nil)
+                sheet.contentViewController = nil
+                continuation.resume(returning: options)
+            })
+            window.beginSheet(sheet)
+        }
+        guard let options else { return }
+        session.strokeOptions = options
+        await session.strokeSelection(options)
+    }
+
     /// View > Grid Settings…: changes only how the grid is drawn and snapped to, so nothing is saved or undone. The
     /// grid shows while the sheet is open, changing as it's edited, and goes back to how it was on Cancel.
     func gridSettings() async {

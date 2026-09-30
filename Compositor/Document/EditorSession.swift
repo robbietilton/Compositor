@@ -272,6 +272,8 @@ final class EditorSession {
     /// The text's style before the font menu started previewing faces on it (see `previewFont`).
     @ObservationIgnored var fontPreviewOriginal: LayerTextStyle?
     var selectionFeatherAmount = 2
+    /// Edit › Stroke's settings, kept for the next time.
+    var strokeOptions = StrokeOptions()
     var wandSettings = WandSettings()
     var objectSelectionSettings = ObjectSelectionSettings()
     var showsPixelGrid = ToolDefaults.bool("pixelGrid", true) { didSet { ToolDefaults.set(showsPixelGrid, "pixelGrid") } }

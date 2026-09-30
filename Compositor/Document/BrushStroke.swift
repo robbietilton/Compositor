@@ -719,12 +719,68 @@ final class BrushStroke {
         }
     }
 
+    /// Paints `region` (document pixels, filled by the nonzero rule) in `color` at `opacity`, as Edit › Stroke
+    /// does along a selection's outline. With `inside` it's kept to that side of `outline`, with `outside` to
+    /// the other; neither, and it's painted whole. Only the tiles the region passes through are touched, so a
+    /// thin stroke round a large selection costs about what the stroke covers, not the area it encloses.
+    func stroke(_ region: CGPath, keeping side: StrokeLocation, of outline: CGPath, color: CGColor, opacity: CGFloat) throws {
+        try paintCanvas(bounds: region.boundingBoxOfPath.insetBy(dx: -1, dy: -1), only: try tiles(reachedBy: region)) { context in
+            if side == .inside {
+                context.addPath(outline)
+                context.clip(using: .winding)
+            }
+            // A layer of its own, so the stroke's opacity applies once and Outside can cut into it alone.
+            context.setAlpha(opacity)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.setAlpha(1)
+            context.setFillColor(color)
+            context.addPath(region)
+            context.fillPath(using: .winding)
+            if side == .outside {
+                context.setBlendMode(.destinationOut)
+                context.setFillColor(gray: 0, alpha: 1)
+                context.addPath(outline)
+                context.fillPath(using: .winding)
+            }
+            context.endTransparencyLayer()
+        }
+    }
+
+    /// The keys of the tiles `region` (document pixels) passes through, found by drawing it at one pixel per tile,
+    /// outlined as well as filled so a band thinner than a tile still marks every tile it crosses. It may take in
+    /// a neighbor or two, never miss one.
+    private func tiles(reachedBy region: CGPath) throws -> Set<Int> {
+        let columns = (width + Self.tileSize - 1) / Self.tileSize, rows = (height + Self.tileSize - 1) / Self.tileSize
+        var toGrid = pixelToDocument.inverted().concatenating(CGAffineTransform(scaleX: 1 / CGFloat(Self.tileSize), y: 1 / CGFloat(Self.tileSize)))
+        guard let path = region.copy(using: &toGrid) else { throw ExportError.render }
+        let grid = try BrushRaster.context(width: columns, height: rows, mask: true)
+        grid.setFillColor(gray: 0, alpha: 1)
+        grid.fill(CGRect(x: 0, y: 0, width: columns, height: rows))
+        grid.setFillColor(gray: 1, alpha: 1)
+        grid.setStrokeColor(gray: 1, alpha: 1)
+        // Wide enough to leave some coverage in every pixel it crosses, thin enough not to reach the next.
+        grid.setLineWidth(0.1)
+        grid.addPath(path)
+        grid.fillPath(using: .winding)
+        grid.addPath(path)
+        grid.strokePath()
+        guard let data = grid.data else { throw ExportError.render }
+        let pixels = data.assumingMemoryBound(to: UInt8.self), stride = grid.bytesPerRow
+        var keys = Set<Int>()
+        for y in 0..<rows {
+            for x in 0..<columns where pixels[y * stride + x] > 0 { keys.insert(y * columns + x) }
+        }
+        return keys
+    }
+
     /// Runs `draw` in document coordinates over every tile the canvas and selection
     /// cover (only the layer's existing pixels with `withinSource`), clipped to both,
-    /// starting from each tile's original content.
-    private func paintCanvas(withinSource: Bool = false, _ draw: (CGContext) throws -> Void) throws {
+    /// starting from each tile's original content. `bounds` limits the tiles further, and `only` to those keys.
+    private func paintCanvas(withinSource: Bool = false, bounds: CGRect? = nil, only keys: Set<Int>? = nil,
+                             _ draw: (CGContext) throws -> Void) throws {
         var area = canvas
         if let selectionClip { area = area.intersection(selectionClip.rect) }
+        if let bounds { area = area.intersection(bounds) }
         guard !area.isNull, !area.isEmpty else { return }
         let inverse = pixelToDocument.inverted()
         var affected = area.applying(inverse).integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
@@ -734,6 +790,7 @@ final class BrushStroke {
         for y in Int(affected.minY) / Self.tileSize...Int(ceil(affected.maxY) - 1) / Self.tileSize {
             for x in Int(affected.minX) / Self.tileSize...Int(ceil(affected.maxX) - 1) / Self.tileSize {
                 let key = y * columns + x
+                if let keys, !keys.contains(key) { continue }
                 try allocateTile(key, x: x, y: y)
                 guard let tile = tiles[key] else { continue }
                 let context = tile.context
