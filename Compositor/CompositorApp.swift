@@ -96,6 +96,11 @@ struct CompositorApp: App {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates(nil) }
                     }
                     CommandGroup(after: .toolbar) {
+                        Button("Command Palette…") {
+                            CommandPaletteController.shared.toggle(session: session, over: applicationDelegate.projects.window)
+                        }
+                        .configuredKeyboardShortcut("p", modifiers: [.command, .option])
+                        Divider()
                         // With a dialog's preview open (Export JPEG), these zoom that preview rather than the canvas.
                         Button("Fit Canvas") {
                             if let preview = session.previewZoom { preview(.fit) } else { session.fit() }
