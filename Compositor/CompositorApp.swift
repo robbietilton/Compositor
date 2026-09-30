@@ -274,6 +274,12 @@ struct CompositorApp: App {
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Group {
                         Divider()
+                        Menu("Image Rotation") {
+                            ForEach(CanvasRotation.allCases, id: \.self) { rotation in
+                                Button(rotation.rawValue) { Task { await session.rotateCanvas(rotation) } }
+                            }
+                        }
+                            .disabled(!session.canEditLayers)
                         Button("Flip Canvas Horizontal") { session.flipCanvas(horizontally: true) }
                             .disabled(!session.canEditLayers)
                         Button("Flip Canvas Vertical") { session.flipCanvas(horizontally: false) }
