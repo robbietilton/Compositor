@@ -24,6 +24,8 @@ nonisolated struct BrushSettings: Sendable {
     var erasing = false
     var healing = false
     var healingMode: SpotHealingMode = .contentAware
+    /// Dodge or Burn: the stroke lightens or darkens the pixels under it instead of painting.
+    var toning: BrushToning?
 }
 
 nonisolated struct BrushPatch: @unchecked Sendable {
@@ -159,6 +161,9 @@ final class BrushStroke {
     /// The part of `clone` each tile draws, cut once: drawing the whole sample into every tile the brush touched,
     /// a 25-megapixel image drawn dozens of times per mouse move, is what made big strokes crawl.
     private var clonePieces: [Int: (image: CGImage, placed: CGRect)] = [:]
+    /// Dodge and Burn: each tile's own pixels toned at the stroke's full strength, made once when the brush first
+    /// reaches it. The coverage then brings it in over the original, so dabs build up to it and never past it.
+    private var tonedTiles: [Int: CGImage] = [:]
     /// A Blur stroke: `clone` holds the layer blurred, painted in place through the tip.
     var isBlur = false
     /// The clone sample replaces what's under the tip rather than drawing over it, so it can also clear pixels.
@@ -531,6 +536,20 @@ final class BrushStroke {
                     // While painting, the area to heal shows as a dark wash, as in Photoshop;
                     // `heal()` rebuilds it from its surroundings when the stroke ends.
                     BrushRaster.fill(Self.healingWash, coverage: mask, in: local, alpha: 0.45, context: tile.context)
+                } else if let toning = settings.toning, !isMask, let base = tile.base {
+                    let toned = try tonedTile(key, base: base, toning: toning)
+                    let context = tile.context
+                    context.saveGState()
+                    context.translateBy(x: 0, y: local.height)
+                    context.scaleBy(x: 1, y: -1)
+                    context.clip(to: local, mask: mask)
+                    context.scaleBy(x: 1, y: -1)
+                    context.translateBy(x: 0, y: -local.height)
+                    // Copied in through the coverage: the original and the toned pixels share their alpha, so the
+                    // mix of them keeps it, where drawing one over the other would thicken anything see-through.
+                    context.setBlendMode(.copy)
+                    BrushRaster.draw(toned, in: local, mask: false, context: context)
+                    context.restoreGState()
                 } else if settings.erasing, !isMask {
                     // Erasing takes the coverage out of the layer's alpha, leaving the pixels under it transparent.
                     tile.context.saveGState()
@@ -568,6 +587,29 @@ final class BrushStroke {
                                    width: pixels.width / scaleX, height: pixels.height / scaleY))
         clonePieces[key] = piece
         return piece
+    }
+
+    private func tonedTile(_ key: Int, base: CGImage, toning: BrushToning) throws -> CGImage {
+        if let toned = tonedTiles[key] { return toned }
+        let context = try BrushRaster.copy(base)
+        guard let data = context.data else { throw ExportError.render }
+        // Opacity caps the stroke, so it's part of how far the pixels move at full coverage.
+        brush_tone(data.assumingMemoryBound(to: UInt8.self), base.width, base.height, context.bytesPerRow,
+                   toning.lightens ? 1 : 0, toning.range.code, Double(toning.exposure * settings.opacity))
+        guard let toned = context.makeImage() else { throw ExportError.render }
+        tonedTiles[key] = toned
+        return toned
+    }
+
+    /// Whether any tile the stroke touched now differs from what it was: a Dodge on pure white, or a Burn on black,
+    /// changes nothing, and shouldn't leave an undo step that does nothing.
+    var changesPixels: Bool {
+        tiles.values.contains { tile in
+            guard let image = tile.image else { return false }
+            guard let base = tile.base, let before = base.dataProvider?.data, let after = image.dataProvider?.data,
+                  base.bytesPerRow == image.bytesPerRow, CFDataGetLength(before) == CFDataGetLength(after) else { return true }
+            return memcmp(CFDataGetBytePtr(before), CFDataGetBytePtr(after), CFDataGetLength(before)) != 0
+        }
     }
 
     private static let eraseColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
