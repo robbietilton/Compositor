@@ -671,6 +671,64 @@ void adjust_tonal_contrast(uint8_t *rgba, const uint8_t *blurred, size_t width, 
     }
 }
 
+// A premultiplied channel as straight color, 0–255.
+static inline int straight(unsigned value, unsigned alpha) {
+    if (alpha == 255) return (int)value;
+    unsigned color = (value * 255u + alpha / 2) / alpha;
+    return color > 255 ? 255 : (int)color;
+}
+static inline uint8_t premultiplied(int color, unsigned alpha) {
+    if (color < 0) color = 0;
+    if (color > 255) color = 255;
+    return (uint8_t)(((unsigned)color * alpha + 127u) / 255u);
+}
+
+void adjust_unsharp_mask(uint8_t *rgba, const uint8_t *blurred, size_t width, size_t height,
+                         size_t stride, size_t blurredStride, double amount, int threshold) {
+    if (amount <= 0) return;
+    // In 256ths, so an opaque pixel (nearly every one in a photo) takes no division.
+    int gain = (int)lround(amount * 256);
+    for (size_t y = 0; y < height; ++y) {
+        uint8_t *p = rgba + y * stride;
+        const uint8_t *b = blurred + y * blurredStride;
+        for (size_t x = 0; x < width; ++x, p += 4, b += 4) {
+            unsigned alpha = p[3];
+            if (alpha == 0 || b[3] == 0) continue;
+            int opaque = alpha == 255 && b[3] == 255;
+            for (int c = 0; c < 3; ++c) {
+                int value = opaque ? p[c] : straight(p[c], alpha), soft = opaque ? b[c] : straight(b[c], b[3]);
+                int difference = value - soft;
+                if (abs(difference) <= threshold) continue;
+                int sharpened = value + ((gain * difference + 128) >> 8);
+                p[c] = opaque ? (uint8_t)(sharpened < 0 ? 0 : sharpened > 255 ? 255 : sharpened) : premultiplied(sharpened, alpha);
+            }
+        }
+    }
+}
+
+void adjust_high_pass(uint8_t *rgba, const uint8_t *blurred, size_t width, size_t height,
+                      size_t stride, size_t blurredStride) {
+    for (size_t y = 0; y < height; ++y) {
+        uint8_t *p = rgba + y * stride;
+        const uint8_t *b = blurred + y * blurredStride;
+        for (size_t x = 0; x < width; ++x, p += 4, b += 4) {
+            unsigned alpha = p[3];
+            if (alpha == 0) continue;
+            if (alpha == 255 && b[3] == 255) {
+                for (int c = 0; c < 3; ++c) {
+                    int detail = 128 + p[c] - b[c];
+                    p[c] = (uint8_t)(detail < 0 ? 0 : detail > 255 ? 255 : detail);
+                }
+                continue;
+            }
+            for (int c = 0; c < 3; ++c) {
+                int soft = b[3] == 0 ? straight(p[c], alpha) : straight(b[c], b[3]);
+                p[c] = premultiplied(128 + straight(p[c], alpha) - soft, alpha);
+            }
+        }
+    }
+}
+
 static double lut_at(const float *lut, double value) {
     double scaled = camera_clamp(value) * 255.0;
     int lo = (int)scaled;
