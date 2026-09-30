@@ -148,12 +148,17 @@ extension EditorSession {
         let pasteboard = NSPasteboard.general
         if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
             addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
-        } else if let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                  let image = try? Self.sRGBCopy(of: external) {
+        } else if let image = Self.pasteboardImage(pasteboard) {
             let origin = CGPoint(x: floor((document.size.width - CGFloat(image.width)) / 2),
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))
             addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste")
         } else { NSSound.beep() }
+    }
+
+    /// An image copied in another app, in the working sRGB format; nil when the pasteboard holds none.
+    static func pasteboardImage(_ pasteboard: NSPasteboard = .general) -> CGImage? {
+        guard let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        return try? sRGBCopy(of: external)
     }
 
     /// Cmd-J (Layer via Copy): the selection's pixels become a new layer in place; with no
