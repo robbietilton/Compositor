@@ -36,6 +36,7 @@ brew install --cask robbietilton-compositor
 - Snapping to canvas and layer edges and centers, with guides
 - Exact values for position, size, scale and angle, stepped with the arrow keys
 - Flip Layer and Flip Canvas, horizontal and vertical
+- Align and Distribute layers to each other, the selection or the canvas, from the Move tool's bar or the Layer menu
 
 ### Selections
 - Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and the Magic tool — Wand selects by color, Object traces whatever you click (Tab switches)
