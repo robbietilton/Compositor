@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     /// The Layers panel's width, remembered across launches.
     @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
+    /// One column of tools or two, remembered across launches.
+    @AppStorage("toolRail.columns") private var toolRailColumns = 1
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
@@ -80,7 +82,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             toolHeaders
             HStack(spacing: 0) {
-                toolRail
+                ToolRail(session: session, columns: $toolRailColumns)
                 Divider()
                 VStack(spacing: 0) {
                     if session.showsRulers, session.document != nil {
@@ -283,40 +285,6 @@ struct ContentView: View {
     private func requestNewCanvas() {
         if let applicationDelegate { Task { await applicationDelegate.projects.newCanvas() } }
         else { session.clearProject() }
-    }
-    private var toolRail: some View {
-        // Scrolls when the window is too short for every tool, rather than pushing the bars above and below away.
-        IndicatorlessScrollView {
-        VStack(spacing: 10) {
-            ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
-                Button { session.selectTool(tool) } label: {
-                    Group {
-                        if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .wand, session.wandMode == .object { ObjectSelectionToolIcon().frame(width: 18, height: 18) }
-                        // The Marquee's icon follows its shape: a dashed circle in Ellipse mode.
-                        else { Image(systemName: tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)).font(.system(size: 17)) }
-                    }
-                    .frame(width: 36, height: 36)
-                        .background(session.tool == tool ? Color.white.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 7))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
-                .foregroundStyle(.primary)
-                .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
-            }
-            ColorPaletteControls(session: session).padding(.top, 8)
-        }
-        .padding(.top, 16).padding(.bottom, 12)
-        .frame(width: 56)
-        }
-        .frame(width: 56)
     }
     private var welcome: some View {
         NewCanvasSheet(session: session,
