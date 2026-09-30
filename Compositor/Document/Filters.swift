@@ -12,6 +12,8 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case bloomGlow = "Bloom / Glow"
     case dither = "Dither"
     case tonalContrast = "Tonal Contrast"
+    /// Edited only as an adjustment layer. Not listed in the Filter menu.
+    case structure = "Structure"
     case lensCorrection = "Lens Correction"
     case cameraRaw = "Camera Raw Filter"
     case removeBackground = "Remove Background"
@@ -103,7 +105,8 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.vignetteHighlights = clamp(vignetteHighlights, 0...100, 25)
         result.bloomAmount = clamp(bloomAmount, 0...100, 40)
         result.bloomRadius = clamp(bloomRadius, 1...150, 24)
-        result.tonalAmount = clamp(tonalAmount, 0...100, 50)
+        // Structure shares this field and may be negative. Tonal Contrast's own slider stays at 0…100.
+        result.tonalAmount = clamp(tonalAmount, -100...100, 50)
         result.tonalRadius = clamp(tonalRadius, 1...100, 16)
         result.tonalShadows = clamp(tonalShadows, -100...100, 40)
         result.tonalMidtones = clamp(tonalMidtones, -100...100, 60)
@@ -240,20 +243,20 @@ nonisolated enum PixelFilter {
             ])
             image = try PixelAdjust.render(bloomed.cropped(to: extent), width: width, height: height, isMask: false)
         case .tonalContrast:
-            let blurred = edges.applyingGaussianBlur(sigma: settings.tonalRadius * job.scale)
-            let base = try PixelAdjust.render(blurred.cropped(to: extent), width: width, height: height, isMask: false)
-            let context = try BrushRaster.context(width: width, height: height, mask: false)
-            let baseContext = try BrushRaster.context(width: width, height: height, mask: false)
-            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
-            BrushRaster.draw(base, in: extent, mask: false, context: baseContext)
-            guard let data = context.data, let baseData = baseContext.data else { throw ExportError.render }
-            adjust_tonal_contrast(data.assumingMemoryBound(to: UInt8.self),
-                                  baseData.assumingMemoryBound(to: UInt8.self),
-                                  width, height, context.bytesPerRow, baseContext.bytesPerRow,
-                                  settings.tonalAmount, settings.tonalShadows,
-                                  settings.tonalMidtones, settings.tonalHighlights)
-            guard let result = context.makeImage() else { throw ExportError.render }
-            image = result
+            image = try localContrast(edges, source: job.image, extent: extent, width: width, height: height,
+                                      radius: settings.tonalRadius * job.scale, amount: settings.tonalAmount,
+                                      shadows: settings.tonalShadows, midtones: settings.tonalMidtones,
+                                      highlights: settings.tonalHighlights)
+        case .structure:
+            let signed = settings.tonalAmount
+            if signed == 0 {
+                image = job.image
+            } else {
+                let band = copysign(100, signed)
+                image = try localContrast(edges, source: job.image, extent: extent, width: width, height: height,
+                                          radius: settings.tonalRadius * job.scale, amount: abs(signed),
+                                          shadows: band, midtones: band, highlights: band)
+            }
         case .lensCorrection:
             // The warp is relative to the image's own size, so a downscaled preview bends the same way.
             let source = try BrushRaster.context(width: width, height: height, mask: false)
@@ -267,6 +270,25 @@ nonisolated enum PixelFilter {
         }
         guard let selection = job.selection else { return image }
         return try PixelAdjust.blend(image, over: job.image, through: selection, pixelToDocument: job.mapping, isMask: false)
+    }
+
+    /// `adjust_tonal_contrast` against a Gaussian of `radius` (already in this image's pixels).
+    /// Shadows, midtones and highlights are each −100…100; `amount` is 0…100.
+    private static func localContrast(_ edges: CIImage, source: CGImage, extent: CGRect, width: Int, height: Int,
+                                      radius: Double, amount: Double, shadows: Double, midtones: Double, highlights: Double) throws -> CGImage {
+        let blurred = edges.applyingGaussianBlur(sigma: radius)
+        let base = try PixelAdjust.render(blurred.cropped(to: extent), width: width, height: height, isMask: false)
+        let context = try BrushRaster.context(width: width, height: height, mask: false)
+        let baseContext = try BrushRaster.context(width: width, height: height, mask: false)
+        BrushRaster.draw(source, in: extent, mask: false, context: context)
+        BrushRaster.draw(base, in: extent, mask: false, context: baseContext)
+        guard let data = context.data, let baseData = baseContext.data else { throw ExportError.render }
+        adjust_tonal_contrast(data.assumingMemoryBound(to: UInt8.self),
+                              baseData.assumingMemoryBound(to: UInt8.self),
+                              width, height, context.bytesPerRow, baseContext.bytesPerRow,
+                              amount, shadows, midtones, highlights)
+        guard let result = context.makeImage() else { throw ExportError.render }
+        return result
     }
 }
 
@@ -605,6 +627,7 @@ extension EditorSession {
             || (edit.kind == .bloomGlow && edit.settings.bloomAmount == 0)
             || (edit.kind == .tonalContrast && (edit.settings.tonalAmount == 0 ||
                 (edit.settings.tonalShadows == 0 && edit.settings.tonalMidtones == 0 && edit.settings.tonalHighlights == 0)))
+            || (edit.kind == .structure && edit.settings.tonalAmount == 0)
             || (edit.kind == .exposure && edit.settings.exposure == ExposureSettings())
             || (edit.kind == .grain && edit.settings.grain.amount == 0)
             || (edit.kind == .cameraRaw && rendered.cameraRaw.isIdentity) { cancelFilter(); return }

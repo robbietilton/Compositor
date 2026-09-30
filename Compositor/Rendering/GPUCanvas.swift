@@ -540,7 +540,26 @@ nonisolated enum GPUAdjustment {
                                      monochromatic: adjustment.resolvedNoiseMonochromatic, seed: adjustment.resolvedNoiseSeed)
         case .grain:
             return GPUNoise.addGrain(to: image, grain: adjustment.grain, scale: scale, mapping: mapping)
+        case .structure:
+            return rendered(image, scale: scale) { try adjustment.apply($0, scale: scale) }
         }
+    }
+
+    /// The same pixels `LayerAdjustment.apply` produces, put back where `image` sat. Nil when the frame is too large
+    /// for that bitmap, so the canvas falls back to Core Graphics.
+    private static func rendered(_ image: CIImage, scale: CGFloat, apply: (CGImage) throws -> CGImage) -> CIImage? {
+        guard scale > 0 else { return nil }
+        let bounds = image.extent.integral
+        guard bounds.origin.x.isFinite, bounds.origin.y.isFinite, bounds.size.width.isFinite, bounds.size.height.isFinite,
+              bounds.width >= 1, bounds.height >= 1,
+              bounds.width * bounds.height <= DocumentLimits.maxSurfaceExtent else { return nil }
+        let width = Int(bounds.width), height = Int(bounds.height)
+        guard width >= 1, height >= 1 else { return nil }
+        let shifted = image.transformed(by: CGAffineTransform(translationX: -bounds.minX, y: -bounds.minY))
+        guard let source = try? PixelAdjust.render(shifted, width: width, height: height, isMask: false),
+              let adjusted = try? apply(source) else { return nil }
+        return CIImage(cgImage: adjusted, options: [.colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!])
+            .transformed(by: CGAffineTransform(translationX: bounds.minX, y: bounds.minY))
     }
 
     // MARK: Color lookups

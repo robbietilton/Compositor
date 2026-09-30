@@ -281,7 +281,7 @@ struct CompositorApp: App {
                     }
                 }
                 CommandMenu("Filter") {
-                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }, id: \.self) { kind in
+                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && $0 != .structure && !$0.isImageAdjustment }, id: \.self) { kind in
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
                             .disabled(!(kind == .vignette ? session.canVignette : session.canAdjustColors) || session.hueSaturation != nil)
                     }

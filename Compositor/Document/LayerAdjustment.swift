@@ -5,6 +5,7 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
     case hsv = "Hue/Saturation", levels = "Levels", curves = "Curves"
     case exposure = "Exposure", gradientMap = "Gradient Map", grain = "Grain", addNoise = "Add Noise"
     case gaussianBlur = "Gaussian Blur", motionBlur = "Motion Blur"
+    case structure = "Structure"
     case invert = "Invert"
     case blackWhite = "Black & White", colorBalance = "Color Balance"
     var symbol: String {
@@ -18,6 +19,7 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
         case .gaussianBlur: return "drop.fill"
         case .motionBlur: return "wind"
         case .addNoise: return "circle.dotted"
+        case .structure: return "circle.grid.2x2"
         case .invert: return "circle.righthalf.filled"
         case .blackWhite: return "circle.filled.pattern.diagonalline.rectangle"
         case .colorBalance: return "scale.3d"
@@ -37,6 +39,7 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
         case .gaussianBlur: return .gaussianBlur
         case .motionBlur: return .motionBlur
         case .addNoise: return .addNoise
+        case .structure: return .structure
         // Hue/Saturation and Levels have panels of their own; Invert has nothing to set.
         case .hsv, .levels, .invert: return nil
         }
@@ -69,6 +72,9 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
     var noiseGaussian: Bool?
     var noiseMonochromatic: Bool?
     var noiseSeed: UInt32?
+    // Optional so projects saved before Structure adjustments continue to decode unchanged.
+    var structureAmount: Double?
+    var structureRadius: Double?
     var exposure: ExposureSettings {
         get { exposureSettings ?? ExposureSettings() }
         set { exposureSettings = newValue }
@@ -117,11 +123,23 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
         get { noiseSeed ?? 0 }
         set { noiseSeed = newValue }
     }
+    /// Local-detail strength, −100…100. Zero leaves the image unchanged.
+    var resolvedStructureAmount: Double {
+        get { structureAmount ?? 0 }
+        set { structureAmount = newValue }
+    }
+    /// Local-detail radius in document pixels, 1–100.
+    var resolvedStructureRadius: Double {
+        get { structureRadius ?? 16 }
+        set { structureRadius = newValue }
+    }
     /// Document-pixel halo needed so a partial canvas redraw can sample beyond its dirty rectangle.
     var samplingMargin: CGFloat {
         switch kind {
         case .gaussianBlur: return CGFloat(gaussianRadius * 3 + 2)
         case .motionBlur: return CGFloat(resolvedMotionDistance / 2 + 2)
+        case .structure:
+            return resolvedStructureAmount == 0 ? 0 : CGFloat(resolvedStructureRadius * 3 + 2)
         default: return 0
         }
     }
@@ -138,6 +156,8 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
         && resolvedMotionAngle.isFinite && (-90...90).contains(resolvedMotionAngle)
         && resolvedMotionDistance.isFinite && (1...2000).contains(resolvedMotionDistance)
         && resolvedNoiseAmount.isFinite && (0.1...400).contains(resolvedNoiseAmount)
+        && resolvedStructureAmount.isFinite && (-100...100).contains(resolvedStructureAmount)
+        && resolvedStructureRadius.isFinite && (1...100).contains(resolvedStructureRadius)
     }
     /// `region` is the part of the document `image` covers (the whole image at one unit per pixel when
     /// omitted), so Grain's pattern stays fixed in the document however the canvas splits its drawing.
@@ -175,6 +195,13 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
                                                   // The region's origin in the image's own pixels.
                                                   noiseOrigin: region.map { CGPoint(x: $0.minX * CGFloat(image.width) / max(1, $0.width),
                                                                                     y: $0.minY * CGFloat(image.height) / max(1, $0.height)) } ?? .zero))
+        case .structure:
+            guard resolvedStructureAmount != 0 else { return image }
+            var settings = FilterSettings()
+            settings.tonalAmount = resolvedStructureAmount
+            settings.tonalRadius = resolvedStructureRadius
+            return try PixelFilter.run(FilterJob(kind: .structure, image: image, settings: settings,
+                                                  scale: scale, selection: nil, mapping: .identity))
         case .invert:
             return try PixelInvert.run(PixelInvert.Job(image: image, isMask: false,
                                                        pixelToDocument: .identity, selection: nil))

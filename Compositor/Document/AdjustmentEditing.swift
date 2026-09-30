@@ -39,7 +39,7 @@ extension EditorSession {
                 let edit = try HueSaturationEdit(layerID: layer.id, original: asset, selection: nil, transform: layer.transform)
                 edit.settings = original.resolvedHSV
                 hueSaturation = edit
-            case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+            case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise, .structure:
                 var settings = FilterSettings()
                 settings.curves = original.curves
                 settings.exposure = original.exposure
@@ -53,6 +53,10 @@ extension EditorSession {
                 settings.amount = original.resolvedNoiseAmount
                 settings.gaussian = original.resolvedNoiseGaussian
                 settings.monochromatic = original.resolvedNoiseMonochromatic
+                if original.kind == .structure {
+                    settings.tonalAmount = original.resolvedStructureAmount
+                    settings.tonalRadius = original.resolvedStructureRadius
+                }
                 filterEdit = try FilterEdit(kind: original.kind.filterKind ?? .curves, layer: layer, selection: nil, settings: settings)
             }
             adjustmentOriginal = original
@@ -75,7 +79,7 @@ extension EditorSession {
         case .hsv:
             guard let hueSaturation else { return nil }
             value.hsvSettings = hueSaturation.settings
-        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise, .structure:
             guard let filterEdit else { return nil }
             switch value.kind {
             case .exposure: value.exposure = filterEdit.settings.exposure
@@ -91,6 +95,9 @@ extension EditorSession {
                 value.resolvedNoiseAmount = filterEdit.settings.amount
                 value.resolvedNoiseGaussian = filterEdit.settings.gaussian
                 value.resolvedNoiseMonochromatic = filterEdit.settings.monochromatic
+            case .structure:
+                value.resolvedStructureAmount = filterEdit.settings.tonalAmount
+                value.resolvedStructureRadius = filterEdit.settings.tonalRadius
             default: value.curves = filterEdit.settings.curves
             }
         }

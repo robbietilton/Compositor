@@ -129,6 +129,11 @@ struct FilterSheet: View {
             case .bloomGlow:
                 control("Amount", \.bloomAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Radius", \.bloomRadius, range: 1...150, unit: "px", decimals: 0, logarithmic: true)
+            case .structure:
+                control("Amount", \.tonalAmount, range: -100...100, unit: "%", decimals: 0, logarithmic: false, resetsTo: 0)
+                    .help("Bring out local detail, or soften it. Zero leaves the image unchanged. Double-click the knob to reset.")
+                control("Radius", \.tonalRadius, range: 1...100, unit: "px", decimals: 0, logarithmic: true, resetsTo: 16)
+                    .help("The size of the detail, in document pixels. Double-click the knob to reset.")
             case .tonalContrast:
                 control("Amount", \.tonalAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Shadows", \.tonalShadows, range: -100...100, unit: "%", decimals: 0, logarithmic: false)
@@ -277,10 +282,11 @@ struct FilterSheet: View {
         Binding(get: { settings[keyPath: key] }, set: { value in update { $0[keyPath: key] = value } })
     }
 
-    /// The setting put back to its filter's default, as a double-click on a colored slider does.
-    static func resetting(_ key: WritableKeyPath<FilterSettings, Double>, in settings: FilterSettings) -> FilterSettings {
+    /// The setting put back by a double-click on a slider knob or its title.
+    /// `to` is the value for a control whose default is not `FilterSettings`'s, such as Structure's amount of zero.
+    static func resetting(_ key: WritableKeyPath<FilterSettings, Double>, in settings: FilterSettings, to explicit: Double? = nil) -> FilterSettings {
         var value = settings
-        value[keyPath: key] = FilterSettings()[keyPath: key]
+        value[keyPath: key] = explicit ?? FilterSettings()[keyPath: key]
         return value
     }
 
@@ -292,23 +298,32 @@ struct FilterSheet: View {
                                                                NSColor(srgbRed: 0.22, green: 0.40, blue: 0.92, alpha: 1))
 
     /// A slider plus an exact field. Logarithmic sliders give the small values used most most of the travel.
-    /// A colored track draws the slider as Camera Raw's, where a double-click on the title or knob resets it.
+    /// Camera Raw's slider, used for a colored track or an explicit reset, restores that value on a double-click
+    /// of the title or the knob.
     private func control(_ title: String, _ key: WritableKeyPath<FilterSettings, Double>, range: ClosedRange<Double>,
-                         unit: String, decimals: Int, logarithmic: Bool, track: CameraRawSliderTrack? = nil) -> some View {
+                         unit: String, decimals: Int, logarithmic: Bool, track: CameraRawSliderTrack? = nil,
+                         resetsTo: Double? = nil) -> some View {
         let step = pow(10, Double(decimals))
-        let reset = { update { $0 = Self.resetting(key, in: $0) } }
+        let resets = track != nil || resetsTo != nil
+        let reset = { update { $0 = Self.resetting(key, in: $0, to: resetsTo) } }
         return HStack(spacing: 10) {
             Text(title).fixedSize()
                 .background(GeometryReader { Color.clear.preference(key: LabelWidthKey.self, value: $0.size.width) })
                 .frame(width: labelWidth, alignment: .leading)
-                .onTapGesture(count: 2) { if track != nil { reset() } }
+                .onTapGesture(count: 2) { if resets { reset() } }
                 .scrubbable(sensitivity: 1 / step,
                             value: Binding(get: { settings[keyPath: key] }, set: { value in update { $0[keyPath: key] = value } }),
                             range: range)
-            if let track {
-                CameraRawSlider(value: settings[keyPath: key], range: range, track: track,
+            if resets {
+                let current = settings[keyPath: key]
+                CameraRawSlider(value: logarithmic ? log(current) : current,
+                                range: logarithmic ? log(range.lowerBound)...log(range.upperBound) : range,
+                                track: track ?? .plain,
                                 help: "\(title). Double-click to reset.",
-                                onChange: { value in update { $0[keyPath: key] = (value * step).rounded() / step } },
+                                onChange: { value in
+                                    let linear = logarithmic ? exp(value) : value
+                                    update { $0[keyPath: key] = (linear * step).rounded() / step }
+                                },
                                 onReset: reset)
             } else {
                 Slider(value: Binding(get: { logarithmic ? log(settings[keyPath: key]) : settings[keyPath: key] },

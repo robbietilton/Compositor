@@ -189,7 +189,7 @@ import Testing
             session.updateFilter(settings, preview: true)
             #expect(session.activeLayer?.adjustment?.curves == settings.curves)
             await session.commitFilter()
-        case .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise, .structure:
             #expect(session.filterEdit?.kind == kind.filterKind)
             var settings = try #require(session.filterEdit).settings
             switch kind {
@@ -200,6 +200,7 @@ import Testing
             case .gaussianBlur: settings.radius = 24
             case .motionBlur: settings.angle = 35; settings.distance = 48
             case .addNoise: settings.amount = 35; settings.gaussian = true; settings.monochromatic = true
+            case .structure: settings.tonalAmount = 40; settings.tonalRadius = 12
             default: settings.grain.amount = 70
             }
             session.updateFilter(settings, preview: true)
@@ -209,6 +210,9 @@ import Testing
             if kind == .motionBlur { #expect(live.resolvedMotionAngle == 35 && live.resolvedMotionDistance == 48) }
             if kind == .addNoise {
                 #expect(live.resolvedNoiseAmount == 35 && live.resolvedNoiseGaussian && live.resolvedNoiseMonochromatic)
+            }
+            if kind == .structure {
+                #expect(live.resolvedStructureAmount == 40 && live.resolvedStructureRadius == 12)
             }
             await session.commitFilter()
         case .hsv:
@@ -235,7 +239,7 @@ import Testing
             #expect(session.levels?.settings == saved.levels)
             session.updateLevels(LevelsSettings(), preview: true)
             session.cancelLevels()
-        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise, .structure:
             let reopened = try #require(session.filterEdit).settings
             #expect(reopened.curves == saved.curves && reopened.exposure == saved.exposure
                     && reopened.gradientMap == saved.gradientMap && reopened.grain == saved.grain
@@ -244,6 +248,9 @@ import Testing
                     && reopened.distance == saved.resolvedMotionDistance)
             #expect(reopened.amount == saved.resolvedNoiseAmount && reopened.gaussian == saved.resolvedNoiseGaussian
                     && reopened.monochromatic == saved.resolvedNoiseMonochromatic)
+            if kind == .structure {
+                #expect(reopened.tonalAmount == saved.resolvedStructureAmount && reopened.tonalRadius == saved.resolvedStructureRadius)
+            }
             session.updateFilter(FilterSettings(), preview: true)
             session.cancelFilter()
         case .hsv:
@@ -264,5 +271,172 @@ import Testing
         let decoded = try JSONDecoder().decode(LayerAdjustment.self, from: data)
         #expect(decoded.hsvSettings == nil)
         #expect(decoded.resolvedHSV.hue == 120)
+    }
+}
+
+@MainActor struct StructureAdjustmentTests {
+    private func stripes(alpha: CGFloat = 1) throws -> CGImage {
+        let context = try BrushRaster.context(width: 64, height: 16, mask: false)
+        for stripe in 0..<8 {
+            let gray: CGFloat = stripe.isMultiple(of: 2) ? 0.4 : 0.6
+            context.setFillColor(CGColor(srgbRed: gray, green: gray, blue: gray, alpha: alpha))
+            context.fill(CGRect(x: stripe * 8, y: 0, width: 8, height: 16))
+        }
+        return try #require(context.makeImage())
+    }
+
+    @Test func amountStrengthensOrSoftensStripesAndLeavesAFlatField() throws {
+        let fixtures = AdjustmentLayerTests()
+        let source = try stripes()
+        let original = try fixtures.pixels(source)
+        var stronger = LayerAdjustment(kind: .structure)
+        stronger.resolvedStructureAmount = 100
+        stronger.resolvedStructureRadius = 6
+        let raised = try fixtures.pixels(stronger.apply(source))
+        let dark = (8 * 64 + 5) * 4, light = (8 * 64 + 13) * 4
+        #expect(raised[dark] < original[dark])
+        #expect(raised[light] > original[light])
+        #expect(stride(from: 3, to: raised.count, by: 4).allSatisfy { raised[$0] == 255 })
+
+        var softer = stronger
+        softer.resolvedStructureAmount = -100
+        let lowered = try fixtures.pixels(softer.apply(source))
+        #expect(lowered[dark] > original[dark])
+        #expect(lowered[light] < original[light])
+
+        let identity = LayerAdjustment(kind: .structure)
+        #expect(try fixtures.pixels(identity.apply(source)) == original)
+        #expect(identity.samplingMargin == 0)
+        #expect(stronger.samplingMargin == 20)
+
+        let flat = try fixtures.image(PaletteColor(red: 0.5, green: 0.5, blue: 0.5))
+        let flatBefore = try fixtures.pixels(flat.image)
+        let flatAfter = try fixtures.pixels(stronger.apply(flat.image))
+        // The blur is an 8-bit round trip, so a flat field can move by a level before the contrast sees it.
+        let flatDelta = zip(flatBefore, flatAfter).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        #expect(flatDelta <= 2, "a flat field moved by \(flatDelta)")
+
+        let translucent = try stripes(alpha: 0.5)
+        let before = try fixtures.pixels(translucent)
+        let after = try fixtures.pixels(stronger.apply(translucent))
+        #expect(stride(from: 3, to: after.count, by: 4).allSatisfy { after[$0] == before[$0] })
+
+        var invalid = stronger
+        invalid.resolvedStructureAmount = 101
+        #expect(!invalid.isValid)
+        invalid.resolvedStructureAmount = 100
+        invalid.resolvedStructureRadius = 0
+        #expect(!invalid.isValid)
+    }
+
+    @Test func omittedFieldsStayIdentity() throws {
+        let decoded = try JSONDecoder().decode(LayerAdjustment.self, from: JSONEncoder().encode(LayerAdjustment(kind: .structure)))
+        #expect(decoded.structureAmount == nil && decoded.structureRadius == nil)
+        #expect(decoded.resolvedStructureAmount == 0 && decoded.resolvedStructureRadius == 16)
+        let fixtures = AdjustmentLayerTests()
+        let source = try stripes()
+        #expect(try fixtures.pixels(decoded.apply(source)) == fixtures.pixels(source))
+    }
+
+    /// A double-click on Structure's Amount or Radius knob uses the same reset as Camera Raw, and Amount's
+    /// default is the center of its slider, not the shared tonal-contrast default of 50.
+    @Test func doubleClickRestoresAmountToCenterAndRadiusToItsDefault() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 16)
+        let source = try stripes()
+        session.insert(ImportedImage(image: source, thumbnail: source, name: "Stripes"))
+        session.addAdjustment(.structure)
+        let id = try #require(session.activeLayerID)
+        await session.beginAdjustmentEditing(id)
+        var settings = try #require(session.filterEdit).settings
+        settings.tonalAmount = 70
+        settings.tonalRadius = 40
+        session.updateFilter(settings, preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 70)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 40)
+
+        session.updateFilter(FilterSheet.resetting(\.tonalAmount, in: settings, to: 0), preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 0)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 40)
+        settings = try #require(session.filterEdit).settings
+        session.updateFilter(FilterSheet.resetting(\.tonalRadius, in: settings, to: 16), preview: true)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 0)
+        #expect(session.activeLayer?.adjustment?.resolvedStructureRadius == 16)
+        #expect(FilterSheet.resetting(\.tonalAmount, in: settings).tonalAmount == 50)
+    }
+
+    @Test func maskHidesTheEffectAndUndoRestoresTheSettings() async throws {
+        let fixtures = AdjustmentLayerTests()
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 16)
+        let source = try stripes()
+        session.insert(ImportedImage(image: source, thumbnail: source, name: "Stripes"))
+        let original = session.document?.layers.first?.asset?.image
+        let plain = try await fixtures.rendered(session)
+        session.addAdjustment(.structure)
+        session.adjustmentEditingID = nil
+        let id = try #require(session.activeLayerID)
+        var value = LayerAdjustment(kind: .structure)
+        value.resolvedStructureAmount = 100
+        value.resolvedStructureRadius = 6
+        session.beginEdit("Edit Structure")
+        session.updateAdjustment(id, value: value)
+        session.endEdit()
+        #expect(try await fixtures.rendered(session) != plain)
+        let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+        session.document?.layers[index].mask = LayerMask.solid(revealing: false)
+        #expect(try await fixtures.rendered(session) == plain)
+        session.undo()
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 0)
+        session.redo()
+        #expect(session.activeLayer?.adjustment?.resolvedStructureAmount == 100)
+        #expect(session.document?.layers.first?.asset?.image === original)
+    }
+
+    @Test func saveReopenAgreesAndOlderOrInvalidFilesAreRejected() async throws {
+        let fixtures = AdjustmentLayerTests()
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 16)
+        let source = try stripes()
+        session.insert(ImportedImage(image: source, thumbnail: source, name: "Stripes"))
+        session.addAdjustment(.structure)
+        session.adjustmentEditingID = nil
+        let id = try #require(session.activeLayerID)
+        var value = LayerAdjustment(kind: .structure)
+        value.resolvedStructureAmount = 80
+        value.resolvedStructureRadius = 8
+        session.updateAdjustment(id, value: value)
+        let before = try await fixtures.rendered(session)
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.version == 12)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Structure-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        #expect(loaded.manifest.layers.last?.adjustment == value)
+        let restored = EditorSession()
+        restored.installProject(loaded, from: url)
+        #expect(try await fixtures.rendered(restored) == before)
+
+        var legacy = snapshot.manifest
+        legacy.version = 11
+        try JSONEncoder().encode(legacy).write(to: url.appendingPathComponent("manifest.json"))
+        do {
+            _ = try await ProjectStore.shared.load(from: url)
+            Issue.record("Version 11 with Structure should be rejected")
+        } catch ProjectError.invalid {}
+
+        var broken = snapshot.manifest
+        let index = try #require(broken.layers.firstIndex { $0.adjustment?.kind == .structure })
+        var record = broken.layers[index]
+        var adjustment = try #require(record.adjustment)
+        adjustment.resolvedStructureAmount = 250
+        record.adjustment = adjustment
+        broken.layers[index] = record
+        try JSONEncoder().encode(broken).write(to: url.appendingPathComponent("manifest.json"))
+        do {
+            _ = try await ProjectStore.shared.load(from: url)
+            Issue.record("Out-of-range Structure should be rejected")
+        } catch ProjectError.invalid {}
     }
 }

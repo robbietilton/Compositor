@@ -254,7 +254,7 @@ import Testing
     /// Each adjustment over a photo, with a mask on it and at 80% opacity, on a canvas where the document fills the view
     /// one to one — so noise and grain land on the same pixels on both canvases.
     @Test(arguments: [AdjustmentKind.curves, .blackWhite, .colorBalance, .exposure, .gradientMap, .invert,
-                      .gaussianBlur, .motionBlur, .addNoise, .grain])
+                      .gaussianBlur, .motionBlur, .addNoise, .grain, .structure])
     func matchesEveryAdjustment(kind: AdjustmentKind) throws {
         guard GPUCanvasRenderer.shared != nil else { return }
         let session = EditorSession()
@@ -276,6 +276,7 @@ import Testing
         case .motionBlur: adjustment.resolvedMotionDistance = 30; adjustment.resolvedMotionAngle = 30
         case .addNoise: adjustment.resolvedNoiseAmount = 25; adjustment.resolvedNoiseSeed = 7
         case .grain: adjustment.grain.amount = 60; adjustment.grain.size = 3; adjustment.grain.seed = 11
+        case .structure: adjustment.resolvedStructureAmount = 60; adjustment.resolvedStructureRadius = 4
         default: break
         }
         var layer = ImageLayer(name: "Adjustment", blankSize: CGSize(width: 600, height: 500))
