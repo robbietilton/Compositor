@@ -624,7 +624,8 @@ final class EditorSession {
     private func restore(_ snapshot: DocumentHistory.Snapshot) {
         cancelCrop()
         cancelGradient()
-        let changedCanvas = document?.id != snapshot.document?.id
+        // A new document, or this one at another size (Canvas Size, Image Size, Rotate Canvas undone or redone).
+        let changedCanvas = document?.id != snapshot.document?.id || document?.size != snapshot.document?.size
         let keepMaskTarget = isMaskSelected && activeLayerID == snapshot.activeLayerID
         document = snapshot.document
         activeLayerID = snapshot.activeLayerID
