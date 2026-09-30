@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     /// The Layers panel's width, remembered across launches.
     @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
+    @AppStorage("navigator.visible") private var showsNavigator = true
+    @State private var navigatorColumnHeight = Double.infinity
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
@@ -109,7 +111,15 @@ struct ContentView: View {
                     }
                 }
                 PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                LayersPanel(session: session, width: layersPanelWidth)
+                VStack(spacing: 0) {
+                    if showsNavigator {
+                        NavigatorPanel(session: session, columnHeight: navigatorColumnHeight)
+                        Divider()
+                    }
+                    LayersPanel(session: session, width: layersPanelWidth)
+                }
+                .frame(width: layersPanelWidth)
+                .onGeometryChange(for: Double.self) { $0.size.height } action: { navigatorColumnHeight = $0 }
             }
             Divider()
             // Keeps its own height however short the window gets; the tools scroll instead.
