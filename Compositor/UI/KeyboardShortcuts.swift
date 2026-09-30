@@ -85,7 +85,7 @@ struct ShortcutDefinition: Identifiable {
             entry("Fill with Background", "\u{7f}", 1, menu: true), entry("Content-Aware Fill", "\u{7f}", 8, menu: true),
             entry("Select All", "a", 1, menu: true), entry("Deselect", "d", 1, menu: true),
             entry("Inverse Selection", "i", 9, menu: true), entry("Select Subject", "a", 3, menu: true),
-            entry("Curves", "m", 1, menu: true), entry("Levels", "l", 1, menu: true),
+            entry("Last Filter", "f", 1, menu: true), entry("Curves", "m", 1, menu: true), entry("Levels", "l", 1, menu: true),
             entry("Hue/Saturation", "u", 1, menu: true), entry("Invert Pixels / Mask", "i", 1, menu: true),
             entry("Canvas Size", "c", 3, menu: true), entry("Image Size", "i", 3, menu: true),
             entry("Transform Layer / Selection", "t", 1, menu: true), entry("Duplicate / Layer via Copy", "j", 1, menu: true),

@@ -59,6 +59,7 @@ brew install --cask robbietilton-compositor
 - Gaussian Blur and Motion Blur that spread past a layer's edges
 - Add Noise, Vignette, Bloom / Glow, Tonal Contrast, Lens Correction and Remove Background
 - Live previews, limited to the selection when there is one
+- Last Filter (⌘F) runs the last filter again with the same settings
 
 ### Canvas and files
 - Multiple projects in tabs

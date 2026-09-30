@@ -253,6 +253,8 @@ final class EditorSession {
     /// The open filter (Filter menu), and the settings the next one starts from.
     var filterEdit: FilterEdit?
     var filterSettings = FilterSettings()
+    /// What Filter › Last Filter runs again.
+    var lastFilter: FilterKind?
     @ObservationIgnored var hueSaturationTask: Task<Void, Never>?
     /// The newest preview request while one is already rendering.
     @ObservationIgnored var hueSaturationPending: HueSaturationJob?

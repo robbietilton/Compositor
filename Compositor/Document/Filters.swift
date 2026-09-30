@@ -23,6 +23,8 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case blackWhite = "Black & White"
     case colorBalance = "Color Balance"
     var isAutomatic: Bool { self == .contentAwareFill || self == .removeBackground }
+    /// The Filter menu's own filters, which Last Filter can run again; not Content-Aware Fill or the Image menu's.
+    var repeatsAsLastFilter: Bool { self != .contentAwareFill && !isImageAdjustment }
     /// Color adjustments: in the Image menu (and editable as adjustment layers), not under Filter.
     var isImageAdjustment: Bool {
         self == .curves || self == .exposure || self == .gradientMap || self == .grain
@@ -273,6 +275,8 @@ nonisolated enum PixelFilter {
 @Observable
 final class FilterEdit {
     let kind: FilterKind
+    /// Filter › Last Filter, applied straight away with the settings it had.
+    var repeating = false
     let layerID: UUID
     let original: ImportedImage
     let transform: LayerTransform
@@ -476,7 +480,8 @@ extension EditorSession {
     var canContentAwareFill: Bool {
         canAdjustColors && !isMaskSelected && selection?.isEmpty == false && filterEdit == nil && hueSaturation == nil
     }
-    func beginFilter(_ kind: FilterKind) {
+    /// `repeating` is Last Filter: the settings go on as they are, without a preview or the panel.
+    func beginFilter(_ kind: FilterKind, repeating: Bool = false) {
         if kind == .contentAwareFill && !canContentAwareFill { return }
         guard filterEdit == nil, hueSaturation == nil, kind == .vignette ? canVignette : canAdjustColors else { NSSound.beep(); return }
         if gradientEdit != nil {
@@ -508,9 +513,26 @@ extension EditorSession {
             let edit = try FilterEdit(kind: kind, layer: layer, selection: selection?.clip(canvas: document.size), settings: settings, growingTo: area)
             if fillsCanvas { edit.canvas = canvas }
             edit.startedEmpty = startedEmpty
+            edit.repeating = repeating
             filterEdit = edit
-            updateFilter(edit.settings, preview: true)
+            // An automatic filter commits what its preview made, so it still needs one.
+            updateFilter(edit.settings, preview: !repeating || kind.isAutomatic)
         } catch { brushError = error.localizedDescription }
+    }
+
+    /// Filter › Last Filter (⌘F): the last filter applied, again, with the same settings and no panel, as in Photoshop.
+    var canRepeatLastFilter: Bool {
+        guard let lastFilter, filterEdit == nil, hueSaturation == nil else { return false }
+        return lastFilter == .vignette ? canVignette : canAdjustColors
+    }
+    func repeatLastFilter() async {
+        guard let kind = lastFilter, canRepeatLastFilter else { NSSound.beep(); return }
+        if gradientEdit != nil { await commitGradient() }
+        beginFilter(kind, repeating: true)
+        guard let edit = filterEdit, edit.repeating else { return }
+        await commitFilter()
+        // Nothing to apply (a zero amount), or it couldn't be: don't leave it open with no panel to close it.
+        if filterEdit === edit { cancelFilter() }
     }
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
@@ -611,6 +633,7 @@ extension EditorSession {
         edit.committing = true
         edit.previewTask?.cancel()
         if edit.kind != .cameraRaw { filterSettings = edit.settings }
+        if edit.kind.repeatsAsLastFilter { lastFilter = edit.kind }
         isProjectBusy = true
         // The preview stays up until the result is on the layer, so the canvas never flashes the original.
         defer { filterEdit = nil; isProjectBusy = false; brushRevision += 1 }
