@@ -26,17 +26,18 @@ final class MetalBrushCoverage {
         pipeline = try device.makeComputePipelineState(function: function)
     }
     func tile(width: Int, height: Int) throws -> Tile {
-        guard let permanent = device.makeBuffer(length: width * height * MemoryLayout<Float>.stride, options: .storageModeShared),
+        // Two floats a pixel: the paint laid down, and the firmest press that reached it (see the shader).
+        guard let permanent = device.makeBuffer(length: width * height * 2 * MemoryLayout<Float>.stride, options: .storageModeShared),
               let preview = device.makeBuffer(length: width * height, options: .storageModeShared) else { throw ExportError.render }
-        memset(permanent.contents(), 0, width * height * MemoryLayout<Float>.stride)
+        memset(permanent.contents(), 0, width * height * 2 * MemoryLayout<Float>.stride)
         return Tile(permanent: permanent, preview: preview)
     }
-    func render(_ tiles: [(Tile, CGRect, CGContext)], settled: [SIMD4<Float>], tail: [SIMD4<Float>],
+    func render(_ tiles: [(Tile, CGRect, CGContext)], settled: [BrushSegment], tail: [BrushSegment],
                 mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize) throws {
         guard !tiles.isEmpty else { return }
         // A dummy segment supplies a valid buffer for tail removal with no new geometry.
         let segments = settled + tail
-        let storage = segments.isEmpty ? [SIMD4<Float>(repeating: 0)] : segments
+        let storage = segments.isEmpty ? [BrushSegment(line: SIMD4(repeating: 0), dynamics: SIMD4(repeating: 0))] : segments
         guard let buffer = storage.withUnsafeBytes({ bytes in
             device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared)
         }), let command = queue.makeCommandBuffer(), let encoder = command.makeComputeCommandEncoder() else { throw ExportError.render }
@@ -78,39 +79,65 @@ struct BrushUniforms {
     uint4 counts; // tile width, height, committed segment count, total segment count
 };
 
-float segmentDistanceSquared(float2 p, float4 segment) {
+// dynamics: the tip's radius at the start and end, and its strength at the start and end (a pen's pressure).
+struct BrushSegment {
+    float4 line;
+    float4 dynamics;
+};
+
+// Where along the segment, 0 to 1, is nearest `p`.
+float closestAlong(float2 p, float4 segment) {
     float2 v = segment.zw - segment.xy;
-    float t = clamp(dot(p - segment.xy, v) / max(dot(v, v), 1e-12f), 0.0f, 1.0f);
-    float2 delta = p - (segment.xy + t * v);
+    return clamp(dot(p - segment.xy, v) / max(dot(v, v), 1e-12f), 0.0f, 1.0f);
+}
+
+float segmentDistanceSquared(float2 p, float4 segment, float t) {
+    float2 delta = p - (segment.xy + t * (segment.zw - segment.xy));
     return dot(delta, delta);
 }
 
-float brushCoverage(float distanceSquared, constant BrushUniforms &u) {
+float brushCoverage(float distanceSquared, float radius, constant BrushUniforms &u) {
     float distance = sqrt(distanceSquared);
-    float radius = u.geometry.z;
     if (u.geometry.w >= 1.0f) {
         return clamp((radius - distance) / u.canvas.z + 0.5f, 0.0f, 1.0f);
     }
+    if (radius <= 0.0f) return 0.0f;
     float t = clamp((distance / radius - u.geometry.w) / (1.0f - u.geometry.w), 0.0f, 1.0f);
     return max(0.0f, (exp(-2.5f * t * t) - exp(-2.5f)) / (1.0f - exp(-2.5f)));
+}
+
+// A hard tip's coverage from one segment, at the radius and strength of its nearest point.
+float hardCoverage(float2 p, BrushSegment s, constant BrushUniforms &u) {
+    float t = closestAlong(p, s.line);
+    return mix(s.dynamics.z, s.dynamics.w, t) * brushCoverage(segmentDistanceSquared(p, s.line, t), mix(s.dynamics.x, s.dynamics.y, t), u);
+}
+
+// The strength of the press where a segment reaches `p`; 0 where it doesn't.
+float segmentStrength(float2 p, BrushSegment s) {
+    float t = closestAlong(p, s.line);
+    float radius = mix(s.dynamics.x, s.dynamics.y, t);
+    return segmentDistanceSquared(p, s.line, t) < radius * radius ? mix(s.dynamics.z, s.dynamics.w, t) : 0.0f;
 }
 
 // Integrate paint deposition by distance travelled, not pointer-event count or
 // spline subdivision count. Optical density adds; coverage is 1 - exp(-density).
 // This is the continuous form of source-over soft dabs at the shared deposition spacing.
-float tipDensity(float distanceSquared, constant BrushUniforms &u) {
-    return -log(max(1.0f - brushCoverage(distanceSquared, u), 0.001f));
+float tipDensity(float distanceSquared, float radius, constant BrushUniforms &u) {
+    return -log(max(1.0f - brushCoverage(distanceSquared, radius, u), 0.001f));
 }
 
-float segmentDensity(float2 p, float4 segment, constant BrushUniforms &u) {
+float segmentDensity(float2 p, BrushSegment s, constant BrushUniforms &u) {
+    float4 segment = s.line;
     float2 v = segment.zw - segment.xy;
     float length = metal::length(v);
-    if (length < 1e-6f) return tipDensity(dot(p - segment.xy, p - segment.xy), u); // initial click
+    if (length < 1e-6f) return tipDensity(dot(p - segment.xy, p - segment.xy), s.dynamics.x, u); // initial click
     float2 direction = v / length;
     float projection = dot(p - segment.xy, direction);
     float2 perpendicular = p - segment.xy - projection * direction;
     float perpendicularSquared = dot(perpendicular, perpendicular);
-    float radiusSquared = u.geometry.z * u.geometry.z;
+    // The widest the tip gets along the segment bounds where it can reach.
+    float widest = max(s.dynamics.x, s.dynamics.y);
+    float radiusSquared = widest * widest;
     if (perpendicularSquared >= radiusSquared) return 0.0f;
     float reach = sqrt(radiusSquared - perpendicularSquared);
     float lo = max(0.0f, projection - reach), hi = min(length, projection + reach);
@@ -124,8 +151,11 @@ float segmentDensity(float2 p, float4 segment, constant BrushUniforms &u) {
     for (uint i = 0; i < 4; ++i) {
         float a = midpoint - halfLength * nodes[i] - projection;
         float b = midpoint + halfLength * nodes[i] - projection;
-        integral += weights[i] * (tipDensity(perpendicularSquared + a * a, u)
-                                + tipDensity(perpendicularSquared + b * b, u));
+        // The tip's radius where each sample sits along the segment.
+        float ra = mix(s.dynamics.x, s.dynamics.y, clamp((projection + a) / length, 0.0f, 1.0f));
+        float rb = mix(s.dynamics.x, s.dynamics.y, clamp((projection + b) / length, 0.0f, 1.0f));
+        integral += weights[i] * (tipDensity(perpendicularSquared + a * a, ra, u)
+                                + tipDensity(perpendicularSquared + b * b, rb, u));
     }
     return integral * halfLength / u.canvas.w;
 }
@@ -135,7 +165,7 @@ float segmentDensity(float2 p, float4 segment, constant BrushUniforms &u) {
 kernel void continuousBrush(device float *permanent [[buffer(0)]],
                             device uchar *preview [[buffer(1)]],
                             constant BrushUniforms &u [[buffer(2)]],
-                            device const float4 *segments [[buffer(3)]],
+                            device const BrushSegment *segments [[buffer(3)]],
                             uint2 pixel [[thread_position_in_grid]]) {
     if (pixel.x >= u.counts.x || pixel.y >= u.counts.y) return;
     uint index = pixel.y * u.counts.x + pixel.x;
@@ -143,19 +173,29 @@ kernel void continuousBrush(device float *permanent [[buffer(0)]],
     float2 p = u.geometry.xy + local.x * u.mapping.xy + local.y * u.mapping.zw;
     if (any(p < 0.0f) || any(p >= u.canvas.xy)) { preview[index] = 0; return; }
     if (u.geometry.w >= 1.0f) {
-        // Hard tips already have a solid interior. Preserve pixel-edge antialiasing.
-        float settled = INFINITY, tail = INFINITY;
-        for (uint i = 0; i < u.counts.z; ++i) settled = min(settled, segmentDistanceSquared(p, segments[i]));
-        for (uint i = u.counts.z; i < u.counts.w; ++i) tail = min(tail, segmentDistanceSquared(p, segments[i]));
-        float value = max(permanent[index], brushCoverage(settled, u));
-        permanent[index] = value;
-        preview[index] = uchar(round(255.0f * max(value, brushCoverage(tail, u))));
+        // Hard tips already have a solid interior. Preserve pixel-edge antialiasing. The strongest press to reach a
+        // pixel sets it, so a stroke builds to its firmest press and never past it.
+        float settled = 0.0f, tail = 0.0f;
+        for (uint i = 0; i < u.counts.z; ++i) settled = max(settled, hardCoverage(p, segments[i], u));
+        for (uint i = u.counts.z; i < u.counts.w; ++i) tail = max(tail, hardCoverage(p, segments[i], u));
+        float value = max(permanent[2 * index], settled);
+        permanent[2 * index] = value;
+        preview[index] = uchar(round(255.0f * max(value, tail)));
     } else {
-        float value = permanent[index], tail = 0.0f;
-        for (uint i = 0; i < u.counts.z; ++i) value += segmentDensity(p, segments[i], u);
-        for (uint i = u.counts.z; i < u.counts.w; ++i) tail += segmentDensity(p, segments[i], u);
-        permanent[index] = min(value, 20.0f);
-        preview[index] = uchar(round(255.0f * (1.0f - exp(-min(value + tail, 20.0f)))));
+        // Soft paint builds up as it always has, then the firmest press to reach the pixel caps it.
+        float value = permanent[2 * index], tail = 0.0f;
+        float cap = permanent[2 * index + 1], tailCap = 0.0f;
+        for (uint i = 0; i < u.counts.z; ++i) {
+            value += segmentDensity(p, segments[i], u);
+            cap = max(cap, segmentStrength(p, segments[i]));
+        }
+        for (uint i = u.counts.z; i < u.counts.w; ++i) {
+            tail += segmentDensity(p, segments[i], u);
+            tailCap = max(tailCap, segmentStrength(p, segments[i]));
+        }
+        permanent[2 * index] = min(value, 20.0f);
+        permanent[2 * index + 1] = cap;
+        preview[index] = uchar(round(255.0f * max(cap, tailCap) * (1.0f - exp(-min(value + tail, 20.0f)))));
     }
 }
 """
