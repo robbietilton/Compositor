@@ -75,6 +75,14 @@ void adjust_colored_vignette(uint8_t *rgba, size_t width, size_t height, size_t 
 void adjust_tonal_contrast(uint8_t *rgba, const uint8_t *blurred, size_t width, size_t height,
                            size_t stride, size_t blurredStride, double amount,
                            double shadows, double midtones, double highlights);
+// Unsharp Mask, as in Photoshop: each channel pushed away from its value in `blurred` (the same image blurred at the
+// radius) by `amount` (1 is 100%), wherever the two differ by more than `threshold` levels. Straight color; the
+// alpha is left as it is.
+void adjust_unsharp_mask(uint8_t *rgba, const uint8_t *blurred, size_t width, size_t height,
+                         size_t stride, size_t blurredStride, double amount, int threshold);
+// High Pass: only the detail finer than `blurred`'s radius, about middle gray. Straight color; alpha kept.
+void adjust_high_pass(uint8_t *rgba, const uint8_t *blurred, size_t width, size_t height,
+                      size_t stride, size_t blurredStride);
 // Manual noise reduction, then sharpening. `scale` maps radius to preview pixels. Applied after the creative grade.
 void adjust_camera_raw_detail(uint8_t *rgba, size_t width, size_t height, size_t stride,
                               double sharpenAmount, double sharpenRadius, double sharpenDetail, double sharpenMasking,
