@@ -62,6 +62,7 @@ brew install --cask robbietilton-compositor
 
 ### Canvas and files
 - Multiple projects in tabs
+- File > New from Clipboard (⇧⌘V) opens whatever image is on the clipboard as a new project
 - Rulers (⌘R), guides dragged from them, a layout grid with adjustable spacing and subdivisions, and Snap To for guides, grid, layers and document bounds
 - Crop with snapping, ratios including 3:4 and 9:16, and Option for symmetric cropping; with a selection, the crop starts at it
 - Canvas Size, Image Size and Trim

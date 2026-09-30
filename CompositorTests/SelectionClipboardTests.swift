@@ -214,4 +214,45 @@ struct SelectionClipboardTests {
         pasted = try #require(session.activeLayer)
         #expect(try await layerPixel(session, pasted.id, x: 65, y: 15) == [0, 0, 255, 255])
     }
+
+    @Test func newFromClipboardOpensATabTheSizeOfTheCopiedPixels() async throws {
+        let workspace = ProjectWorkspace()
+        let source = workspace.current
+        source.session.createDocument(width: 100, height: 40, emptyLayer: true)
+        source.session.setPaletteColor(red, background: false)
+        await source.session.fillSelection(with: .foreground)
+        select(source.session, CGRect(x: 10, y: 5, width: 30, height: 20))
+        source.session.copySelection()
+
+        #expect(workspace.newFromClipboard())
+        #expect(workspace.tabs.count == 2 && workspace.current !== source)
+        let session = workspace.current.session
+        #expect(session.document?.size == CGSize(width: 30, height: 20))
+        let layer = try #require(session.document?.layers.first)
+        #expect(session.document?.layers.count == 1 && layer.name == "Layer 1" && session.activeLayerID == layer.id)
+        #expect(layer.transform.origin == .zero && layer.size == CGSize(width: 30, height: 20))
+        #expect(try pixel(try await render(session), x: 15, y: 10) == [255, 0, 0, 255])
+        #expect(session.history.undoName == "New from Clipboard")
+        #expect(source.session.document?.layers.count == 1) // The source project is untouched.
+    }
+
+    @Test func newFromClipboardTakesAnImageFromAnotherApp() throws {
+        let context = try #require(CGContext(data: nil, width: 12, height: 7, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 12, height: 7))
+        let png = try #require(NSBitmapImageRep(cgImage: try #require(context.makeImage())).representation(using: .png, properties: [:]))
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(png, forType: .png)
+
+        let workspace = ProjectWorkspace()
+        #expect(workspace.newFromClipboard())
+        #expect(workspace.tabs.count == 1) // The empty first tab is reused, as a dropped image does.
+        #expect(workspace.current.session.document?.size == CGSize(width: 12, height: 7))
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("not an image", forType: .string)
+        #expect(!workspace.newFromClipboard())
+        #expect(workspace.tabs.count == 1)
+    }
 }

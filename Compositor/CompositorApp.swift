@@ -50,6 +50,13 @@ struct CompositorApp: App {
                         Task { await applicationDelegate.projects.newCanvas() }
                     }.configuredKeyboardShortcut("n")
                         .disabled(!applicationDelegate.projects.canStart)
+                    // As in Preview: a new project from the image on the clipboard, no size to fill in.
+                    Button("New from Clipboard") {
+                        applicationDelegate.showEditor?()
+                        if !applicationDelegate.workspace.newFromClipboard() { NSSound.beep() }
+                    }
+                        .configuredKeyboardShortcut("v", modifiers: [.command, .shift])
+                        .disabled(!applicationDelegate.projects.canStart)
                     Button("Open Project…") {
                         applicationDelegate.showEditor?()
                         Task { await applicationDelegate.projects.open() }

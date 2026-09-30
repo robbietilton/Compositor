@@ -205,6 +205,28 @@ final class ProjectWorkspace {
         Task { await copyLayers(ids, into: destination) }
         return true
     }
+    /// File > New from Clipboard: a new project exactly the size of the copied image, holding it as its only layer, as
+    /// one undo step. Pixels copied in any open project come first, as Paste does; otherwise an image from another app.
+    /// False when there is nothing to paste.
+    @discardableResult
+    func newFromClipboard() -> Bool {
+        guard canSwitch else { return false }
+        let count = NSPasteboard.general.changeCount
+        let copied = tabs.lazy.compactMap { $0.session.pixelClipboard }.first { $0.changeCount == count }?.image
+        guard let image = copied ?? EditorSession.pasteboardImage() else { return false }
+        guard (1...DocumentLimits.maxSide).contains(image.width), (1...DocumentLimits.maxSide).contains(image.height),
+              image.width * image.height <= DocumentLimits.documentPixelBudget else {
+            current.session.importError = ImageImportError.tooLarge.localizedDescription
+            return true
+        }
+        current.session.commitTransform()
+        let session = addTab().session
+        session.beginEdit("New from Clipboard")
+        session.createDocument(width: image.width, height: image.height)
+        session.addPixelLayer(image, at: .zero, name: session.nextLayerName(), editName: "Paste")
+        session.endEdit()
+        return true
+    }
     func copyLayer(_ id: UUID, into destination: UUID?, at point: CGPoint? = nil) async {
         await copyLayers([id], into: destination, at: point)
     }
