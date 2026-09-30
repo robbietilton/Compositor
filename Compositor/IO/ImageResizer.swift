@@ -25,6 +25,9 @@ actor ImageResizer {
         guard options.width * options.height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
         let sx = CGFloat(options.width) / CGFloat(old.width)
         let sy = CGFloat(options.height) / CGFloat(old.height)
+        // Effects are sized in pixels, so they scale with the pixels, as Photoshop's Scale Styles does: by the mean of
+        // the two factors when the image is stretched. Live text and shapes are resampled into plain pixels.
+        let effectScale = (sx * sy).squareRoot()
         manifest.guides = old.guides?.map { $0.scaled(x: sx, y: sy) }
         var images: [UUID: ImportedImage] = [:]
         var masks: [UUID: ImportedImage] = [:]
@@ -95,7 +98,7 @@ actor ImageResizer {
             manifest.layers.append(ProjectLayerRecord(id: layer.id, name: layer.name, isVisible: layer.isVisible,
                 transform: transform, imageFile: layer.imageFile, parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.maskFile, maskEnabled: layer.maskEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment,
                 maskPlacement: layer.maskPlacement.map { $0.placing($0.unitToDocument.concatenating(CGAffineTransform(scaleX: sx, y: sy))) },
-                maskLinked: layer.maskLinked))
+                maskLinked: layer.maskLinked, effects: layer.effects?.scaled(by: effectScale)))
         }
         return ProjectSnapshot(manifest: manifest, images: images, masks: masks)
     }
@@ -111,8 +114,7 @@ extension EditorSession {
         beginEdit(actionName)
         let m = snapshot.manifest
         document = CanvasDocument(id: m.documentID, width: m.width, height: m.height,
-            layers: m.layers.map { ImageLayer(id: $0.id, asset: snapshot.images[$0.id], name: $0.name,
-                isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment) }, resolution: m.resolution ?? 72, guides: m.guides ?? [])
+            layers: snapshot.documentLayers, resolution: m.resolution ?? 72, guides: m.guides ?? [])
         endEdit()
         viewport.fit(documentSize: document!.size)
     }

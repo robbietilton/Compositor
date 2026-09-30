@@ -25,13 +25,7 @@ extension EditorSession {
         let manifest = snapshot.manifest
         transformEdit = nil
         document = CanvasDocument(id: manifest.documentID, width: manifest.width, height: manifest.height,
-            layers: manifest.layers.map {
-                ImageLayer(id: $0.id, asset: snapshot.images[$0.id], name: $0.name,
-                           isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: snapshot.mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
-                           shape: LayerShape.loaded($0.shape, image: snapshot.images[$0.id]?.image),
-                           effects: $0.effects,
-                           text: LayerText.loaded($0.text, image: snapshot.images[$0.id]?.image))
-            }, resolution: manifest.resolution ?? 72, guides: manifest.guides ?? [])
+            layers: snapshot.documentLayers, resolution: manifest.resolution ?? 72, guides: manifest.guides ?? [])
         activeLayerID = manifest.activeLayerID
         projectURL = url
         renamingLayerID = nil
@@ -75,5 +69,20 @@ extension EditorSession {
         guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
         clearProject()
         createDocument(width: width, height: height, emptyLayer: true)
+    }
+}
+
+extension ProjectSnapshot {
+    /// The layers the manifest records, each with its pixels, mask, effects and live text or shape. Opening a project
+    /// and the edits that rebuild the document from a snapshot (canvas and image size, crop, trim) all build them here,
+    /// so none of them leaves part of a layer behind.
+    var documentLayers: [ImageLayer] {
+        manifest.layers.map {
+            ImageLayer(id: $0.id, asset: images[$0.id], name: $0.name,
+                       isVisible: $0.isVisible, transform: $0.transform, parentID: $0.parentID, isGroup: $0.isGroup == true, opacity: $0.opacity ?? 1, blendMode: $0.blendMode ?? .normal, mask: mask(for: $0), maskSourceID: $0.maskSourceID, adjustment: $0.adjustment,
+                       shape: LayerShape.loaded($0.shape, image: images[$0.id]?.image),
+                       effects: $0.effects,
+                       text: LayerText.loaded($0.text, image: images[$0.id]?.image))
+        }
     }
 }

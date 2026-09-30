@@ -137,6 +137,20 @@ nonisolated struct LayerEffects: Codable, Equatable, Sendable {
             && (colorOverlay?.isValid ?? true) && (innerShadow?.isValid ?? true)
             && (outerGlow?.isValid ?? true) && (innerGlow?.isValid ?? true)
     }
+    /// The effects for an image resampled by `factor`: every size, distance and blur in pixels scaled with it, held to
+    /// the ranges `isValid` accepts.
+    func scaled(by factor: CGFloat) -> LayerEffects {
+        func scale(_ value: CGFloat?, upTo limit: CGFloat) -> CGFloat { min(limit, (value ?? 0) * factor) }
+        var result = self
+        result.stroke?.size = scale(stroke?.size, upTo: 500)
+        result.shadow?.distance = scale(shadow?.distance, upTo: 5000)
+        result.shadow?.blur = scale(shadow?.blur, upTo: 500)
+        result.innerShadow?.distance = scale(innerShadow?.distance, upTo: 5000)
+        result.innerShadow?.blur = scale(innerShadow?.blur, upTo: 500)
+        result.outerGlow?.size = scale(outerGlow?.size, upTo: 500)
+        result.innerGlow?.size = scale(innerGlow?.size, upTo: 500)
+        return result
+    }
     var kinds: [LayerEffectKind] { LayerEffectKind.allCases.filter { contains($0) } }
     func contains(_ kind: LayerEffectKind) -> Bool {
         switch kind {

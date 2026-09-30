@@ -97,7 +97,8 @@ extension EditorSession {
             guard let index = document?.layers.firstIndex(where: { $0.id == source.id }) else { throw ProjectError.invalid }
             document?.layers[index] = ImageLayer(id: source.id, asset: merged.asset, name: source.name, isVisible: source.isVisible,
                 transform: merged.transform, parentID: source.parentID, isGroup: false,
-                opacity: source.opacity, blendMode: source.blendMode, mask: merged.mask, maskSourceID: source.maskSourceID)
+                opacity: source.opacity, blendMode: source.blendMode, mask: merged.mask, maskSourceID: source.maskSourceID,
+                effects: source.effects)
             document?.selection = moved
             activeLayerID = source.id
         } catch {
