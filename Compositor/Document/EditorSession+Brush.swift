@@ -65,6 +65,16 @@ extension EditorSession {
             var settings = brushSettings
             settings.healing = tool == .spotHealing
             settings.erasing = tool == .brush && brushMode == .erase && !isMaskSelected
+            if tool == .brush, let lightens = brushMode.toneLightens {
+                guard !isMaskSelected else {
+                    brushError = "Dodge and Burn lighten and darken a layer’s pixels, not its mask. Click the layer’s thumbnail to work on its pixels."
+                    return
+                }
+                guard layer.asset != nil else { brushError = "“\(layer.name)” has no pixels yet to lighten or darken."; return }
+                // At 0% nothing would change; there's no stroke to make.
+                guard toneExposure > 0 else { return }
+                settings.toning = BrushToning(lightens: lightens, range: toneRange, exposure: toneExposure)
+            }
             settings.healingMode = spotHealingMode
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
@@ -142,7 +152,7 @@ extension EditorSession {
             }
             try stroke.flush()
             if stroke.settings.healing { try stroke.heal() }
-            if !stroke.patches.isEmpty { try commitPaintSnapshot(stroke) }
+            if !stroke.patches.isEmpty, stroke.settings.toning == nil || stroke.changesPixels { try commitPaintSnapshot(stroke) }
         } catch { brushError = error.localizedDescription }
         return true
     }
@@ -164,7 +174,7 @@ extension EditorSession {
             mask = original.replacing(ImportedImage(image: try raster.makeImage(), thumbnail: try raster.thumbnail(),
                 name: original.asset.name, raster: raster))
         }
-        beginEdit(stroke.editName ?? (stroke.isMask ? "Paint Mask" : stroke.settings.erasing ? "Erase" : stroke.isBlur ? "Blur" : stroke.clone != nil ? "Clone Stamp" : stroke.settings.healing ? "Spot Healing" : "Brush Stroke"))
+        beginEdit(stroke.editName ?? stroke.settings.toning.map { $0.lightens ? "Dodge" : "Burn" } ?? (stroke.isMask ? "Paint Mask" : stroke.settings.erasing ? "Erase" : stroke.isBlur ? "Blur" : stroke.clone != nil ? "Clone Stamp" : stroke.settings.healing ? "Spot Healing" : "Brush Stroke"))
         if stroke.isMask {
             document?.layers[index].mask = current.mask.map { mask in
                 var painted = mask.replacing(result.asset)

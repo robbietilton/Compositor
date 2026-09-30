@@ -4,13 +4,13 @@ struct BrushControls: View {
     @Bindable var session: EditorSession
     var body: some View {
         HStack(spacing: 12) {
-            Text(session.tool == .spotHealing ? "Spot Healing" : session.tool == .cloneStamp ? "Clone Stamp" : session.tool == .blur ? "Smear" : session.brushMode == .erase ? "Eraser" : "Brush").font(ToolHeaderStyle.titleFont)
+            Text(session.tool == .spotHealing ? "Spot Healing" : session.tool == .cloneStamp ? "Clone Stamp" : session.tool == .blur ? "Smear" : session.brushMode == .erase ? "Eraser" : session.brushMode == .paint ? "Brush" : session.brushMode.rawValue).font(ToolHeaderStyle.titleFont)
             if session.tool == .brush {
                 Picker("Mode", selection: $session.brushMode) {
                     ForEach(BrushToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .help("Paint with the foreground color (B), or erase pixels away (E)")
+                .help("Paint with the foreground color (B), erase pixels away (E), or lighten (Dodge) or darken (Burn) them. Tab steps through them.")
             }
             if session.tool == .blur {
                 Picker("Mode", selection: $session.blurMode) {
@@ -82,6 +82,24 @@ struct BrushControls: View {
                     .help("How far the blur softens, in pixels")
                     .unitSuffix("px")
             }
+            // Dodge and Burn: which tones they reach, and how far they move them.
+            if session.tool == .brush, session.brushMode.toneLightens != nil {
+                Picker("Range", selection: $session.toneRange) {
+                    ForEach(ToneRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .fixedSize()
+                .help("Work mostly on the dark, middle or light tones; the rest are touched less the further they are")
+                Text("Exposure").scrubbable(sensitivity: 0.01, value: $session.toneExposure, range: 0...1)
+                Slider(value: $session.toneExposure, in: 0...1).frame(width: 100)
+                TextField("Exposure", value: Binding<Double>(get: { Double(session.toneExposure * 100) },
+                    set: { session.toneExposure = $0.isFinite ? CGFloat(min(100, max(0, $0)) / 100) : 0.5 }),
+                    format: .number.precision(.fractionLength(0)))
+                    .frame(width: 42).textFieldStyle(.roundedBorder)
+                    .arrowSteps(value: { Double(session.toneExposure * 100) },
+                                change: { session.toneExposure = CGFloat(min(100, max(0, $0)) / 100) })
+                    .help("How far a full-strength stroke moves the pixels toward white or black")
+                    .unitSuffix("%")
+            }
             // Paint and Erase only: healing, cloning and smearing have their own feel.
             if session.tool == .brush {
                 Text("Smoothing")
@@ -100,7 +118,8 @@ struct BrushControls: View {
                     Text("Black · Hide").tag(false)
                     Text("White · Reveal").tag(true)
                 }.frame(width: 180)
-            } else if session.tool != .cloneStamp, session.tool != .blur {
+            } else if session.tool != .cloneStamp, session.tool != .blur,
+                      !(session.tool == .brush && session.brushMode.toneLightens != nil) {
                 // Same foreground color and Color Picker as the tool-rail swatch.
                 HStack(spacing: 6) {
                     Text("Color")
