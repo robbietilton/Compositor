@@ -34,6 +34,8 @@ final class ToolOptionsBar: UIView {
         /// An ellipse shows Anti-alias and a rectangle doesn't; Wand and Object have settings of their own.
         let marqueeKind: LassoKind
         let wandMode: WandMode
+        /// A line has a width and a rectangle a corner radius.
+        let shapeKind: ShapeKind
     }
 
     override init(frame: CGRect) {
@@ -64,7 +66,7 @@ final class ToolOptionsBar: UIView {
         guard let session else { return }
         let key = Key(tool: session.tool, brushMode: session.brushMode, blurMode: session.blurMode,
                       maskSelected: session.isMaskSelected, hasDocument: session.document != nil,
-                      marqueeKind: session.marqueeKind, wandMode: session.wandMode)
+                      marqueeKind: session.marqueeKind, wandMode: session.wandMode, shapeKind: session.shapeKind)
         if key != shownKey {
             shownKey = key
             build(for: session)
@@ -80,6 +82,8 @@ final class ToolOptionsBar: UIView {
         case .move: buildTransform()
         case .marquee, .lasso, .wand: buildSelection(for: session)
         case .crop: buildCrop()
+        case .gradient: buildGradient(for: session)
+        case .shape: buildShape(for: session)
         case let tool where tool.isBrushTool && ToolRailView.touchTools.contains(tool): buildBrush(for: session)
         case .hand, .zoom: buildNavigation(zoom: session.tool == .zoom)
         case .eyedropper: buildEyedropper()
@@ -415,6 +419,91 @@ final class ToolOptionsBar: UIView {
         }
     }
 
+    /// The Mac's Gradient bar: the gradient's shape and colors, Reverse and Opacity, and while a gradient waits for them,
+    /// Cancel and Apply.
+    private func buildGradient(for session: EditorSession) {
+        let shapes = GradientShape.allCases
+        let shape = OptionControls.segments(shapes.map(\.rawValue)) { [weak self] in self?.session?.gradientSettings.shape = shapes[$0] }
+        let swatch = GradientSwatch()
+        let styles = GradientStyle.allCases
+        let style = PopUpButton()
+        style.accessibilityLabel = "Colors"
+        style.onChoose = { [weak self] name in
+            guard let style = GradientStyle(rawValue: name) else { return }
+            self?.session?.gradientSettings.style = style
+        }
+        let reverse = OptionControls.checkbox("Reverse") { [weak self] in self?.session?.gradientSettings.reversed = $0 }
+        let opacity = SliderField(caption: "Opacity", unit: "%", sliderRange: 0.01...1, fieldRange: 0.01...1, fieldScale: 100,
+                                  sensitivity: 0.01)
+        opacity.onChange = { [weak self] in self?.session?.gradientSettings.opacity = CGFloat($0) }
+        let cancel = OptionControls.button("Cancel") { [weak self] in self?.session?.cancelGradient() }
+        let apply = OptionControls.button("Apply", prominent: true) { [weak self] in
+            guard let session = self?.session else { return }
+            Task { await session.commitGradient() }
+        }
+        let pending = OptionControls.row([cancel, apply])
+
+        for view in [OptionControls.title("Gradient"), shape, swatch, style, reverse, opacity] as [UIView] { add(view) }
+        addSpace()
+        if session.isMaskSelected { add(OptionControls.caption("Mask", color: .secondaryLabel)) }
+        add(pending)
+
+        refreshers.append { [weak self] session in
+            shape.selectedSegmentIndex = shapes.firstIndex(of: session.gradientSettings.shape) ?? 0
+            swatch.colors = session.gradientColors(mask: false)
+            style.show([styles.map(\.rawValue)], chosen: session.gradientSettings.style.rawValue)
+            reverse.isSelected = session.gradientSettings.reversed
+            opacity.show(Double(session.gradientSettings.opacity))
+            let waiting = session.gradientEdit != nil
+            pending.alpha = waiting ? 1 : 0
+            pending.isUserInteractionEnabled = waiting
+            let usable = !session.showsBusy && session.document != nil
+            self?.content.isUserInteractionEnabled = usable
+            self?.content.alpha = usable ? 1 : 0.5
+        }
+    }
+
+    /// The Mac's Shape bar: the shape, a line's width or a rectangle's corner radius, and the foreground color it's
+    /// filled with.
+    private func buildShape(for session: EditorSession) {
+        let kinds = ShapeKind.allCases
+        let kind = OptionControls.segments(kinds.map(\.rawValue)) { [weak self] index in
+            self?.session?.cancelShape()
+            self?.session?.shapeKind = kinds[index]
+        }
+        add(OptionControls.title("Shape"))
+        add(kind)
+        refreshers.append { kind.selectedSegmentIndex = kinds.firstIndex(of: $0.shapeKind) ?? 0 }
+        if session.shapeKind == .line {
+            let width = SliderField(caption: "Width", unit: "px", sliderRange: 1...100, fieldRange: 1...5000, sensitivity: 1)
+            width.onChange = { [weak self] in self?.session?.shapeLineWidth = min(5000, max(1, $0.rounded())) }
+            add(width)
+            refreshers.append { width.show($0.shapeLineWidth) }
+        }
+        if session.shapeKind == .rectangle {
+            let radius = SliderField(caption: "Radius", unit: "px", sliderRange: 0...200, fieldRange: 0...5000, sensitivity: 1)
+            radius.onChange = { [weak self] in self?.session?.shapeCornerRadius = min(5000, max(0, $0.rounded())) }
+            add(radius)
+            refreshers.append { radius.show($0.shapeCornerRadius) }
+        }
+        // Shapes fill with the foreground color; the swatch opens its picker, as the rail's does.
+        let swatch = ColorSwatchButton()
+        swatch.accessibilityLabel = "Fill color"
+        swatch.addAction(UIAction { [weak self, weak swatch] _ in
+            guard let swatch else { return }
+            self?.onChooseForeground(swatch)
+        }, for: .primaryActionTriggered)
+        add(OptionControls.row([OptionControls.caption("Fill", color: .secondaryLabel), swatch], spacing: 8))
+
+        refreshers.append { [weak self] session in
+            swatch.color = session.foregroundColor
+            swatch.isEnabled = session.canEditPalette
+            let usable = !session.showsBusy && session.document != nil
+            self?.content.isUserInteractionEnabled = usable
+            self?.content.alpha = usable ? 1 : 0.5
+        }
+    }
+
     /// The frame's shapes in the Crop bar, as the Mac's has them.
     static let cropRatios = ["Free", "Original", "1:1", "4:3", "3:4", "16:9", "9:16"]
 
@@ -501,6 +590,44 @@ final class ToolOptionsBar: UIView {
 }
 
 /// A color as the Mac's swatches draw it: a rounded rectangle with a white inner and a black outer edge.
+/// A gradient's colors from end to end over a checkerboard, so transparency reads as transparency, as the Mac's
+/// Gradient bar shows them.
+final class GradientSwatch: UIView {
+    var colors: [CGColor] = [] { didSet { setNeedsDisplay() } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        layer.cornerRadius = 3
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        layer.borderWidth = 1
+        layer.borderColor = UIColor(white: 0, alpha: 0.5).cgColor
+        widthAnchor.constraint(equalToConstant: 56).isActive = true
+        heightAnchor.constraint(equalToConstant: 18).isActive = true
+        isAccessibilityElement = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(bounds)
+        let tile: CGFloat = 4
+        context.setFillColor(UIColor(white: 0.5, alpha: 0.45).cgColor)
+        for row in 0..<Int(ceil(bounds.height / tile)) {
+            for column in 0..<Int(ceil(bounds.width / tile)) where (row + column).isMultiple(of: 2) {
+                context.fill(CGRect(x: CGFloat(column) * tile, y: CGFloat(row) * tile, width: tile, height: tile))
+            }
+        }
+        guard colors.count >= 2,
+              let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray, locations: nil)
+        else { return }
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: bounds.width, y: 0), options: [])
+    }
+}
+
 final class ColorSwatchButton: UIControl {
     var color = PaletteColor.black {
         didSet { fill.backgroundColor = UIColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1) }

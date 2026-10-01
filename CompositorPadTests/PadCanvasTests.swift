@@ -153,6 +153,38 @@ import Testing
         #expect(undone.0 == undone.1 && undone.1 == undone.2, "after undo \(undone)")
     }
 
+    /// A shape being dragged out shows where its layer will go, just above the active layer: under the layers above it.
+    @Test func drawsAShapeBeingDraggedOutAboveTheActiveLayer() throws {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 400, height: 300), backingScale: 1, documentSize: nil)
+        session.createNewProject(width: 400, height: 300)
+        session.zoom(to: 1)
+        let below = try #require(session.activeLayerID)
+        // A red layer above it, in the middle.
+        let context = try BrushRaster.context(width: 100, height: 100, mask: false)
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Red"))
+        let red = try #require(session.activeLayer?.transform)
+        session.selectLayer(below)
+        session.selectTool(.shape)
+        session.shapeKind = .rectangle
+        session.foregroundColor = PaletteColor(red: 0, green: 0, blue: 1)
+        session.beginShape(at: CGPoint(x: 20, y: 20))
+        session.dragShape(to: CGPoint(x: 380, y: 280), square: false, fromCenter: false)
+
+        let bytes = try frameBytes(session, size: CGSize(width: 400, height: 300))
+        func pixel(_ x: Int, _ y: Int) -> (Int, Int, Int) {
+            let i = (y * 400 + x) * 4
+            return (Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2]))
+        }
+        let shape = pixel(40, 40)
+        #expect(shape.0 < 25 && shape.1 < 25 && shape.2 > 230, "shape \(shape)")
+        let covered = pixel(Int(red.origin.x) + 50, Int(red.origin.y) + 50)
+        #expect(covered.0 > 230 && covered.1 < 25 && covered.2 < 25, "covered \(covered)")
+    }
+
     /// Text is drawn through UIKit on iPad: upright, like the Mac's — a T's bar is at its top.
     @Test func drawsTextUpright() throws {
         var style = LayerTextStyle()

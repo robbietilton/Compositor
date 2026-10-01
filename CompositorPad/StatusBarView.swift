@@ -91,6 +91,11 @@ final class StatusBarView: UIView {
             return "\(tap) · Drag inside to move it · Two fingers move and zoom"
         case .crop:
             return "Drag a frame, or its edges · Drag inside to move it · Two fingers move and zoom"
+        case .gradient:
+            return (fingerPaints ? "Drag out a gradient" : "Drag out a gradient with Apple Pencil") + ", or move one of its ends · \(fingers)"
+        case .shape:
+            let shape = session.shapeKind == .ellipse ? "an ellipse" : "a " + session.shapeKind.rawValue.lowercased()
+            return "Drag out \(shape)\(fingerPaints ? "" : " with Apple Pencil") · \(fingers)"
         case .eyedropper:
             return "Touch to pick up a color · Two fingers move and zoom"
         case .hand:

@@ -5,8 +5,8 @@ import UIKit
 /// The iPad canvas's frame, composited on the GPU the way the Mac canvas composites its own.
 ///
 /// Adapted from `CanvasView`'s GPU drawing in Rendering/EditorCanvas.swift, which lives inside the AppKit view for
-/// now. Once that compositing moves out of the view, both canvases draw from it and this copy goes. Text being typed
-/// and shapes being dragged out are left out: the iPad has neither tool yet.
+/// now. Once that compositing moves out of the view, both canvases draw from it and this copy goes. Text being typed is
+/// left out: the iPad has no Type tool yet.
 @MainActor final class PadCanvasCompositor {
     let session: EditorSession
     /// Called when something drawn in the background (a layer's effects) is ready to be shown.
@@ -437,6 +437,11 @@ import UIKit
                                                                              kCIInputMaskImageKey: coverage])
         }
         var result = CIImage.empty()
+        // A shape being dragged out goes where its layer will: just above the active layer.
+        func drafts(after id: UUID, over image: CIImage) -> CIImage {
+            guard id == session.activeLayerID, let shape = session.shapeDraftImage(placement: placement) else { return image }
+            return shape.composited(over: image)
+        }
         for id in ids where !stacked.contains(id) {
             guard let layer = byID[id] else { continue }
             let mode = session.displayedBlendMode(for: layer)
@@ -454,6 +459,7 @@ import UIKit
                 }
                 var group = base.applyingFilter("CIColorMatrix", parameters: [
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0), "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1)])
+                group = drafts(after: id, over: group)
                 for childID in children {
                     guard let child = byID[childID] else { continue }
                     if let adjustment = child.adjustment {
@@ -462,6 +468,7 @@ import UIKit
                     } else if let image = own(child) {
                         group = GPUBlend.blend(image, over: group, mode: session.displayedBlendMode(for: child))
                     } else if unsupported { return nil }
+                    group = drafts(after: childID, over: group)
                 }
                 let stack = group.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(),
                                                                                        kCIInputMaskImageKey: base])
@@ -472,6 +479,7 @@ import UIKit
             if let image = live(layer) {
                 result = GPUBlend.blend(clippedByFolders(id, image), over: result, mode: mode)
             } else if unsupported { return nil }
+            result = drafts(after: id, over: result)
         }
         return result
     }

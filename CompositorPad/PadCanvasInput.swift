@@ -1,8 +1,8 @@
 import UIKit
 
-/// What a touch does with the Move, Crop and selection tools, as the Mac's canvas does with the mouse, apart from
-/// UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a hardware keyboard
-/// holds. The iPad canvas feeds it touches; tests feed it points.
+/// What a touch does with the Move, Crop, Gradient, Shape and selection tools, as the Mac's canvas does with the mouse,
+/// apart from UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a hardware
+/// keyboard holds. The iPad canvas feeds it touches; tests feed it points.
 @MainActor final class PadCanvasInput {
     let session: EditorSession
     /// Asks for the overlay to be drawn again though nothing it observes changed, as the lines a drag snaps to.
@@ -29,7 +29,12 @@ import UIKit
         case pixels(start: CGPoint)
         /// The crop frame drawn, moved or resized, snapping to `snap`; `before` is the frame it had.
         case crop(CropDrag, snap: CropSnap, before: CGRect?)
+        /// An end of the gradient's line: the line as it was, or nil when the drag made the gradient.
+        case gradient(GradientEnd, before: (start: CGPoint, end: CGPoint)?)
+        /// A shape being dragged out.
+        case shape
     }
+    enum GradientEnd { case start, end }
     private var drag: Drag?
     /// Whether Shift squares a marquee: a Shift already held at the press chose Add instead, until it's let go.
     private var squareArmed = false
@@ -39,7 +44,9 @@ import UIKit
     }
 
     /// Whether this handles touches with `tool`.
-    static func handles(_ tool: NavigationTool) -> Bool { tool == .move || tool == .crop || tool.isSelectionTool }
+    static func handles(_ tool: NavigationTool) -> Bool {
+        tool == .move || tool == .crop || tool == .gradient || tool == .shape || tool.isSelectionTool
+    }
 
     var isDragging: Bool { drag != nil }
 
@@ -64,6 +71,13 @@ import UIKit
         }
         if session.tool == .crop {
             beginCrop(at: point, pixel: pixel)
+            return true
+        }
+        if session.tool == .gradient { return beginGradient(at: point, pixel: pixel) }
+        if session.tool == .shape {
+            session.beginShape(at: snappedCorner(pixel, keys: keys))
+            guard session.shapeDraft != nil else { return false }
+            drag = .shape
             return true
         }
         guard session.tool.isSelectionTool else { return false }
@@ -149,6 +163,16 @@ import UIKit
                 next = snap.apply(next, drag: crop, point: pixel, ratio: session.cropRatio, symmetric: symmetric)
             }
             if CropGeometry.valid(next) { session.cropRect = next }
+        case .gradient(let end, _):
+            guard let edit = session.gradientEdit else { return }
+            // Shift turns the line to 45° steps about its other end.
+            let pixel = keys.contains(.shift) ? GradientEdit.constrained(pixel, around: end == .start ? edit.end : edit.start) : pixel
+            session.moveGradient(start: end == .start ? pixel : nil, end: end == .end ? pixel : nil)
+            overlayChanged()
+        case .shape:
+            // Shift squares the shape, or turns a line to 45° steps; Option grows it from its center.
+            session.dragShape(to: snappedCorner(pixel, keys: keys), square: keys.contains(.shift), fromCenter: keys.contains(.alternate))
+            overlayChanged()
         }
     }
 
@@ -183,6 +207,11 @@ import UIKit
         case .crop:
             // The frame stays for Apply Crop, or Return.
             break
+        case .gradient:
+            // The line stays, its ends to drag, until Apply or Return.
+            session.endGradientDrag()
+        case .shape:
+            session.finishShape()
         }
     }
 
@@ -205,6 +234,10 @@ import UIKit
             session.cancelPixelMove()
         case .crop(_, _, let before):
             session.cropRect = before
+        case .gradient(_, let before):
+            if let before { session.moveGradient(start: before.start, end: before.end) } else { session.cancelGradient() }
+        case .shape:
+            session.cancelShape()
         }
     }
 
@@ -227,6 +260,24 @@ import UIKit
         let targets = session.cropSnapTargets()
         let snap = CropSnap(xs: targets.xs, ys: targets.ys, tolerance: Self.cropSnapDistance / max(session.viewport.pointsPerPixel, 0.0001))
         drag = .crop(CropDrag(start: pixel, original: rect, mode: mode), snap: snap, before: before)
+    }
+
+    /// A press with the Gradient tool, as the Mac's: on an end of the line it moves that end; anywhere else it starts the
+    /// line again, or a new gradient. A finger finds an end further off than the Mac's pointer does.
+    private func beginGradient(at point: CGPoint, pixel: CGPoint) -> Bool {
+        let before = session.gradientEdit.map { (start: $0.start, end: $0.end) }
+        if let line = overlay.gradientLine {
+            let ends: [(end: GradientEnd, distance: CGFloat)] = [(.end, hypot(point.x - line.end.x, point.y - line.end.y)),
+                                                                  (.start, hypot(point.x - line.start.x, point.y - line.start.y))]
+            if let nearest = ends.filter({ $0.distance <= Self.reach }).min(by: { $0.distance < $1.distance }) {
+                drag = .gradient(nearest.end, before: before)
+                return true
+            }
+        }
+        session.beginGradient(at: pixel)
+        guard session.gradientEdit != nil else { return false }
+        drag = .gradient(.end, before: before)
+        return true
     }
 
     /// The crop frame's handle under a finger, found further off than the Mac's pointer finds it: the nearest corner

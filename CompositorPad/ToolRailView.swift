@@ -11,7 +11,8 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
     weak var presenter: UIViewController?
 
     /// What a finger or Apple Pencil can do on the canvas so far.
-    static let touchTools: Set<NavigationTool> = [.move, .marquee, .lasso, .wand, .crop, .brush, .blur, .eyedropper, .hand, .zoom]
+    static let touchTools: Set<NavigationTool> = [.move, .marquee, .lasso, .wand, .crop, .brush, .blur, .gradient, .shape,
+                                                    .eyedropper, .hand, .zoom]
 
     private let tools = NavigationTool.allCases.filter { $0 != .idle }
     private var buttons: [NavigationTool: UIButton] = [:]

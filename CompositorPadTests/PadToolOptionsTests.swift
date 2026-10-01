@@ -68,6 +68,17 @@ import UIKit
         #expect(abs(gap(after: deselect, in: bar) - 18) < 1)
     }
 
+    /// A gradient waiting for them has Cancel and Apply at the Gradient bar's end.
+    @Test func applySitsAtTheGradientBarsEnd() throws {
+        let session = try session()
+        session.selectTool(.gradient)
+        session.beginGradient(at: CGPoint(x: 10, y: 10))
+        session.moveGradient(end: CGPoint(x: 200, y: 10))
+        let bar = bar(for: session, width: 2400)
+        let apply = try #require(views(UIButton.self, in: bar).first { $0.configuration?.title == "Apply" })
+        #expect(abs(gap(after: apply, in: bar) - 18) < 1)
+    }
+
     /// The Crop bar has Cancel and Apply Crop at its end.
     @Test func applyCropSitsAtTheCropBarsEnd() throws {
         let session = try session()
