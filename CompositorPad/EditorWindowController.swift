@@ -515,13 +515,66 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         present(alert, animated: true)
     }
 
-    /// The project as an export takes it: a crop in progress is set aside and a transform kept first, as the Mac's exports
-    /// begin. Not while an editor or a dialog is open over the window, which what the export shows would have to wait for.
-    private func exportSnapshot(of session: EditorSession) -> ProjectSnapshot? {
-        guard presentedViewController == nil, session.canStartProjectOperation else { return nil }
+    /// Readies the project for something that works on all of it, as the Mac's project operations begin: a crop in
+    /// progress is set aside and a transform kept. Not while an editor or a dialog is open over the window, which what
+    /// the operation shows would have to wait for.
+    private func beginProjectOperation(on session: EditorSession) -> Bool {
+        guard presentedViewController == nil, session.canStartProjectOperation else { return false }
         session.cancelCrop()
         session.commitTransform()
-        return session.projectSnapshot()
+        return true
+    }
+
+    /// The project as an export takes it.
+    private func exportSnapshot(of session: EditorSession) -> ProjectSnapshot? {
+        beginProjectOperation(on: session) ? session.projectSnapshot() : nil
+    }
+
+    /// The resize a size dialog set going, if any. Tests wait for it.
+    private(set) var resizing: Task<Void, Never>?
+
+    /// Image › Canvas Size…, as the Mac's sheet. The project waits while it's open; OK resizes the canvas as one step to
+    /// undo.
+    @objc func canvasSize(_ sender: Any?) {
+        if let dialog = canvasSizeDialog() { present(dialog, animated: true) }
+    }
+    func canvasSizeDialog() -> CanvasSizeController? {
+        guard let session = activeTab?.session, let document = session.document, beginProjectOperation(on: session) else { return nil }
+        session.isProjectBusy = true
+        return CanvasSizeController(document: document, session: session) { [weak self] options in
+            self?.dismiss(animated: true)
+            guard let options, let snapshot = session.projectSnapshot() else {
+                session.isProjectBusy = false
+                return
+            }
+            self?.resizing = Task { [weak self] in
+                defer { session.isProjectBusy = false }
+                do { session.applyDocumentSize(try await CanvasResizer.shared.resize(snapshot, to: options), actionName: "Canvas Size") }
+                catch { self?.showError("Couldn’t change canvas size", error) }
+            }
+        }
+    }
+
+    /// Image › Image Size…, as the Mac's sheet. The project waits while it's open; Resize resamples the layers, or sets
+    /// only the resolution, as one step to undo.
+    @objc func imageSize(_ sender: Any?) {
+        if let dialog = imageSizeDialog() { present(dialog, animated: true) }
+    }
+    func imageSizeDialog() -> ImageSizeController? {
+        guard let session = activeTab?.session, let document = session.document, beginProjectOperation(on: session) else { return nil }
+        session.isProjectBusy = true
+        return ImageSizeController(document: document) { [weak self] options in
+            self?.dismiss(animated: true)
+            guard let options, let snapshot = session.projectSnapshot() else {
+                session.isProjectBusy = false
+                return
+            }
+            self?.resizing = Task { [weak self] in
+                defer { session.isProjectBusy = false }
+                do { session.applyImageSize(try await ImageResizer.shared.resize(snapshot, to: options)) }
+                catch { self?.showError("Couldn’t resize the image", error) }
+            }
+        }
     }
 
     /// The flattened image as PNG, to share, save to Photos or keep in Files.
@@ -677,7 +730,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         if presentedViewController != nil, Self.canvasKeys.contains(action) { return false }
         switch action {
         case #selector(saveProject(_:)), #selector(duplicateProject(_:)), #selector(renameProject(_:)): return hasFile
-        case #selector(exportPNG(_:)), #selector(exportJPEG(_:)):
+        case #selector(exportPNG(_:)), #selector(exportJPEG(_:)), #selector(canvasSize(_:)), #selector(imageSize(_:)):
             return hasDocument && session?.canStartProjectOperation == true && presentedViewController == nil
         case #selector(fitCanvas(_:)), #selector(actualPixels(_:)),
              #selector(zoomIn(_:)), #selector(zoomOut(_:)): return hasDocument

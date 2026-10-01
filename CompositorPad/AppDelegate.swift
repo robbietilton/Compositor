@@ -62,6 +62,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Levels…", action: #selector(Window.levels(_:)), input: "l", modifierFlags: .command),
             UIKeyCommand(title: "Hue/Saturation…", action: #selector(Window.hueSaturation(_:)), input: "u", modifierFlags: .command),
             UIKeyCommand(title: "Invert", action: #selector(Window.invertPixels(_:)), input: "i", modifierFlags: .command),
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "Canvas Size…", action: #selector(Window.canvasSize(_:)), input: "c", modifierFlags: [.command, .alternate]),
+                UIKeyCommand(title: "Image Size…", action: #selector(Window.imageSize(_:)), input: "i", modifierFlags: [.command, .alternate]),
+            ]),
         ]), afterMenu: .edit)
         let layer = UIMenu.Identifier("com.wonderassembly.compositor.layer")
         builder.insertSibling(UIMenu(title: "Layer", identifier: layer, children: [

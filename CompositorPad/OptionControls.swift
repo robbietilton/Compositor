@@ -140,8 +140,10 @@ final class NumberField: UIView, UITextFieldDelegate {
 
     let field = UITextField()
     private let caption: UILabel?
-    private let range: ClosedRange<Double>
-    private let sensitivity: Double
+    /// What typing or scrubbing can set, and how much a point of scrubbing changes it; a dialog whose units change moves
+    /// them.
+    var range: ClosedRange<Double>
+    var sensitivity: Double
     private let format: (Double) -> String
     private var shown: Double = 0
     private var scrubStart: Double?
@@ -202,6 +204,13 @@ final class NumberField: UIView, UITextFieldDelegate {
             caption?.isUserInteractionEnabled = newValue
             caption?.textColor = newValue ? .secondaryLabel : .tertiaryLabel
         }
+    }
+
+    /// Gives the caption `width`, so the fields of a form line up under one another.
+    func alignCaption(width: CGFloat) {
+        guard let caption else { return }
+        caption.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        caption.widthAnchor.constraint(equalToConstant: width).isActive = true
     }
 
     private func typed() {
