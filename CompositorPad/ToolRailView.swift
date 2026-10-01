@@ -106,8 +106,7 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         for tool in tools {
             guard let button = buttons[tool] else { continue }
             let selected = session.tool == tool
-            button.configuration?.image = UIImage(systemName: Self.symbol(for: tool, in: session),
-                                                  withConfiguration: UIImage.SymbolConfiguration(pointSize: 19))
+            button.configuration?.image = Self.image(for: tool, in: session)
             button.backgroundColor = selected ? UIColor(white: 1, alpha: 0.12) : .clear
             button.layer.borderWidth = selected ? 1 : 0
             button.layer.borderColor = UIColor(white: 1, alpha: 0.14).cgColor
@@ -125,9 +124,32 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         fingerButton.accessibilityValue = fingerPaints ? "On" : "Off"
     }
 
-    /// The Mac rail's icons: SF Symbols, the Marquee's following its shape and the Brush's its mode.
+    /// The Mac rail's icons: SF Symbols, the Marquee's following its shape and the Brush's its mode, and the Mac's own
+    /// icons where SF Symbols has nothing to match, drawn into the rail's assets by scripts/rail-icons.swift.
+    static func image(for tool: NavigationTool, in session: EditorSession) -> UIImage? {
+        switch tool {
+        case .cloneStamp: UIImage(named: "rail.cloneStamp")
+        case .gradient: UIImage(named: "rail.gradient")
+        case .lasso where session.lassoKind == .polygonal: UIImage(named: "rail.lasso.polygonal")
+        case .wand where session.wandMode == .object: UIImage(named: "rail.wand.object")
+        default: UIImage(systemName: symbol(for: tool, in: session),
+                         withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize(for: tool)))
+        }
+    }
+
     static func symbol(for tool: NavigationTool, in session: EditorSession) -> String {
         tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)
+    }
+
+    /// SF Symbols look larger or smaller than one another at one size: the rail draws its symbols at 19 points, and these
+    /// a little smaller or larger, so they look as large as the rest.
+    private static func pointSize(for tool: NavigationTool) -> CGFloat {
+        switch tool {
+        case .marquee, .shape, .type: 17
+        case .wand: 21
+        case .blur: 23
+        default: 19
+        }
     }
 
     // MARK: Colors
