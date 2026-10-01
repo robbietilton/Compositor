@@ -1,8 +1,8 @@
 import UIKit
 
-/// What a touch does with the Move, Crop, Gradient, Shape, Type and selection tools, as the Mac's canvas does with the
-/// mouse, apart from UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a hardware
-/// keyboard holds. The iPad canvas feeds it touches; tests feed it points.
+/// What a touch does with the Move, Crop, Gradient, Shape, Type and selection tools, and with Clone Stamp's source, as
+/// the Mac's canvas does with the mouse, apart from UIKit's touches: a press, drag and lift at points in the canvas's
+/// coordinates, with the keys a hardware keyboard holds. The iPad canvas feeds it touches; tests feed it points.
 @MainActor final class PadCanvasInput {
     let session: EditorSession
     /// Asks for the overlay to be drawn again though nothing it observes changed, as the lines a drag snaps to.
@@ -40,11 +40,15 @@ import UIKit
         case shape
         /// A box for new text, dragged out from `anchor`.
         case textBox(anchor: CGPoint)
+        /// Clone Stamp's source, `grab` from the touch, and the source and alignment it had.
+        case cloneSource(grab: CGSize, before: (source: CGPoint?, offset: CGSize?))
     }
     enum GradientEnd { case start, end }
     private var drag: Drag?
     /// Whether Shift squares a marquee: a Shift already held at the press chose Add instead, until it's let go.
     private var squareArmed = false
+    /// Where the last Clone Stamp stroke ended, in document pixels.
+    private var cloneStrokeEnd: CGPoint?
 
     init(session: EditorSession) {
         self.session = session
@@ -202,6 +206,8 @@ import UIKit
         case .textBox(let anchor):
             textBox = DragBox.rect(from: anchor, to: pixel, square: false, fromCenter: false)
             overlayChanged()
+        case .cloneSource(let grab, _):
+            session.setCloneSource(CGPoint(x: pixel.x + grab.width, y: pixel.y + grab.height))
         }
     }
 
@@ -246,6 +252,9 @@ import UIKit
             textBox = nil
             if rect.width < 4 && rect.height < 4 { session.beginText(at: rect.origin, newLayer: true) }
             else { session.beginText(in: rect) }
+        case .cloneSource:
+            // The source stays where the touch left it.
+            break
         }
     }
 
@@ -274,6 +283,9 @@ import UIKit
             session.cancelShape()
         case .textBox:
             textBox = nil
+        case .cloneSource(_, let before):
+            session.cloneSource = before.source
+            session.cloneOffset = before.offset
         }
     }
 
@@ -296,6 +308,49 @@ import UIKit
         let targets = session.cropSnapTargets()
         let snap = CropSnap(xs: targets.xs, ys: targets.ys, tolerance: Self.cropSnapDistance / max(session.viewport.pointsPerPixel, 0.0001))
         drag = .crop(CropDrag(start: pixel, original: rect, mode: mode), snap: snap, before: before)
+    }
+
+    /// Where Clone Stamp's crosshair marks its source, in document pixels, as the Mac's does, with the brush at `brush`
+    /// while it touches or hovers over the canvas: at the source, or once a stroke has fixed the offset to it, that far
+    /// from the brush. With nothing over the canvas, an aligned source stays where the last stroke left it. Nil with
+    /// other tools, or before a source is set.
+    func cloneSourceMark(brush: CGPoint?) -> CGPoint? {
+        guard session.tool == .cloneStamp, session.document != nil, let source = session.cloneSource else { return nil }
+        if let brush, let sample = session.cloneSamplePoint(for: brush) { return sample }
+        if session.cloneSettings.aligned, let offset = session.cloneOffset, let end = cloneStrokeEnd {
+            return CGPoint(x: end.x + offset.width, y: end.y + offset.height)
+        }
+        return source
+    }
+
+    /// Whether a touch is setting Clone Stamp's source.
+    var isDraggingSource: Bool {
+        if case .cloneSource = drag { return true }
+        return false
+    }
+
+    /// A touch coming down at `point` with Clone Stamp that sets its source rather than painting: with Option held, as an
+    /// Option-click sets it on the Mac; on the source's crosshair, which a finger moves, as in Pixelmator Pro for iPad;
+    /// or, before there's a source to copy from, wherever a touch that `paints` comes down. The source follows the
+    /// touch until it lifts. False for a touch that paints, or one that moves the canvas.
+    func beginSourceDrag(at point: CGPoint, keys: UIKeyModifierFlags = [], paints: Bool = true) -> Bool {
+        guard session.tool == .cloneStamp, let document = session.document, let pixel = pixel(point) else { return false }
+        var grab = CGSize.zero
+        if let mark = cloneSourceMark(brush: nil), !keys.contains(.alternate) {
+            let shown = session.viewport.viewPoint(from: mark, documentSize: document.size)
+            guard hypot(point.x - shown.x, point.y - shown.y) <= Self.reach else { return false }
+            grab = CGSize(width: mark.x - pixel.x, height: mark.y - pixel.y)
+        } else if !keys.contains(.alternate), !paints {
+            return false
+        }
+        drag = .cloneSource(grab: grab, before: (session.cloneSource, session.cloneOffset))
+        session.setCloneSource(CGPoint(x: pixel.x + grab.width, y: pixel.y + grab.height))
+        return true
+    }
+
+    /// The stroke ending at `pixel`, where Clone Stamp's crosshair then keeps an aligned source.
+    func strokeEnded(at pixel: CGPoint?) {
+        if session.tool == .cloneStamp, let pixel { cloneStrokeEnd = pixel }
     }
 
     /// The topmost text on the canvas at `pixel`, as the Mac finds text to open.

@@ -72,6 +72,12 @@ final class StatusBarView: UIView {
         switch session.tool {
         case .brush:
             return "\(pencil) to \(session.brushMode == .erase ? "erase" : "paint") · \(fingers)"
+        case .spotHealing:
+            return "\(pencil) over blemishes to heal · \(fingers)"
+        case .cloneStamp where session.cloneSource == nil:
+            return (fingerPaints ? "Tap" : "Tap with Apple Pencil") + " where to copy from · \(fingers)"
+        case .cloneStamp:
+            return "\(pencil) to clone · Drag the crosshair, or Option-tap, to copy from elsewhere · \(fingers)"
         case .blur:
             let action = session.blurMode == .blur ? "soften" : session.blurMode == .smudge ? "smudge" : "push pixels"
             return "\(pencil) to \(action) · \(fingers)"
@@ -108,8 +114,6 @@ final class StatusBarView: UIView {
             return "Tap to zoom in · Drag right or left to zoom smoothly"
         case .idle:
             return "No tool selected"
-        default:
-            return "\(ToolOptionsBar.name(of: session.tool)) isn't on iPad yet · \(fingers)"
         }
     }
 

@@ -824,8 +824,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The Mac's single-key tools and color keys, on a hardware keyboard.
     override var keyCommands: [UIKeyCommand]? {
         let tools: [(String, NavigationTool)] = [("v", .move), ("m", .marquee), ("l", .lasso), ("w", .wand), ("c", .crop), ("b", .brush),
-                                                 ("r", .blur), ("g", .gradient), ("u", .shape), ("t", .type), ("i", .eyedropper), ("h", .hand),
-                                                 ("z", .zoom)]
+                                                 ("j", .spotHealing), ("s", .cloneStamp), ("r", .blur), ("g", .gradient), ("u", .shape),
+                                                 ("t", .type), ("i", .eyedropper), ("h", .hand), ("z", .zoom)]
         return tools.map { key, tool in
             UIKeyCommand(title: tool.label, action: #selector(toolKey(_:)), input: key, propertyList: tool.rawValue)
         } + [

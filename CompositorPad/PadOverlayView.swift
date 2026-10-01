@@ -2,12 +2,47 @@ import Observation
 import UIKit
 
 /// What's drawn over the canvas: the transform box and its handles, guides, the crop frame, marching ants and the
-/// lines a move snaps to, drawn by the editor's own `CanvasOverlay`, as the Mac's canvas draws them; and a box being
-/// dragged out for new text.
+/// lines a move snaps to, drawn by the editor's own `CanvasOverlay`, as the Mac's canvas draws them; a box being
+/// dragged out for new text; and the brush cursor.
 final class PadOverlayView: UIView {
     let overlay: CanvasOverlay
     /// A box being dragged out for new text, in document pixels.
     var textBox: CGRect? { didSet { if textBox != oldValue { setNeedsDisplay() } } }
+    /// The brush cursor, in the view's points, as the Mac's canvas draws it: the brush's circle, `diameter` across, at
+    /// `point`, with a crosshair in it where the Mac shows its crosshair pointer, or Clone Stamp's `preview` of what it
+    /// would stamp, at `previewOpacity` and cut to one click's `tip`; and Clone Stamp's source crosshair at `sample`.
+    struct BrushCursor {
+        var point: CGPoint?
+        var diameter: CGFloat
+        var crosshair: Bool
+        var sample: CGPoint?
+        var preview: CGImage?
+        var previewOpacity: CGFloat
+        var tip: CGImage?
+
+        var circle: CGRect? { point.map { CGRect(x: $0.x - diameter / 2, y: $0.y - diameter / 2, width: diameter, height: diameter) } }
+
+        /// What it covers, to be drawn again when it moves or changes.
+        var areas: [CGRect] {
+            let reach = BrushCursorDrawing.crosshairReach + 3
+            return [circle?.insetBy(dx: -3, dy: -3), point.map { CGRect(x: $0.x - reach, y: $0.y - reach, width: reach * 2, height: reach * 2) },
+                    sample.map { CGRect(x: $0.x - reach, y: $0.y - reach, width: reach * 2, height: reach * 2) }].compactMap { $0 }
+        }
+
+        func same(as other: BrushCursor?) -> Bool {
+            guard let other else { return false }
+            return point == other.point && diameter == other.diameter && crosshair == other.crosshair && sample == other.sample
+                && preview === other.preview && previewOpacity == other.previewOpacity && tip === other.tip
+        }
+    }
+    /// Only the areas the cursor leaves and moves to are drawn again, as it follows the brush.
+    var brushCursor: BrushCursor? {
+        didSet {
+            if let brushCursor, brushCursor.same(as: oldValue) { return }
+            if brushCursor == nil, oldValue == nil { return }
+            for area in (oldValue?.areas ?? []) + (brushCursor?.areas ?? []) { setNeedsDisplay(area) }
+        }
+    }
 
     init(session: EditorSession) {
         overlay = CanvasOverlay(session: session)
@@ -32,6 +67,11 @@ final class PadOverlayView: UIView {
             DispatchQueue.main.async { self?.setNeedsDisplay() }
         }
         march(marching && window != nil)
+        if let cursor = brushCursor {
+            BrushCursorDrawing.draw(circle: cursor.circle, preview: cursor.preview, previewOpacity: cursor.previewOpacity,
+                                    tip: cursor.tip, hardness: nil, marker: cursor.sample, in: context)
+            if cursor.crosshair, let point = cursor.point { BrushCursorDrawing.strokeCrosshair(at: point, in: context) }
+        }
     }
 
     /// The box for new text, outlined in the accent color, as the Mac draws it.

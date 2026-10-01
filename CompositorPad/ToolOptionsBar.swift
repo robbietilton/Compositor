@@ -269,6 +269,23 @@ final class ToolOptionsBar: UIView {
             add(picker)
             refreshers.append { picker.selectedSegmentIndex = modes.firstIndex(of: $0.blurMode) ?? 0 }
         }
+        if tool == .spotHealing {
+            let modes = SpotHealingMode.allCases
+            let picker = OptionControls.segments(modes.map(\.rawValue)) { [weak self] in self?.session?.spotHealingMode = modes[$0] }
+            add(picker)
+            refreshers.append { picker.selectedSegmentIndex = modes.firstIndex(of: $0.spotHealingMode) ?? 0 }
+        }
+        if tool == .cloneStamp {
+            // Aligned keeps the source moving with the brush between strokes; off, every stroke starts at the source.
+            let aligned = OptionControls.checkbox("Aligned") { [weak self] in self?.session?.cloneSettings.aligned = $0 }
+            add(aligned)
+            refreshers.append { aligned.isSelected = $0.cloneSettings.aligned }
+            let sample = OptionControls.segments(["This Layer", "All Layers"]) { [weak self] in
+                self?.session?.cloneSettings.sampleAllLayers = $0 == 1
+            }
+            add(sample)
+            refreshers.append { sample.selectedSegmentIndex = $0.cloneSettings.sampleAllLayers ? 1 : 0 }
+        }
 
         let size = NumberField(caption: "Size", unit: "px", width: 56, range: 1...2000)
         size.onChange = { [weak self] in self?.session?.brushSettings.diameter = CGFloat($0) }
@@ -321,6 +338,12 @@ final class ToolOptionsBar: UIView {
             }
         }
         addSpace()
+        // Until Clone Stamp has a source, as the Mac's bar says, where its Option-click sets it.
+        if tool == .cloneStamp {
+            let hint = OptionControls.caption("Tap where to copy from", color: .secondaryLabel)
+            add(hint)
+            refreshers.append { hint.isHidden = $0.cloneSource != nil }
+        }
         if session.isMaskSelected { add(OptionControls.caption("Mask", color: .secondaryLabel)) }
 
         refreshers.append { [weak self] session in
