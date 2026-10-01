@@ -1445,76 +1445,18 @@ final class CanvasView: NSView {
                 sample = session.viewport.viewPoint(from: source, documentSize: document.size)
             }
             if session.brushStroke == nil, !optionHeld, let offset = session.cloneStrokeOffset(at: point) {
-                preview = clonePreview(center: CGPoint(x: point.x + offset.width, y: point.y + offset.height),
-                                       diameter: diameter, document: document)
+                preview = clonePreview.image(center: CGPoint(x: point.x + offset.width, y: point.y + offset.height),
+                                             diameter: diameter, document: document)
             }
         }
         brushCursor.update(point: shows ? brushPointer : nil, diameter: max(1, diameter * session.viewport.pointsPerPixel),
                            sample: sample, preview: preview, previewOpacity: session.brushSettings.opacity,
-                           tip: preview == nil ? nil : cloneTip(diameter: diameter, hardness: session.brushSettings.hardness),
+                           tip: preview == nil ? nil : clonePreview.tip(diameter: diameter, hardness: session.brushSettings.hardness),
                            hardness: brushTipDrag?.hardnessShown == true ? session.brushSettings.hardness : nil)
     }
 
-    private var cloneTipCache: (diameter: CGFloat, hardness: CGFloat, image: CGImage?)?
+    private lazy var clonePreview = ClonePreview(session: session)
 
-    /// One click's coverage at the current brush size and hardness, painted by the brush engine
-    /// itself, so the preview softens exactly as a click would. Rebuilt only when they change.
-    private func cloneTip(diameter: CGFloat, hardness: CGFloat) -> CGImage? {
-        if let cache = cloneTipCache, cache.diameter == diameter, cache.hardness == hardness { return cache.image }
-        var image: CGImage?
-        let side = max(1, Int(diameter.rounded(.up)))
-        let size = CGSize(width: side, height: side)
-        let settings = BrushSettings(diameter: diameter, hardness: hardness, red: 1, green: 1, blue: 1)
-        if let stroke = try? BrushStroke(layer: ImageLayer(name: "Tip", blankSize: size), mask: false, settings: settings, canvas: size),
-           (try? stroke.append(CGPoint(x: CGFloat(side) / 2, y: CGFloat(side) / 2))) != nil,
-           (try? stroke.flush()) != nil,
-           let painted = try? stroke.paintSnapshot(),
-           let context = try? BrushRaster.context(width: side, height: side, mask: false) {
-            BrushRaster.draw(painted.asset.image, in: painted.bounds, mask: false, context: context)
-            image = context.makeImage()
-        }
-        cloneTipCache = (diameter, hardness, image)
-        return image
-    }
-
-    private struct ClonePreviewKey: Equatable {
-        let center: CGPoint
-        let diameter: CGFloat
-        let scale: CGFloat
-        let revision: Int
-        let undoCount: Int
-        let allLayers: Bool
-        let layerID: UUID?
-    }
-    private var clonePreviewCache: (key: ClonePreviewKey, image: CGImage?)?
-
-    /// What a Clone Stamp click would copy into the brush circle: the source around `center`
-    /// (document pixels), rendered for just that area at screen resolution and reused until the
-    /// pointer, zoom, brush, or document changes.
-    private func clonePreview(center: CGPoint, diameter: CGFloat, document: CanvasDocument) -> CGImage? {
-        let scale = session.viewport.pointsPerPixel * session.viewport.backingScale
-        let key = ClonePreviewKey(center: center, diameter: diameter, scale: scale, revision: session.brushRevision,
-                                  undoCount: session.history.undoCount, allLayers: session.cloneSettings.sampleAllLayers,
-                                  layerID: session.activeLayerID)
-        if let cache = clonePreviewCache, cache.key == key { return cache.image }
-        let side = min(1024, max(1, Int((diameter * scale).rounded(.up))))
-        var image: CGImage?
-        if diameter > 0, let context = try? BrushRaster.context(width: side, height: side, mask: false) {
-            let perPixel = CGFloat(side) / diameter
-            context.scaleBy(x: perPixel, y: perPixel)
-            context.translateBy(x: diameter / 2 - center.x, y: diameter / 2 - center.y)
-            context.interpolationQuality = .medium
-            if session.cloneSettings.sampleAllLayers {
-                session.drawLiveComposite(document, in: context)
-            } else if let layer = session.activeLayer, let source = layer.asset?.image {
-                let transform = session.displayedTransform(for: layer)
-                LayerRenderer.draw(source, transform: transform, center: transform.center, in: context)
-            }
-            image = context.makeImage()
-        }
-        clonePreviewCache = (key, image)
-        return image
-    }
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) {
         session.filterEdit?.cameraRawReadout = nil

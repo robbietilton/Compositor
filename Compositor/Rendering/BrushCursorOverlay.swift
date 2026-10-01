@@ -9,7 +9,6 @@ final class BrushCursorOverlay: NSView {
     private var previewOpacity: CGFloat = 1
     /// One click's coverage (white with alpha), which shapes the preview's edge to the brush hardness.
     private var tip: CGImage?
-    private static let markerReach: CGFloat = 7
     /// While hardness is being dragged: the fraction of the radius painted at full strength, shown as an inner ring.
     private var hardness: CGFloat?
     override var isFlipped: Bool { true }
@@ -27,7 +26,7 @@ final class BrushCursorOverlay: NSView {
             if let next { setNeedsDisplay(next.insetBy(dx: -3, dy: -3)) }
         }
         if marker != sample {
-            let reach = Self.markerReach + 3
+            let reach = BrushCursorDrawing.crosshairReach + 3
             if let marker { setNeedsDisplay(CGRect(x: marker.x - reach, y: marker.y - reach, width: reach * 2, height: reach * 2)) }
             marker = sample
             if let sample { setNeedsDisplay(CGRect(x: sample.x - reach, y: sample.y - reach, width: reach * 2, height: reach * 2)) }
@@ -35,61 +34,7 @@ final class BrushCursorOverlay: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        if let circle {
-            if let preview {
-                context.saveGState()
-                context.addEllipse(in: circle)
-                context.clip()
-                context.setAlpha(previewOpacity)
-                context.beginTransparencyLayer(in: circle, auxiliaryInfo: nil)
-                context.interpolationQuality = .medium
-                // The view is flipped; images draw bottom-up.
-                context.translateBy(x: circle.minX, y: circle.maxY)
-                context.scaleBy(x: 1, y: -1)
-                let bounds = CGRect(origin: .zero, size: circle.size)
-                context.draw(preview, in: bounds)
-                // Keep only what one click would lay down, so soft brushes preview softly.
-                if let tip {
-                    context.setBlendMode(.destinationIn)
-                    context.draw(tip, in: bounds)
-                }
-                context.endTransparencyLayer()
-                context.restoreGState()
-            }
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(2.5)
-            context.strokeEllipse(in: circle)
-            context.setStrokeColor(NSColor.black.cgColor)
-            context.setLineWidth(1)
-            context.strokeEllipse(in: circle)
-            if let hardness, hardness > 0 {
-                let inset = circle.width * (1 - hardness) / 2
-                let inner = circle.insetBy(dx: inset, dy: inset)
-                context.setLineDash(phase: 0, lengths: [4, 3])
-                context.setStrokeColor(NSColor.white.cgColor)
-                context.setLineWidth(2.5)
-                context.strokeEllipse(in: inner)
-                context.setStrokeColor(NSColor.black.cgColor)
-                context.setLineWidth(1)
-                context.strokeEllipse(in: inner)
-                context.setLineDash(phase: 0, lengths: [])
-            }
-        }
-        if let marker {
-            let reach = Self.markerReach
-            context.move(to: CGPoint(x: marker.x - reach, y: marker.y))
-            context.addLine(to: CGPoint(x: marker.x + reach, y: marker.y))
-            context.move(to: CGPoint(x: marker.x, y: marker.y - reach))
-            context.addLine(to: CGPoint(x: marker.x, y: marker.y + reach))
-            let arms = context.path
-            context.setLineCap(.round)
-            context.setStrokeColor(NSColor.white.cgColor)
-            context.setLineWidth(3)
-            context.strokePath()
-            if let arms { context.addPath(arms) }
-            context.setStrokeColor(NSColor.black.cgColor)
-            context.setLineWidth(1)
-            context.strokePath()
-        }
+        BrushCursorDrawing.draw(circle: circle, preview: preview, previewOpacity: previewOpacity, tip: tip, hardness: hardness,
+                                marker: marker, in: context)
     }
 }
