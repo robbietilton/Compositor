@@ -118,7 +118,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
         }
     }
 
-    /// A save is of the history's revision when it began: once written, that revision is the saved one.
+    /// A save is of the history's revision when it began: once written, that revision is the saved one, and whatever
+    /// the project has done since, edits or an undo back past it, is still to save.
     override func changeCountToken(for saveOperation: UIDocument.SaveOperation) -> Any {
         MainActor.assumeIsolated { session.history.currentRevision }
     }
@@ -129,7 +130,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
         }
         Task { @MainActor in
             session.history.markSaved(saved)
-            if !session.history.isModified { updateChangeCount(.cleared) }
+            updateChangeCount(session.history.isModified ? .done : .cleared)
         }
     }
 
