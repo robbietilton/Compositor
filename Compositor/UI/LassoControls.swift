@@ -160,19 +160,8 @@ struct LassoControls: View {
 struct PolygonalLassoToolIcon: View {
     var body: some View {
         Canvas { context, size in
-            let unit = size.width / 18
-            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * unit, y: y * unit) }
-            // Laid out like the SF Symbol lasso: a wide loop, a knot below its right side, a short rope.
-            var loop = Path()
-            loop.addLines([point(1.2, 7.0), point(4.0, 2.4), point(11.8, 1.8), point(16.8, 5.2), point(15.6, 10.4), point(7.0, 11.6)])
-            loop.closeSubpath()
-            var knot = Path()
-            knot.addLines([point(8.9, 10.9), point(13.3, 10.5), point(11.6, 14.5)])
-            knot.closeSubpath()
-            var rope = Path()
-            rope.addLines([point(11.6, 14.5), point(12.9, 17.3)])
-            let style = StrokeStyle(lineWidth: 1.4 * unit, lineCap: .round, lineJoin: .round)
-            for part in [loop, knot, rope] { context.stroke(part, with: .foreground, style: style) }
+            let style = ToolIcons.polygonalLassoStyle(in: size)
+            for part in ToolIcons.polygonalLasso(in: size) { context.stroke(part, with: .foreground, style: style) }
         }
         .accessibilityHidden(true)
     }
@@ -242,24 +231,9 @@ struct SelectionAmountSheet: View {
 struct ObjectSelectionToolIcon: View {
     var body: some View {
         Canvas { context, size in
-            let unit = size.width / 18
-            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * unit, y: y * unit) }
-            let style = StrokeStyle(lineWidth: 1.6 * unit, lineCap: .round, lineJoin: .round)
-            for corners in [
-                [point(2, 6), point(2, 2), point(6, 2)],
-                [point(12, 2), point(16, 2), point(16, 6)],
-                [point(16, 12), point(16, 16), point(12, 16)],
-                [point(6, 16), point(2, 16), point(2, 12)]
-            ] {
-                var corner = Path()
-                corner.addLines(corners)
-                context.stroke(corner, with: .foreground, style: style)
-            }
-            var cursor = Path()
-            cursor.addLines([point(7, 5), point(7, 14), point(9.6, 11.7), point(11.3, 15.3),
-                             point(13.2, 14.4), point(11.5, 10.9), point(14.5, 10.9)])
-            cursor.closeSubpath()
-            context.fill(cursor, with: .foreground)
+            let style = ToolIcons.objectSelectionStyle(in: size)
+            for corner in ToolIcons.objectSelectionCorners(in: size) { context.stroke(corner, with: .foreground, style: style) }
+            context.fill(ToolIcons.objectSelectionPointer(in: size), with: .foreground)
         }
         .accessibilityHidden(true)
     }

@@ -63,40 +63,12 @@ struct GradientControls: View {
 /// One-color tool-rail icon: a Floyd–Steinberg dithered fade from empty to solid, so it
 /// reads as a gradient in the same monochrome style as the SF Symbols beside it.
 struct GradientToolIcon: View {
-    /// 16×16 so each dot is exactly 1 pt inside the icon's 16 pt frame.
-    private static let pattern: [[Bool]] = {
-        let size = 16
-        var ramp = (0..<size).map { _ in (0..<size).map { CGFloat($0) / CGFloat(size - 1) } }
-        var result = Array(repeating: Array(repeating: false, count: size), count: size)
-        for y in 0..<size {
-            for x in 0..<size {
-                let on = ramp[y][x] >= 0.5
-                result[y][x] = on
-                let error = ramp[y][x] - (on ? 1 : 0)
-                if x + 1 < size { ramp[y][x + 1] += error * 7 / 16 }
-                guard y + 1 < size else { continue }
-                if x > 0 { ramp[y + 1][x - 1] += error * 3 / 16 }
-                ramp[y + 1][x] += error * 5 / 16
-                if x + 1 < size { ramp[y + 1][x + 1] += error / 16 }
-            }
-        }
-        return result
-    }()
     var body: some View {
         Canvas { context, size in
-            let frame = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 1)
-            let shape = Path(roundedRect: frame, cornerRadius: 3.5)
-            let cell = frame.width / CGFloat(Self.pattern.count)
-            var dots = Path()
-            for (row, line) in Self.pattern.enumerated() {
-                for (column, on) in line.enumerated() where on {
-                    dots.addRect(CGRect(x: frame.minX + CGFloat(column) * cell, y: frame.minY + CGFloat(row) * cell,
-                                        width: cell, height: cell))
-                }
-            }
+            let shape = ToolIcons.gradientFrame(in: size)
             context.clip(to: shape)
-            context.fill(dots, with: .foreground)
-            context.stroke(shape, with: .foreground, lineWidth: 1.4)
+            context.fill(ToolIcons.gradientDots(in: size), with: .foreground)
+            context.stroke(shape, with: .foreground, lineWidth: ToolIcons.gradientFrameWidth)
         }
         .accessibilityHidden(true)
     }

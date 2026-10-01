@@ -132,16 +132,7 @@ struct BrushControls: View {
 /// A rubber stamp for the tool rail (SF Symbols has none): round handle, neck, body, and pad.
 struct CloneStampToolIcon: View {
     var body: some View {
-        Canvas { context, size in
-            let w = size.width, h = size.height
-            var stamp = Path()
-            stamp.addEllipse(in: CGRect(x: w * 0.33, y: h * 0.02, width: w * 0.34, height: h * 0.30))
-            stamp.addRect(CGRect(x: w * 0.43, y: h * 0.28, width: w * 0.14, height: h * 0.28))
-            stamp.addRoundedRect(in: CGRect(x: w * 0.12, y: h * 0.54, width: w * 0.76, height: h * 0.22),
-                                 cornerSize: CGSize(width: w * 0.08, height: w * 0.08))
-            stamp.addRect(CGRect(x: w * 0.06, y: h * 0.82, width: w * 0.88, height: h * 0.12))
-            context.fill(stamp, with: .foreground)
-        }
-        .accessibilityHidden(true)
+        Canvas { context, size in context.fill(ToolIcons.cloneStamp(in: size), with: .foreground) }
+            .accessibilityHidden(true)
     }
 }
