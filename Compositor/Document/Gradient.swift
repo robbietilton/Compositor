@@ -125,3 +125,13 @@ extension EditorSession {
         Task { await commitGradient() }
     }
 }
+
+extension GradientEdit {
+    /// `point` turned about `anchor` to the nearest 45° step, as Shift constrains the line in Photoshop.
+    nonisolated static func constrained(_ point: CGPoint, around anchor: CGPoint) -> CGPoint {
+        let dx = point.x - anchor.x, dy = point.y - anchor.y
+        let length = hypot(dx, dy)
+        let angle = (atan2(dy, dx) / (.pi / 4)).rounded() * (.pi / 4)
+        return CGPoint(x: anchor.x + cos(angle) * length, y: anchor.y + sin(angle) * length)
+    }
+}

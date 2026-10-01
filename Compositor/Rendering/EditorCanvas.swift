@@ -1153,7 +1153,7 @@ final class CanvasView: NSView {
         func drawOwnWithDraft(_ id: UUID, _ context: CGContext) {
             drawOwn(id, context)
             guard id == session.activeLayerID else { return }
-            drawShapeDraft(scale: scale, center: center, in: context)
+            session.drawShapeDraft(scale: scale, center: center, in: context)
             drawNewText(context)
         }
         // New text goes where its layer will: just above the active layer, or on top when that isn't drawn (a
@@ -1234,33 +1234,6 @@ final class CanvasView: NSView {
         }
         draftEffects = nil
         draftEffectsSource = nil
-    }
-
-    /// The shape being dragged out with the Shape tool, drawn in the color it will be made in.
-    private func drawShapeDraft(scale: CGFloat, center: (CGPoint) -> CGPoint, in context: CGContext) {
-        // A flat or upright line has a box with no height or width, which is not "empty" for this purpose.
-        guard let draft = session.shapeDraft,
-              draft.kind == .line ? (draft.rect.width > 0 || draft.rect.height > 0) : !draft.rect.isEmpty else { return }
-        let middle = center(CGPoint(x: draft.rect.midX, y: draft.rect.midY))
-        let rect = CGRect(x: middle.x - draft.rect.width * scale / 2, y: middle.y - draft.rect.height * scale / 2,
-                          width: draft.rect.width * scale, height: draft.rect.height * scale)
-        context.saveGState()
-        context.setFillColor(session.foregroundColor.nsColor.cgColor)
-        if draft.kind == .line {
-            guard let ends = session.shapeLineEnds else { context.restoreGState(); return }
-            let thickness = max(1, CGFloat(session.shapeLineWidth) * scale)
-            context.setStrokeColor(session.foregroundColor.nsColor.cgColor)
-            context.setLineWidth(thickness)
-            context.setLineCap(.round)
-            // Exactly the two points being dragged between, so the start never shifts.
-            context.move(to: center(ends.start))
-            context.addLine(to: center(ends.end))
-            context.strokePath()
-        } else {
-            context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale))
-            context.fillPath()
-        }
-        context.restoreGState()
     }
 
     /// The effects surface for the layer being painted, made when the stroke starts and updated as it goes.
@@ -1876,7 +1849,7 @@ final class CanvasView: NSView {
         if let handle = gradientDrag, let edit = session.gradientEdit, let document = session.document {
             var pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
             if event.modifierFlags.contains(.shift) {
-                pixel = Self.snapped(pixel, around: handle == .start ? edit.end : edit.start)
+                pixel = GradientEdit.constrained(pixel, around: handle == .start ? edit.end : edit.start)
             }
             session.moveGradient(start: handle == .start ? pixel : nil, end: handle == .end ? pixel : nil)
             synchronizeDisplay()
@@ -2370,14 +2343,6 @@ final class CanvasView: NSView {
         synchronizeDisplay()
     }
 
-    /// Shift constrains the line to 45° steps, as in Photoshop.
-    private static func snapped(_ point: CGPoint, around anchor: CGPoint) -> CGPoint {
-        let dx = point.x - anchor.x, dy = point.y - anchor.y
-        let length = hypot(dx, dy)
-        let angle = (atan2(dy, dx) / (.pi / 4)).rounded() * (.pi / 4)
-        return CGPoint(x: anchor.x + cos(angle) * length, y: anchor.y + sin(angle) * length)
-    }
-
     private func sampleColor(at point: CGPoint) {
         guard let document = session.document else { return }
         Self.eyedropperCursor.set()
@@ -2550,19 +2515,6 @@ extension CanvasView {
     func gpuFrame(size: CGSize) -> CIImage? {
         guard let renderer = GPUCanvasRenderer.shared, let document = session.document else { return nil }
         return gpuFrame(document, renderer: renderer, size: size)
-    }
-
-    /// The shape being dragged out, drawn by `drawShapeDraft` into a bitmap just big enough for it, in frame pixels.
-    private func shapeDraftImage(placement: GPUPlacement) -> CIImage? {
-        guard let draft = session.shapeDraft, let renderer = GPUCanvasRenderer.shared else { return nil }
-        let reach = CGFloat(session.shapeLineWidth) * placement.scale + 4
-        let box = draft.rect.applying(placement.mapping).insetBy(dx: -reach, dy: -reach).integral
-        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
-              let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
-        context.translateBy(x: -box.minX, y: -box.minY)
-        drawShapeDraft(scale: placement.scale, center: { $0.applying(placement.mapping) }, in: context)
-        guard let image = context.makeImage(), let drawn = renderer.image(image, transient: true) else { return nil }
-        return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
     }
 
     /// The whole view as `draw(_:)` draws it — the backdrop, the document's shadow and checkerboard, the layers and the
@@ -2997,7 +2949,7 @@ extension CanvasView {
         func drafts(after id: UUID, over image: CIImage) -> CIImage {
             guard id == session.activeLayerID else { return image }
             var result = image
-            if let shape = shapeDraftImage(placement: placement) { result = shape.composited(over: result) }
+            if let shape = session.shapeDraftImage(placement: placement) { result = shape.composited(over: result) }
             if session.textDraft?.layerID == nil, let text = draftText, let placed = placement.place(text.image, transform: text.transform) {
                 result = placed.composited(over: result)
                 drewNewText = true
