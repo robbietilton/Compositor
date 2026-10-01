@@ -96,6 +96,10 @@ final class StatusBarView: UIView {
         case .shape:
             let shape = session.shapeKind == .ellipse ? "an ellipse" : "a " + session.shapeKind.rawValue.lowercased()
             return "Drag out \(shape)\(fingerPaints ? "" : " with Apple Pencil") · \(fingers)"
+        case .type where session.textDraft != nil:
+            return "Type · Drag the box's edges to wrap the text · Done keeps it, Cancel puts it back"
+        case .type:
+            return "Tap to type · Drag a box for a paragraph · Tap text to edit it · Two fingers move and zoom"
         case .eyedropper:
             return "Touch to pick up a color · Two fingers move and zoom"
         case .hand:

@@ -2,9 +2,12 @@ import Observation
 import UIKit
 
 /// What's drawn over the canvas: the transform box and its handles, guides, the crop frame, marching ants and the
-/// lines a move snaps to, drawn by the editor's own `CanvasOverlay`, as the Mac's canvas draws them.
+/// lines a move snaps to, drawn by the editor's own `CanvasOverlay`, as the Mac's canvas draws them; and a box being
+/// dragged out for new text.
 final class PadOverlayView: UIView {
     let overlay: CanvasOverlay
+    /// A box being dragged out for new text, in document pixels.
+    var textBox: CGRect? { didSet { if textBox != oldValue { setNeedsDisplay() } } }
 
     init(session: EditorSession) {
         overlay = CanvasOverlay(session: session)
@@ -23,11 +26,23 @@ final class PadOverlayView: UIView {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let marching = withObservationTracking {
             overlay.draw(in: context, bounds: bounds, deviceScale: traitCollection.displayScale)
+            drawTextBox(in: context)
             return overlay.session.displayedSelection?.isEmpty == false
         } onChange: { [weak self] in
             DispatchQueue.main.async { self?.setNeedsDisplay() }
         }
         march(marching && window != nil)
+    }
+
+    /// The box for new text, outlined in the accent color, as the Mac draws it.
+    private func drawTextBox(in context: CGContext) {
+        let session = overlay.session
+        guard let rect = textBox, let document = session.document else { return }
+        let origin = session.viewport.viewPoint(from: rect.origin, documentSize: document.size)
+        let scale = session.viewport.pointsPerPixel
+        context.setStrokeColor(Platform.accentColor.cgColor)
+        context.setLineWidth(1)
+        context.stroke(CGRect(origin: origin, size: CGSize(width: rect.width * scale, height: rect.height * scale)))
     }
 
     override func didMoveToWindow() {

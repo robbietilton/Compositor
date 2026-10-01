@@ -13,6 +13,9 @@ final class ToolOptionsBar: UIView {
     }
     /// Opens the foreground color's picker from the brush's Color swatch, as the rail's swatch does.
     var onChooseForeground: (UIView) -> Void = { _ in }
+    /// Opens the font picker, or the text color's, from the Type bar.
+    var onChooseFont: (UIView) -> Void = { _ in }
+    var onChooseTextColor: (UIView) -> Void = { _ in }
 
     static let height: CGFloat = 50
 
@@ -84,6 +87,7 @@ final class ToolOptionsBar: UIView {
         case .crop: buildCrop()
         case .gradient: buildGradient(for: session)
         case .shape: buildShape(for: session)
+        case .type: buildType()
         case let tool where tool.isBrushTool && ToolRailView.touchTools.contains(tool): buildBrush(for: session)
         case .hand, .zoom: buildNavigation(zoom: session.tool == .zoom)
         case .eyedropper: buildEyedropper()
@@ -498,6 +502,91 @@ final class ToolOptionsBar: UIView {
         refreshers.append { [weak self] session in
             swatch.color = session.foregroundColor
             swatch.isEnabled = session.canEditPalette
+            let usable = !session.showsBusy && session.document != nil
+            self?.content.isUserInteractionEnabled = usable
+            self?.content.alpha = usable ? 1 : 0.5
+        }
+    }
+
+    /// The Mac's Type bar: the font, its size and color, the alignment, tracking and leading; then Cancel and Done while
+    /// text is being typed, or Edit Text for a text layer. The font and color apply to the letters selected, or to all
+    /// of them; the rest to the whole text.
+    private func buildType() {
+        var fontConfiguration = UIButton.Configuration.gray()
+        fontConfiguration.cornerStyle = .capsule
+        fontConfiguration.image = UIImage(systemName: "chevron.up.chevron.down",
+                                          withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+        fontConfiguration.imagePlacement = .trailing
+        fontConfiguration.imagePadding = 6
+        fontConfiguration.titleLineBreakMode = .byTruncatingTail
+        fontConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 10)
+        fontConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var attributes = attributes
+            attributes.font = OptionControls.controlFont
+            return attributes
+        }
+        let font = UIButton(configuration: fontConfiguration)
+        font.accessibilityLabel = "Font"
+        font.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        font.addAction(UIAction { [weak self, weak font] _ in
+            guard let font else { return }
+            self?.onChooseFont(font)
+        }, for: .primaryActionTriggered)
+
+        let size = NumberField(caption: "Size", unit: "px", width: 56, range: 1...2000)
+        size.onChange = { [weak self] value in self?.session?.changeTextStyle { $0.fontSize = CGFloat(value) } }
+        let color = ColorSwatchButton()
+        color.accessibilityLabel = "Text color"
+        color.addAction(UIAction { [weak self, weak color] _ in
+            guard let color else { return }
+            self?.onChooseTextColor(color)
+        }, for: .primaryActionTriggered)
+        let alignments = TextAlignment.allCases
+        let alignment = UISegmentedControl(items: alignments.map { alignment -> UIImage in
+            let image = UIImage(systemName: alignment == .left ? "text.alignleft" : alignment == .center ? "text.aligncenter" : "text.alignright")
+                ?? UIImage()
+            image.accessibilityLabel = "Align " + alignment.rawValue.lowercased()
+            return image
+        })
+        alignment.addAction(UIAction { [weak self, weak alignment] _ in
+            guard let alignment, alignment.selectedSegmentIndex >= 0 else { return }
+            self?.session?.changeTextStyle { $0.alignment = alignments[alignment.selectedSegmentIndex] }
+        }, for: .valueChanged)
+        let tracking = NumberField(caption: "Tracking", width: 52, range: -100...1000)
+        tracking.onChange = { [weak self] value in self?.session?.changeTextStyle { $0.tracking = CGFloat(value) } }
+        // 0 means Auto: the field is left empty, so its placeholder shows.
+        let leading = NumberField(caption: "Leading", width: 56, range: 0...5000, format: { $0 > 0 ? String(Int($0.rounded())) : "" })
+        leading.field.placeholder = "Auto"
+        leading.onChange = { [weak self] value in self?.session?.changeTextStyle { $0.leading = CGFloat(value) } }
+        let cancel = OptionControls.button("Cancel") { [weak self] in self?.session?.cancelText() }
+        let done = OptionControls.button("Done", prominent: true) { [weak self] in _ = self?.session?.finishText() }
+        let edit = OptionControls.button("Edit Text") { [weak self] in self?.session?.editActiveText() }
+
+        for view in [OptionControls.title("Type"), font, size, color, alignment, tracking, leading] as [UIView] { add(view) }
+        addSpace()
+        add(OptionControls.row([cancel, done, edit]))
+
+        refreshers.append { [weak self] session in
+            let style = session.currentTextStyle
+            // The face of the letters selected, or before the caret; none when they're in more than one.
+            var name = style.fontName
+            if let draft = session.textDraft {
+                let selection = draft.selection
+                name = selection.length == 0 ? draft.style.fontName(at: max(0, selection.location - 1))
+                    : draft.style.uniformFontName(in: selection) ?? "Multiple"
+            }
+            font.configuration?.title = name
+            size.show(Double(style.fontSize))
+            color.color = session.typeColor
+            color.isEnabled = session.canEditPalette
+            alignment.selectedSegmentIndex = alignments.firstIndex(of: style.alignment) ?? 0
+            tracking.show(Double(style.tracking))
+            leading.show(Double(style.leading))
+            let editing = session.textDraft != nil
+            cancel.isHidden = !editing
+            done.isHidden = !editing
+            edit.isHidden = editing
+            edit.isEnabled = session.activeLayer?.liveText != nil && session.canEditLayers
             let usable = !session.showsBusy && session.document != nil
             self?.content.isUserInteractionEnabled = usable
             self?.content.alpha = usable ? 1 : 0.5

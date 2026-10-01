@@ -1,7 +1,7 @@
 import UIKit
 
-/// What a touch does with the Move, Crop, Gradient, Shape and selection tools, as the Mac's canvas does with the mouse,
-/// apart from UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a hardware
+/// What a touch does with the Move, Crop, Gradient, Shape, Type and selection tools, as the Mac's canvas does with the
+/// mouse, apart from UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a hardware
 /// keyboard holds. The iPad canvas feeds it touches; tests feed it points.
 @MainActor final class PadCanvasInput {
     let session: EditorSession
@@ -9,6 +9,11 @@ import UIKit
     var overlayChanged: () -> Void = {}
     /// Work a press started and left running, such as the Magic Wand's: tests wait for it.
     private(set) var pending: Task<Void, Never>?
+    /// Text on the canvas opened for editing by a touch at this point, in the canvas's coordinates, where the canvas puts
+    /// the caret.
+    var textOpened: (CGPoint) -> Void = { _ in }
+    /// The box being dragged out for new text, in document pixels, for the overlay to draw.
+    private(set) var textBox: CGRect?
 
     /// How far a finger may land from a handle, or from a polygonal lasso's first corner to close it.
     static let reach: CGFloat = 22
@@ -33,6 +38,8 @@ import UIKit
         case gradient(GradientEnd, before: (start: CGPoint, end: CGPoint)?)
         /// A shape being dragged out.
         case shape
+        /// A box for new text, dragged out from `anchor`.
+        case textBox(anchor: CGPoint)
     }
     enum GradientEnd { case start, end }
     private var drag: Drag?
@@ -45,7 +52,7 @@ import UIKit
 
     /// Whether this handles touches with `tool`.
     static func handles(_ tool: NavigationTool) -> Bool {
-        tool == .move || tool == .crop || tool == .gradient || tool == .shape || tool.isSelectionTool
+        tool == .move || tool == .crop || tool == .gradient || tool == .shape || tool == .type || tool.isSelectionTool
     }
 
     var isDragging: Bool { drag != nil }
@@ -54,10 +61,29 @@ import UIKit
         session.document.map { session.viewport.documentPoint(from: point, documentSize: $0.size) }
     }
 
-    /// A touch coming down at `point`. False when it starts nothing to follow, as a tap with the Magic Wand.
+    /// A touch coming down at `point`, the `tapCount`th in quick succession. False when it starts nothing to follow, as
+    /// a tap with the Magic Wand.
     @discardableResult
-    func began(at point: CGPoint, keys: UIKeyModifierFlags = []) -> Bool {
+    func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) -> Bool {
         guard let pixel = pixel(point) else { return false }
+        // A double tap on text with the Move tool opens it, as a double click does on the Mac.
+        if session.tool == .move, tapCount >= 2, session.canEditLayers, let layer = liveText(at: pixel) {
+            session.commitTransform()
+            openText(layer, at: point)
+            return false
+        }
+        if session.tool == .type {
+            // Text being typed is kept first, as on the Mac. Then a touch on text opens it; anywhere else a drag draws a
+            // box for new text, and a tap starts a line of it.
+            guard session.finishText() else { return false }
+            if let layer = liveText(at: pixel) {
+                openText(layer, at: point)
+                return false
+            }
+            textBox = CGRect(origin: pixel, size: .zero)
+            drag = .textBox(anchor: pixel)
+            return true
+        }
         if session.tool == .move {
             // A handle of the transform box, or else the layer under the touch when Auto Select is on, as the Mac's
             // Move tool picks it. Command flips Auto Select, Command-Shift adds the layer to the selection, Command on
@@ -173,6 +199,9 @@ import UIKit
             // Shift squares the shape, or turns a line to 45° steps; Option grows it from its center.
             session.dragShape(to: snappedCorner(pixel, keys: keys), square: keys.contains(.shift), fromCenter: keys.contains(.alternate))
             overlayChanged()
+        case .textBox(let anchor):
+            textBox = DragBox.rect(from: anchor, to: pixel, square: false, fromCenter: false)
+            overlayChanged()
         }
     }
 
@@ -212,6 +241,11 @@ import UIKit
             session.endGradientDrag()
         case .shape:
             session.finishShape()
+        case .textBox:
+            guard let rect = textBox else { break }
+            textBox = nil
+            if rect.width < 4 && rect.height < 4 { session.beginText(at: rect.origin, newLayer: true) }
+            else { session.beginText(in: rect) }
         }
     }
 
@@ -238,6 +272,8 @@ import UIKit
             if let before { session.moveGradient(start: before.start, end: before.end) } else { session.cancelGradient() }
         case .shape:
             session.cancelShape()
+        case .textBox:
+            textBox = nil
         }
     }
 
@@ -260,6 +296,20 @@ import UIKit
         let targets = session.cropSnapTargets()
         let snap = CropSnap(xs: targets.xs, ys: targets.ys, tolerance: Self.cropSnapDistance / max(session.viewport.pointsPerPixel, 0.0001))
         drag = .crop(CropDrag(start: pixel, original: rect, mode: mode), snap: snap, before: before)
+    }
+
+    /// The topmost text on the canvas at `pixel`, as the Mac finds text to open.
+    private func liveText(at pixel: CGPoint) -> ImageLayer? {
+        guard let document = session.document else { return nil }
+        let visible = document.effectiveVisibleIDs
+        return document.layers.reversed().first { visible.contains($0.id) && $0.liveText != nil && $0.transform.contains(pixel) }
+    }
+
+    /// Opens `layer`'s text for editing, the caret where the touch came down.
+    private func openText(_ layer: ImageLayer, at point: CGPoint) {
+        session.selectLayer(layer.id)
+        session.editActiveText()
+        if session.textDraft?.layerID == layer.id { textOpened(point) }
     }
 
     /// A press with the Gradient tool, as the Mac's: on an end of the line it moves that end; anywhere else it starts the

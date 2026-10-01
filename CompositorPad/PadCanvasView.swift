@@ -13,12 +13,19 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     var pencilSeen: () -> Void = {}
     private let surface = MetalCanvasView(frame: .zero)
     private(set) lazy var overlayView = PadOverlayView(session: session)
-    /// What touches do with the Move tool and the selection tools.
+    /// What touches do with the Move, Crop, Gradient, Shape, Type and selection tools.
     private(set) lazy var input: PadCanvasInput = {
         let input = PadCanvasInput(session: session)
-        input.overlayChanged = { [weak self] in self?.overlayView.setNeedsDisplay() }
+        input.overlayChanged = { [weak self] in
+            guard let self else { return }
+            self.overlayView.textBox = self.input.textBox
+            self.overlayView.setNeedsDisplay()
+        }
+        input.textOpened = { [weak self] point in self?.openedText(at: point) }
         return input
     }()
+    /// The text being typed, while there is some, over the canvas and its overlays.
+    private(set) var textEditor: PadTextEditor?
     private let sampleRing = SampleRingView()
     private lazy var compositor = PadCanvasCompositor(session: session)
     private var displayLink: CADisplayLink?
@@ -48,6 +55,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         addSubview(overlayView)
         addSubview(sampleRing)
         compositor.needsRedraw = { [weak self] in self?.setNeedsRender() }
+        compositor.textShownTransform = { [weak self] in self?.textEditor?.shownTransform }
         session.refreshCanvasPreview = { [weak self] in self?.setNeedsRender() }
 
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
@@ -115,12 +123,44 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         let frame = withObservationTracking {
             // Painting changes tiles inside the stroke; the revision is what says so.
             _ = session.brushRevision
+            // The text editor first: the canvas draws the text being typed where the editor shows it.
+            synchronizeTextEditor()
             return session.document.flatMap { compositor.frame($0, renderer: renderer, size: size) }
         } onChange: { [weak self] in
             DispatchQueue.main.async { self?.setNeedsRender() }
         }
         let backdrop = CIImage(color: CIColor(red: 0.105, green: 0.105, blue: 0.105)).cropped(to: CGRect(origin: .zero, size: size))
         renderer.present(frame ?? backdrop, in: surface.metalLayer)
+    }
+
+    // MARK: Text
+
+    /// Lays the editor over the text being typed, making it when typing starts and taking it away when it ends.
+    func synchronizeTextEditor() {
+        guard let draft = session.textDraft else {
+            guard let editor = textEditor else { return }
+            let hadFocus = editor.textView.isFirstResponder
+            editor.removeFromSuperview()
+            textEditor = nil
+            if hadFocus { becomeFirstResponder() }
+            return
+        }
+        let editor = textEditor ?? {
+            let editor = PadTextEditor(session: session)
+            editor.changed = { [weak self] in self?.setNeedsRender() }
+            addSubview(editor)
+            textEditor = editor
+            return editor
+        }()
+        editor.synchronize(draft)
+    }
+
+    /// Text opened by a touch at `point`: the editor laid over it now, the caret where the touch came down.
+    private func openedText(at point: CGPoint) {
+        synchronizeTextEditor()
+        guard let editor = textEditor else { return }
+        editor.placeCaret(at: editor.textView.convert(point, from: self))
+        setNeedsRender()
     }
 
     // MARK: Touches
@@ -159,7 +199,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             drag = .paint
             session.beginBrush(at: pixel)
         } else if PadCanvasInput.handles(tool) {
-            guard input.began(at: touch.location(in: self), keys: event?.modifierFlags ?? []) else { return }
+            guard input.began(at: touch.location(in: self), keys: event?.modifierFlags ?? [], tapCount: touch.tapCount) else { return }
             activeTouch = touch
             drag = .tool
         } else if tool == .eyedropper {

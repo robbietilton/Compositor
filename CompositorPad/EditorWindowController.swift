@@ -23,8 +23,25 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         item.accessibilityLabel = "New canvas"
         return item
     }()
-    private lazy var undoItem = barItem(symbol: "arrow.uturn.backward", label: "Undo") { $0.undo() }
-    private lazy var redoItem = barItem(symbol: "arrow.uturn.forward", label: "Redo") { $0.redo() }
+    // While text is typed, they take back what was typed, as the Mac's Edit menu does then.
+    private lazy var undoItem = barItem(symbol: "arrow.uturn.backward", label: "Undo") { [weak self] session in
+        if let text = self?.textUndo { text.undo() } else { session.undo() }
+    }
+    private lazy var redoItem = barItem(symbol: "arrow.uturn.forward", label: "Redo") { [weak self] session in
+        if let text = self?.textUndo { text.redo() } else { session.redo() }
+    }
+    private lazy var typePickers: TypePickers = {
+        let pickers = TypePickers()
+        pickers.session = { [weak self] in self?.activeTab?.session }
+        pickers.returnFocus = { [weak self] in self?.activeTab?.canvas.textEditor?.textView.becomeFirstResponder() }
+        return pickers
+    }()
+
+    /// The undo of the text being typed, while there is some.
+    private var textUndo: UndoManager? {
+        guard activeTab?.session.textDraft != nil else { return nil }
+        return activeTab?.canvas.textEditor?.textView.undoManager
+    }
     private lazy var fitItem = barItem(title: "Fit", label: "Fit canvas in window") { $0.fit() }
     private lazy var actualItem = barItem(title: "100%", label: "Actual pixels") { $0.zoom(to: 1) }
     private lazy var zoomInItem = barItem(symbol: "plus.magnifyingglass", label: "Zoom in") { $0.zoomKeyboard(by: 1) }
@@ -67,6 +84,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         rail.fingerPaints = fingerPaints
         rail.onFingerPaintsChange = { [weak self] in self?.setFingerPaints($0) }
         optionsBar.onChooseForeground = { [weak self] in self?.rail.chooseColor(background: false, from: $0) }
+        optionsBar.onChooseFont = { [weak self] source in
+            guard let self else { return }
+            self.typePickers.chooseFont(from: source, presenter: self)
+        }
+        optionsBar.onChooseTextColor = { [weak self] source in
+            guard let self else { return }
+            self.typePickers.chooseTextColor(from: source, presenter: self)
+        }
         layersPanel.presenter = self
         statusBar.fingerPaints = fingerPaints
 
@@ -141,8 +166,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let session = tab.session
         tabStrip.show(tabs.map { .init(id: $0.id, title: $0.title, modified: $0.document != nil && $0.session.isModified) },
                       active: activeID)
-        undoItem.isEnabled = session.canUndo
-        redoItem.isEnabled = session.canRedo
+        // Typing changes the draft, which brings this round again.
+        _ = session.textDraft
+        undoItem.isEnabled = textUndo?.canUndo ?? session.canUndo
+        redoItem.isEnabled = textUndo?.canRedo ?? session.canRedo
         let hasDocument = session.document != nil
         for item in [fitItem, actualItem, zoomInItem, zoomOutItem] { item.isEnabled = hasDocument }
         newCanvas.isHidden = !tab.isEmpty
@@ -797,7 +824,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The Mac's single-key tools and color keys, on a hardware keyboard.
     override var keyCommands: [UIKeyCommand]? {
         let tools: [(String, NavigationTool)] = [("v", .move), ("m", .marquee), ("l", .lasso), ("w", .wand), ("c", .crop), ("b", .brush),
-                                                 ("r", .blur), ("g", .gradient), ("u", .shape), ("i", .eyedropper), ("h", .hand), ("z", .zoom)]
+                                                 ("r", .blur), ("g", .gradient), ("u", .shape), ("t", .type), ("i", .eyedropper), ("h", .hand),
+                                                 ("z", .zoom)]
         return tools.map { key, tool in
             UIKeyCommand(title: tool.label, action: #selector(toolKey(_:)), input: key, propertyList: tool.rawValue)
         } + [

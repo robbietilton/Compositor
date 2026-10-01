@@ -5,13 +5,15 @@ import UIKit
 /// The iPad canvas's frame, composited on the GPU the way the Mac canvas composites its own.
 ///
 /// Adapted from `CanvasView`'s GPU drawing in Rendering/EditorCanvas.swift, which lives inside the AppKit view for
-/// now. Once that compositing moves out of the view, both canvases draw from it and this copy goes. Text being typed is
-/// left out: the iPad has no Type tool yet.
+/// now. Once that compositing moves out of the view, both canvases draw from it and this copy goes.
 @MainActor final class PadCanvasCompositor {
     let session: EditorSession
     /// Called when something drawn in the background (a layer's effects) is ready to be shown.
     var needsRedraw: () -> Void = {}
+    /// Where the text editor shows the text being typed, which the canvas draws it at.
+    var textShownTransform: () -> LayerTransform? = { nil }
     private var strokeSurface: LayerEffectsSurface?
+    private lazy var textRendering = TextDraftRendering(session: session)
 
     init(session: EditorSession) {
         self.session = session
@@ -20,6 +22,7 @@ import UIKit
     /// The whole view — the backdrop, the document's shadow and checkerboard, the layers and the document's edge — in
     /// screen pixels, `size` across. Nil when a layer needs something the GPU path doesn't draw.
     func frame(_ document: CanvasDocument, renderer: GPUCanvasRenderer, size: CGSize) -> CIImage? {
+        textRendering.handOffEffects(document)
         let viewport = session.viewport
         let device = viewport.backingScale
         let pixels = renderBounds ?? CGRect(origin: .zero, size: document.size)
@@ -273,6 +276,12 @@ import UIKit
         // One layer's pixels, placed, through its own mask and at its opacity.
         func own(_ layer: ImageLayer) -> CIImage? {
             let opacity = layer.effectiveOpacity(in: byID)
+            // Text being edited, as it will be committed.
+            if layer.id == session.textDraft?.layerID {
+                guard let shown = textRendering.editedText(layer, shownAt: textShownTransform()) else { return nil }
+                guard let image = placement.place(shown.image, transform: shown.transform) else { unsupported = true; return nil }
+                return GPUBlend.faded(image, opacity)
+            }
             // Smudge or Liquify in progress: the layer as the stroke has reshaped it so far, across the canvas.
             if let warp = session.warpStroke, warp.layer.id == layer.id, warp.gpu != nil || warp.image != nil {
                 let canvas = LayerTransform(origin: .zero, size: document.size)
@@ -437,10 +446,19 @@ import UIKit
                                                                              kCIInputMaskImageKey: coverage])
         }
         var result = CIImage.empty()
-        // A shape being dragged out goes where its layer will: just above the active layer.
+        // A shape being dragged out and new text go where their layers will: just above the active layer, or new text on
+        // top when that isn't drawn.
+        var drewNewText = false
         func drafts(after id: UUID, over image: CIImage) -> CIImage {
-            guard id == session.activeLayerID, let shape = session.shapeDraftImage(placement: placement) else { return image }
-            return shape.composited(over: image)
+            guard id == session.activeLayerID else { return image }
+            var result = image
+            if let shape = session.shapeDraftImage(placement: placement) { result = shape.composited(over: result) }
+            if session.textDraft?.layerID == nil, let text = textRendering.text(shownAt: textShownTransform()),
+               let placed = placement.place(text.image, transform: text.transform) {
+                result = placed.composited(over: result)
+                drewNewText = true
+            }
+            return result
         }
         for id in ids where !stacked.contains(id) {
             guard let layer = byID[id] else { continue }
@@ -480,6 +498,10 @@ import UIKit
                 result = GPUBlend.blend(clippedByFolders(id, image), over: result, mode: mode)
             } else if unsupported { return nil }
             result = drafts(after: id, over: result)
+        }
+        if !drewNewText, session.textDraft?.layerID == nil, let text = textRendering.text(shownAt: textShownTransform()),
+           let placed = placement.place(text.image, transform: text.transform) {
+            result = placed.composited(over: result)
         }
         return result
     }
