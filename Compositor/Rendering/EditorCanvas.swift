@@ -20,20 +20,11 @@ struct EditorCanvas: NSViewRepresentable {
 
 final class CanvasView: NSView {
     var inlineTextEditor: InlineTextEditor?
-    /// The text being typed, rendered as the layer will hold it, remade only when its style changes.
-    private var draftTextCache: (style: LayerTextStyle, image: CGImage)?
-    /// The effects rendered for the text being edited, and what they were rendered from.
-    private var draftEffects: (image: CGImage, effects: LayerEffects, transform: LayerTransform, rendered: CGImage, inset: CGFloat)?
-    /// Which layer and text `draftEffects` were made for, so they can stand in once the edit is committed.
-    private var draftEffectsSource: (layerID: UUID, style: LayerTextStyle)?
+    /// The text being typed, as the canvas draws it.
+    private lazy var textRendering = TextDraftRendering(session: session)
     /// The text being typed as pixels, where the editor shows it (see InlineTextEditor).
     private var draftText: (image: CGImage, transform: LayerTransform)? {
-        guard let draft = session.textDraft, let transform = inlineTextEditor?.shownTransform else { draftTextCache = nil; return nil }
-        if draftTextCache?.style != draft.style {
-            guard let image = try? EditorSession.textImage(draft.style) else { draftTextCache = nil; return nil }
-            draftTextCache = (draft.style, image)
-        }
-        return draftTextCache.map { ($0.image, transform) }
+        textRendering.text(shownAt: inlineTextEditor?.shownTransform)
     }
     var textBoxAnchor: CGPoint?
     var textBoxRect: CGRect?
@@ -970,7 +961,7 @@ final class CanvasView: NSView {
             drawMaskAlone(mask, of: layer, document: document, scale: scale, center: center, in: context)
             return
         }
-        handOffTextEffects(document)
+        textRendering.handOffEffects(document)
         session.effectsPreviews.prepare(layers: document.layers)
         // Color Burn and Color Dodge are blended by hand against the pixels under them, which needs a surface to
         // read back (see SeparableBlend).
@@ -1203,37 +1194,9 @@ final class CanvasView: NSView {
         drawNewText(context)
     }
 
-    /// Text being edited, as it shows among the layers: as it will be committed, with its effects around it. They stay
-    /// on while it's edited, redone from the text as typed — and until a change has been redone, the last effects
-    /// stand in under the new text rather than blinking off.
+    /// Text being edited, as it shows among the layers (see TextDraftRendering).
     private func editedText(_ layer: ImageLayer) -> (image: CGImage, transform: LayerTransform)? {
-        guard let text = draftText else { return nil }
-        guard let effects = layer.effects?.visible, !effects.isEmpty, effects.isValid else { return text }
-        // Redone only when the text's pixels, its place or its effects change.
-        if draftEffects?.image !== text.image || draftEffects?.effects != effects || draftEffects?.transform != text.transform {
-            let mask = layer.mask.flatMap { owned -> CGImage? in
-                guard let placement = owned.placement else { return owned.enabledImage }
-                return owned.clipImage(placement: placement, over: text.transform,
-                                       width: text.image.width, height: text.image.height, limit: 2048)
-            }
-            draftEffects = session.effectsPreviews.renderNow(image: text.image, mask: mask, effects: effects)
-                .map { (text.image, effects, text.transform, $0.image, $0.inset) }
-            draftEffectsSource = session.textDraft.map { (layer.id, $0.style) }
-        }
-        guard let built = draftEffects else { return text }
-        return (built.rendered, LayerEffectsRenderer.placed(text.transform, image: built.rendered, inset: built.inset))
-    }
-
-    /// Text editing just ended: if the layer now holds the text as it was last typed, its effects from the edit stand
-    /// in until they're rebuilt from the committed pixels, so they don't blink off for a frame.
-    private func handOffTextEffects(_ document: CanvasDocument) {
-        guard session.textDraft == nil, let built = draftEffects, let source = draftEffectsSource else { return }
-        if document.layers.first(where: { $0.id == source.layerID })?.liveText?.style == source.style {
-            session.effectsPreviews.seed(source.layerID, image: built.rendered,
-                placement: LayerEffectsRenderer.placed(built.transform, image: built.rendered, inset: built.inset))
-        }
-        draftEffects = nil
-        draftEffectsSource = nil
+        textRendering.editedText(layer, shownAt: inlineTextEditor?.shownTransform)
     }
 
     /// The effects surface for the layer being painted, made when the stroke starts and updated as it goes.
@@ -2566,7 +2529,7 @@ extension CanvasView {
     /// The layers composited as `drawLayers` composites them, over nothing. Nil when a layer needs the Core Graphics
     /// canvas.
     private func gpuLayers(_ document: CanvasDocument, placement: GPUPlacement) -> CIImage? {
-        handOffTextEffects(document)
+        textRendering.handOffEffects(document)
         session.effectsPreviews.prepare(layers: document.layers)
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let ids = document.renderLayers.map(\.id)

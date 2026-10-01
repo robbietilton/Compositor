@@ -146,18 +146,8 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
             }
             logicalSize = measuredSize
         }
-        var transform = draft.transform ?? LayerTransform(origin: draft.origin, size: logicalSize)
         // Point text already on a layer grows as it is typed too, keeping whatever scale the layer was given.
-        if style.boxSize == nil, draft.transform != nil, let asset = layer?.asset, asset.image.width > 0 {
-            let factor = transform.size.width / CGFloat(asset.image.width)
-            // A rotated layer turns about its center, so growing it swings its corner away and the text drifts as it
-            // is typed. The top-left corner is put back where it was, which is where the commit leaves it too.
-            let anchor = transform.point(.zero)
-            transform.size = CGSize(width: logicalSize.width * factor, height: logicalSize.height * factor)
-            let moved = transform.point(.zero)
-            transform.origin.x += anchor.x - moved.x
-            transform.origin.y += anchor.y - moved.y
-        }
+        let transform = draft.shownTransform(logicalSize: logicalSize, layerWidth: layer?.asset?.image.width)
         shownTransform = transform
         let scale = canvas.session.viewport.pointsPerPixel
         let anchor = canvas.session.viewport.viewPoint(from: transform.point(.zero), documentSize: document.size)
@@ -226,16 +216,10 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     }
 
     func textDidChange(_ notification: Notification) {
-        guard !synchronizing, let session = canvas?.session, var draft = session.textDraft else { return }
-        if let pendingStyle, pendingStyle.content == textView.string {
-            draft.style.colorRuns = pendingStyle.colorRuns
-            draft.style.fontRuns = pendingStyle.fontRuns
-        }
+        guard !synchronizing, let session = canvas?.session,
+              let draft = session.textDraft(changedTo: textView.string, selection: textView.selectedRange(), pending: pendingStyle)
+        else { return }
         pendingStyle = nil
-        draft.style.content = textView.string
-        // Text NSTextView changed without saying how can't keep its colors and faces letter for letter.
-        if !draft.style.isValid { draft.style.colorRuns = nil; draft.style.fontRuns = nil }
-        draft.selection = textView.selectedRange()
         shownStyle = draft.style
         session.textDraft = draft
         // NSTextView draws the changed glyphs itself. Refresh the box's overflow marker
@@ -245,12 +229,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
         let length = replacementString?.utf16.count ?? 0
         guard textView.string.utf16.count - affectedCharRange.length + length <= 100_000 else { return false }
-        if !synchronizing, let draft = canvas?.session.textDraft,
-           draft.style.colorRuns != nil || draft.style.fontRuns != nil {
-            var style = pendingStyle ?? draft.style
-            guard NSMaxRange(affectedCharRange) <= style.content.utf16.count else { return true }
-            style.replaceCharacters(in: affectedCharRange, withLength: length)
-            style.content = (style.content as NSString).replacingCharacters(in: affectedCharRange, with: replacementString ?? "")
+        if !synchronizing, let style = canvas?.session.textStyle(replacing: affectedCharRange, with: replacementString, after: pendingStyle) {
             pendingStyle = style
         }
         return true
@@ -447,44 +426,14 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         let pixel = canvas.session.viewport.documentPoint(from: canvas.convert(event.locationInWindow, from: nil), documentSize: document.size)
         // Dragging a handle turns point text into a box of the size it has right now, which then holds the text and
         // wraps it, rather than scaling the text. Its scale and rotation are whatever the layer already had.
-        var fixed = draft
-        if fixed.style.boxSize == nil {
-            fixed.style.boxSize = logicalSize
-            fixed.transform = transform
-            fixed.origin = transform.origin
-            canvas.session.textDraft = fixed
-        }
+        let fixed = draft.boxed(logicalSize: logicalSize, shown: transform)
+        if draft.style.boxSize == nil { canvas.session.textDraft = fixed }
         resize = (handle, fixed, transform, pixel)
     }
     override func mouseDragged(with event: NSEvent) {
         guard let resize, let canvas, let document = canvas.session.document else { return }
         let point = canvas.session.viewport.documentPoint(from: canvas.convert(event.locationInWindow, from: nil), documentSize: document.size)
-        let old = resize.transform
-        let dx = point.x - resize.start.x, dy = point.y - resize.start.y
-        let localX = dx * cos(old.radians) + dy * sin(old.radians)
-        let localY = -dx * sin(old.radians) + dy * cos(old.radians)
-        let unit = LayerTransform.handles[resize.handle]
-        var left: CGFloat = 0, top: CGFloat = 0, right = old.size.width, bottom = old.size.height
-        let source = resize.draft.style.boxSize ?? logicalSize
-        let minW = 16 * old.size.width / source.width, minH = 16 * old.size.height / source.height
-        if unit.x == 0 { left = min(localX, right - minW) }
-        if unit.x == 1 { right = max(left + minW, right + localX) }
-        if unit.y == 0 { top = min(localY, bottom - minH) }
-        if unit.y == 1 { bottom = max(top + minH, bottom + localY) }
-        var draft = resize.draft
-        draft.style.boxSize = CGSize(width: ((right - left) * source.width / old.size.width).rounded(),
-                                     height: ((bottom - top) * source.height / old.size.height).rounded())
-        guard draft.style.boxIsValid else { return }
-        var transform = old
-        transform.size = CGSize(width: draft.style.boxSize!.width * old.size.width / source.width,
-                                height: draft.style.boxSize!.height * old.size.height / source.height)
-        let anchor = old.point(CGPoint(x: left / old.size.width, y: top / old.size.height))
-        let current = transform.point(.zero)
-        transform.origin.x += anchor.x - current.x
-        transform.origin.y += anchor.y - current.y
-        guard transform.isValid else { return }
-        draft.origin = transform.origin
-        draft.transform = transform
+        guard let draft = resize.draft.resized(handle: resize.handle, from: resize.transform, start: resize.start, to: point) else { return }
         canvas.session.textDraft = draft
         canvas.synchronizeDisplay()
     }
