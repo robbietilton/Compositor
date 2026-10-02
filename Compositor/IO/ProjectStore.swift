@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import ImageIO
+import Synchronization
 import UniformTypeIdentifiers
 
 extension UTType {
@@ -167,44 +168,85 @@ actor ProjectStore {
         do { manifest = try JSONDecoder().decode(ProjectManifest.self, from: metadata) }
         catch { throw ProjectError.invalid }
         try validate(manifest)
-        var images: [UUID: ImportedImage] = [:]
-        var masks: [UUID: ImportedImage] = [:]
+        // Every layer's and mask's file checked first, one by one, then read, a few at once: a package faulty in more than
+        // one file is refused for the first fault the checks find, before any found reading it.
+        var files: [PackedImage] = []
         var pixels = 0, maskPixels = 0
         for layer in manifest.layers {
           for isMask in [false, true] {
             guard let filename = isMask ? layer.maskFile : layer.imageFile else { continue }
             let file = url.appendingPathComponent("images").appendingPathComponent(filename)
             try checkFile(file, inside: url, maximumBytes: 512 * 1024 * 1024)
-            let asset = try autoreleasepool {
-                // Decoded from the file's bytes in memory, not from the file: an image made from a file source stays tied
-                // to it, and the next save replaces that file (ImageIO: "mmapped file changed"), so an image kept for undo
-                // could later read someone else's pixels.
-                let bytes = try Data(contentsOf: file)
-                guard let source = CGImageSourceCreateWithData(bytes as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
-                      CGImageSourceGetType(source) as String? == UTType.png.identifier,
-                      CGImageSourceGetCount(source) == 1,
-                      let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                      let width = properties[kCGImagePropertyPixelWidth] as? Int,
-                      let height = properties[kCGImagePropertyPixelHeight] as? Int,
-                      (properties[kCGImagePropertyDepth] as? Int ?? 8) <= 8 else { throw ProjectError.missingImage }
-                if isMask { try checkSize(width: width, height: height, used: &maskPixels) }
-                else { try checkSize(width: width, height: height, used: &pixels) }
-                guard let image = CGImageSourceCreateImageAtIndex(source, 0,
-                    [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-                      let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 96,
-                        kCGImageSourceShouldCacheImmediately: true
-                      ] as CFDictionary) else { throw ProjectError.missingImage }
-                if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
-                return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name)
-            }
-            if isMask { masks[layer.id] = asset } else { images[layer.id] = asset }
+            // Decoded from the file's bytes in memory, not from the file: an image made from a file source stays tied
+            // to it, and the next save replaces that file (ImageIO: "mmapped file changed"), so an image kept for undo
+            // could later read someone else's pixels.
+            let bytes = try Data(contentsOf: file)
+            guard let source = CGImageSourceCreateWithData(bytes as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+                  CGImageSourceGetType(source) as String? == UTType.png.identifier,
+                  CGImageSourceGetCount(source) == 1,
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Int,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                  (properties[kCGImagePropertyDepth] as? Int ?? 8) <= 8 else { throw ProjectError.missingImage }
+            if isMask { try checkSize(width: width, height: height, used: &maskPixels) }
+            else { try checkSize(width: width, height: height, used: &pixels) }
+            files.append(PackedImage(layer: layer.id, name: layer.name, isMask: isMask, source: source))
           }
+        }
+        var images: [UUID: ImportedImage] = [:]
+        var masks: [UUID: ImportedImage] = [:]
+        for (file, asset) in zip(files, try assets(for: files)) {
+            if file.isMask { masks[file.layer] = asset } else { images[file.layer] = asset }
         }
         let snapshot = ProjectSnapshot(manifest: manifest, images: images, masks: masks)
         Timing.end(reading, snapshot.timingDetail)
         return snapshot
+    }
+
+    /// A layer's or mask's PNG in a package being read, checked and waiting for its image and thumbnail.
+    private struct PackedImage: @unchecked Sendable {
+        let layer: UUID
+        let name: String
+        let isMask: Bool
+        /// Read by one call of `asset(for:)` only.
+        let source: CGImageSource
+    }
+
+    /// `files` read, a few at once: their thumbnails are most of the time a package takes to read. Throws the first
+    /// file's error, in package order.
+    private nonisolated static func assets(for files: [PackedImage]) throws -> [ImportedImage] {
+        let results = Mutex([Result<ImportedImage, any Error>?](repeating: nil, count: files.count))
+        let next = Atomic(0)
+        // Four at a time, as many as the iPad has performance cores; each takes the next file as soon as it's done.
+        DispatchQueue.concurrentPerform(iterations: min(4, files.count)) { _ in
+            while true {
+                let index = next.add(1, ordering: .relaxed).oldValue
+                guard index < files.count else { return }
+                let result = Result { try autoreleasepool { try asset(for: files[index]) } }
+                results.withLock { $0[index] = result }
+            }
+        }
+        return try results.withLock { $0 }.map { try $0!.get() }
+    }
+
+    /// A file's image and thumbnail. The image stays as compressed as its file until something draws it, and what
+    /// drawing decodes is kept where the system can let it go. A mask's PNG says nothing of its color space and ImageIO
+    /// takes it as Generic Gray, which saving again would write out as a profile; it's device gray, as the editor's own
+    /// masks are, so saving again writes the same bytes.
+    private nonisolated static func asset(for file: PackedImage) throws -> ImportedImage {
+        guard var image = CGImageSourceCreateImageAtIndex(file.source, 0, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(file.source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 96,
+                kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) else { throw ProjectError.missingImage }
+        if file.isMask {
+            guard LayerMask.isValid(image) else { throw ProjectError.invalid }
+            if image.colorSpace?.name == CGColorSpace.genericGrayGamma2_2, let gray = image.copy(colorSpace: CGColorSpaceCreateDeviceGray()) {
+                image = gray
+            }
+        }
+        return ImportedImage(image: image, thumbnail: thumbnail, name: file.name)
     }
 
     private nonisolated static func validate(_ manifest: ProjectManifest) throws {
