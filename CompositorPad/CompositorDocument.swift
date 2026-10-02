@@ -14,6 +14,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     private let readSnapshot = Mutex<ProjectSnapshot?>(nil)
     /// Why the last open or save failed, for saying so.
     private let lastError = Mutex<(any Error)?>(nil)
+    /// The project's images as its package holds them, so a save encodes only what changed.
+    let encoded = EncodedImages()
     /// A URL from the Files app is the app's to use only between these calls; `open` starts, `closeDocument` stops.
     @MainActor private var accessedURL: URL?
     /// Told how far the open's own read has come. Cleared once `open` returns, so a read after it, as when something else
@@ -97,7 +99,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     }
 
     override func read(from url: URL) throws {
-        let snapshot = try ProjectStore.readPackage(url, progress: reading.withLock { $0 })
+        let snapshot = try ProjectStore.readPackage(url, encoded: encoded, progress: reading.withLock { $0 })
         readSnapshot.withLock { $0 = snapshot }
     }
 
@@ -131,7 +133,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     override func writeContents(_ contents: Any, to url: URL, for saveOperation: UIDocument.SaveOperation,
                                 originalContentsURL: URL?) throws {
         guard let snapshot = contents as? ProjectSnapshot else { throw ProjectError.invalid }
-        let package = try ProjectStore.package(for: snapshot, quickLook: Self.quickLookImages(snapshot))
+        let package = try ProjectStore.package(for: snapshot, quickLook: Self.quickLookImages(snapshot), encoded: encoded)
         try Timing.measure("Write package") { try package.write(to: url, options: [], originalContentsURL: originalContentsURL) }
     }
 

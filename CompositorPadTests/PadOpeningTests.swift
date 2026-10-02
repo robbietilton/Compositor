@@ -226,6 +226,23 @@ import UIKit
         }
     }
 
+    /// Saving an opened project encodes nothing it read, and after one layer's pixels change, only that layer.
+    @Test func savingAnOpenedProjectEncodesOnlyWhatChanged() async throws {
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tab = EditorTab()
+        _ = try await tab.open(url).value
+        let document = try #require(tab.document)
+        #expect(await document.save(to: url, for: .forOverwriting))
+        #expect(document.encoded.encoded == 0)
+        let index = try #require(tab.session.document?.layers.firstIndex { $0.asset != nil })
+        let painted = try pattern(120, 80, seed: 5)
+        tab.session.document!.layers[index].asset = ImportedImage(image: painted, thumbnail: painted, name: "Layer")
+        #expect(await document.save(to: url, for: .forOverwriting))
+        #expect(document.encoded.encoded == 1)
+        await tab.close()
+    }
+
     /// A project that can't be opened doesn't leave the tab busy.
     @Test func aFailedOpenIsNotLeftBusy() async throws {
         let url = temporaryURL("Empty.comp")
