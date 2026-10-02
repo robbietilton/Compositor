@@ -10,6 +10,8 @@ final class ProjectController {
     private var saveGeneration = 0
     /// Keeps the document in step with its package when something else writes it. See ProjectController+ExternalChanges.
     let externalChanges = ExternalChangeState()
+    /// The project's images as its package holds them, so a save encodes only what changed.
+    let encoded = EncodedImages()
     var canStart: Bool {
         session.canStartProjectOperation && workspace?.isManaging != true
     }
@@ -228,7 +230,7 @@ final class ProjectController {
             defer { externalChanges.saving = false }
             do {
                 let quickLook = await ImageExporter.shared.quickLookImages(snapshot)
-                try await ProjectStore.shared.save(snapshot, to: destination, quickLook: quickLook)
+                try await ProjectStore.shared.save(snapshot, to: destination, quickLook: quickLook, encoded: encoded)
                 session.projectURL = destination
                 session.history.markSaved(revision)
                 saveGeneration += 1
@@ -277,13 +279,13 @@ final class ProjectController {
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         do {
             // Validate first. A corrupt project never discards the live document.
-            var snapshot = try await ProjectStore.shared.load(from: source)
+            var snapshot = try await ProjectStore.shared.load(from: source, encoded: encoded)
             let previousSave = saveGeneration
             guard await confirmReplacement() else { return false }
             // Saving in the confirmation can replace the very file being opened.
             if saveGeneration != previousSave,
                session.projectURL?.resolvingSymlinksInPath() == source.resolvingSymlinksInPath() {
-                snapshot = try await ProjectStore.shared.load(from: source)
+                snapshot = try await ProjectStore.shared.load(from: source, encoded: encoded)
             }
             session.installProject(snapshot, from: source)
             RecentProjects.shared.note(source)

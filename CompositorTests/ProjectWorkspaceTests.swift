@@ -192,6 +192,26 @@ import Testing
         #expect(images.count == 3 && images.allSatisfy { renderer.cachedLevels(of: $0).isEmpty })
     }
 
+    /// Saving an opened project encodes nothing it read, and after one layer's pixels change, only that layer.
+    @Test func savingAnOpenedProjectEncodesOnlyWhatChanged() async throws {
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let workspace = ProjectWorkspace()
+        #expect(await workspace.open(url))
+        let tab = workspace.current
+        #expect(await tab.controller.save())
+        #expect(tab.controller.encoded.encoded == 0)
+        let image = try #require(tab.session.document?.layers.first(where: { $0.asset != nil })?.asset?.image)
+        let context = try BrushRaster.copy(image)
+        context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+        let painted = try #require(context.makeImage())
+        let index = try #require(tab.session.document?.layers.firstIndex { $0.asset != nil })
+        tab.session.document!.layers[index].asset = ImportedImage(image: painted, thumbnail: painted, name: "Layer")
+        #expect(await tab.controller.save())
+        #expect(tab.controller.encoded.encoded == 1)
+    }
+
     @Test func moveTabReordersWithoutTouchingSelectionOrDocuments() {
         let workspace = ProjectWorkspace()
         let a = workspace.current
