@@ -155,6 +155,28 @@ actor ImageExporter {
         try write(data, to: url)
     }
 
+    /// One page the document's printed size (its pixels at its resolution), holding the flattened canvas at full
+    /// resolution. Core Graphics keeps the pixels lossless, and transparency stays transparent, as in a PNG.
+    func pdfData(_ snapshot: ProjectSnapshot) throws -> Data {
+        let raster = try render(snapshot)
+        let pointsPerPixel = 72 / (raster.resolution > 0 ? raster.resolution : 72)
+        var page = CGRect(x: 0, y: 0, width: CGFloat(raster.image.width) * pointsPerPixel,
+                          height: CGFloat(raster.image.height) * pointsPerPixel)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data),
+              let context = CGContext(consumer: consumer, mediaBox: &page, nil) else { throw ExportError.encode }
+        context.beginPDFPage(nil)
+        context.draw(raster.image, in: page)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
+    }
+
+    func exportPDF(_ snapshot: ProjectSnapshot, to url: URL) throws {
+        let data = try pdfData(snapshot)
+        try write(data, to: url)
+    }
+
     func write(_ data: Data, to url: URL) throws {
         var coordinationError: NSError?
         var writeError: Error?

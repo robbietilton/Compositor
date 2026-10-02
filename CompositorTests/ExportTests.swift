@@ -63,6 +63,32 @@ struct ExportTests {
         }
     }
 
+    @Test func pdfIsOnePageAtThePrintedSizeWithLosslessPixels() async throws {
+        let original = try snapshot()
+        var manifest = original.manifest
+        manifest.resolution = 150
+        let data = try await ImageExporter.shared.pdfData(ProjectSnapshot(manifest: manifest, images: original.images))
+        let document = try #require(CGPDFDocument(CGDataProvider(data: data as CFData)!))
+        #expect(document.numberOfPages == 1)
+        let page = try #require(document.page(at: 1))
+        // 6 pixels at 150 per inch is 0.04 in, or 2.88 points.
+        let box = page.getBoxRect(.mediaBox)
+        #expect(abs(box.width - 2.88) < 0.001 && abs(box.height - 2.88) < 0.001)
+        // The pixels go in losslessly, never as JPEG.
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(text.contains("/FlateDecode") && !text.contains("/DCTDecode"))
+        // Drawn back at one point per pixel, red stays red and the clear area stays clear.
+        let context = try #require(CGContext(data: nil, width: 6, height: 6, bitsPerComponent: 8, bytesPerRow: 24,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.interpolationQuality = .none
+        context.scaleBy(x: 6 / box.width, y: 6 / box.height)
+        context.drawPDFPage(page)
+        let bitmap = NSBitmapImageRep(cgImage: try #require(context.makeImage()))
+        #expect(try #require(bitmap.colorAt(x: 1, y: 1)).redComponent > 0.99)
+        #expect(try #require(bitmap.colorAt(x: 1, y: 1)).alphaComponent == 1)
+        #expect(try #require(bitmap.colorAt(x: 4, y: 1)).alphaComponent == 0)
+    }
+
     @Test func blankCanvasAndOversizedCanvas() async throws {
         let blank = ProjectSnapshot(manifest: ProjectManifest(documentID: UUID(), width: 2, height: 2,
             activeLayerID: nil, layers: []), images: [:])
@@ -72,5 +98,6 @@ struct ExportTests {
         let huge = ProjectSnapshot(manifest: ProjectManifest(documentID: UUID(), width: 30_000, height: 30_000,
             activeLayerID: nil, layers: []), images: [:])
         await #expect(throws: ExportError.self) { try await ImageExporter.shared.pngData(huge) }
+        await #expect(throws: ExportError.self) { try await ImageExporter.shared.pdfData(huge) }
     }
 }

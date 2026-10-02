@@ -42,23 +42,34 @@ final class ProjectController {
     func finishWriting() async { if let writing { _ = await writing.value } }
 
     func exportPNG() async {
+        await exportFlattened(as: .png, named: "PNG") { try await ImageExporter.shared.exportPNG($0, to: $1) }
+    }
+
+    /// A one-page PDF at the document's printed size, for print shops that ask for one.
+    func exportPDF() async {
+        await exportFlattened(as: .pdf, named: "PDF") { try await ImageExporter.shared.exportPDF($0, to: $1) }
+    }
+
+    private func exportFlattened(as type: UTType, named name: String,
+                                 export: (ProjectSnapshot, URL) async throws -> Void) async {
         guard session.document != nil, begin() else { return }
         defer { session.isProjectBusy = false }
         guard let snapshot = session.projectSnapshot() else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
+        panel.allowedContentTypes = [type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export PNG"
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".png"
+        panel.title = "Export " + name
+        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+            + "." + (type.preferredFilenameExtension ?? name.lowercased())
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
         else { response = await panel.begin() }
         guard response == .OK, let url = panel.url else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try await ImageExporter.shared.exportPNG(snapshot, to: url) }
-        catch { await showError("Couldn’t export PNG", error: error) }
+        do { try await export(snapshot, url) }
+        catch { await showError("Couldn’t export " + name, error: error) }
     }
 
     func canvasSize() async {
