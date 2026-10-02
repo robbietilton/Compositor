@@ -12,20 +12,31 @@ import UIKit
 
     /// The project being opened into the tab, while it loads.
     private(set) var openingURL: URL?
+    /// The open under way, which closing the tab stops.
+    private var opening: Task<Void, any Error>?
+    /// Images on their way in, waiting for the project to open or being read: the tab isn't empty while there are any.
+    var incoming = 0
+    /// Closed: nothing that lands in it afterwards gets a file.
+    private(set) var isClosed = false
 
     /// The file's name without its extension, or Untitled.
     var title: String { (session.projectURL ?? openingURL)?.deletingPathExtension().lastPathComponent ?? "Untitled" }
     /// Nothing in it yet and nothing on its way: the New Canvas form, which an opened project can take over.
-    var isEmpty: Bool { document == nil && session.document == nil && openingURL == nil }
+    var isEmpty: Bool { document == nil && session.document == nil && openingURL == nil && incoming == 0 }
     /// The project the tab holds or is opening.
     var url: URL? { session.projectURL ?? openingURL }
 
     /// Opens the project at `url` in this tab. The tab is taken from the call on, while the package is read, so
-    /// projects opened together (as a window's are when it comes back) each get a tab of their own.
+    /// projects opened together (as a window's are when it comes back) each get a tab of their own. Its editor is busy
+    /// until the project is in, as the Mac's is: images brought in meanwhile wait, and land in the project.
     func open(_ url: URL) -> Task<Void, any Error> {
         openingURL = url
-        return Task {
-            defer { openingURL = nil }
+        session.isProjectBusy = true
+        let opening = Task {
+            defer {
+                openingURL = nil
+                session.isProjectBusy = false
+            }
             let opening = Timing.begin("Open project")
             let document = CompositorDocument(fileURL: url, session: session)
             try await document.openDocument()
@@ -37,18 +48,29 @@ import UIKit
                 canvas.afterNextFrame { Timing.end(drawing) }
             }
         }
+        self.opening = opening
+        return opening
     }
 
     /// Gives what the editor holds (a new canvas, or images brought into an empty tab) a file of its own. The file is
     /// where the project starts from then, as an opened project's is: undo doesn't go back past it to no canvas at all.
     func createDocument(named name: String) async throws {
-        guard document == nil, session.document != nil else { return }
+        guard !isClosed, document == nil, session.document != nil else { return }
         session.history.reset()
-        document = try await CompositorDocument.create(at: CompositorDocument.unusedURL(named: name), with: session)
+        let created = try await CompositorDocument.create(at: CompositorDocument.unusedURL(named: name), with: session)
+        // Closed while the file was written: it's closed again.
+        guard !isClosed else {
+            await created.closeDocument()
+            return
+        }
+        document = created
     }
 
-    /// Saves and closes the file; the tab is done with.
+    /// Saves and closes the file; the tab is done with. A project still opening stops, and its file is closed.
     func close() async {
+        isClosed = true
+        opening?.cancel()
+        _ = await opening?.result
         await document?.closeDocument()
         document = nil
     }

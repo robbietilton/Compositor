@@ -396,7 +396,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             do {
                 try await opening.value
                 PadRecentProjects.shared.note(url)
+            } catch is CancellationError {
+                // The tab was closed while it opened.
             } catch {
+                // Closed while it opened, it says nothing.
+                guard tabs.contains(where: { $0 === tab }) else { return }
                 // The tab opened for it goes again, unless it's the window's last.
                 if tab.isEmpty, tabs.count > 1 { close(tab.id) }
                 showError("Couldn’t open “\(url.deletingPathExtension().lastPathComponent)”", error)
@@ -410,7 +414,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private func bringIn(_ images: [URL], into target: EditorTab? = nil, at point: CGPoint? = nil) async {
         guard !images.isEmpty, let tab = target ?? activeTab ?? tabs.first else { return }
         let importing = Timing.begin("Import images")
+        tab.incoming += 1
         await tab.session.importImages(images, at: point)
+        tab.incoming -= 1
         Timing.end(importing, Timing.counted(images.count, "image"))
         do { try await tab.createDocument(named: images.first?.deletingPathExtension().lastPathComponent ?? "Untitled") }
         catch { showError("Couldn’t save the new project", error) }
@@ -421,6 +427,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// dropped on the canvas (`canvasPoint`, in the canvas's coordinates), as on the Mac, or else on the canvas's middle.
     func receive(_ providers: [NSItemProvider], at canvasPoint: CGPoint? = nil) async {
         guard let tab = activeTab else { return }
+        // On their way in from the moment they're handed over, which can take a while from iCloud.
+        tab.incoming += 1
+        defer { tab.incoming -= 1 }
         let session = tab.session
         let point = canvasPoint.flatMap { point in
             session.document.map { session.viewport.documentPoint(from: point, documentSize: $0.size) }

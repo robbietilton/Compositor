@@ -24,7 +24,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     // MARK: Opening and closing
 
-    /// Reads the package and puts it into the editor.
+    /// Reads the package and puts it into the editor. Cancelled meanwhile, it closes the file again and throws
+    /// `CancellationError`, the editor untouched.
     @MainActor func openDocument() async throws {
         if fileURL.startAccessingSecurityScopedResource() { accessedURL = fileURL }
         guard await open() else {
@@ -35,6 +36,10 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
             _ = await close()
             stopAccessing()
             throw ProjectError.invalid
+        }
+        guard !Task.isCancelled else {
+            await closeDocument()
+            throw CancellationError()
         }
         session.installProject(snapshot, from: fileURL)
         trackChanges()
