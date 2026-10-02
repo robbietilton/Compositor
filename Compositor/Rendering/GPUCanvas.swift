@@ -315,8 +315,8 @@ import QuartzCore
     }
 
     /// Draws `image` into `layer`'s next drawable, in step with the Core Animation transaction it's drawn in, so it
-    /// lands on the same frame as the overlays above it.
-    func present(_ image: CIImage, in layer: CAMetalLayer) {
+    /// lands on the same frame as the overlays above it. `drawn` runs once the GPU has drawn it, on a thread of Metal's.
+    func present(_ image: CIImage, in layer: CAMetalLayer, drawn: [@Sendable () -> Void] = []) {
         guard let drawable = layer.nextDrawable(), let buffer = queue.makeCommandBuffer() else { return }
         let size = layer.drawableSize
         // Core Image writes a texture that can be rendered to bottom row first (a plain one, top row first), so the
@@ -325,6 +325,7 @@ import QuartzCore
             ? image.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: size.height)) : image
         context.render(upright, to: drawable.texture, commandBuffer: buffer,
                        bounds: CGRect(x: 0, y: 0, width: size.width, height: size.height), colorSpace: space)
+        if !drawn.isEmpty { buffer.addCompletedHandler { _ in drawn.forEach { $0() } } }
         buffer.commit()
         buffer.waitUntilScheduled()
         drawable.present()

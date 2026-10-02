@@ -21,7 +21,8 @@ actor ImageExporter {
         let width = snapshot.manifest.width, height = snapshot.manifest.height
         guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
               width * height <= DocumentLimits.maxSurfacePixels else { throw ExportError.tooLarge }
-        return try autoreleasepool {
+        let rendering = Timing.begin("Render")
+        let raster = try autoreleasepool {
             guard let space = CGColorSpace(name: CGColorSpace.sRGB),
                   let context = CGContext(data: nil, width: width, height: height,
                                           bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
@@ -73,14 +74,18 @@ actor ImageExporter {
             guard let image = context.makeImage() else { throw ExportError.render }
             return ExportRaster(image: image, resolution: snapshot.manifest.resolution ?? 72)
         }
+        Timing.end(rendering, "\(width)×\(height)")
+        return raster
     }
 
     /// The Space-bar preview, saved in the project's QuickLook folder: the flattened image on white, a JPEG up to
     /// 1,024 px on the long side, about 100–200 KB. Nil for canvases too large to flatten on every save.
     func quickLookImages(_ snapshot: ProjectSnapshot) -> QuickLookImages? {
+        let making = Timing.begin("QuickLook preview")
         guard snapshot.manifest.width * snapshot.manifest.height <= 50_000_000,
               let raster = try? render(snapshot),
               let preview = try? scaledJPEG(raster.image, longSide: 1024) else { return nil }
+        Timing.end(making)
         return QuickLookImages(preview: preview)
     }
 
@@ -103,9 +108,12 @@ actor ImageExporter {
 
     func pngData(_ snapshot: ProjectSnapshot) throws -> Data {
         let raster = try render(snapshot)
-        return try encode(raster.image, type: .png, properties: [
+        let encoding = Timing.begin("Encode PNG")
+        let data = try encode(raster.image, type: .png, properties: [
             kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution
         ] as CFDictionary)
+        Timing.end(encoding, Timing.bytes(data.count))
+        return data
     }
 
     private func encode(_ image: CGImage, type: UTType, properties: CFDictionary? = nil) throws -> Data {
@@ -120,7 +128,8 @@ actor ImageExporter {
 
     func jpeg(_ raster: ExportRaster, options: JPEGOptions) throws -> JPEGResult {
         try Task.checkCancellation()
-        return try autoreleasepool {
+        let encoding = Timing.begin("Encode JPEG")
+        let result = try autoreleasepool {
             let image = raster.image
             guard let context = CGContext(data: nil, width: image.width, height: image.height,
                 bitsPerComponent: 8, bytesPerRow: image.width * 4,
@@ -148,6 +157,8 @@ actor ImageExporter {
                   ] as CFDictionary) else { throw ExportError.encode }
             return JPEGResult(data: data, preview: preview)
         }
+        Timing.end(encoding, "quality \(Int((options.quality * 100).rounded()))%, \(Timing.bytes(result.data.count))")
+        return result
     }
 
     func exportPNG(_ snapshot: ProjectSnapshot, to url: URL) throws {

@@ -98,6 +98,7 @@ actor ProjectStore {
     /// The package `save` writes: the manifest, every layer's and mask's pixels as PNG, and the Quick Look preview,
     /// validated as `load` validates. A caller that coordinates the write itself, as a UIDocument does, writes this.
     nonisolated static func package(for snapshot: ProjectSnapshot, quickLook: QuickLookImages? = nil) throws -> FileWrapper {
+        let encoding = Timing.begin("Encode project")
         try validate(snapshot.manifest)
         var images: [String: FileWrapper] = [:]
         var pixels = 0, maskPixels = 0
@@ -135,6 +136,7 @@ actor ProjectStore {
                 "Preview.jpg": FileWrapper(regularFileWithContents: quickLook.preview),
             ])
         }
+        Timing.end(encoding, snapshot.timingDetail)
         return FileWrapper(directoryWithFileWrappers: contents)
     }
 
@@ -151,6 +153,7 @@ actor ProjectStore {
 
     /// Reads a package whose reading is already coordinated: `load` coordinates it, and so does a UIDocument.
     nonisolated static func readPackage(_ url: URL) throws -> ProjectSnapshot {
+        let reading = Timing.begin("Read project")
         guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw ProjectError.invalid }
         let metadataURL = url.appendingPathComponent("manifest.json")
         try checkFile(metadataURL, inside: url, maximumBytes: 4 * 1024 * 1024)
@@ -199,7 +202,9 @@ actor ProjectStore {
             if isMask { masks[layer.id] = asset } else { images[layer.id] = asset }
           }
         }
-        return ProjectSnapshot(manifest: manifest, images: images, masks: masks)
+        let snapshot = ProjectSnapshot(manifest: manifest, images: images, masks: masks)
+        Timing.end(reading, snapshot.timingDetail)
+        return snapshot
     }
 
     private nonisolated static func validate(_ manifest: ProjectManifest) throws {
