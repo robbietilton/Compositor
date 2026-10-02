@@ -24,15 +24,18 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     // MARK: Opening and closing
 
-    /// Reads the package and puts it into the editor. Cancelled meanwhile, it closes the file again and throws
-    /// `CancellationError`, the editor untouched.
-    @MainActor func openDocument() async throws {
+    /// Reads the package and puts it into the editor. `prepare` is handed what was read, to make the canvas's textures
+    /// for it away from the main thread; they go to the canvas in the same turn of the main actor as the project goes
+    /// into the editor, so the canvas's next frame is the project's, and finds them. Returns how many went to the canvas.
+    /// Cancelled meanwhile, it closes the file again and throws `CancellationError`, the editor untouched.
+    @MainActor @discardableResult
+    func openDocument(prepare: (ProjectSnapshot) async -> GPUCanvasRenderer.Prepared? = { _ in nil }) async throws -> Int {
         if fileURL.startAccessingSecurityScopedResource() { accessedURL = fileURL }
         guard await open() else {
             stopAccessing()
             throw lastError.withLock { $0 } ?? CocoaError(.fileReadUnknown)
         }
-        guard let snapshot = readSnapshot.withLock({ value in defer { value = nil }; return value }) else {
+        guard var snapshot = takeReadSnapshot() else {
             _ = await close()
             stopAccessing()
             throw ProjectError.invalid
@@ -41,8 +44,22 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
             await closeDocument()
             throw CancellationError()
         }
+        var prepared = await prepare(snapshot)
+        guard !Task.isCancelled else {
+            await closeDocument()
+            throw CancellationError()
+        }
+        // Something else wrote the package meanwhile: what it holds now goes in, and its first frame makes its own
+        // textures.
+        if let newer = takeReadSnapshot() {
+            snapshot = newer
+            prepared = nil
+        }
+        // Nothing is awaited from here to the install, so no frame comes between.
+        if let prepared { GPUCanvasRenderer.shared?.adopt(prepared) }
         session.installProject(snapshot, from: fileURL)
         trackChanges()
+        return prepared?.count ?? 0
     }
 
     /// A new project with what `session` already holds, written to `url` before anything else happens to it.
@@ -61,6 +78,11 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     @MainActor func closeDocument() async {
         _ = await close()
         stopAccessing()
+    }
+
+    /// The package just read, if it hasn't been taken yet.
+    private func takeReadSnapshot() -> ProjectSnapshot? {
+        readSnapshot.withLock { value in defer { value = nil }; return value }
     }
 
     @MainActor private func stopAccessing() {
@@ -155,7 +177,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     override func revert(toContentsOf url: URL, completionHandler: ((Bool) -> Void)? = nil) {
         super.revert(toContentsOf: url) { [weak self] success in
             Task { @MainActor [weak self] in
-                if success, let self, let snapshot = self.readSnapshot.withLock({ value in defer { value = nil }; return value }) {
+                // Until the project is in the editor, the open takes up what was read itself.
+                if success, let self, self.session.projectURL != nil, let snapshot = self.takeReadSnapshot() {
                     self.session.reloadProject(snapshot)
                 }
                 completionHandler?(success)

@@ -22,15 +22,16 @@ import UIKit
         FileManager.default.temporaryDirectory.appending(path: "PadOpeningTests \(UUID().uuidString) \(name)")
     }
 
-    /// A project of two layers, saved where a tab can open it.
-    private func savedProject() throws -> URL {
+    /// A project of two layers, or `layers`, saved where a tab can open it, or over the one at `url`.
+    private func savedProject(layers: Int = 2, at url: URL? = nil) throws -> URL {
         let session = EditorSession()
         session.createDocument(width: 300, height: 200)
-        for seed in 0..<2 {
+        for seed in 0..<layers {
             let image = try pattern(300 - seed * 50, 200 - seed * 25, seed: seed)
             session.insert(ImportedImage(image: image, thumbnail: image, name: "Layer"))
         }
-        let url = temporaryURL("Project.comp")
+        let url = url ?? temporaryURL("Project.comp")
+        try? FileManager.default.removeItem(at: url)
         try ProjectStore.package(for: try #require(session.projectSnapshot())).write(to: url, options: [], originalContentsURL: nil)
         return url
     }
@@ -79,6 +80,53 @@ import UIKit
         await #expect(throws: CancellationError.self) { try await opening.value }
         #expect(tab.session.document == nil && tab.document == nil && !tab.session.isProjectBusy)
         #expect(!NSFileCoordinator.filePresenters.contains { $0.presentedItemURL?.standardizedFileURL == url.standardizedFileURL })
+    }
+
+    /// A tab in front makes the textures its canvas draws the project from as the project opens.
+    @Test func aTabInFrontMakesItsTexturesAsItOpens() async throws {
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let tab = EditorTab()
+        window.addSubview(tab.canvas)
+        let sources = CanvasDocument(project: try ProjectStore.readPackage(url)).canvasSources
+        #expect(sources.count == 2)
+        #expect(try await tab.open(url).value == sources.count)
+        tab.canvas.removeFromSuperview()
+        await tab.close()
+        withExtendedLifetime(window) {}
+    }
+
+    /// A tab behind makes none, and makes them as it's brought forward, as before.
+    @Test func aTabBehindMakesNone() async throws {
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let tab = EditorTab()
+        #expect(try await tab.open(url).value == 0)
+        let images = try #require(tab.session.document).layers.compactMap { $0.asset?.image }
+        #expect(images.count == 2 && images.allSatisfy { renderer.cachedLevels(of: $0).isEmpty })
+        await tab.close()
+    }
+
+    /// A change another app makes to the project while it opens is in the editor once it's open; what was made for the
+    /// project as first read is let go.
+    @Test func aChangeMadeWhileAProjectOpensIsTakenUp() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let session = EditorSession()
+        let document = CompositorDocument(fileURL: url, session: session)
+        let made = try await document.openDocument { snapshot in
+            let prepared = await renderer.prepare(CanvasDocument(project: snapshot).canvasSources)
+            _ = try? self.savedProject(layers: 3, at: url)
+            #expect(await document.revert(toContentsOf: url))
+            return prepared
+        }
+        #expect(session.document?.layers.count == 3)
+        #expect(made == 0)
+        await document.closeDocument()
     }
 
     /// Waits up to a few seconds for `condition`, as the window's own tasks finish.

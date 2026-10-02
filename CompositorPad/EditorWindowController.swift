@@ -394,7 +394,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         setNeedsUpdateProperties()
         Task {
             do {
-                try await opening.value
+                _ = try await opening.value
                 PadRecentProjects.shared.note(url)
             } catch is CancellationError {
                 // The tab was closed while it opened.
