@@ -6,6 +6,8 @@ final class StatusBarView: UIView {
     var session: EditorSession? { didSet { if session !== oldValue { setNeedsUpdateProperties() } } }
     /// Whether a finger paints, as `DrawingInput` says; the hints say what draws.
     var fingerPaints = true { didSet { setNeedsUpdateProperties() } }
+    /// A project is opening in the tab: it isn't waiting for a canvas.
+    var isOpening = false { didSet { if isOpening != oldValue { setNeedsUpdateProperties() } } }
     /// A word on what just changed, said in the hint's place for a moment.
     private(set) var flashed: String?
     private var flashEnd: Task<Void, Never>?
@@ -55,7 +57,7 @@ final class StatusBarView: UIView {
             space.text = "sRGB · Transparent"
         } else {
             zoom.text = nil
-            size.text = "Ready when you are"
+            size.text = isOpening ? nil : "Ready when you are"
             space.text = nil
         }
         for label in [zoom, size, space] { label.isHidden = label.text == nil }

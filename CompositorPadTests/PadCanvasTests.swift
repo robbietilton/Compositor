@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreImage
 import Metal
 import Testing
+import UIKit
 @testable import Compositor
 
 /// The iPad canvas against the editor's own composite, and painting on it.
@@ -240,6 +241,42 @@ import Testing
             #expect(renderer.cachedLevels(of: prepared.image) == renderer.cachedLevels(of: drawn.image), "\(prepared.name)")
         }
         await file.closeDocument()
+    }
+
+    /// What waits for the canvas's next frame to show runs as that frame is presented, once, on the main thread.
+    @Test func whatWaitsForTheNextFrameToShowRunsAsItIsPresented() throws {
+        let canvas = PadCanvasView(session: try richSession())
+        canvas.frame = CGRect(x: 0, y: 0, width: 300, height: 200)
+        canvas.layoutIfNeeded()
+        var runs = 0
+        canvas.whenNextFrameShows {
+            #expect(Thread.isMainThread)
+            runs += 1
+        }
+        #expect(runs == 0)
+        canvas.render()
+        #expect(runs == 1)
+        canvas.render()
+        #expect(runs == 1)
+    }
+
+    /// A canvas that finds no drawable three frames running goes on without one, so nothing waits for its frame for good.
+    @Test func whatWaitsForTheNextFrameToShowStillRunsWithoutADrawable() throws {
+        let canvas = PadCanvasView(session: try richSession())
+        canvas.frame = CGRect(x: 0, y: 0, width: 300, height: 200)
+        canvas.layoutIfNeeded()
+        let surface = try #require(canvas.subviews.lazy.compactMap { $0 as? MetalCanvasView }.first)
+        surface.metalLayer.device = nil
+        var runs = 0
+        canvas.whenNextFrameShows { runs += 1 }
+        canvas.render()
+        canvas.render()
+        #expect(runs == 0)
+        canvas.render()
+        #expect(runs == 1)
+        surface.metalLayer.device = GPUCanvasRenderer.shared?.device
+        canvas.render()
+        #expect(runs == 1)
     }
 
     @Test func matchesTheEditorsComposite() throws {

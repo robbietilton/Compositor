@@ -18,12 +18,7 @@ final class NewCanvasView: UIView, UITextFieldDelegate {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        let card = UIView()
-        card.backgroundColor = UIColor(white: 0.18, alpha: 0.96)
-        card.layer.cornerRadius = 20
-        card.layer.cornerCurve = .continuous
-        card.layer.borderWidth = 1
-        card.layer.borderColor = UIColor(white: 1, alpha: 0.08).cgColor
+        let card = Self.card()
 
         let title = UILabel()
         title.text = "New canvas"
@@ -110,6 +105,17 @@ final class NewCanvasView: UIView, UITextFieldDelegate {
         validate()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// The card an empty tab's form sits on, and an opening tab's Loading card too.
+    static func card() -> UIView {
+        let card = UIView()
+        card.backgroundColor = UIColor(white: 0.18, alpha: 0.96)
+        card.layer.cornerRadius = 20
+        card.layer.cornerCurve = .continuous
+        card.layer.borderWidth = 1
+        card.layer.borderColor = UIColor(white: 1, alpha: 0.08).cgColor
+        return card
+    }
 
     /// Lists up to five recent projects, or hides the list when there are none.
     func showRecent(_ urls: [URL]) {

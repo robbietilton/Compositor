@@ -16,6 +16,8 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
             setNeedsUpdateProperties()
         }
     }
+    /// A project is opening in the tab: it has no layers yet, but isn't waiting for any to be made.
+    var isOpening = false { didSet { if isOpening != oldValue { setNeedsUpdateProperties() } } }
     /// Shows the rename prompt.
     weak var presenter: UIViewController?
 
@@ -205,7 +207,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         footer.last?.button.accessibilityLabel = deleteTitle
         footer.last?.button.toolTip = deleteTitle
 
-        empty.isHidden = !layers.isEmpty
+        empty.isHidden = !layers.isEmpty || session.document == nil && isOpening
         emptyDetail.text = session.document == nil ? "Create a canvas or import an image." : "Import an image or add a blank layer."
         show(rows(of: session))
     }

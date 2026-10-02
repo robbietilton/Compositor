@@ -16,9 +16,13 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     private let lastError = Mutex<(any Error)?>(nil)
     /// A URL from the Files app is the app's to use only between these calls; `open` starts, `closeDocument` stops.
     @MainActor private var accessedURL: URL?
+    /// Told how far the open's own read has come. Cleared once `open` returns, so a read after it, as when something else
+    /// changes the package, says nothing.
+    private let reading: Mutex<(@Sendable (ProjectStore.ReadProgress) -> Void)?>
 
-    init(fileURL url: URL, session: EditorSession) {
+    init(fileURL url: URL, session: EditorSession, reading: (@Sendable (ProjectStore.ReadProgress) -> Void)? = nil) {
         self.session = session
+        self.reading = Mutex(reading)
         super.init(fileURL: url)
     }
 
@@ -31,7 +35,9 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     @MainActor @discardableResult
     func openDocument(prepare: (ProjectSnapshot) async -> GPUCanvasRenderer.Prepared? = { _ in nil }) async throws -> Int {
         if fileURL.startAccessingSecurityScopedResource() { accessedURL = fileURL }
-        guard await open() else {
+        let opened = await open()
+        reading.withLock { $0 = nil }
+        guard opened else {
             stopAccessing()
             throw lastError.withLock { $0 } ?? CocoaError(.fileReadUnknown)
         }
@@ -91,7 +97,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     }
 
     override func read(from url: URL) throws {
-        let snapshot = try ProjectStore.readPackage(url)
+        let snapshot = try ProjectStore.readPackage(url, progress: reading.withLock { $0 })
         readSnapshot.withLock { $0 = snapshot }
     }
 

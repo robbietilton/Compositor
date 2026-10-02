@@ -32,6 +32,9 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     private var needsRender = true
     /// What waits for the next frame to be drawn.
     private var nextFrame: [@Sendable () -> Void] = []
+    /// What waits for the next frame to go on screen, and how many frames in a row found no drawable for it.
+    private var nextFrameShown: [() -> Void] = []
+    private var unshownFrames = 0
 
     /// The touch drawing or dragging with the current tool, and what it's doing.
     private var activeTouch: UITouch?
@@ -128,14 +131,24 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         setNeedsRender()
     }
 
+    /// Runs `action` on the main thread as the canvas's next frame is handed to Core Animation, in the transaction that
+    /// puts it on screen (the canvas presents with the transaction), so what `action` changes in the interface lands
+    /// with the frame. A canvas that finds no drawable three frames running goes on without one, so nothing waits for
+    /// good.
+    func whenNextFrameShows(_ action: @escaping () -> Void) {
+        nextFrameShown.append(action)
+        setNeedsRender()
+    }
+
     @objc private func tick() {
         guard needsRender else { displayLink?.isPaused = true; return }
         needsRender = false
         render()
     }
 
-    /// Draws the frame, and asks for the next one when anything it read from the session changes.
-    private func render() {
+    /// Draws the frame, and asks for the next one when anything it read from the session changes. The display link
+    /// calls it; tests call it to draw a frame without one.
+    func render() {
         guard let renderer = GPUCanvasRenderer.shared else { return }
         surface.fit(scale: session.viewport.backingScale)
         let size = surface.metalLayer.drawableSize
@@ -150,8 +163,18 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             DispatchQueue.main.async { self?.setNeedsRender() }
         }
         let backdrop = CIImage(color: CIColor(red: 0.105, green: 0.105, blue: 0.105)).cropped(to: CGRect(origin: .zero, size: size))
-        renderer.present(frame ?? backdrop, in: surface.metalLayer, drawn: nextFrame)
+        let presented = renderer.present(frame ?? backdrop, in: surface.metalLayer, drawn: nextFrame)
         nextFrame = []
+        guard !nextFrameShown.isEmpty else { return }
+        if presented || unshownFrames >= 2 {
+            let shown = nextFrameShown
+            nextFrameShown = []
+            unshownFrames = 0
+            shown.forEach { $0() }
+        } else {
+            unshownFrames += 1
+            setNeedsRender()
+        }
     }
 
     // MARK: Text

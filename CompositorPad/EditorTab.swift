@@ -18,6 +18,8 @@ import UIKit
     var incoming = 0
     /// Closed: nothing that lands in it afterwards gets a file.
     private(set) var isClosed = false
+    /// The open under way or last made, step by step, for the window's Loading card.
+    private(set) var loading: LoadingProgress?
 
     /// The file's name without its extension, or Untitled.
     var title: String { (session.projectURL ?? openingURL)?.deletingPathExtension().lastPathComponent ?? "Untitled" }
@@ -29,25 +31,41 @@ import UIKit
     /// Opens the project at `url` in this tab. The tab is taken from the call on, while the package is read, so
     /// projects opened together (as a window's are when it comes back) each get a tab of their own. Its editor is busy
     /// until the project is in, as the Mac's is: images brought in meanwhile wait, and land in the project. The task's
-    /// value is how many textures the canvas was handed as it opened.
-    func open(_ url: URL) -> Task<Int, any Error> {
+    /// value is how many textures the canvas was handed as it opened. `failed` is told why it couldn't open, in the same
+    /// turn of the main actor as the tab stops opening, so the window takes care of the tab before anything shows it
+    /// empty; an open stopped by closing the tab isn't a failure.
+    func open(_ url: URL, failed: @escaping (any Error) -> Void = { _ in }) -> Task<Int, any Error> {
         openingURL = url
         session.isProjectBusy = true
+        let loading = LoadingProgress(name: title)
+        self.loading = loading
         let opening = Task {
+            var failure: (any Error)?
             defer {
                 openingURL = nil
                 session.isProjectBusy = false
+                // Failed or stopped before the project went in.
+                if !loading.isDrawing { loading.stopped() }
+                if let failure, !(failure is CancellationError) { failed(failure) }
             }
             let opening = Timing.begin("Open project")
-            let document = CompositorDocument(fileURL: url, session: session)
-            let handed = try await document.openDocument { snapshot in
-                // The tab in front shows the project on its next frame: the textures it draws from are made first,
-                // away from the main thread. A tab behind makes them as it's brought forward, as before, and so does
-                // one whose window isn't on screen, which draws no frame to take them.
-                guard isShown, let renderer = GPUCanvasRenderer.shared else { return nil }
-                let prepared = await renderer.prepare(CanvasDocument(project: snapshot).canvasSources)
-                // Sent behind meanwhile: nothing is kept for it.
-                return isShown ? prepared : nil
+            let document = CompositorDocument(fileURL: url, session: session, reading: { loading.read($0) })
+            let handed: Int
+            do {
+                handed = try await document.openDocument { snapshot in
+                    // The tab in front shows the project on its next frame: the textures it draws from are made first,
+                    // away from the main thread. A tab behind makes them as it's brought forward, as before, and so
+                    // does one whose window isn't on screen, which draws no frame to take them.
+                    guard isShown, let renderer = GPUCanvasRenderer.shared else { return nil }
+                    let prepared = await renderer.prepare(CanvasDocument(project: snapshot).canvasSources,
+                                                          progress: { loading.preparing($0) })
+                    loading.prepared(prepared.count)
+                    // Sent behind meanwhile: nothing is kept for it.
+                    return isShown ? prepared : nil
+                }
+            } catch {
+                failure = error
+                throw error
             }
             self.document = document
             Timing.end(opening, session.document.map {
@@ -57,6 +75,11 @@ import UIKit
             if canvas.window != nil {
                 let drawing = Timing.begin("First frame")
                 canvas.afterNextFrame { Timing.end(drawing) }
+            }
+            // The card goes with the frame that shows the project; a tab behind keeps it until it's brought forward.
+            if GPUCanvasRenderer.shared != nil {
+                loading.drawing()
+                canvas.whenNextFrameShows { loading.shown() }
             }
             return handed
         }
@@ -87,6 +110,7 @@ import UIKit
     /// Saves and closes the file; the tab is done with. A project still opening stops, and its file is closed.
     func close() async {
         isClosed = true
+        loading?.stopped()
         opening?.cancel()
         _ = await opening?.result
         await document?.closeDocument()

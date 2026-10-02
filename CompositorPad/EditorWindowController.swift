@@ -62,6 +62,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private let rail = ToolRailView()
     private let canvasHost = UIView()
     private let newCanvas = NewCanvasView()
+    private let loadingCard = LoadingView()
     /// The outline around the canvas while something dragged over the window can be dropped, as on the Mac.
     private let dropTarget = UIView()
     private let layersPanel = LayersPanelView()
@@ -119,8 +120,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let optionsLine = Self.separator(vertical: false)
         let railLine = Self.separator(vertical: true), panelLine = Self.separator(vertical: true)
         let statusLine = Self.separator(vertical: false)
-        for subview in [optionsBar, optionsLine, rail, railLine, canvasHost, newCanvas, dropTarget, panelLine, layersPanel,
-                        statusLine, statusBar] as [UIView] {
+        for subview in [optionsBar, optionsLine, rail, railLine, canvasHost, newCanvas, loadingCard, dropTarget, panelLine,
+                        layersPanel, statusLine, statusBar] as [UIView] {
             view.addSubview(subview)
             subview.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -141,6 +142,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             canvasHost.topAnchor.constraint(equalTo: rail.topAnchor), canvasHost.bottomAnchor.constraint(equalTo: rail.bottomAnchor),
             newCanvas.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), newCanvas.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
             newCanvas.topAnchor.constraint(equalTo: canvasHost.topAnchor), newCanvas.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
+            loadingCard.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), loadingCard.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
+            loadingCard.topAnchor.constraint(equalTo: canvasHost.topAnchor), loadingCard.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
             dropTarget.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), dropTarget.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
             dropTarget.topAnchor.constraint(equalTo: canvasHost.topAnchor), dropTarget.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
             panelLine.topAnchor.constraint(equalTo: rail.topAnchor), panelLine.bottomAnchor.constraint(equalTo: rail.bottomAnchor),
@@ -182,11 +185,19 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let hasDocument = session.document != nil
         for item in [fitItem, actualItem, zoomInItem, zoomOutItem] { item.isEnabled = hasDocument }
         newCanvas.isHidden = !tab.isEmpty
+        // The opening tab's Loading card, in the same pass that hides New canvas.
+        loadingCard.progress = tab.loading
+        loadingCard.updatePropertiesIfNeeded()
         view.window?.windowScene?.title = tab.title
         rail.session = session
         optionsBar.session = session
         layersPanel.session = session
         statusBar.session = session
+        // An opening tab isn't empty, though it has nothing yet; its canvas's handles and outlines wait for its picture.
+        let opening = tab.loading?.isShowing == true
+        layersPanel.isOpening = opening
+        statusBar.isOpening = opening
+        tab.canvas.overlayView.isHidden = opening
         // Who draws, which Apple Pencil turning up and the toolbar's switch change.
         statusBar.fingerPaints = input.fingerPaints
         tab.canvas.fingerPaints = input.fingerPaints
@@ -390,21 +401,17 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         }
         // An empty tab in front takes the project; otherwise it gets a tab of its own.
         let tab = activeTab.flatMap { $0.isEmpty ? $0 : nil } ?? addTab()
-        let opening = tab.open(url)
+        let opening = tab.open(url) { [weak self] error in
+            // Closed while it opened, it says nothing.
+            guard let self, tabs.contains(where: { $0 === tab }) else { return }
+            // The tab opened for it goes again, unless it's the window's last.
+            if tab.isEmpty, tabs.count > 1 { close(tab.id) }
+            showError("Couldn’t open “\(url.deletingPathExtension().lastPathComponent)”", error)
+            setNeedsUpdateProperties()
+        }
         setNeedsUpdateProperties()
         Task {
-            do {
-                _ = try await opening.value
-                PadRecentProjects.shared.note(url)
-            } catch is CancellationError {
-                // The tab was closed while it opened.
-            } catch {
-                // Closed while it opened, it says nothing.
-                guard tabs.contains(where: { $0 === tab }) else { return }
-                // The tab opened for it goes again, unless it's the window's last.
-                if tab.isEmpty, tabs.count > 1 { close(tab.id) }
-                showError("Couldn’t open “\(url.deletingPathExtension().lastPathComponent)”", error)
-            }
+            if (try? await opening.value) != nil { PadRecentProjects.shared.note(url) }
             setNeedsUpdateProperties()
         }
     }
