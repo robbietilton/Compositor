@@ -152,8 +152,20 @@ actor ProjectStore {
         return try result.get()
     }
 
-    /// Reads a package whose reading is already coordinated: `load` coordinates it, and so does a UIDocument.
-    nonisolated static func readPackage(_ url: URL) throws -> ProjectSnapshot {
+    /// How far `readPackage` has come, said on the thread doing the work for whoever shows it. The thumbnails' counts
+    /// come from a few lanes at once, and can arrive out of order.
+    nonisolated enum ReadProgress: Sendable, Equatable {
+        /// The manifest is read and checked: the canvas's size, its layers, and how many image and mask files they have.
+        case manifest(width: Int, height: Int, layers: Int, files: Int)
+        /// The first `done` layers' files are read and checked, in package order.
+        case layers(done: Int)
+        /// `done` files have their image and thumbnail made, or failed to.
+        case thumbnails(done: Int)
+    }
+
+    /// Reads a package whose reading is already coordinated: `load` coordinates it, and so does a UIDocument. `progress`
+    /// is told how far it has come as it goes.
+    nonisolated static func readPackage(_ url: URL, progress: (@Sendable (ReadProgress) -> Void)? = nil) throws -> ProjectSnapshot {
         let reading = Timing.begin("Read project")
         guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw ProjectError.invalid }
         let metadataURL = url.appendingPathComponent("manifest.json")
@@ -168,11 +180,15 @@ actor ProjectStore {
         do { manifest = try JSONDecoder().decode(ProjectManifest.self, from: metadata) }
         catch { throw ProjectError.invalid }
         try validate(manifest)
+        if let progress {
+            let files = manifest.layers.reduce(0) { $0 + ($1.imageFile == nil ? 0 : 1) + ($1.maskFile == nil ? 0 : 1) }
+            progress(.manifest(width: manifest.width, height: manifest.height, layers: manifest.layers.count, files: files))
+        }
         // Every layer's and mask's file checked first, one by one, then read, a few at once: a package faulty in more than
         // one file is refused for the first fault the checks find, before any found reading it.
         var files: [PackedImage] = []
         var pixels = 0, maskPixels = 0
-        for layer in manifest.layers {
+        for (index, layer) in manifest.layers.enumerated() {
           for isMask in [false, true] {
             guard let filename = isMask ? layer.maskFile : layer.imageFile else { continue }
             let file = url.appendingPathComponent("images").appendingPathComponent(filename)
@@ -192,10 +208,11 @@ actor ProjectStore {
             else { try checkSize(width: width, height: height, used: &pixels) }
             files.append(PackedImage(layer: layer.id, name: layer.name, isMask: isMask, source: source))
           }
+          progress?(.layers(done: index + 1))
         }
         var images: [UUID: ImportedImage] = [:]
         var masks: [UUID: ImportedImage] = [:]
-        for (file, asset) in zip(files, try assets(for: files)) {
+        for (file, asset) in zip(files, try assets(for: files, progress: progress)) {
             if file.isMask { masks[file.layer] = asset } else { images[file.layer] = asset }
         }
         let snapshot = ProjectSnapshot(manifest: manifest, images: images, masks: masks)
@@ -214,9 +231,10 @@ actor ProjectStore {
 
     /// `files` read, a few at once: their thumbnails are most of the time a package takes to read. Throws the first
     /// file's error, in package order.
-    private nonisolated static func assets(for files: [PackedImage]) throws -> [ImportedImage] {
+    private nonisolated static func assets(for files: [PackedImage],
+                                           progress: (@Sendable (ReadProgress) -> Void)?) throws -> [ImportedImage] {
         let results = Mutex([Result<ImportedImage, any Error>?](repeating: nil, count: files.count))
-        let next = Atomic(0)
+        let next = Atomic(0), finished = Atomic(0)
         // Four at a time, as many as the iPad has performance cores; each takes the next file as soon as it's done.
         DispatchQueue.concurrentPerform(iterations: min(4, files.count)) { _ in
             while true {
@@ -224,6 +242,7 @@ actor ProjectStore {
                 guard index < files.count else { return }
                 let result = Result { try autoreleasepool { try asset(for: files[index]) } }
                 results.withLock { $0[index] = result }
+                if let progress { progress(.thumbnails(done: finished.add(1, ordering: .relaxed).newValue)) }
             }
         }
         return try results.withLock { $0 }.map { try $0!.get() }

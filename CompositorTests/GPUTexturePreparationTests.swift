@@ -2,6 +2,8 @@ import CoreGraphics
 import CoreImage
 import Foundation
 import Metal
+import QuartzCore
+import Synchronization
 import Testing
 @testable import Compositor
 
@@ -135,25 +137,43 @@ import Testing
     }
 
     /// Preparations asked for at once, as two windows opening projects ask, take turns, so their textures and copies
-    /// aren't all held at the same time: a small one asked for after a large one finishes after it. Each still makes
-    /// what it's asked for, one that makes nothing included.
+    /// aren't all held at the same time: one asked for while another has its turn waits, and makes nothing until the
+    /// other has made all of its images. One that then has nothing to make doesn't keep the next from its turn.
     @Test(.timeLimit(.minutes(10)))
     func preparationsTakeTurns() async throws {
-        final class Order { var finished: [String] = [] }
+        nonisolated final class Next: Sendable { let preparing = Mutex<[Task<Int, Never>]>([]) }
         let renderer = try #require(GPUCanvasRenderer.shared)
         let large = try pattern(4000, 3000), tooLarge = try pattern(16_385, 2), small = try pattern(120, 90)
-        let order = Order()
-        let preparing = [("large", large), ("too large", tooLarge), ("small", small)].map { name, image in
-            Task {
-                let count = await renderer.prepare(sources([image])).count
-                order.finished.append(name)
-                return count
+        let said = Said<(String, GPUCanvasRenderer.PrepareProgress)>(), next = Next(), waiting = DispatchSemaphore(value: 0)
+        let first = await renderer.prepare(sources([large])) { event in
+            said.add(("large", event))
+            switch event {
+            case .making:
+                // Asked for as the large one takes its turn.
+                next.preparing.withLock {
+                    $0 = [Task { await renderer.prepare(sources([tooLarge])) { if $0 == .waiting { waiting.signal() } }.count },
+                          Task {
+                              await renderer.prepare(sources([small])) {
+                                  said.add(("small", $0))
+                                  if $0 == .waiting { waiting.signal() }
+                              }.count
+                          }]
+                }
+            case .made:
+                // Held at its last image until both have asked, so they ask while it has its turn, however late their
+                // tasks start; without turns, neither waits, and it goes on after a minute.
+                for _ in 0..<2 { _ = waiting.wait(timeout: .now() + 60) }
+            case .waiting: break
             }
         }
-        var counts: [Int] = []
-        for task in preparing { counts.append(await task.value) }
+        var counts = [first.count]
+        for task in next.preparing.withLock({ $0 }) { counts.append(await task.value) }
         #expect(counts == [1, 0, 1])
-        #expect(order.finished.firstIndex(of: "large")! < order.finished.firstIndex(of: "small")!)
+        let events = said.events
+        let lastOfLarge = try #require(events.lastIndex { $0 == ("large", .made(done: 1)) })
+        let smallMaking = try #require(events.firstIndex { $0 == ("small", .making(total: 1)) })
+        #expect(events.first { $0.0 == "small" }?.1 == .waiting)
+        #expect(lastOfLarge < smallMaking)
     }
 
     /// A preparation cancelled while it waits its turn makes nothing; the one ahead of it is unaffected.
@@ -222,5 +242,61 @@ import Testing
         // Reduced, it's uploaded once, at full size, to reduce from.
         #expect(renderer.image(reduced, level: 2) != nil)
         #expect(renderer.uploads == before + 2)
+    }
+
+    /// A preparation says how many images it's about to make, then each one as it's tried, in whatever order the lanes
+    /// finish them. (It may first say it waits its turn, when another test's preparation is running.)
+    @Test func aPreparationSaysHowFarItHasCome() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let images = try (0..<3).map { _ in try pattern(200, 150) }
+        let said = Said<GPUCanvasRenderer.PrepareProgress>()
+        let prepared = await renderer.prepare(sources(images), progress: said.add)
+        let events = said.events.drop { $0 == .waiting }
+        #expect(events.first == .making(total: 3))
+        #expect(events.compactMap { if case .made(let done) = $0 { done } else { nil } }.sorted() == [1, 2, 3])
+        #expect(events.count == 4 && prepared.count == 3)
+    }
+
+    /// One that makes nothing says nothing of making: an image too large for a texture, or cancelled before it starts.
+    @Test func aPreparationThatMakesNothingSaysNothing() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let tooLarge = Said<GPUCanvasRenderer.PrepareProgress>(), cancelled = Said<GPUCanvasRenderer.PrepareProgress>()
+        _ = await renderer.prepare(sources([try pattern(120, 90), try pattern(16_385, 2)]), progress: tooLarge.add)
+        let images = try sources([pattern(120, 90)])
+        let preparing = Task { await renderer.prepare(images, progress: cancelled.add) }
+        preparing.cancel()
+        #expect(await preparing.value.count == 0)
+        #expect(tooLarge.events.allSatisfy { $0 == .waiting } && cancelled.events.allSatisfy { $0 == .waiting })
+    }
+
+    /// One asked for while another runs says it waits its turn, once, then goes on as any; cancelled while it waits, it
+    /// says only that.
+    @Test(.timeLimit(.minutes(10)), arguments: [false, true])
+    func aPreparationWaitingItsTurnSaysSo(cancelled: Bool) async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let first = try pattern(1500, 1000), second = try pattern(120, 90)
+        let said = Said<GPUCanvasRenderer.PrepareProgress>()
+        let preparingFirst = Task { await renderer.prepare(sources([first])) }
+        let preparingSecond = Task { await renderer.prepare(sources([second]), progress: said.add) }
+        // Both start before this goes on: the first takes the turn, or waits behind another test's, and the second waits.
+        await Task.yield()
+        if cancelled { preparingSecond.cancel() }
+        _ = await preparingSecond.value
+        _ = await preparingFirst.value
+        #expect(said.events == (cancelled ? [.waiting] : [.waiting, .making(total: 1), .made(done: 1)]))
+    }
+
+    /// Presenting says whether there was a drawable to draw the frame in.
+    @Test func presentingSaysWhetherItPresented() throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let frame = CIImage(color: .gray).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 48))
+        let layer = CAMetalLayer()
+        layer.device = renderer.device
+        layer.pixelFormat = .bgra8Unorm
+        layer.drawableSize = CGSize(width: 64, height: 48)
+        #expect(renderer.present(frame, in: layer))
+        // With no device, there's no drawable. (A new layer has one already on iPad, so it's taken away.)
+        layer.device = nil
+        #expect(!renderer.present(frame, in: layer))
     }
 }

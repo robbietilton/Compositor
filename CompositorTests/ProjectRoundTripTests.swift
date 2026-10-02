@@ -1,8 +1,16 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import Synchronization
 import Testing
 @testable import Compositor
+
+/// What a few threads at once have said, in the order they said it.
+nonisolated final class Said<Event: Sendable>: Sendable {
+    private let said = Mutex<[Event]>([])
+    func add(_ event: Event) { said.withLock { $0.append(event) } }
+    var events: [Event] { said.withLock { $0 } }
+}
 
 /// A package read back holds its layers as the editor made them, and saving it again writes the same bytes.
 @MainActor struct ProjectRoundTripTests {
@@ -135,5 +143,56 @@ import Testing
         let read = try ProjectStore.readPackage(url)
         let before = try await ImageExporter.shared.render(original), after = try await ImageExporter.shared.render(read)
         #expect(try pixels(after.image) == pixels(before.image))
+    }
+
+    /// Reading says how far it has come: the manifest's totals first, then each layer's files read and checked, in order,
+    /// then each file's thumbnail, in whatever order the lanes finish them.
+    @Test func aReadSaysHowFarItHasCome() throws {
+        let original = try project()
+        let url = try saved(original)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let said = Said<ProjectStore.ReadProgress>()
+        let read = try ProjectStore.readPackage(url, progress: said.add)
+        let events = said.events, manifest = original.manifest
+        #expect(events.first == .manifest(width: manifest.width, height: manifest.height, layers: manifest.layers.count, files: 7))
+        let layers = events.compactMap { if case .layers(let done) = $0 { done } else { nil } }
+        let thumbnails = events.compactMap { if case .thumbnails(let done) = $0 { done } else { nil } }
+        #expect(layers == Array(1...manifest.layers.count))
+        #expect(thumbnails.sorted() == Array(1...7))
+        #expect(events.count == 1 + layers.count + thumbnails.count)
+        let lastLayer = try #require(events.lastIndex { if case .layers = $0 { true } else { false } })
+        let firstThumbnail = try #require(events.firstIndex { if case .thumbnails = $0 { true } else { false } })
+        #expect(lastLayer < firstThumbnail)
+        // And it reads what a read without anyone told reads.
+        let plain = try ProjectStore.readPackage(url)
+        #expect(read.timingDetail == plain.timingDetail && read.images.count == 5 && read.masks.count == 2)
+    }
+
+    /// Layers without files, as adjustments and folders are, have no thumbnails to make.
+    @Test func aReadOfLayersWithoutFilesSaysNoThumbnails() throws {
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 48)
+        var levels = ImageLayer(name: "Levels", blankSize: CGSize(width: 64, height: 48))
+        levels.adjustment = LayerAdjustment(kind: .levels)
+        session.document!.layers.append(levels)
+        let url = try saved(try #require(session.projectSnapshot()))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let said = Said<ProjectStore.ReadProgress>()
+        _ = try ProjectStore.readPackage(url, progress: said.add)
+        #expect(said.events == [.manifest(width: 64, height: 48, layers: 1, files: 0), .layers(done: 1)])
+    }
+
+    /// A damaged file stops the count at the layers before it, and the read is refused.
+    @Test func aDamagedFileStopsTheCountWhereItIs() throws {
+        let original = try project()
+        let url = try saved(original)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let second = try #require(original.manifest.layers[1].imageFile)
+        try Data("not a PNG".utf8).write(to: url.appending(path: "images").appending(path: second))
+        let said = Said<ProjectStore.ReadProgress>()
+        #expect(throws: ProjectError.self) { try ProjectStore.readPackage(url, progress: said.add) }
+        let manifest = original.manifest
+        #expect(said.events == [.manifest(width: manifest.width, height: manifest.height, layers: manifest.layers.count, files: 7),
+                                .layers(done: 1)])
     }
 }

@@ -176,11 +176,23 @@ import Synchronization
         var count: Int { made.count }
     }
 
+    /// How far `prepare` has come, for whoever shows it.
+    nonisolated enum PrepareProgress: Sendable, Equatable {
+        /// Another preparation is running, and this one waits its turn. Said on the main actor, once.
+        case waiting
+        /// `total` images are about to be made. Said on the main actor, once the wait is over and what's held is left out.
+        case making(total: Int)
+        /// `done` images have been tried, made or not. Said by the lanes, which can say theirs out of order.
+        case made(done: Int)
+    }
+
     /// The full-size textures of `sources`, made as a frame drawing them would make them, a few at a time away from the
     /// main thread. One the canvas already holds is left out, and nothing is kept until `adopt`. Preparations take
     /// turns, so two windows opening projects at once don't hold both projects' textures at the same time. Cancelled, it
-    /// takes no more images and returns what it made; cancelled while it waits its turn, it makes nothing.
-    func prepare(_ sources: [GPUTextureSource]) async -> Prepared {
+    /// takes no more images and returns what it made; cancelled while it waits its turn, it makes nothing. `progress` is
+    /// told how far it has come as it goes.
+    func prepare(_ sources: [GPUTextureSource], progress: (@Sendable (PrepareProgress) -> Void)? = nil) async -> Prepared {
+        if preparing { progress?(.waiting) }
         while preparing { await withCheckedContinuation { waitingToPrepare.append($0) } }
         guard !Task.isCancelled else { return Prepared() }
         let sources = notHeld(sources)
@@ -188,6 +200,7 @@ import Synchronization
         // masks a frame can leave out, folders' and adjustments', aren't among the sources then.)
         guard !sources.isEmpty, !sources.contains(where: { max($0.image.width, $0.image.height) > Self.largestTexture })
         else { return Prepared() }
+        progress?(.making(total: sources.count))
         preparing = true
         defer {
             preparing = false
@@ -202,7 +215,7 @@ import Synchronization
             // few threads, which the lanes would hold for as long as the decoding takes.
             await withCheckedContinuation { finished in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let made = Self.make(sources, device: device, space: space, stop: stop)
+                    let made = Self.make(sources, device: device, space: space, stop: stop, progress: progress)
                     finished.resume(returning: (made, ContinuousClock.now - start))
                 }
             }
@@ -256,10 +269,10 @@ import Synchronization
     /// `sources`' textures, a few at once, each lane taking the next image as soon as it's done (as `ProjectStore`
     /// reads files). One that can't be made is left out, as a frame would leave it.
     nonisolated private static func make(_ sources: [GPUTextureSource], device: any MTLDevice, space: CGColorSpace,
-                                         stop: Stop) -> [Prepared.Made] {
+                                         stop: Stop, progress: (@Sendable (PrepareProgress) -> Void)?) -> [Prepared.Made] {
         dispatchPrecondition(condition: .notOnQueue(.main))
         let made = Mutex([Prepared.Made?](repeating: nil, count: sources.count))
-        let next = Atomic(0)
+        let next = Atomic(0), tried = Atomic(0)
         DispatchQueue.concurrentPerform(iterations: min(preparedAtOnce, sources.count)) { _ in
             while !stop.requested.load(ordering: .relaxed) {
                 let index = next.add(1, ordering: .relaxed).oldValue
@@ -275,6 +288,7 @@ import Synchronization
                                                   copying: copying, writing: writing)
                     }
                 }
+                if let progress { progress(.made(done: tried.add(1, ordering: .relaxed).newValue)) }
             }
         }
         return made.withLock { $0 }.compactMap { $0 }
@@ -544,8 +558,10 @@ import Synchronization
 
     /// Draws `image` into `layer`'s next drawable, in step with the Core Animation transaction it's drawn in, so it
     /// lands on the same frame as the overlays above it. `drawn` runs once the GPU has drawn it, on a thread of Metal's.
-    func present(_ image: CIImage, in layer: CAMetalLayer, drawn: [@Sendable () -> Void] = []) {
-        guard let drawable = layer.nextDrawable(), let buffer = queue.makeCommandBuffer() else { return }
+    /// Returns whether there was a drawable to draw it in.
+    @discardableResult
+    func present(_ image: CIImage, in layer: CAMetalLayer, drawn: [@Sendable () -> Void] = []) -> Bool {
+        guard let drawable = layer.nextDrawable(), let buffer = queue.makeCommandBuffer() else { return false }
         let size = layer.drawableSize
         // Core Image writes a texture that can be rendered to bottom row first (a plain one, top row first), so the
         // frame is turned over to land top row first.
@@ -558,6 +574,7 @@ import Synchronization
         buffer.waitUntilScheduled()
         drawable.present()
         endFrame()
+        return true
     }
 }
 
