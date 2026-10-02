@@ -47,8 +47,7 @@ nonisolated enum BrushRaster {
     /// is copied byte for byte, several times quicker than drawing it.
     static func copy(_ image: CGImage) throws -> CGContext {
         let context = try Self.context(width: image.width, height: image.height, mask: false)
-        guard image.bitsPerPixel == 32, image.bitsPerComponent == 8, image.bitmapInfo == context.bitmapInfo,
-              image.colorSpace == context.colorSpace, let source = image.dataProvider?.data,
+        guard copiesStraight(image, into: context), let source = image.dataProvider?.data,
               let bytes = CFDataGetBytePtr(source), let target = context.data,
               CFDataGetLength(source) >= image.bytesPerRow * (image.height - 1) + image.width * 4 else {
             draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), mask: false, context: context)
@@ -59,6 +58,15 @@ nonisolated enum BrushRaster {
             memcpy(target + y * context.bytesPerRow, bytes + y * image.bytesPerRow, row)
         }
         return context
+    }
+    /// Whether `copy` copies `image` byte for byte rather than drawing it: its pixels are laid out as a color context's.
+    static func copiesStraight(_ image: CGImage) -> Bool {
+        guard let layout = try? context(width: 1, height: 1, mask: false) else { return false }
+        return copiesStraight(image, into: layout)
+    }
+    private static func copiesStraight(_ image: CGImage, into context: CGContext) -> Bool {
+        image.bitsPerPixel == 32 && image.bitsPerComponent == 8 && image.bitmapInfo == context.bitmapInfo
+            && image.colorSpace == context.colorSpace
     }
 
     /// Runs `body` over `count` pixels in a few bands at once, each a (start, length) of whole pixels.

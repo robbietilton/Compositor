@@ -34,6 +34,33 @@ import QuartzCore
     }
     private var textures: [Key: Entry] = [:]
     private var frame = 0
+    /// Textures made, and the time it took on the main thread. A reduction's time includes waiting for the GPU work
+    /// queued before it; a painted layer's is the time to queue its own.
+    private struct TextureWork {
+        var frames = 0, images = 0, masks = 0, converted = 0, pixels = 0, reductions = 0, rasters = 0
+        var copying = Duration.zero, writing = Duration.zero, reducing = Duration.zero, assembling = Duration.zero
+        var isEmpty: Bool { images + masks + reductions + rasters == 0 }
+        var total: Duration { copying + writing + reducing + assembling }
+        var detail: String {
+            var parts: [String] = []
+            if images + masks > 0 {
+                let made = Timing.counted(images, "image") + (masks == 0 ? "" : " and " + Timing.counted(masks, "mask"))
+                parts.append("\(made) of \(Timing.megapixels(pixels)), \(converted) converted: "
+                    + "copying \(Timing.milliseconds(copying)), writing \(Timing.milliseconds(writing))")
+            }
+            if reductions > 0 { parts.append("\(Timing.counted(reductions, "reduction")) \(Timing.milliseconds(reducing))") }
+            if rasters > 0 { parts.append("\(Timing.counted(rasters, "painted layer")) \(Timing.milliseconds(assembling))") }
+            return (frames > 1 ? "over \(frames) frames, " : "") + parts.joined(separator: "; ")
+        }
+        mutating func add(_ other: TextureWork) {
+            frames += other.frames; images += other.images; masks += other.masks; converted += other.converted
+            pixels += other.pixels; reductions += other.reductions; rasters += other.rasters
+            copying += other.copying; writing += other.writing; reducing += other.reducing; assembling += other.assembling
+        }
+    }
+    /// What the frame being drawn has made, and what frames before it made that hasn't been said yet.
+    private var work = TextureWork(), held = TextureWork()
+    private var lastWorkLine: ContinuousClock.Instant?, lastWorkFrame: ContinuousClock.Instant?
     /// Textures not used for this many frames are let go.
     private let keepFrames = 90
 
@@ -61,6 +88,7 @@ import QuartzCore
                 guard let self else { return }
                 if self.frame == self.lastIdleFrame { self.release(keepingLastFrame: true) }
                 self.lastIdleFrame = self.frame
+                self.sayHeldTextureWork()
             }
         }
         // Short of memory, the system says so: what the last frame didn't use goes, and everything when it's critical —
@@ -76,6 +104,21 @@ import QuartzCore
     private var idle: Timer?
     private var lastIdleFrame = -1
     private let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+
+    private func say(_ made: inout TextureWork) {
+        guard !made.isEmpty else { return }
+        Timing.report("Textures", took: made.total, made.detail)
+        made = TextureWork()
+        lastWorkLine = .now
+    }
+
+    /// What frames held back, once none has made textures for a second; with what draws that were never presented made.
+    private func sayHeldTextureWork() {
+        guard lastWorkFrame.map({ ContinuousClock.now - $0 >= .seconds(1) }) ?? true else { return }
+        held.add(work)
+        work = TextureWork()
+        say(&held)
+    }
 
     /// Lets go of textures: all but the ones the last frame drew from, or all of them.
     private func release(keepingLastFrame: Bool) {
@@ -106,7 +149,7 @@ import QuartzCore
         } else {
             let made: CIImage?
             if level == 0 || transient {
-                made = upload(image, mask: mask)
+                made = upload(image, mask: mask, transient: transient)
             } else if let larger = texture(image, level: level - 1, mask: mask, transient: false, drawing: false) {
                 made = reduce(larger, from: Self.size(image.width, image.height, level: level - 1),
                               to: Self.size(image.width, image.height, level: level), mask: mask)
@@ -235,8 +278,23 @@ import QuartzCore
         return made
     }
 
-    /// Lets go of textures no frame has used for a while.
+    /// Lets go of textures no frame has used for a while, and says what making textures took. The first frame to make
+    /// any after a quiet second gets a line of its own, so one that stalls on them shows; frames that keep making
+    /// them, as a drag can, are summed up at most once a second, and what's left once they stop, a few seconds later.
     func endFrame() {
+        if !work.isEmpty {
+            let now = ContinuousClock.now
+            work.frames = 1
+            if lastWorkFrame.map({ now - $0 >= .seconds(1) }) ?? true {
+                say(&held)
+                say(&work)
+            } else {
+                held.add(work)
+                work = TextureWork()
+                if lastWorkLine.map({ now - $0 >= .seconds(1) }) ?? true { say(&held) }
+            }
+            lastWorkFrame = now
+        }
         frame += 1
         textures = textures.filter { $0.value.used >= frame - $0.value.keep }
         strokes = strokes.filter { $0.value.used >= frame - keepFrames }
@@ -256,12 +314,26 @@ import QuartzCore
     }
 
     /// The image's own bytes, copied straight in: sRGB, premultiplied, top row first — or for a mask, its gray values.
-    private func upload(_ image: CGImage, mask: Bool) -> CIImage? {
+    /// An image that isn't laid out that way is drawn into that layout first. A `transient` image, replaced every
+    /// frame, isn't counted in the lines about textures.
+    private func upload(_ image: CGImage, mask: Bool, transient: Bool) -> CIImage? {
+        var copying = Duration.zero, writing = Duration.zero
         guard let texture = texture(width: image.width, height: image.height, mask: mask),
-              let pixels = try? (mask ? Self.grayCopy(image) : BrushRaster.copy(image)), let data = pixels.data else { return nil }
-        texture.replace(region: MTLRegionMake2D(0, 0, image.width, image.height), mipmapLevel: 0,
-                        withBytes: data, bytesPerRow: pixels.bytesPerRow)
-        return wrap(texture, mask: mask)
+              let pixels = try? Timing.step("Texture copy", adding: &copying, { try mask ? Self.grayCopy(image) : BrushRaster.copy(image) }),
+              let data = pixels.data else { return nil }
+        Timing.step("Texture write", adding: &writing) {
+            texture.replace(region: MTLRegionMake2D(0, 0, image.width, image.height), mipmapLevel: 0,
+                            withBytes: data, bytesPerRow: pixels.bytesPerRow)
+        }
+        guard let made = wrap(texture, mask: mask) else { return nil }
+        if !transient {
+            if mask { work.masks += 1 } else { work.images += 1 }
+            if !mask, !BrushRaster.copiesStraight(image) { work.converted += 1 }
+            work.pixels += image.width * image.height
+            work.copying += copying
+            work.writing += writing
+        }
+        return made
     }
 
     static func grayCopy(_ image: CGImage) throws -> CGContext {
@@ -273,19 +345,27 @@ import QuartzCore
     }
 
     private func assemble(_ raster: RasterSnapshot) -> CIImage? {
-        guard let texture = texture(width: raster.width, height: raster.height, mask: raster.isMask) else { return nil }
-        // Transparent (or a mask's fill) everywhere first, then the base and every tile in its place: tiles replace
-        // what's under them, transparent pixels included.
-        let clear = raster.isMask ? CIImage(color: CIColor(red: raster.fill, green: raster.fill, blue: raster.fill)) : CIImage.clear
-        guard let buffer = queue.makeCommandBuffer() else { return nil }
-        context.render(clear, to: texture, commandBuffer: buffer,
-                       bounds: CGRect(x: 0, y: 0, width: raster.width, height: raster.height), colorSpace: space)
-        buffer.commit()
-        let writes = TileWrites(renderer: self, into: texture, mask: raster.isMask)
-        if let base = raster.base { writes.place(base, at: raster.baseRect) }
-        for patch in raster.patches { writes.place(patch.image, at: patch.rect) }
-        writes.commit()
-        return wrap(texture, mask: raster.isMask)
+        var assembling = Duration.zero
+        let made = Timing.step("Raster assembly", adding: &assembling) { () -> CIImage? in
+            guard let texture = texture(width: raster.width, height: raster.height, mask: raster.isMask) else { return nil }
+            // Transparent (or a mask's fill) everywhere first, then the base and every tile in its place: tiles replace
+            // what's under them, transparent pixels included.
+            let clear = raster.isMask ? CIImage(color: CIColor(red: raster.fill, green: raster.fill, blue: raster.fill)) : CIImage.clear
+            guard let buffer = queue.makeCommandBuffer() else { return nil }
+            context.render(clear, to: texture, commandBuffer: buffer,
+                           bounds: CGRect(x: 0, y: 0, width: raster.width, height: raster.height), colorSpace: space)
+            buffer.commit()
+            let writes = TileWrites(renderer: self, into: texture, mask: raster.isMask)
+            if let base = raster.base { writes.place(base, at: raster.baseRect) }
+            for patch in raster.patches { writes.place(patch.image, at: patch.rect) }
+            writes.commit()
+            return wrap(texture, mask: raster.isMask)
+        }
+        if made != nil {
+            work.rasters += 1
+            work.assembling += assembling
+        }
+        return made
     }
 
     /// `full` (`width` × `height`) `level` halvings smaller, sharply, rounded up like `DownsampleCache`'s — computed as
@@ -300,18 +380,26 @@ import QuartzCore
 
     /// `larger` (`from` in size) sharply reduced to `to`, kept as a texture of its own.
     private func reduce(_ larger: CIImage, from: CGSize, to: CGSize, mask: Bool) -> CIImage? {
-        let w = Int(to.width), h = Int(to.height)
-        let sx = to.width / from.width, sy = to.height / from.height
-        let reduced = larger.clampedToExtent()
-            .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: sy, kCIInputAspectRatioKey: sx / sy])
-            .cropped(to: CGRect(x: 0, y: 0, width: w, height: h))
-        guard let texture = texture(width: w, height: h, mask: mask), let buffer = queue.makeCommandBuffer() else { return nil }
-        // A mask's values carry no color space; rendered in the working space, they're written as they are.
-        context.render(reduced, to: texture, commandBuffer: buffer, bounds: CGRect(x: 0, y: 0, width: w, height: h),
-                       colorSpace: space)
-        buffer.commit()
-        buffer.waitUntilCompleted()
-        return wrap(texture, mask: mask)
+        var reducing = Duration.zero
+        let made = Timing.step("Texture reduction", adding: &reducing) { () -> CIImage? in
+            let w = Int(to.width), h = Int(to.height)
+            let sx = to.width / from.width, sy = to.height / from.height
+            let reduced = larger.clampedToExtent()
+                .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: sy, kCIInputAspectRatioKey: sx / sy])
+                .cropped(to: CGRect(x: 0, y: 0, width: w, height: h))
+            guard let texture = texture(width: w, height: h, mask: mask), let buffer = queue.makeCommandBuffer() else { return nil }
+            // A mask's values carry no color space; rendered in the working space, they're written as they are.
+            context.render(reduced, to: texture, commandBuffer: buffer, bounds: CGRect(x: 0, y: 0, width: w, height: h),
+                           colorSpace: space)
+            buffer.commit()
+            buffer.waitUntilCompleted()
+            return wrap(texture, mask: mask)
+        }
+        if made != nil {
+            work.reductions += 1
+            work.reducing += reducing
+        }
+        return made
     }
 
     /// Draws `image` into `layer`'s next drawable, in step with the Core Animation transaction it's drawn in, so it
