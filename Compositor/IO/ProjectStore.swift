@@ -62,6 +62,40 @@ nonisolated struct ProjectSnapshot: @unchecked Sendable {
     var masks: [UUID: ImportedImage] = [:]
 }
 
+/// The PNG bytes of a project's images as its package last held them, read or written, so a save writes an image that
+/// hasn't changed as it was rather than encoding it again. Each open project keeps one; images are kept by identity,
+/// and only those the package holds. An image read from the package costs nothing more, as its bytes are what it's
+/// drawn from; one a save encoded keeps its PNG beside its pixels, so when memory runs short they're all let go, and
+/// the next save encodes everything.
+nonisolated final class EncodedImages: @unchecked Sendable {
+    private let held = Mutex<(bytes: [ObjectIdentifier: (image: CGImage, png: Data)], encoded: Int)>(([:], 0))
+    private let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global(qos: .utility))
+
+    init() {
+        pressure.setEventHandler { [weak self] in self?.hold([]) }
+        pressure.resume()
+    }
+
+    deinit { pressure.cancel() }
+
+    /// The bytes `image` was read from or last written as.
+    func png(for image: CGImage) -> Data? {
+        held.withLock { $0.bytes[ObjectIdentifier(image)]?.png }
+    }
+
+    /// What the package holds now: these images, as these bytes, `encoded` of them made just now. What it no longer holds
+    /// is let go.
+    func hold(_ images: [(image: CGImage, png: Data)], encoded: Int = 0) {
+        held.withLock {
+            $0.bytes = Dictionary(images.map { (ObjectIdentifier($0.image), $0) }, uniquingKeysWith: { first, _ in first })
+            $0.encoded += encoded
+        }
+    }
+
+    /// How many images saves have had to encode, for tests.
+    var encoded: Int { held.withLock { $0.encoded } }
+}
+
 nonisolated enum ProjectError: LocalizedError {
     case invalid, version(Int), missingImage, tooLarge, encode
     var errorDescription: String? {
@@ -82,8 +116,8 @@ actor ProjectStore {
         let version: Int
     }
 
-    func save(_ snapshot: ProjectSnapshot, to url: URL, quickLook: QuickLookImages? = nil) throws {
-        let package = try Self.package(for: snapshot, quickLook: quickLook)
+    func save(_ snapshot: ProjectSnapshot, to url: URL, quickLook: QuickLookImages? = nil, encoded: EncodedImages? = nil) throws {
+        let package = try Self.package(for: snapshot, quickLook: quickLook, encoded: encoded)
         var coordinationError: NSError?
         var writeError: Error?
         NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { destination in
@@ -98,10 +132,13 @@ actor ProjectStore {
 
     /// The package `save` writes: the manifest, every layer's and mask's pixels as PNG, and the Quick Look preview,
     /// validated as `load` validates. A caller that coordinates the write itself, as a UIDocument does, writes this.
-    nonisolated static func package(for snapshot: ProjectSnapshot, quickLook: QuickLookImages? = nil) throws -> FileWrapper {
+    /// With `encoded`, an image the package already holds is written as the bytes it holds, and only the others are
+    /// encoded, a few at once.
+    nonisolated static func package(for snapshot: ProjectSnapshot, quickLook: QuickLookImages? = nil,
+                                    encoded: EncodedImages? = nil) throws -> FileWrapper {
         let encoding = Timing.begin("Encode project")
         try validate(snapshot.manifest)
-        var images: [String: FileWrapper] = [:]
+        var files: [(name: String, image: CGImage)] = []
         var pixels = 0, maskPixels = 0
         for layer in snapshot.manifest.layers {
           for isMask in [false, true] {
@@ -111,18 +148,13 @@ actor ProjectStore {
                 guard LayerMask.isValid(asset.image) else { throw ProjectError.invalid }
                 try checkSize(width: asset.image.width, height: asset.image.height, used: &maskPixels)
             } else { try checkSize(width: asset.image.width, height: asset.image.height, used: &pixels) }
-            let data = try autoreleasepool {
-                let data = NSMutableData()
-                guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
-                    throw ProjectError.encode
-                }
-                CGImageDestinationAddImage(destination, asset.image, nil)
-                guard CGImageDestinationFinalize(destination) else { throw ProjectError.encode }
-                return data as Data
-            }
-            images[filename] = FileWrapper(regularFileWithContents: data)
+            files.append((filename, asset.image))
           }
         }
+        let (pngs, made) = try Self.pngs(of: files.map(\.image), reusing: encoded)
+        var images: [String: FileWrapper] = [:]
+        for (file, png) in zip(files, pngs) { images[file.name] = FileWrapper(regularFileWithContents: png) }
+        encoded?.hold(zip(files.map(\.image), pngs).map { ($0, $1) }, encoded: made)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let metadata = try encoder.encode(snapshot.manifest)
@@ -137,15 +169,53 @@ actor ProjectStore {
                 "Preview.jpg": FileWrapper(regularFileWithContents: quickLook.preview),
             ])
         }
-        Timing.end(encoding, snapshot.timingDetail)
+        Timing.end(encoding, snapshot.timingDetail + (encoded == nil ? "" : ", \(made) encoded"))
         return FileWrapper(directoryWithFileWrappers: contents)
     }
 
-    func load(from url: URL) throws -> ProjectSnapshot {
+    /// `images` as PNG: each one `encoded` holds as the bytes it holds, the others encoded four at a time, an image used
+    /// twice once. Returns how many were encoded; throws the first image's error, in order.
+    private nonisolated static func pngs(of images: [CGImage], reusing encoded: EncodedImages?) throws -> (pngs: [Data], made: Int) {
+        var pngs = images.map { encoded?.png(for: $0) }
+        // Each image to encode, once, however many files show it.
+        var missing: [Int] = [], first: [ObjectIdentifier: Int] = [:]
+        for index in images.indices where pngs[index] == nil {
+            let id = ObjectIdentifier(images[index])
+            if first[id] == nil {
+                first[id] = index
+                missing.append(index)
+            }
+        }
+        let results = Mutex([Result<Data, any Error>?](repeating: nil, count: missing.count))
+        let next = Atomic(0)
+        DispatchQueue.concurrentPerform(iterations: min(4, missing.count)) { _ in
+            while true {
+                let index = next.add(1, ordering: .relaxed).oldValue
+                guard index < missing.count else { return }
+                let result = Result { try autoreleasepool { try png(of: images[missing[index]]) } }
+                results.withLock { $0[index] = result }
+            }
+        }
+        for (index, result) in zip(missing, results.withLock { $0 }) { pngs[index] = try result!.get() }
+        for index in images.indices where pngs[index] == nil { pngs[index] = pngs[first[ObjectIdentifier(images[index])]!] }
+        return (pngs.map { $0! }, missing.count)
+    }
+
+    private nonisolated static func png(of image: CGImage) throws -> Data {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
+            throw ProjectError.encode
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { throw ProjectError.encode }
+        return data as Data
+    }
+
+    func load(from url: URL, encoded: EncodedImages? = nil) throws -> ProjectSnapshot {
         var coordinationError: NSError?
         var result: Result<ProjectSnapshot, Error>?
         NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { source in
-            result = Result { try Self.readPackage(source) }
+            result = Result { try Self.readPackage(source, encoded: encoded) }
         }
         if let coordinationError { throw coordinationError }
         guard let result else { throw ProjectError.invalid }
@@ -164,8 +234,9 @@ actor ProjectStore {
     }
 
     /// Reads a package whose reading is already coordinated: `load` coordinates it, and so does a UIDocument. `progress`
-    /// is told how far it has come as it goes.
-    nonisolated static func readPackage(_ url: URL, progress: (@Sendable (ReadProgress) -> Void)? = nil) throws -> ProjectSnapshot {
+    /// is told how far it has come as it goes, and `encoded` what bytes each image was read from.
+    nonisolated static func readPackage(_ url: URL, encoded: EncodedImages? = nil,
+                                        progress: (@Sendable (ReadProgress) -> Void)? = nil) throws -> ProjectSnapshot {
         let reading = Timing.begin("Read project")
         guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw ProjectError.invalid }
         let metadataURL = url.appendingPathComponent("manifest.json")
@@ -206,15 +277,17 @@ actor ProjectStore {
                   (properties[kCGImagePropertyDepth] as? Int ?? 8) <= 8 else { throw ProjectError.missingImage }
             if isMask { try checkSize(width: width, height: height, used: &maskPixels) }
             else { try checkSize(width: width, height: height, used: &pixels) }
-            files.append(PackedImage(layer: layer.id, name: layer.name, isMask: isMask, source: source))
+            files.append(PackedImage(layer: layer.id, name: layer.name, isMask: isMask, bytes: bytes, source: source))
           }
           progress?(.layers(done: index + 1))
         }
         var images: [UUID: ImportedImage] = [:]
         var masks: [UUID: ImportedImage] = [:]
-        for (file, asset) in zip(files, try assets(for: files, progress: progress)) {
+        let assets = try assets(for: files, progress: progress)
+        for (file, asset) in zip(files, assets) {
             if file.isMask { masks[file.layer] = asset } else { images[file.layer] = asset }
         }
+        encoded?.hold(zip(assets, files).map { ($0.image, $1.bytes) })
         let snapshot = ProjectSnapshot(manifest: manifest, images: images, masks: masks)
         Timing.end(reading, snapshot.timingDetail)
         return snapshot
@@ -225,6 +298,8 @@ actor ProjectStore {
         let layer: UUID
         let name: String
         let isMask: Bool
+        /// The file's bytes, which a save writes again while the image is unchanged.
+        let bytes: Data
         /// Read by one call of `asset(for:)` only.
         let source: CGImageSource
     }

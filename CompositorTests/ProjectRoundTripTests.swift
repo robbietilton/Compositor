@@ -81,8 +81,8 @@ nonisolated final class Said<Event: Sendable>: Sendable {
     }
 
     /// The package's files by name, the manifest's and every layer's and mask's.
-    private func files(_ snapshot: ProjectSnapshot) throws -> [String: Data] {
-        let package = try ProjectStore.package(for: snapshot)
+    private func files(_ snapshot: ProjectSnapshot, encoded: EncodedImages? = nil) throws -> [String: Data] {
+        let package = try ProjectStore.package(for: snapshot, encoded: encoded)
         var files: [String: Data] = [:]
         files["manifest.json"] = package.fileWrappers?["manifest.json"]?.regularFileContents
         for (name, file) in package.fileWrappers?["images"]?.fileWrappers ?? [:] { files[name] = file.regularFileContents }
@@ -194,5 +194,52 @@ nonisolated final class Said<Event: Sendable>: Sendable {
         let manifest = original.manifest
         #expect(said.events == [.manifest(width: manifest.width, height: manifest.height, layers: manifest.layers.count, files: 7),
                                 .layers(done: 1)])
+    }
+
+    /// Saving again writes an image that hasn't changed as the bytes it was last written as, and encodes only the one
+    /// that has; either way the package holds the bytes a save from scratch writes.
+    @Test func savingAgainEncodesOnlyWhatChanged() throws {
+        let original = try project()
+        let encoded = EncodedImages()
+        let first = try files(original, encoded: encoded)
+        #expect(encoded.encoded == 7)
+        #expect(try first == files(original))
+        #expect(try files(original, encoded: encoded) == first)
+        #expect(encoded.encoded == 7)
+        // One layer's pixels replaced.
+        let layer = original.manifest.layers[2].id
+        var images = original.images
+        let image = try cutOut(320, 640)
+        images[layer] = ImportedImage(image: image, thumbnail: image, name: "Layer")
+        let changed = ProjectSnapshot(manifest: original.manifest, images: images, masks: original.masks)
+        let after = try files(changed, encoded: encoded)
+        #expect(encoded.encoded == 8)
+        #expect(try after == files(changed))
+        #expect(after.filter { first[$0.key] != $0.value }.map(\.key) == [try #require(original.manifest.layers[2].imageFile)])
+    }
+
+    /// A project read back saves as the bytes it was read from, encoding nothing.
+    @Test func aReadProjectSavesWithoutEncoding() throws {
+        let original = try project()
+        let url = try saved(original)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let encoded = EncodedImages()
+        let read = try ProjectStore.readPackage(url, encoded: encoded)
+        #expect(try files(read, encoded: encoded) == files(original))
+        #expect(encoded.encoded == 0)
+    }
+
+    /// An image two layers show is encoded once.
+    @Test func anImageShownTwiceIsEncodedOnce() throws {
+        let original = try project()
+        var images = original.images
+        let layers = original.manifest.layers
+        images[layers[3].id] = images[layers[1].id]
+        let shared = ProjectSnapshot(manifest: original.manifest, images: images, masks: original.masks)
+        let encoded = EncodedImages()
+        let written = try files(shared, encoded: encoded)
+        #expect(encoded.encoded == 6)
+        #expect(try written[#require(layers[3].imageFile)] == written[#require(layers[1].imageFile)])
+        #expect(try written == files(shared))
     }
 }
