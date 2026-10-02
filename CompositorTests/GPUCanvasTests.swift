@@ -584,4 +584,162 @@ import Testing
         renderer.endFrame()
         #expect(renderer.cachedLevels(of: image) == [0, 1, 2])
     }
+
+    /// `session(zoom:)`'s document with more of what a project can hold, drawn from or not: a layer masked by a hidden
+    /// one, itself masked by another hidden one; a mask placed apart from its layer; a disabled mask, with a masked
+    /// adjustment clipped to its layer; a hidden folder holding a masked layer; a photo clipped to an empty layer; an
+    /// adjustment clipped to a hidden layer, outside a clipping stack; text; and a drop shadow. Saved and read back, so
+    /// its images are read lazily from their files, as an opened project's are.
+    private func openedProject() throws -> (snapshot: ProjectSnapshot, url: URL) {
+        let session = try session(zoom: 1)
+        func layer(_ image: CGImage, _ name: String, at origin: CGPoint) -> ImageLayer {
+            ImageLayer(id: UUID(), asset: ImportedImage(image: image, thumbnail: image, name: name), name: name, isVisible: true,
+                       transform: LayerTransform(origin: origin, size: CGSize(width: image.width, height: image.height)))
+        }
+        func mask(_ width: Int, _ height: Int) throws -> LayerMask {
+            LayerMask(asset: try LayerMask.asset(from: gradientMask(width, height)))
+        }
+        var deep = layer(try pattern(150, 150, seed: 7, alpha: true), "Deep source", at: CGPoint(x: 420, y: 320))
+        deep.isVisible = false
+        var near = layer(try pattern(180, 140, seed: 8, alpha: true), "Near source", at: CGPoint(x: 400, y: 300))
+        near.isVisible = false
+        near.maskSourceID = deep.id
+        near.mask = try mask(180, 140)
+        var shown = layer(try pattern(200, 160, seed: 9), "Masked by hidden layers", at: CGPoint(x: 380, y: 290))
+        shown.maskSourceID = near.id
+        var apart = layer(try pattern(220, 180, seed: 10), "Mask placed apart", at: CGPoint(x: 20, y: 150))
+        apart.mask = try mask(220, 180)
+        var placement = apart.transform
+        placement.origin.x += 40
+        placement.rotation = 15
+        apart.mask!.placement = placement
+        apart.mask!.isLinked = false
+        var disabled = layer(try pattern(160, 120, seed: 11), "Mask turned off", at: CGPoint(x: 200, y: 20))
+        disabled.mask = try mask(160, 120)
+        disabled.mask!.isEnabled = false
+        var stacked = ImageLayer(name: "Levels clipped to a layer", blankSize: CGSize(width: 600, height: 500))
+        stacked.adjustment = LayerAdjustment(kind: .levels)
+        stacked.adjustment!.levels.ranges[0].gamma = 0.8
+        stacked.mask = try mask(600, 500)
+        stacked.maskSourceID = disabled.id
+        var folder = ImageLayer(name: "Hidden folder", blankSize: CGSize(width: 600, height: 500))
+        folder.isGroup = true
+        folder.isVisible = false
+        folder.mask = try mask(600, 500)
+        var hidden = layer(try pattern(140, 140, seed: 12), "In a hidden folder", at: CGPoint(x: 100, y: 100))
+        hidden.parentID = folder.id
+        hidden.mask = try mask(140, 140)
+        let empty = ImageLayer(name: "Empty", blankSize: CGSize(width: 600, height: 500))
+        var clipped = layer(try pattern(160, 160, seed: 14), "Clipped to an empty layer", at: CGPoint(x: 300, y: 200))
+        clipped.maskSourceID = empty.id
+        var adjustment = ImageLayer(name: "Clipped Levels", blankSize: CGSize(width: 600, height: 500))
+        adjustment.adjustment = LayerAdjustment(kind: .levels)
+        adjustment.adjustment!.levels.ranges[0].gamma = 0.6
+        adjustment.mask = try mask(600, 500)
+        adjustment.maskSourceID = deep.id
+        var shadowed = layer(try pattern(120, 100, seed: 13, alpha: true), "Shadowed", at: CGPoint(x: 460, y: 60))
+        shadowed.effects = LayerEffects(shadow: ShadowEffect(distance: 8, blur: 6))
+        session.document!.layers += [deep, near, shown, apart, disabled, stacked, hidden, folder, empty, clipped, adjustment, shadowed]
+        session.selectLayer(shadowed.id)
+        session.beginText(at: CGPoint(x: 60, y: 420), newLayer: true)
+        session.textDraft?.style.content = "Opened"
+        session.textDraft?.style.fontSize = 48
+        #expect(session.finishText())
+        let url = FileManager.default.temporaryDirectory.appending(path: "opened-\(UUID().uuidString).comp")
+        try ProjectStore.package(for: try #require(session.projectSnapshot())).write(to: url, options: [], originalContentsURL: nil)
+        return (try ProjectStore.readPackage(url), url)
+    }
+
+    /// Where an opened project is seen: fit in windows of a few sizes, on screens of either scale, or zoomed in to
+    /// crisp pixels.
+    enum OpenedView: String, CaseIterable {
+        case fitAtOneX, fitAtTwoX, fitSmall, crisp
+        var points: CGSize {
+            switch self {
+            case .fitAtOneX: CGSize(width: 600, height: 500)
+            case .fitAtTwoX: CGSize(width: 918, height: 800)
+            case .fitSmall: CGSize(width: 300, height: 200)
+            case .crisp: CGSize(width: 500, height: 400)
+            }
+        }
+        var scale: Int { self == .fitAtOneX ? 1 : 2 }
+    }
+
+    /// A canvas showing `snapshot` as it's opened.
+    private func canvas(_ snapshot: ProjectSnapshot, from url: URL, in view: OpenedView) -> CanvasView {
+        let session = EditorSession()
+        session.viewport.resize(to: view.points, backingScale: CGFloat(view.scale), documentSize: nil)
+        session.installProject(snapshot, from: url)
+        if view == .crisp { session.zoom(to: 3) }
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(origin: .zero, size: view.points)
+        return canvas
+    }
+
+    /// The canvas's GPU frame, drawn.
+    private func frameBytes(_ canvas: CanvasView, in view: OpenedView) throws -> [UInt8] {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let width = Int(view.points.width) * view.scale, height = Int(view.points.height) * view.scale
+        let frame = try #require(canvas.gpuFrame(size: CGSize(width: width, height: height)))
+        let texture = try #require(GPUCanvasRenderer.makeTexture(width: width, height: height, mask: false, device: renderer.device))
+        let buffer = try #require(renderer.queue.makeCommandBuffer())
+        renderer.context.render(frame, to: texture, commandBuffer: buffer, bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                                colorSpace: renderer.space)
+        buffer.commit(); buffer.waitUntilCompleted()
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        return bytes
+    }
+
+    /// Every image of the document: each layer's pixels and mask, folders' masks included.
+    private func images(_ document: CanvasDocument) -> [(name: String, image: CGImage)] {
+        document.layers.flatMap { layer in
+            [layer.asset.map { (layer.name, $0.image) }, layer.mask.map { (layer.name + "'s mask", $0.asset.image) }].compactMap { $0 }
+        }
+    }
+
+    /// The images a document just put in an editor says its first frame draws from are exactly the ones the canvas's
+    /// first frame uploads.
+    @Test(arguments: OpenedView.allCases)
+    func theFirstFrameDrawsFromExactlyItsSources(view: OpenedView) throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let (snapshot, url) = try openedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let canvas = canvas(snapshot, from: url, in: view)
+        let document = try #require(canvas.session.document)
+        let sources = Set(document.canvasSources.map { ObjectIdentifier($0.image) })
+        _ = try frameBytes(canvas, in: view)
+        let all = images(document)
+        // All but the mask placed apart, the disabled one, the hidden folder's mask and layer, the photo clipped to an
+        // empty layer, and the clipped adjustment's mask.
+        #expect(all.count == 26 && sources.count == 19)
+        for (name, image) in all {
+            let levels = renderer.cachedLevels(of: image)
+            #expect(levels.isEmpty != sources.contains(ObjectIdentifier(image)), "\(name): \(levels)")
+            if sources.contains(ObjectIdentifier(image)) { #expect(levels.first == 0, "\(name): \(levels)") }
+        }
+    }
+
+    /// An opened project's first frame, its textures made ahead, uploads nothing but the copy of a mask placed apart,
+    /// looks exactly as one made on demand, and leaves the canvas holding what that one would.
+    @Test(arguments: OpenedView.allCases)
+    func anOpenedProjectsFirstFrameUploadsNothingAndLooksTheSame(view: OpenedView) async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let (prepared, url) = try openedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let onDemand = try ProjectStore.readPackage(url)
+        let made = await renderer.prepare(CanvasDocument(project: prepared).canvasSources)
+        // From here on nothing is awaited, so no other test's frame comes between.
+        renderer.adopt(made)
+        let before = renderer.uploads
+        let first = try frameBytes(canvas(prepared, from: url, in: view), in: view)
+        // The mask placed apart is drawn from a copy resampled into its layer's grid for the view, made as it's drawn.
+        #expect(renderer.uploads == before + 1)
+        #expect(try frameBytes(canvas(onDemand, from: url, in: view), in: view) == first)
+        renderer.endFrame()
+        let pairs = zip(images(CanvasDocument(project: prepared)), images(CanvasDocument(project: onDemand)))
+        for (made, drawn) in pairs {
+            #expect(renderer.cachedLevels(of: made.image) == renderer.cachedLevels(of: drawn.image), "\(made.name)")
+        }
+    }
 }

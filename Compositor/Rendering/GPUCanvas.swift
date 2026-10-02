@@ -4,6 +4,7 @@ import AppKit
 import CoreImage
 import Metal
 import QuartzCore
+import Synchronization
 
 /// The canvas composited on the GPU. Core Graphics composites every layer on the CPU, about 5 ms for each full-size
 /// layer on a Retina screen, on every frame of a drag, pan or zoom; here the layers stay on the GPU as textures and a
@@ -162,6 +163,123 @@ import QuartzCore
         return Self.reduced(found, width: image.width, height: image.height, level: level)
     }
 
+    /// Full-size textures `prepare` made away from the main thread, waiting for `adopt`. Each was written before it was
+    /// handed over and is never written again.
+    nonisolated struct Prepared: Sendable {
+        fileprivate struct Made: Sendable {
+            let source: CGImage
+            let image: CIImage
+            let mask: Bool, converted: Bool
+            let copying: Duration, writing: Duration
+        }
+        fileprivate var made: [Made] = []
+        var count: Int { made.count }
+    }
+
+    /// The full-size textures of `sources`, made as a frame drawing them would make them, a few at a time away from the
+    /// main thread. One the canvas already holds is left out, and nothing is kept until `adopt`. Preparations take
+    /// turns, so two windows opening projects at once don't hold both projects' textures at the same time. Cancelled, it
+    /// takes no more images and returns what it made; cancelled while it waits its turn, it makes nothing.
+    func prepare(_ sources: [GPUTextureSource]) async -> Prepared {
+        while preparing { await withCheckedContinuation { waitingToPrepare.append($0) } }
+        guard !Task.isCancelled else { return Prepared() }
+        let sources = notHeld(sources)
+        // One too large for a texture means the document can't be drawn on the GPU, so nothing is made for it. (The
+        // masks a frame can leave out, folders' and adjustments', aren't among the sources then.)
+        guard !sources.isEmpty, !sources.contains(where: { max($0.image.width, $0.image.height) > Self.largestTexture })
+        else { return Prepared() }
+        preparing = true
+        defer {
+            preparing = false
+            let waiting = waitingToPrepare
+            waitingToPrepare = []
+            for preparation in waiting { preparation.resume() }
+        }
+        let start = ContinuousClock.now, stop = Stop(), device = device, space = space
+        // Timed to when the lanes are done, not to when the main actor gets back to it.
+        let (made, took) = await withTaskCancellationHandler {
+            // On a global queue: not the caller's actor, which an async function of the renderer's runs on, nor Swift's
+            // few threads, which the lanes would hold for as long as the decoding takes.
+            await withCheckedContinuation { finished in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let made = Self.make(sources, device: device, space: space, stop: stop)
+                    finished.resume(returning: (made, ContinuousClock.now - start))
+                }
+            }
+        } onCancel: {
+            stop.requested.store(true, ordering: .relaxed)
+        }
+        if !Task.isCancelled, !made.isEmpty {
+            var work = TextureWork()
+            for made in made {
+                if made.mask { work.masks += 1 } else { work.images += 1 }
+                if made.converted { work.converted += 1 }
+                work.pixels += made.source.width * made.source.height
+                work.copying += made.copying
+                work.writing += made.writing
+            }
+            Timing.report("Prepare textures", took: took, work.detail + ", \(min(Self.preparedAtOnce, sources.count)) at a time")
+        }
+        return Prepared(made: made)
+    }
+
+    /// `sources` the canvas holds no full-size texture for, each once.
+    func notHeld(_ sources: [GPUTextureSource]) -> [GPUTextureSource] {
+        var seen = Set<ObjectIdentifier>()
+        return sources.filter {
+            let id = ObjectIdentifier($0.image)
+            return seen.insert(id).inserted && textures[Key(id: id, level: 0)] == nil
+        }
+    }
+
+    /// Takes in textures `prepare` made, as though the next frame had uploaded them: one that frame draws is kept as any
+    /// is, and one it only reduces from goes once it's done. Call it in the same turn of the main actor as the document
+    /// that draws them goes in. They outlast a frame of another canvas drawn first, but not two.
+    func adopt(_ prepared: Prepared) {
+        for made in prepared.made {
+            let key = Key(id: ObjectIdentifier(made.source), level: 0)
+            guard textures[key] == nil else { continue }
+            textures[key] = Entry(source: made.source, image: made.image, used: frame + 1, keep: 0)
+        }
+    }
+
+    /// Four at a time, as a package is read.
+    nonisolated private static let preparedAtOnce = 4
+    /// Set while a preparation runs; the next waits its turn.
+    private var preparing = false
+    private var waitingToPrepare: [CheckedContinuation<Void, Never>] = []
+    /// Set when the preparing task is cancelled; each lane looks before taking another image.
+    nonisolated private final class Stop: Sendable {
+        let requested = Atomic(false)
+    }
+
+    /// `sources`' textures, a few at once, each lane taking the next image as soon as it's done (as `ProjectStore`
+    /// reads files). One that can't be made is left out, as a frame would leave it.
+    nonisolated private static func make(_ sources: [GPUTextureSource], device: any MTLDevice, space: CGColorSpace,
+                                         stop: Stop) -> [Prepared.Made] {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+        let made = Mutex([Prepared.Made?](repeating: nil, count: sources.count))
+        let next = Atomic(0)
+        DispatchQueue.concurrentPerform(iterations: min(preparedAtOnce, sources.count)) { _ in
+            while !stop.requested.load(ordering: .relaxed) {
+                let index = next.add(1, ordering: .relaxed).oldValue
+                guard index < sources.count else { return }
+                let source = sources[index]
+                autoreleasepool {
+                    var copying = Duration.zero, writing = Duration.zero
+                    guard let image = upload(source.image, mask: source.mask, device: device, space: space,
+                                             copying: &copying, writing: &writing) else { return }
+                    let converted = !source.mask && !BrushRaster.copiesStraight(source.image)
+                    made.withLock {
+                        $0[index] = Prepared.Made(source: source.image, image: image, mask: source.mask, converted: converted,
+                                                  copying: copying, writing: writing)
+                    }
+                }
+            }
+        }
+        return made.withLock { $0 }.compactMap { $0 }
+    }
+
     /// The levels of `image` held as textures, for checking what the cache keeps.
     func cachedLevels(of image: CGImage) -> [Int] {
         textures.keys.filter { $0.id == ObjectIdentifier(image) }.map(\.level).sorted()
@@ -301,7 +419,14 @@ import QuartzCore
     }
 
     private func texture(width: Int, height: Int, mask: Bool) -> MTLTexture? {
-        guard width > 0, height > 0, width <= 16_384, height <= 16_384 else { return nil }
+        Self.makeTexture(width: width, height: height, mask: mask, device: device)
+    }
+
+    /// The longest side a texture can have.
+    nonisolated static let largestTexture = 16_384
+
+    nonisolated static func makeTexture(width: Int, height: Int, mask: Bool, device: any MTLDevice) -> (any MTLTexture)? {
+        guard width > 0, height > 0, width <= largestTexture, height <= largestTexture else { return nil }
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: mask ? .r8Unorm : .rgba8Unorm,
                                                                   width: width, height: height, mipmapped: false)
         descriptor.usage = [.shaderRead, .shaderWrite]
@@ -309,24 +434,23 @@ import QuartzCore
         return device.makeTexture(descriptor: descriptor)
     }
 
-    private func wrap(_ texture: MTLTexture, mask: Bool) -> CIImage? {
+    private func wrap(_ texture: MTLTexture, mask: Bool) -> CIImage? { Self.wrap(texture, mask: mask, space: space) }
+
+    nonisolated static func wrap(_ texture: any MTLTexture, mask: Bool, space: CGColorSpace) -> CIImage? {
         CIImage(mtlTexture: texture, options: [.colorSpace: mask ? NSNull() : space])
     }
 
-    /// The image's own bytes, copied straight in: sRGB, premultiplied, top row first — or for a mask, its gray values.
-    /// An image that isn't laid out that way is drawn into that layout first. A `transient` image, replaced every
-    /// frame, isn't counted in the lines about textures.
+    /// Images and masks frames have uploaded since launch, transient ones aside: for tests that check what a frame made.
+    private(set) var uploads = 0
+
+    /// An image's texture, made as `upload(_:mask:device:space:copying:writing:)` makes it, and counted. A `transient`
+    /// image, replaced every frame, isn't counted.
     private func upload(_ image: CGImage, mask: Bool, transient: Bool) -> CIImage? {
         var copying = Duration.zero, writing = Duration.zero
-        guard let texture = texture(width: image.width, height: image.height, mask: mask),
-              let pixels = try? Timing.step("Texture copy", adding: &copying, { try mask ? Self.grayCopy(image) : BrushRaster.copy(image) }),
-              let data = pixels.data else { return nil }
-        Timing.step("Texture write", adding: &writing) {
-            texture.replace(region: MTLRegionMake2D(0, 0, image.width, image.height), mipmapLevel: 0,
-                            withBytes: data, bytesPerRow: pixels.bytesPerRow)
-        }
-        guard let made = wrap(texture, mask: mask) else { return nil }
+        guard let made = Self.upload(image, mask: mask, device: device, space: space, copying: &copying, writing: &writing)
+        else { return nil }
         if !transient {
+            uploads += 1
             if mask { work.masks += 1 } else { work.images += 1 }
             if !mask, !BrushRaster.copiesStraight(image) { work.converted += 1 }
             work.pixels += image.width * image.height
@@ -336,7 +460,23 @@ import QuartzCore
         return made
     }
 
-    static func grayCopy(_ image: CGImage) throws -> CGContext {
+    /// `image`'s bytes in a new texture, made on whichever thread calls it: sRGB, premultiplied, top row first — or for a
+    /// mask, its gray values. An image that isn't laid out that way is drawn into that layout first, which for one read
+    /// from a package is its decoding. Frames and textures made ahead of them both come from here, so a texture made
+    /// ahead holds the very bytes a frame would have uploaded.
+    nonisolated static func upload(_ image: CGImage, mask: Bool, device: any MTLDevice, space: CGColorSpace,
+                                   copying: inout Duration, writing: inout Duration) -> CIImage? {
+        guard let texture = makeTexture(width: image.width, height: image.height, mask: mask, device: device),
+              let pixels = try? Timing.step("Texture copy", adding: &copying, { try mask ? grayCopy(image) : BrushRaster.copy(image) }),
+              let data = pixels.data else { return nil }
+        Timing.step("Texture write", adding: &writing) {
+            texture.replace(region: MTLRegionMake2D(0, 0, image.width, image.height), mipmapLevel: 0,
+                            withBytes: data, bytesPerRow: pixels.bytesPerRow)
+        }
+        return wrap(texture, mask: mask, space: space)
+    }
+
+    nonisolated static func grayCopy(_ image: CGImage) throws -> CGContext {
         let context = try BrushRaster.context(width: image.width, height: image.height, mask: true)
         context.setFillColor(gray: 0, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
@@ -419,6 +559,12 @@ import QuartzCore
         drawable.present()
         endFrame()
     }
+}
+
+/// An image of a document the canvas draws from: a layer's pixels, or a mask.
+nonisolated struct GPUTextureSource: Sendable {
+    let image: CGImage
+    let mask: Bool
 }
 
 #if os(macOS)
