@@ -17,21 +17,25 @@ nonisolated enum ExportError: LocalizedError {
 actor ImageExporter {
     static let shared = ImageExporter()
 
-    func render(_ snapshot: ProjectSnapshot) throws -> ExportRaster {
+    /// `snapshot` flattened, at its own size or, for a preview, `scale` of it: drawn at that size, not shrunk from the
+    /// whole.
+    func render(_ snapshot: ProjectSnapshot, scale: CGFloat = 1) throws -> ExportRaster {
         let width = snapshot.manifest.width, height = snapshot.manifest.height
         guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
               width * height <= DocumentLimits.maxSurfacePixels else { throw ExportError.tooLarge }
+        let scale = min(1, scale)
+        let pixelWidth = max(1, Int((CGFloat(width) * scale).rounded())), pixelHeight = max(1, Int((CGFloat(height) * scale).rounded()))
         let rendering = Timing.begin("Render")
         let raster = try autoreleasepool {
             guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-                  let context = CGContext(data: nil, width: width, height: height,
-                                          bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
+                  let context = CGContext(data: nil, width: pixelWidth, height: pixelHeight,
+                                          bitsPerComponent: 8, bytesPerRow: pixelWidth * 4, space: space,
                                           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
                 throw ExportError.render
             }
-            context.clear(CGRect(x: 0, y: 0, width: width, height: height))
-            context.translateBy(x: 0, y: CGFloat(height))
-            context.scaleBy(x: 1, y: -1)
+            context.clear(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+            context.translateBy(x: 0, y: CGFloat(pixelHeight))
+            context.scaleBy(x: CGFloat(pixelWidth) / CGFloat(width), y: -CGFloat(pixelHeight) / CGFloat(height))
             let records = Dictionary(uniqueKeysWithValues: snapshot.manifest.layers.map { ($0.id, $0) })
             for layer in snapshot.manifest.layers {
                 guard layer.imageFile == nil || snapshot.images[layer.id] != nil,
@@ -58,6 +62,9 @@ actor ImageExporter {
                 if SeparableBlend.needsSurface(mode), SeparableBlend.draw(mode, in: target, body: { drawLayer(.normal, $0) }) { return }
                 drawLayer(mode, target)
             }
+            // The surfaces made along the way are as sharp as the image they go into.
+            live.resolution = CGFloat(pixelWidth) / CGFloat(width)
+            live.adjustmentScale = live.resolution
             live.adjustment = { records[$0]?.adjustment }
             live.adjustmentOpacity = { records[$0]?.effectiveOpacity(in: records) ?? 1 }
             live.adjustmentClip = { id, ctx in
@@ -74,7 +81,7 @@ actor ImageExporter {
             guard let image = context.makeImage() else { throw ExportError.render }
             return ExportRaster(image: image, resolution: snapshot.manifest.resolution ?? 72)
         }
-        Timing.end(rendering, "\(width)×\(height)")
+        Timing.end(rendering, "\(pixelWidth)×\(pixelHeight)")
         return raster
     }
 
@@ -82,8 +89,13 @@ actor ImageExporter {
     /// 1,024 px on the long side, about 100–200 KB. Nil for canvases too large to flatten on every save.
     func quickLookImages(_ snapshot: ProjectSnapshot) -> QuickLookImages? {
         let making = Timing.begin("QuickLook preview")
+        let longSide = max(snapshot.manifest.width, snapshot.manifest.height)
+        // Drawn no smaller than half size, where a layer at its own size draws straight, then shrunk; the reductions a
+        // smaller one needs aren't kept, as nothing draws this again.
         guard snapshot.manifest.width * snapshot.manifest.height <= 50_000_000,
-              let raster = try? render(snapshot),
+              let raster = try? DownsampleCache.$keeps.withValue(false, operation: {
+                  try render(snapshot, scale: max(0.5, 1024 / CGFloat(longSide)))
+              }),
               let preview = try? scaledJPEG(raster.image, longSide: 1024) else { return nil }
         Timing.end(making)
         return QuickLookImages(preview: preview)

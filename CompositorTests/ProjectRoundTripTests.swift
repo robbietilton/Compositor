@@ -242,4 +242,55 @@ nonisolated final class Said<Event: Sendable>: Sendable {
         #expect(try written[#require(layers[3].imageFile)] == written[#require(layers[1].imageFile)])
         #expect(try written == files(shared))
     }
+
+    /// The Quick Look preview, 1,024 pixels on the long side, is drawn at no less than half the canvas's size, and looks
+    /// as the whole canvas shrunk to that size on white does, blurred, masked and clipped layers included.
+    @Test func theQuickLookPreviewIsDrawnSmaller() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 2400, height: 1600)
+        for image in [try cutOut(2400, 1600), try cutOut(1200, 900), try everyPremultipliedPixel()] {
+            session.insert(ImportedImage(image: image, thumbnail: image, name: "Layer"))
+        }
+        session.document!.layers[1].mask = LayerMask(asset: try LayerMask.asset(from: edgedMask(1200, 900, revealing: true)))
+        session.document!.layers[2].blendMode = .multiply
+        session.document!.layers[2].opacity = 0.7
+        // Clipped to the layer under it, and everything blurred, so a blur not scaled with the drawing shows.
+        session.document!.layers[2].maskSourceID = session.document!.layers[1].id
+        var blur = ImageLayer(name: "Blur", blankSize: CGSize(width: 2400, height: 1600))
+        blur.adjustment = LayerAdjustment(kind: .gaussianBlur)
+        blur.adjustment!.blurRadius = 12
+        session.document!.layers.append(blur)
+        let snapshot = try #require(session.projectSnapshot())
+        let half = try await ImageExporter.shared.render(snapshot, scale: 0.5).image
+        #expect(half.width == 1200 && half.height == 800)
+        let jpeg = try #require(await ImageExporter.shared.quickLookImages(snapshot)).preview
+        let source = try #require(CGImageSourceCreateWithData(jpeg as CFData, nil))
+        let preview = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(preview.width == 1024 && preview.height == 683)
+        // The whole canvas shrunk to that size on white, as the preview used to be made.
+        let whole = try await ImageExporter.shared.render(snapshot).image
+        let shrunk = try #require(CGContext(data: nil, width: 1024, height: 683, bitsPerComponent: 8, bytesPerRow: 1024 * 4,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        shrunk.setFillColor(gray: 1, alpha: 1)
+        shrunk.fill(CGRect(x: 0, y: 0, width: 1024, height: 683))
+        shrunk.interpolationQuality = .high
+        shrunk.draw(whole, in: CGRect(x: 0, y: 0, width: 1024, height: 683))
+        let drawn = try pixels(preview), expected = try pixels(try #require(shrunk.makeImage()))
+        let difference = zip(drawn, expected).reduce(0) { $0 + abs(Int($1.0) - Int($1.1)) }
+        #expect(Double(difference) / Double(drawn.count) < 3, "mean \(Double(difference) / Double(drawn.count))")
+    }
+
+    /// Making the preview keeps none of the reductions its layers needed: a layer drawn smaller than half size, as one
+    /// scaled down is, leaves nothing in DownsampleCache, which would keep it and its image after every save.
+    @Test func thePreviewKeepsNoReductions() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 2400, height: 1600)
+        let image = try cutOut(2000, 1400)
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Layer"))
+        session.document!.layers[0].transform.size = CGSize(width: 1400, height: 980)
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(await ImageExporter.shared.quickLookImages(snapshot) != nil)
+        #expect(DownsampleCache.shared.keptLevels(of: image) == 0)
+    }
 }
