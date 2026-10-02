@@ -4,9 +4,6 @@ import UIKit
 /// no touch interaction yet are shown, and dimmed, so the rail reads as the Mac's does.
 final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
     var session: EditorSession? { didSet { if session !== oldValue { setNeedsUpdateProperties() } } }
-    /// Whether a finger paints; the window keeps the choice.
-    var fingerPaints = true { didSet { setNeedsUpdateProperties() } }
-    var onFingerPaintsChange: (Bool) -> Void = { _ in }
     /// Shows the color picker and the mask's color choice over the window.
     weak var presenter: UIViewController?
 
@@ -17,7 +14,6 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
     private let tools = NavigationTool.allCases.filter { $0 != .idle }
     private var buttons: [NavigationTool: UIButton] = [:]
     private let foreground = SwatchButton(), background = SwatchButton()
-    private let fingerButton = UIButton(configuration: .plain())
     private var pickingBackground = false
 
     override init(frame: CGRect) {
@@ -71,30 +67,15 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         column.addArrangedSubview(swatches)
         column.setCustomSpacing(18, after: buttons[tools.last!]!)
 
-        var finger = UIButton.Configuration.plain()
-        finger.image = UIImage(systemName: "hand.point.up.left")
-        fingerButton.configuration = finger
-        fingerButton.accessibilityLabel = "Paint with a finger"
-        fingerButton.toolTip = "Paint with a finger (once Apple Pencil touches the canvas, fingers move it instead)"
-        fingerButton.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            self.fingerPaints.toggle()
-            self.onFingerPaintsChange(self.fingerPaints)
-        }, for: .primaryActionTriggered)
-
         addSubview(scroll)
-        addSubview(fingerButton)
-        for view in [scroll, fingerButton] as [UIView] { view.translatesAutoresizingMaskIntoConstraints = false }
+        scroll.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor), scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: fingerButton.topAnchor, constant: -8),
+            scroll.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -10),
             column.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
             column.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             column.centerXAnchor.constraint(equalTo: scroll.frameLayoutGuide.centerXAnchor),
-            fingerButton.centerXAnchor.constraint(equalTo: centerXAnchor),
-            fingerButton.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -10),
-            fingerButton.widthAnchor.constraint(equalToConstant: 44), fingerButton.heightAnchor.constraint(equalToConstant: 44),
             widthAnchor.constraint(equalToConstant: 60),
         ])
     }
@@ -118,10 +99,6 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         foreground.color = session.paletteColor(background: false)
         background.color = session.paletteColor(background: true)
         for swatch in [foreground, background] { swatch.isEnabled = session.canEditPalette }
-        fingerButton.configuration?.baseForegroundColor = fingerPaints ? .tintColor : .secondaryLabel
-        fingerButton.backgroundColor = fingerPaints ? UIColor.tintColor.withAlphaComponent(0.18) : .clear
-        fingerButton.layer.cornerRadius = 22
-        fingerButton.accessibilityValue = fingerPaints ? "On" : "Off"
     }
 
     /// The Mac rail's icons: SF Symbols, the Marquee's following its shape and the Brush's its mode, and the Mac's own

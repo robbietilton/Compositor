@@ -4,8 +4,11 @@ import UIKit
 /// right what the tool in hand does, or what the editor is busy with.
 final class StatusBarView: UIView {
     var session: EditorSession? { didSet { if session !== oldValue { setNeedsUpdateProperties() } } }
-    /// Whether a finger paints; once Apple Pencil has, fingers move the canvas instead, and the hints say so.
+    /// Whether a finger paints, as `DrawingInput` says; the hints say what draws.
     var fingerPaints = true { didSet { setNeedsUpdateProperties() } }
+    /// A word on what just changed, said in the hint's place for a moment.
+    private(set) var flashed: String?
+    private var flashEnd: Task<Void, Never>?
 
     static let height: CGFloat = 30
 
@@ -61,7 +64,32 @@ final class StatusBarView: UIView {
             hint.text = session.showsBusy ? "Working…" : "Importing images…"
         } else {
             spinner.stopAnimating()
-            hint.text = session.document == nil ? nil : Self.hint(for: session, fingerPaints: fingerPaints)
+            hint.text = session.document == nil ? nil : flashed ?? Self.hint(for: session, fingerPaints: fingerPaints)
+        }
+        hint.textColor = flashed == nil || session.showsBusy || session.isImporting ? .secondaryLabel : .tintColor
+    }
+
+    /// How long a flash stays before the hint comes back.
+    static let flashDuration: Duration = .seconds(3)
+
+    /// Says `message` in the hint's place, in the accent color, for `duration`, and to VoiceOver: a mode just switched,
+    /// say, and what it switched to.
+    func flash(_ message: String, for duration: Duration = flashDuration) {
+        flashEnd?.cancel()
+        crossfade { self.flashed = message }
+        UIAccessibility.post(notification: .announcement, argument: message)
+        flashEnd = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.crossfade { self?.flashed = nil }
+        }
+    }
+
+    private func crossfade(_ change: @escaping () -> Void) {
+        UIView.transition(with: hint, duration: 0.25, options: .transitionCrossDissolve) {
+            change()
+            self.setNeedsUpdateProperties()
+            self.updatePropertiesIfNeeded()
         }
     }
 

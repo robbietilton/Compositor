@@ -1,4 +1,5 @@
 import PhotosUI
+import Symbols
 import UIKit
 import UniformTypeIdentifiers
 
@@ -30,6 +31,17 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private lazy var redoItem = barItem(symbol: "arrow.uturn.forward", label: "Redo") { [weak self] session in
         if let text = self?.textUndo { text.redo() } else { session.redo() }
     }
+    /// Who draws, Apple Pencil alone or fingers too: a switch for the whole app rather than a tool, so it sits by Undo
+    /// and Redo, not among the tools. It's there once Apple Pencil has turned up.
+    private lazy var inputItem: UIBarButtonItem = {
+        let item = UIBarButtonItem(title: nil, image: nil, primaryAction: UIAction { [weak self] _ in self?.switchInput() })
+        item.isHidden = true
+        return item
+    }()
+    /// Who draws, which the toolbar's switch shows and the canvas follows.
+    var input = DrawingInput.shared
+    /// Whether the switch last showed Apple Pencil alone, so a flip morphs one symbol into the other.
+    private var shownPencilOnly: Bool?
     private lazy var typePickers: TypePickers = {
         let pickers = TypePickers()
         pickers.session = { [weak self] in self?.activeTab?.session }
@@ -54,7 +66,6 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private let dropTarget = UIView()
     private let layersPanel = LayersPanelView()
     private let statusBar = StatusBarView()
-    private var fingerPaints = UserDefaults.standard.object(forKey: "fingerPaints") as? Bool ?? true
 
     private enum Picking { case project, images }
     private var picking: Picking?
@@ -73,7 +84,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         // groups, for a window that may have no keyboard or menu bar in reach.
         navigationItem.leadingItemGroups = [UIBarButtonItemGroup(barButtonItems: [newTabItem], representativeItem: nil)]
         navigationItem.titleView = tabStrip
-        navigationItem.trailingItemGroups = [[undoItem, redoItem], [fitItem], [actualItem], [zoomInItem, zoomOutItem]]
+        navigationItem.trailingItemGroups = [[inputItem], [undoItem, redoItem], [fitItem], [actualItem], [zoomInItem, zoomOutItem]]
             .map { UIBarButtonItemGroup(barButtonItems: $0, representativeItem: nil) }
 
         tabStrip.onSelect = { [weak self] in self?.select($0) }
@@ -81,8 +92,6 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tabStrip.menu = { [weak self] in self?.tabMenu($0) }
 
         rail.presenter = self
-        rail.fingerPaints = fingerPaints
-        rail.onFingerPaintsChange = { [weak self] in self?.setFingerPaints($0) }
         optionsBar.onChooseForeground = { [weak self] in self?.rail.chooseColor(background: false, from: $0) }
         optionsBar.onChooseFont = { [weak self] source in
             guard let self else { return }
@@ -93,7 +102,6 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             self.typePickers.chooseTextColor(from: source, presenter: self)
         }
         layersPanel.presenter = self
-        statusBar.fingerPaints = fingerPaints
 
         newCanvas.onCreate = { [weak self] in self?.createCanvas(width: $0, height: $1) }
         newCanvas.onOpen = { [weak self] in self?.openProject(nil) }
@@ -162,6 +170,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// Follows the tab in front: UIKit calls this again whenever anything it read from that tab's editor changes.
     override func updateProperties() {
         super.updateProperties()
+        showInputSwitch()
         guard let tab = activeTab else { return }
         let session = tab.session
         tabStrip.show(tabs.map { .init(id: $0.id, title: $0.title, modified: $0.document != nil && $0.session.isModified) },
@@ -178,6 +187,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         optionsBar.session = session
         layersPanel.session = session
         statusBar.session = session
+        // Who draws, which Apple Pencil turning up and the toolbar's switch change.
+        statusBar.fingerPaints = input.fingerPaints
+        tab.canvas.fingerPaints = input.fingerPaints
         // What the editor asks of whoever shows it: a Photoshop file's conversion report, a RAW file's development,
         // and the errors it runs into. Shown once the update is over.
         if session.showsConversionSheet || session.showsRawDevelop || session.importError != nil
@@ -285,8 +297,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         activeID = id
         canvasHost.subviews.forEach { $0.removeFromSuperview() }
         let canvas = tab.canvas
-        canvas.fingerPaints = fingerPaints
-        canvas.pencilSeen = { [weak self] in self?.setFingerPaints(false) }
+        canvas.fingerPaints = input.fingerPaints
+        canvas.pencilSeen = { [weak self] in self?.pencilTurnedUp() }
         canvasHost.addSubview(canvas)
         canvas.frame = canvasHost.bounds
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -318,12 +330,42 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return UIMenu(children: [UIMenu(options: .displayInline, children: fileActions), close])
     }
 
-    private func setFingerPaints(_ paints: Bool) {
-        fingerPaints = paints
-        UserDefaults.standard.set(paints, forKey: "fingerPaints")
-        rail.fingerPaints = paints
-        statusBar.fingerPaints = paints
-        activeTab?.canvas.fingerPaints = paints
+    /// Apple Pencil turned up on this window's canvas. The first time since launch it takes drawing from fingers, unless
+    /// the switch was left with fingers drawing too, and the status line says so.
+    private func pencilTurnedUp() {
+        if input.pencilTurnedUp() { inputSwitched(pencilOnly: true) }
+    }
+
+    /// Flips who draws, from the toolbar's switch.
+    func switchInput() {
+        input.pencilOnly.toggle()
+        inputSwitched(pencilOnly: input.pencilOnly)
+    }
+
+    /// Says who draws now, as it just changed.
+    private func inputSwitched(pencilOnly: Bool) {
+        statusBar.flash(DrawingInput.description(pencilOnly: pencilOnly))
+    }
+
+    /// The switch for who draws: there once Apple Pencil has turned up, coming in as it does, and showing who draws
+    /// now, one symbol morphing into the other as it's flipped.
+    private func showInputSwitch() {
+        let pencilOnly = input.pencilOnly
+        inputItem.accessibilityLabel = DrawingInput.description(pencilOnly: pencilOnly)
+        if let image = UIImage(systemName: DrawingInput.symbol(pencilOnly: pencilOnly)) {
+            if shownPencilOnly == nil || inputItem.isHidden { inputItem.image = image }
+            else if shownPencilOnly != pencilOnly { inputItem.setSymbolImage(image, contentTransition: .replace) }
+        }
+        shownPencilOnly = pencilOnly
+        guard inputItem.isHidden == input.hasPencil else { return }
+        if input.hasPencil, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
+            UIView.animate(withDuration: 0.35) {
+                self.inputItem.isHidden = false
+                self.navigationController?.navigationBar.layoutIfNeeded()
+            }
+        } else {
+            inputItem.isHidden = !input.hasPencil
+        }
     }
 
     // MARK: Opening

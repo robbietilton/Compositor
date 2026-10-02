@@ -7,9 +7,9 @@ import UIKit
 /// document coordinates, as the Mac's `CanvasView` does with the mouse.
 final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteractionDelegate, UIPointerInteractionDelegate {
     let session: EditorSession
-    /// Whether a finger paints. Once Apple Pencil has touched the canvas, fingers move it instead, as in other iPad
-    /// painting apps.
+    /// Whether a finger paints, as `DrawingInput` says: once Apple Pencil turns up, fingers can move the canvas instead.
     var fingerPaints = true
+    /// Apple Pencil touched the canvas, hovered over it, or was tapped or squeezed.
     var pencilSeen: () -> Void = {}
     private let surface = MetalCanvasView(frame: .zero)
     private(set) lazy var overlayView = PadOverlayView(session: session)
@@ -216,6 +216,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     }
 
     @objc private func hovered(_ gesture: UIHoverGestureRecognizer) {
+        // Only Apple Pencil hovers above the screen; a pointer is on it.
+        if gesture.zOffset > 0 { pencilSeen() }
         switch gesture.state {
         case .began, .changed: hover(at: gesture.location(in: self), keys: gesture.modifierFlags)
         default: hover(at: nil)
@@ -251,7 +253,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         if !isFirstResponder { becomeFirstResponder() }
         guard activeTouch == nil, let touch = touches.first, event?.allTouches?.count == 1,
               session.document != nil, !session.isProjectBusy, !session.isImporting else { return }
-        if touch.type == .pencil, fingerPaints { pencilSeen() }
+        if touch.type == .pencil { pencilSeen() }
         let tool = session.tool
         let point = touch.location(in: self)
         let keys = event?.modifierFlags ?? []
@@ -410,9 +412,14 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     /// A double tap (or squeeze) on Apple Pencil switches between painting and erasing, as the system setting suggests.
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        pencilSeen()
         guard UIPencilInteraction.preferredTapAction == .switchEraser || UIPencilInteraction.preferredTapAction == .switchPrevious
         else { return }
         if session.tool != .brush { session.selectTool(.brush) }
         session.brushMode = session.brushMode == .paint ? .erase : .paint
+    }
+
+    func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
+        pencilSeen()
     }
 }
