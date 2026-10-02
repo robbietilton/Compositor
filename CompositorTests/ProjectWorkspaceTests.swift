@@ -123,6 +123,75 @@ import Testing
         #expect(workspace.tabs[1].session.document?.layers.count == 1)
     }
 
+    /// A project of three layers, one masked, saved as a package.
+    private func savedProject() throws -> URL {
+        let saved = EditorSession()
+        saved.createDocument(width: 400, height: 300)
+        for seed in 0..<3 {
+            let context = try BrushRaster.context(width: 400 - seed * 80, height: 300 - seed * 60, mask: false)
+            context.setFillColor(red: CGFloat(seed) / 3, green: 0.5, blue: 0.8, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: context.width, height: context.height / 2))
+            let image = context.makeImage()!
+            saved.insert(ImportedImage(image: image, thumbnail: image, name: "Layer"))
+        }
+        let mask = try BrushRaster.context(width: 240, height: 180, mask: true)
+        mask.setFillColor(gray: 1, alpha: 1)
+        mask.fill(CGRect(x: 0, y: 0, width: 120, height: 180))
+        saved.document!.layers[saved.document!.layers.count - 1].mask = LayerMask(asset: try LayerMask.asset(from: mask.makeImage()!))
+        let url = FileManager.default.temporaryDirectory.appending(path: "first-frame-\(UUID().uuidString).comp")
+        try ProjectStore.package(for: try #require(saved.projectSnapshot())).write(to: url, options: [], originalContentsURL: nil)
+        return url
+    }
+
+    /// A project opened in a tab draws its first frame from textures made before the tab showed: the frame uploads
+    /// nothing.
+    @Test func anOpenedProjectsFirstFrameUploadsNothing() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let url = try savedProject()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let workspace = ProjectWorkspace()
+        #expect(await workspace.open(url))
+        // From here on nothing is awaited, so no other test's frame comes between.
+        let session = workspace.current.session
+        let document = try #require(session.document)
+        #expect(document.canvasSources.count == 4)
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+        session.viewport.resize(to: canvas.bounds.size, backingScale: 2, documentSize: document.size)
+        let before = renderer.uploads
+        #expect(canvas.gpuFrame(size: CGSize(width: 1000, height: 800)) != nil)
+        #expect(renderer.uploads == before)
+    }
+
+    /// A project opened together with an image goes behind the image's tab at once, so nothing is made for it ahead:
+    /// it makes its textures as it's brought forward.
+    @Test func aProjectOpenedWithAnImageMakesNoTexturesAhead() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let url = try savedProject(), image = try ImageImportTests().fixture(.png)
+        defer { for file in [url, image] { try? FileManager.default.removeItem(at: file) } }
+        let workspace = ProjectWorkspace()
+        await workspace.receive([url, image])
+        let project = try #require(workspace.tabs.first { $0.session.projectURL != nil })
+        #expect(workspace.current !== project)
+        let images = try #require(project.session.document).layers.compactMap { $0.asset?.image }
+        #expect(images.count == 3 && images.allSatisfy { renderer.cachedLevels(of: $0).isEmpty })
+    }
+
+    /// A project opened together with one already open in a tab goes behind that tab at once, so nothing is made for it
+    /// ahead either.
+    @Test func aProjectOpenedBeforeOneAlreadyOpenMakesNoTexturesAhead() async throws {
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let first = try savedProject(), open = try savedProject()
+        defer { for file in [first, open] { try? FileManager.default.removeItem(at: file) } }
+        let workspace = ProjectWorkspace()
+        #expect(await workspace.open(open))
+        await workspace.receive([first, open])
+        let project = try #require(workspace.tabs.first { $0.session.projectURL?.lastPathComponent == first.lastPathComponent })
+        #expect(workspace.current !== project)
+        let images = try #require(project.session.document).layers.compactMap { $0.asset?.image }
+        #expect(images.count == 3 && images.allSatisfy { renderer.cachedLevels(of: $0).isEmpty })
+    }
+
     @Test func moveTabReordersWithoutTouchingSelectionOrDocuments() {
         let workspace = ProjectWorkspace()
         let a = workspace.current

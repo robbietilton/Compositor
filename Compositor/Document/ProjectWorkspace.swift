@@ -81,10 +81,19 @@ final class ProjectWorkspace {
             urls = panel.urls
         }
         var opened = false
-        for url in urls { opened = await loadProject(url) || opened }
+        for (index, url) in urls.enumerated() {
+            opened = await loadProject(url, preparing: !sendsBehindAtOnce(urls.dropFirst(index + 1).first)) || opened
+        }
         return opened
     }
-    private func loadProject(_ url: URL) async -> Bool {
+    /// Whether opening `next` straight after a project selects another tab before the project's draws: an image opens in
+    /// a tab of its own at once, and so does a project already open in one.
+    private func sendsBehindAtOnce(_ next: URL?) -> Bool {
+        guard let next else { return false }
+        return next.pathExtension.lowercased() != "comp"
+            || tabs.contains { $0.session.projectURL?.resolvingSymlinksInPath() == next.resolvingSymlinksInPath() }
+    }
+    private func loadProject(_ url: URL, preparing: Bool = true) async -> Bool {
         if let existing = tabs.first(where: { $0.session.projectURL?.resolvingSymlinksInPath() == url.resolvingSymlinksInPath() }) {
             selectedID = existing.id; return true
         }
@@ -92,8 +101,15 @@ final class ProjectWorkspace {
         let tab = ProjectTab(name: url.deletingPathExtension().lastPathComponent)
         tab.controller.window = window
         guard await tab.controller.open(url) else { return false }
+        // The textures its first frame draws from are made before the tab shows, away from the main thread, and go to
+        // the canvas as it's selected.
+        var prepared: GPUCanvasRenderer.Prepared?
+        if preparing, !CanvasView.gpuDisabled, let renderer = GPUCanvasRenderer.shared, let document = tab.session.document {
+            prepared = await renderer.prepare(document.canvasSources)
+        }
         if tabs.count == 1, current.session.document == nil { tabs.removeAll() }
         tab.controller.workspace = self; tabs.append(tab); selectedID = tab.id
+        if let prepared { GPUCanvasRenderer.shared?.adopt(prepared) }
         return true
     }
     func close(_ id: UUID) async {
@@ -162,8 +178,11 @@ final class ProjectWorkspace {
             try? await Task.sleep(for: .milliseconds(30))
         }
         isManaging = true; defer { isManaging = false }
-        for url in urls {
-            if url.pathExtension.lowercased() == "comp" { _ = await loadProject(url); continue }
+        for (index, url) in urls.enumerated() {
+            if url.pathExtension.lowercased() == "comp" {
+                _ = await loadProject(url, preparing: !sendsBehindAtOnce(urls.dropFirst(index + 1).first))
+                continue
+            }
             let tab: ProjectTab
             if let destination {
                 guard let existing = tabs.first(where: { $0.id == destination }) else { continue }
