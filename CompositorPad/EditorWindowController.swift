@@ -409,7 +409,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// the first one sets the canvas and the project gets a file.
     private func bringIn(_ images: [URL], into target: EditorTab? = nil, at point: CGPoint? = nil) async {
         guard !images.isEmpty, let tab = target ?? activeTab ?? tabs.first else { return }
+        let importing = Timing.begin("Import images")
         await tab.session.importImages(images, at: point)
+        Timing.end(importing, Timing.counted(images.count, "image"))
         do { try await tab.createDocument(named: images.first?.deletingPathExtension().lastPathComponent ?? "Untitled") }
         catch { showError("Couldn’t save the new project", error) }
         setNeedsUpdateProperties()
@@ -681,7 +683,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                         catch { self.showError("Couldn’t export JPEG", error) }
                     }
                 }
-                self.present(dialog, animated: true)
+                let presenting = Timing.begin("JPEG dialog")
+                self.present(dialog, animated: true) { Timing.end(presenting) }
             } catch {
                 session.isProjectBusy = false
                 self?.showError("Couldn’t export JPEG", error)
@@ -692,11 +695,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
     private func share(_ data: Data, named name: String) throws {
         let url = FileManager.default.temporaryDirectory.appending(path: name)
-        try data.write(to: url, options: .atomic)
+        try Timing.measure("Write export", Timing.bytes(data.count)) { try data.write(to: url, options: .atomic) }
         let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         share.popoverPresentationController?.sourceView = tabStrip
         share.popoverPresentationController?.sourceRect = tabStrip.bounds
-        present(share, animated: true)
+        let presenting = Timing.begin("Share sheet")
+        present(share, animated: true) { Timing.end(presenting) }
     }
 
     @objc func closeTab(_ sender: Any?) { if let id = activeID { close(id) } }

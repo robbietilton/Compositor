@@ -30,6 +30,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     private lazy var compositor = PadCanvasCompositor(session: session)
     private var displayLink: CADisplayLink?
     private var needsRender = true
+    /// What waits for the next frame to be drawn.
+    private var nextFrame: [@Sendable () -> Void] = []
 
     /// The touch drawing or dragging with the current tool, and what it's doing.
     private var activeTouch: UITouch?
@@ -120,6 +122,12 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         displayLink?.isPaused = false
     }
 
+    /// Runs `action` once the canvas's next frame is drawn, on a thread of Metal's.
+    func afterNextFrame(_ action: @escaping @Sendable () -> Void) {
+        nextFrame.append(action)
+        setNeedsRender()
+    }
+
     @objc private func tick() {
         guard needsRender else { displayLink?.isPaused = true; return }
         needsRender = false
@@ -142,7 +150,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             DispatchQueue.main.async { self?.setNeedsRender() }
         }
         let backdrop = CIImage(color: CIColor(red: 0.105, green: 0.105, blue: 0.105)).cropped(to: CGRect(origin: .zero, size: size))
-        renderer.present(frame ?? backdrop, in: surface.metalLayer)
+        renderer.present(frame ?? backdrop, in: surface.metalLayer, drawn: nextFrame)
+        nextFrame = []
     }
 
     // MARK: Text

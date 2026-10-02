@@ -26,9 +26,16 @@ import UIKit
         openingURL = url
         return Task {
             defer { openingURL = nil }
+            let opening = Timing.begin("Open project")
             let document = CompositorDocument(fileURL: url, session: session)
             try await document.openDocument()
             self.document = document
+            Timing.end(opening, session.document.map { "\($0.width)×\($0.height), \(Timing.counted($0.layers.count, "layer"))" } ?? "")
+            // The tab in front shows it on the canvas's next frame; a tab behind, once it's brought forward.
+            if canvas.window != nil {
+                let drawing = Timing.begin("First frame")
+                canvas.afterNextFrame { Timing.end(drawing) }
+            }
         }
     }
 

@@ -75,12 +75,23 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     // MARK: Saving
 
+    /// Every save, asked for or UIDocument's own, from start to finish.
+    override func save(to url: URL, for saveOperation: UIDocument.SaveOperation, completionHandler: (@Sendable (Bool) -> Void)? = nil) {
+        let saving = Timing.begin("Save project")
+        super.save(to: url, for: saveOperation) { success in
+            if success { Timing.end(saving) }
+            completionHandler?(success)
+        }
+    }
+
     /// What a save writes: the document as it stands, captured on the main queue. Edits carry on while it's written.
     override func contents(forType typeName: String) throws -> Any {
+        let capturing = Timing.begin("Snapshot")
         let snapshot = try MainActor.assumeIsolated { () throws -> ProjectSnapshot in
             guard let snapshot = session.projectSnapshot() else { throw ProjectError.invalid }
             return snapshot
         }
+        Timing.end(capturing)
         return snapshot
     }
 
@@ -88,7 +99,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
                                 originalContentsURL: URL?) throws {
         guard let snapshot = contents as? ProjectSnapshot else { throw ProjectError.invalid }
         let package = try ProjectStore.package(for: snapshot, quickLook: Self.quickLookImages(snapshot))
-        try package.write(to: url, options: [], originalContentsURL: originalContentsURL)
+        try Timing.measure("Write package") { try package.write(to: url, options: [], originalContentsURL: originalContentsURL) }
     }
 
     /// The preview the Mac's Finder shows for the package. The exporter renders it on its own actor; the write is
@@ -186,10 +197,12 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     /// A copy of the package beside the app's own projects, named after this one.
     @MainActor func duplicate() async throws -> URL {
+        let duplicating = Timing.begin("Duplicate project")
         let destination = Self.unusedURL(named: localizedName + " copy")
         let source = fileURL
         // Saved first, so the copy has everything the editor holds.
         _ = await save(to: fileURL, for: .forOverwriting)
+        let copying = Timing.begin("Copy package")
         try await Task.detached {
             var coordinationError: NSError?, copyError: Error?
             NSFileCoordinator().coordinate(readingItemAt: source, options: [], error: &coordinationError) { from in
@@ -197,6 +210,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
             }
             if let error = coordinationError ?? copyError { throw error }
         }.value
+        Timing.end(copying)
+        Timing.end(duplicating)
         return destination
     }
 

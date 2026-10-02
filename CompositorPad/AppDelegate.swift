@@ -2,6 +2,12 @@ import UIKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        Timing.launched(to: "the app's own code")
+        return true
+    }
+
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
         let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
@@ -108,12 +114,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    /// Whether the app's first window is still to come; its first frame ends the launch.
+    private static var launching = true
     private var editor: EditorWindowController? {
         (window?.rootViewController as? UINavigationController)?.viewControllers.first as? EditorWindowController
     }
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
+        let launching = Self.launching
+        Self.launching = false
+        if launching { Timing.launched(to: "the window") }
+        let settingUp = Timing.begin("Window setup")
         // A project or image opened from elsewhere comes into a window already open, as a tab, rather than a new
         // window, as the Mac's does.
         scene.activationConditions.canActivateForTargetContentIdentifierPredicate = NSPredicate(value: true)
@@ -130,6 +142,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         editor.loadViewIfNeeded()
         if let activity = connectionOptions.userActivities.first ?? session.stateRestorationActivity { editor.restore(from: activity) }
         editor.open(connectionOptions.urlContexts.map(\.url))
+        Timing.end(settingUp)
+        if launching { editor.activeTab?.canvas.afterNextFrame { Timing.launched(to: "the first frame") } }
     }
 
     /// Files and other apps hand projects and images over here: “Open in Compositor”, or a tap on a project in Files.
