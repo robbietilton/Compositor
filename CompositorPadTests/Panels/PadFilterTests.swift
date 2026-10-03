@@ -436,7 +436,7 @@ import UIKit
 
     /// Motion Blur, Add Noise, Exposure and Grain layers open the same editor as their menu commands, and OK keeps what's
     /// set as one step.
-    @Test(arguments: [AdjustmentKind.motionBlur, .addNoise, .exposure, .grain])
+    @Test(arguments: [AdjustmentKind.motionBlur, .addNoise, .exposure, .grain, .blackWhite, .colorBalance])
     func adjustmentLayersAreEdited(kind: AdjustmentKind) async throws {
         let (window, controller, session) = try await shownWindow()
         defer { window.isHidden = true }
@@ -462,6 +462,106 @@ import UIKit
         try await eventually { session.filterEdit != nil }
         let kept = try #require(session.filterEdit?.settings[keyPath: row.key])
         #expect(abs(kept - value) < 0.5 / step, "\(kind) \(row.caption): \(kept), not \(value)")
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    // MARK: Black & White and Color Balance
+
+    /// The editor's row captioned `caption`.
+    private func row(_ caption: String, in editor: UIViewController) throws -> SliderField {
+        try #require(views(SliderField.self, in: editor.view).first { views(UILabel.self, in: $0).first?.text == caption }, "\(caption)")
+    }
+
+    /// Image › Black & White… has a row for each family of colors, at Photoshop's defaults, each with the Mac's track,
+    /// dark to light in that family's hue; Tint adds Hue and Saturation, whose track follows the hue, and the editor
+    /// grows to hold them.
+    @Test func blackWhitesRows() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        #expect(choose(filterCommand(.blackWhite), in: controller))
+        let editor = try await filterEditor(over: controller)
+        let families = ["Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"]
+        #expect(shownCaptions(of: editor) == families)
+        for (index, family) in families.enumerated() {
+            let row = try row(family, in: editor)
+            #expect(row.track == .luminance(Double(index) * 60), "\(family)")
+            #expect(views(UITextField.self, in: row).first?.text == ["40", "60", "40", "60", "20", "80"][index], "\(family)")
+        }
+        let short = editor.preferredContentSize.height
+        let tint = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Tint" })
+        tint.isSelected = true
+        tint.sendActions(for: .primaryActionTriggered)
+        #expect(session.filterEdit?.settings.blackWhite.tint == true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        #expect(shownCaptions(of: editor) == families + ["Hue", "Saturation"])
+        #expect(editor.preferredContentSize.height > short)
+        #expect(try row("Hue", in: editor).track == .plain && row("Saturation", in: editor).track == .saturation(40))
+        try row("Hue", in: editor).onChange(200)
+        editor.updatePropertiesIfNeeded()
+        #expect(try row("Saturation", in: editor).track == .saturation(200))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A double tap on a colored row's caption puts its value back, as on the Mac: Reds to 40, and Tint's Hue, which
+    /// has the system's track, to 40 too.
+    @Test func aDoubleTapResetsAColoredRow() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.blackWhite), in: controller)
+        let editor = try await filterEditor(over: controller)
+        var settings = try #require(session.filterEdit?.settings)
+        settings.blackWhite.reds = 150
+        settings.blackWhite.tint = true
+        settings.blackWhite.tintHue = 200
+        session.updateFilter(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        for caption in ["Reds", "Hue"] {
+            let row = try row(caption, in: editor)
+            let label = try #require(views(UILabel.self, in: row).first)
+            #expect(row.resets(at: label.convert(CGPoint(x: label.bounds.midX, y: label.bounds.midY), to: row)), "\(caption)")
+        }
+        #expect(session.filterEdit?.settings.blackWhite.reds == 40 && session.filterEdit?.settings.blackWhite.tintHue == 40)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A value typed past a slider's end is held to it, as on the Mac now: Reds at 400 is 300, and the preview works.
+    @Test func aValueTypedPastTheEndIsHeldToIt() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.blackWhite), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let field = try #require(views(NumberField.self, in: try row("Reds", in: editor)).first)
+        field.field.text = "400"
+        field.textFieldDidEndEditing(field.field)
+        #expect(session.filterEdit?.settings.blackWhite.reds == 300)
+        try await eventually { session.filterEdit?.preparing == false }
+        #expect(session.filterEdit?.previewError == nil)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Image › Color Balance… has the Mac's three sections, Shadows, Midtones and Highlights, each with three rows whose
+    /// tracks run from each color to its opposite, and Preserve Luminosity, on at first.
+    @Test func colorBalancesRows() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        #expect(choose(filterCommand(.colorBalance), in: controller))
+        let editor = try await filterEditor(over: controller)
+        let labels = views(UILabel.self, in: editor.view).compactMap(\.text)
+        #expect(["Shadows", "Midtones", "Highlights"].allSatisfy(labels.contains))
+        let rows = views(SliderField.self, in: editor.view)
+        #expect(rows.compactMap { views(UILabel.self, in: $0).first?.text } == Array(repeating: ["Cyan / Red", "Magenta / Green", "Yellow / Blue"], count: 3).flatMap { $0 })
+        #expect(rows.map(\.track) == Array(repeating: [CameraRawSliderTrack.cyanRed, .magentaGreen, .yellowBlue], count: 3).flatMap { $0 })
+        let preserve = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Preserve Luminosity" })
+        #expect(preserve.isSelected && session.filterEdit?.settings.colorBalance.preserveLuminosity == true)
+        // The middle row of Midtones is Midtones' Magenta / Green.
+        rows[4].onChange(-35)
+        #expect(session.filterEdit?.settings.colorBalance.midMagentaGreen == -35)
         session.cancelFilter()
         try await eventually { controller.presentedViewController == nil }
     }

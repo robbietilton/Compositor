@@ -17,6 +17,9 @@ final class FilterEditorController: AdjustmentEditorController {
         var help: String? = nil
         /// When the row shows, as Remove Background's Advanced rows; always if nil.
         var shown: ((FilterSettings) -> Bool)? = nil
+        /// The row's colored track, as the Mac's Camera Raw sliders: a double tap on its caption or thumb then puts the
+        /// value back, a plain track's too. Nil for the system's slider, which doesn't reset.
+        var track: ((FilterSettings) -> CameraRawSliderTrack)? = nil
     }
 
     /// What the Mac's filter panel puts in a filter's editor, in order.
@@ -24,7 +27,9 @@ final class FilterEditorController: AdjustmentEditorController {
         case slider(Row)
         /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it.
         case choice(caption: String?, titles: [String], help: String?, chosen: (FilterSettings) -> Int, choose: (inout FilterSettings, Int) -> Void)
-        case checkbox(String, WritableKeyPath<FilterSettings, Bool>)
+        case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil)
+        /// A section's title, as Color Balance's Shadows, Midtones and Highlights.
+        case heading(String)
         /// A color, as a swatch that opens the color picker on it.
         case color(caption: String, help: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
         /// What the filter does, in the panel's words.
@@ -94,11 +99,49 @@ final class FilterEditorController: AdjustmentEditorController {
             .slider(Row(caption: "Highlights", key: \.vignetteHighlights, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
                         help: "Protect bright areas near the edge")),
         ],
+        // Each slider says how bright that family of colors becomes, as Photoshop's do.
+        .blackWhite: [
+            family("Reds", \.blackWhite.reds, hue: 0), family("Yellows", \.blackWhite.yellows, hue: 60),
+            family("Greens", \.blackWhite.greens, hue: 120), family("Cyans", \.blackWhite.cyans, hue: 180),
+            family("Blues", \.blackWhite.blues, hue: 240), family("Magentas", \.blackWhite.magentas, hue: 300),
+            .checkbox("Tint", \.blackWhite.tint, help: "Color the result while keeping its tones, for a sepia or a cyanotype"),
+            .slider(Row(caption: "Hue", key: \.blackWhite.tintHue, range: 0...360, unit: "°", decimals: 0, logarithmic: false,
+                        shown: { $0.blackWhite.tint }, track: { _ in .plain })),
+            .slider(Row(caption: "Saturation", key: \.blackWhite.tintSaturation, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        shown: { $0.blackWhite.tint }, track: { .saturation($0.blackWhite.tintHue) })),
+        ],
+        .colorBalance: [
+            .heading("Shadows"),
+            balance("Cyan / Red", \.colorBalance.shadowCyanRed, .cyanRed),
+            balance("Magenta / Green", \.colorBalance.shadowMagentaGreen, .magentaGreen),
+            balance("Yellow / Blue", \.colorBalance.shadowYellowBlue, .yellowBlue),
+            .heading("Midtones"),
+            balance("Cyan / Red", \.colorBalance.midCyanRed, .cyanRed),
+            balance("Magenta / Green", \.colorBalance.midMagentaGreen, .magentaGreen),
+            balance("Yellow / Blue", \.colorBalance.midYellowBlue, .yellowBlue),
+            .heading("Highlights"),
+            balance("Cyan / Red", \.colorBalance.highlightCyanRed, .cyanRed),
+            balance("Magenta / Green", \.colorBalance.highlightMagentaGreen, .magentaGreen),
+            balance("Yellow / Blue", \.colorBalance.highlightYellowBlue, .yellowBlue),
+            .checkbox("Preserve Luminosity", \.colorBalance.preserveLuminosity,
+                      help: "Put each pixel's brightness back afterwards, so only the color moves"),
+        ],
         .lensCorrection: [
             .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
             .note("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)."),
         ],
     ]
+
+    /// Black & White's row for a family of colors, its track dark to light in the family's hue.
+    private static func family(_ caption: String, _ key: WritableKeyPath<FilterSettings, Double>, hue: Double) -> Control {
+        .slider(Row(caption: caption, key: key, range: BlackWhiteSettings.range, unit: "%", decimals: 0, logarithmic: false,
+                    track: { _ in .luminance(hue) }))
+    }
+    /// Color Balance's row for a pair of colors, its track from one to the other.
+    private static func balance(_ caption: String, _ key: WritableKeyPath<FilterSettings, Double>, _ track: CameraRawSliderTrack) -> Control {
+        .slider(Row(caption: caption, key: key, range: ColorBalanceSettings.range, unit: nil, decimals: 0, logarithmic: false,
+                    track: { _ in track }))
+    }
 
     /// The kinds the iPad has this editor for; the Filter and Image menus offer them, and New Adjustment Layer the
     /// adjustments among them.
@@ -167,6 +210,10 @@ final class FilterEditorController: AdjustmentEditorController {
                                         fieldWidth: NumberField.width(toShow: row.range, decimals: row.decimals))
                 field.onChange = { [weak self] value in self?.update { $0[keyPath: row.key] = value } }
                 field.toolTip = row.help
+                if row.track != nil {
+                    field.onReset = { [weak self] in self?.update { $0[keyPath: row.key] = FilterSettings()[keyPath: row.key] } }
+                    field.toolTip = row.help ?? row.caption + ". Double-tap to reset."
+                }
                 fields.append((row, field))
                 content.addArrangedSubview(field)
             case .choice(let caption, let titles, let help, let chosen, let choose):
@@ -175,8 +222,9 @@ final class FilterEditorController: AdjustmentEditorController {
                 refreshers.append { segments.selectedSegmentIndex = chosen($0) }
                 let views = (caption.map { [OptionControls.caption($0, color: .secondaryLabel)] } ?? []) + [segments, UIView()]
                 content.addArrangedSubview(OptionControls.row(views, spacing: 10))
-            case .checkbox(let title, let key):
+            case .checkbox(let title, let key, let help):
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
+                box.toolTip = help
                 refreshers.append { box.isSelected = $0[keyPath: key] }
                 content.addArrangedSubview(OptionControls.row([box, UIView()]))
             case .color(let caption, let help, let value, let open):
@@ -196,6 +244,10 @@ final class FilterEditorController: AdjustmentEditorController {
                 captions.append(label)
                 // Spaced as a row's slider is from its caption, so the swatch starts where the sliders do.
                 content.addArrangedSubview(OptionControls.row([label, swatch, UIView()], spacing: 8))
+            case .heading(let title):
+                let label = OptionControls.caption(title, color: .label)
+                label.font = .preferredFont(forTextStyle: .headline)
+                content.addArrangedSubview(label)
             case .text(let text):
                 let label = OptionControls.caption(text, color: .label)
                 label.numberOfLines = 0
@@ -216,6 +268,7 @@ final class FilterEditorController: AdjustmentEditorController {
         for (row, field) in fields {
             field.show(settings[keyPath: row.key])
             field.isHidden = row.shown?(settings) == false
+            if let track = row.track { field.track = track(settings) }
         }
         for refresh in refreshers { refresh(settings) }
         error.text = edit?.previewError
