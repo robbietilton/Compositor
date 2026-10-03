@@ -302,6 +302,101 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    // MARK: Space
+
+    /// Space held down, a touch moves the canvas whatever the tool, Apple Pencil's too, as a click does on the Mac.
+    @Test func spaceHeldATouchMovesTheCanvas() {
+        for tool in NavigationTool.allCases {
+            #expect(PadCanvasView.touchMovesCanvas(tool: tool, pencil: true, fingerPaints: true, spaceHeld: true), "\(tool)")
+        }
+        #expect(!PadCanvasView.touchMovesCanvas(tool: .brush, pencil: true, fingerPaints: false, spaceHeld: false))
+        #expect(!PadCanvasView.touchMovesCanvas(tool: .move, pencil: false, fingerPaints: false, spaceHeld: false))
+    }
+
+    /// Space is held from when it goes down until it comes up, or the keyboard goes elsewhere, or the app does.
+    @Test func spaceIsHeldUntilItsLetGo() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        #expect(controller.holdSpace())
+        #expect(tab.canvas.spaceHeld)
+        controller.releaseSpace()
+        #expect(!tab.canvas.spaceHeld)
+
+        // The canvas giving the keyboard to a field, which takes Space as a space.
+        try #require(tab.canvas.becomeFirstResponder())
+        #expect(controller.holdSpace())
+        let field = UITextField()
+        controller.view.addSubview(field)
+        defer { field.removeFromSuperview() }
+        try #require(field.becomeFirstResponder())
+        #expect(!tab.canvas.spaceHeld)
+        #expect(!controller.holdSpace())
+        #expect(!tab.canvas.spaceHeld)
+
+        // The app going to the background, or the switcher, which takes the key's coming up with it.
+        let scenes = SceneDelegate()
+        let other = EditorWindowController()
+        scenes.window = UIWindow(windowScene: try #require(window.windowScene))
+        scenes.window?.rootViewController = UINavigationController(rootViewController: other)
+        other.loadViewIfNeeded()
+        let otherTab = try #require(other.activeTab)
+        otherTab.canvas.spaceHeld = true
+        scenes.sceneWillResignActive(try #require(window.windowScene))
+        #expect(!otherTab.canvas.spaceHeld)
+    }
+
+    /// The canvas taking the keyboard from the window, as a touch does, keeps Space held, so the touch moves the canvas.
+    @Test func theCanvasTakingTheKeyboardKeepsSpaceHeld() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        try #require(controller.isFirstResponder)
+        #expect(controller.holdSpace())
+        try #require(tab.canvas.becomeFirstResponder())
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(tab.canvas.spaceHeld)
+    }
+
+    /// A stroke being drawn takes no Space, as it takes no other key on the Mac.
+    @Test func aStrokeTakesNoSpace() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        tab.session.selectTool(.brush)
+        tab.session.beginBrush(at: CGPoint(x: 100, y: 100))
+        #expect(!controller.holdSpace())
+        #expect(!tab.canvas.spaceHeld)
+        tab.session.cancelBrush()
+    }
+
+    /// Beside Levels, which holds the other keys, Space still moves the canvas, as on the Mac.
+    @Test func spaceMovesTheCanvasBesideLevels() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        tab.session.beginLevels()
+        try await eventually { controller.presentedViewController is AdjustmentEditorController }
+        try #require(controller.presentedViewController is AdjustmentEditorController)
+        #expect(controller.holdSpace())
+        #expect(tab.canvas.spaceHeld)
+        controller.releaseSpace()
+        tab.session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Space held, the brush's circle goes from under the pointer, which is a hand on the Mac.
+    @Test func spaceHeldTheBrushShowsNoCircle() throws {
+        let (_, tab) = try window()
+        tab.session.selectTool(.brush)
+        tab.canvas.hover(at: CGPoint(x: 200, y: 150))
+        #expect(tab.canvas.overlayView.brushCursor != nil)
+        tab.canvas.spaceHeld = true
+        #expect(tab.canvas.overlayView.brushCursor == nil)
+        tab.canvas.spaceHeld = false
+        #expect(tab.canvas.overlayView.brushCursor != nil)
+    }
+
     // MARK: Names
 
     /// The canvas's keys go by the names the Mac's Keyboard Shortcuts list gives them, and are made once.

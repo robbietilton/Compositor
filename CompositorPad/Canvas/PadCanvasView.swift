@@ -59,6 +59,9 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     private lazy var clonePreview = ClonePreview(session: session)
     private lazy var pointerInteraction = UIPointerInteraction(delegate: self)
     private var pointerHidden = false
+    /// Whether Space is held down, so a touch moves the canvas whatever the tool, as on the Mac. The window sets it from
+    /// the keyboard.
+    var spaceHeld = false { didSet { if spaceHeld != oldValue { synchronizeBrushCursor() } } }
 
     init(session: EditorSession) {
         self.session = session
@@ -238,11 +241,13 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// stamp. Holding Option, or setting the source, brings the crosshair back.
     func synchronizeBrushCursor() {
         let tool = session.tool
-        if pointerHidden != tool.isBrushTool {
-            pointerHidden = tool.isBrushTool
+        // Space held, the pointer moves the canvas, so it shows rather than the brush's circle.
+        let brushes = tool.isBrushTool && !spaceHeld
+        if pointerHidden != brushes {
+            pointerHidden = brushes
             pointerInteraction.invalidate()
         }
-        guard tool.isBrushTool, let document = session.document else {
+        guard brushes, let document = session.document else {
             overlayView.brushCursor = nil
             return
         }
@@ -282,16 +287,16 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// With a brush in hand the pointer hides over the canvas: the brush cursor's crosshair stands in for it, as the
     /// Mac's crosshair pointer does in the brush's circle.
     func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
-        session.tool.isBrushTool ? .hidden() : nil
+        session.tool.isBrushTool && !spaceHeld ? .hidden() : nil
     }
 
     // MARK: Touches
 
-    /// Whether a one-finger touch moves the canvas rather than using the tool: always with the Hand, and, once Apple
-    /// Pencil has painted, with the tools that paint or draw, as in other iPad painting apps. A finger still moves
-    /// layers, selects, crops, picks colors and zooms.
-    static func touchMovesCanvas(tool: NavigationTool, pencil: Bool, fingerPaints: Bool) -> Bool {
-        tool == .hand || (!pencil && !fingerPaints && (tool.isBrushTool || tool == .gradient || tool == .shape))
+    /// Whether a one-finger touch moves the canvas rather than using the tool: always with the Hand or with Space held,
+    /// as on the Mac, and, once Apple Pencil has painted, with the tools that paint or draw, as in other iPad painting
+    /// apps. A finger still moves layers, selects, crops, picks colors and zooms.
+    static func touchMovesCanvas(tool: NavigationTool, pencil: Bool, fingerPaints: Bool, spaceHeld: Bool = false) -> Bool {
+        tool == .hand || spaceHeld || (!pencil && !fingerPaints && (tool.isBrushTool || tool == .gradient || tool == .shape))
     }
 
     private func documentPoint(_ touch: UITouch) -> CGPoint? {
@@ -303,6 +308,13 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// canvas takes the focus back; undo and redo, the system's three-finger gestures among them, reach the window's
     /// undo manager through it.
     override var canBecomeFirstResponder: Bool { true }
+    /// A field or the text being typed taking the keyboard takes Space's coming up with it, so Space is let go, as the
+    /// Mac's canvas lets it go.
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { spaceHeld = false }
+        return resigned
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         if !isFirstResponder { becomeFirstResponder() }
@@ -313,8 +325,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         let point = touch.location(in: self)
         let keys = event?.modifierFlags ?? []
         let adjusting = session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
-        let paints = !Self.touchMovesCanvas(tool: tool, pencil: touch.type == .pencil, fingerPaints: fingerPaints)
-        if tool == .cloneStamp, !adjusting, input.beginSourceDrag(at: point, keys: keys, paints: paints) {
+        let paints = !Self.touchMovesCanvas(tool: tool, pencil: touch.type == .pencil, fingerPaints: fingerPaints, spaceHeld: spaceHeld)
+        if tool == .cloneStamp, !spaceHeld, !adjusting, input.beginSourceDrag(at: point, keys: keys, paints: paints) {
             // Clone Stamp's source, set where the touch lands or moved by its crosshair, by a finger as by Apple Pencil.
             activeTouch = touch
             drag = .tool

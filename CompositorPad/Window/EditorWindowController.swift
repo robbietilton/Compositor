@@ -1170,6 +1170,46 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The canvas's keys, as the Mac's Keyboard Shortcuts lists them, on a hardware keyboard.
     override var keyCommands: [UIKeyCommand]? { Self.canvasCommands }
 
+    // Space held down moves the canvas under a touch, as on the Mac. It's no key command: those come when a key goes
+    // down, not up. A field or the text being typed takes it as a space before it reaches here.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let space = presses.filter { $0.key?.keyCode == .keyboardSpacebar }
+        let rest = space.isEmpty || !holdSpace() ? presses : presses.subtracting(space)
+        if !rest.isEmpty { super.pressesBegan(rest, with: event) }
+    }
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.key?.keyCode == .keyboardSpacebar }) { releaseSpace() }
+        super.pressesEnded(presses, with: event)
+    }
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.key?.keyCode == .keyboardSpacebar }) { releaseSpace() }
+        super.pressesCancelled(presses, with: event)
+    }
+    /// Holds Space down for the canvas in front, when it has the keyboard and no stroke is being drawn, which takes no
+    /// key but Escape on the Mac; whether it did.
+    func holdSpace() -> Bool {
+        guard let tab = activeTab, isFirstResponder || tab.canvas.isFirstResponder,
+              tab.session.brushStroke == nil, tab.session.warpStroke == nil else { return false }
+        tab.canvas.spaceHeld = true
+        return true
+    }
+    /// Lets Space go: it came up, or went with the keyboard or the app.
+    func releaseSpace() {
+        for tab in tabs { tab.canvas.spaceHeld = false }
+    }
+    /// The keyboard going from the window to a field takes Space's coming up with it, so Space is let go; going to the
+    /// canvas, as a touch takes it, Space stays held for the touch.
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned {
+            Task { @MainActor [weak self] in
+                guard let self, let tab = activeTab, !isFirstResponder, !tab.canvas.isFirstResponder else { return }
+                releaseSpace()
+            }
+        }
+        return resigned
+    }
+
     /// The canvas's keys, by the names the Mac's Keyboard Shortcuts list gives them. Made once: whether each applies is
     /// asked when it's pressed.
     private static let canvasCommands: [UIKeyCommand] = {
