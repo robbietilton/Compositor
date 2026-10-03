@@ -18,6 +18,17 @@ import UIKit
         #expect(bar.titles == ["Compositor", "File", "Edit", "View", "Select", "Image", "Filter", "Layer", "Window", "Help"])
     }
 
+    /// No shortcut of the app's is one iPadOS keeps for itself, which would never reach it: the Mac's ⌘H and ⌘M go
+    /// without on iPad, as Home and Minimize there.
+    @Test func noShortcutIsTheSystems() {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let keys = bar.bar.commands.compactMap { $0 as? UIKeyCommand } + (EditorWindowController().keyCommands ?? [])
+        for key in keys {
+            let reserved = MenuBarModel.reserved.first { $0.input == key.input && $0.flags == key.modifierFlags }
+            #expect(reserved == nil, "\(key.title) is \(shortcut(key)), which iPadOS keeps for \(reserved?.what ?? "")")
+        }
+    }
+
     /// No shortcut the app adds clashes with one already in the system's menus, which UIKit would turn away, and with
     /// it the whole group it came in.
     @Test func noShortcutIsTurnedAway() {
@@ -355,7 +366,7 @@ import UIKit
         #expect(view.submenus.map(\.title) == ["Show", "Snap To"])
         #expect(view.submenus[0].commands.map(\.title) == ["Grid", "Guides"])
         #expect(view.submenus[1].commands.map(\.title) == ["Guides", "Grid", "Layers", "Document Bounds"])
-        #expect(view.commands.map(shortcut) == ["⌘0", "⌘1", "⌘=", "⌘-", "", "", "⌘H", "⌘'", "⌘;", "⌘R", "⇧⌘;", "", "", "", "",
+        #expect(view.commands.map(shortcut) == ["⌘0", "⌘1", "⌘=", "⌘-", "", "", "", "⌘'", "⌘;", "⌘R", "⇧⌘;", "", "", "", "",
                                                 "⌥⌘;", "", ""])
     }
 

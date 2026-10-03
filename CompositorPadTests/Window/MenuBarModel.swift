@@ -107,6 +107,14 @@ import UIKit
         menu(.help, "Help", [key("", "?", .command, "showHelp:")]),
     ])
 
+    /// Shortcuts iPadOS takes before the app, whatever its menus say: seen on an iPad (⌘H, ⌘M) or in Apple's list of
+    /// iPad shortcuts (support.apple.com/102393).
+    static let reserved: [(input: String, flags: UIKeyModifierFlags, what: String)] = [
+        ("h", .command, "the Home Screen"), ("m", .command, "Minimize"), ("\t", .command, "the app switcher"),
+        ("\t", [.command, .shift], "the app switcher"), (" ", .command, "Spotlight"), ("3", [.command, .shift], "a screenshot"),
+        ("4", [.command, .shift], "a screenshot to mark up"), (" ", .control, "the next keyboard"),
+    ]
+
     /// Shortcuts that `buildMenu` added and UIKit turned away, as it does, with the key the bar already had.
     private(set) var conflicts: [String] = []
 

@@ -90,7 +90,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         ]), afterMenu: .view)
         let image = UIMenu.Identifier("com.wonderassembly.compositor.image")
         builder.insertSibling(UIMenu(title: "Image", identifier: image, children: [
-            UIKeyCommand(title: "Curves…", action: #selector(Window.curves(_:)), input: "m", modifierFlags: .command),
+            // Without the Mac's ⌘M, which iPadOS keeps for Minimize.
+            UICommand(title: "Curves…", action: #selector(Window.curves(_:))),
             UIKeyCommand(title: "Levels…", action: #selector(Window.levels(_:)), input: "l", modifierFlags: .command),
             UIKeyCommand(title: "Hue/Saturation…", action: #selector(Window.hueSaturation(_:)), input: "u", modifierFlags: .command),
         ] + [FilterKind.blackWhite, .colorBalance, .exposure, .gradientMap, .grain].map { kind in
@@ -171,7 +172,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Zoom Out", action: #selector(Window.zoomOut(_:)), input: "-", modifierFlags: .command),
                 toggle("Pixel Grid (800% and above)", .pixelGrid),
                 toggle("Snap", .snapping),
-                toggle("Show Transform Controls", .transformControls, "h"),
+                // Without the Mac's ⌘H, which iPadOS keeps for the Home Screen.
+                toggle("Show Transform Controls", .transformControls),
             ]),
             UIMenu(options: .displayInline, children: [
                 UIMenu(title: "Show", children: [toggle("Grid", .grid, "'"), toggle("Guides", .guides, ";")]),
