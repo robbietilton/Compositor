@@ -25,8 +25,8 @@ import UIKit
 
     private lazy var overlay = CanvasOverlay(session: session)
     private enum Drag {
-        /// A brush stroke, which last reached `last`, in document pixels.
-        case paint(last: CGPoint)
+        /// A brush stroke, kept straight while Shift is held, which last reached `last`, in document pixels.
+        case paint(BrushAxisLock, last: CGPoint)
         /// The Eyedropper taking colors, and the foreground color it replaced.
         case sample(original: PaletteColor)
         /// The Zoom tool, as on the Mac: a tap zooms in, a drag right or left zooms smoothly in or out.
@@ -85,15 +85,22 @@ import UIKit
     @discardableResult
     func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) -> Bool {
         guard let pixel = pixel(point) else { return false }
-        if session.tool.isBrushTool {
-            session.beginBrush(at: pixel)
-            drag = .paint(last: pixel)
-            return true
-        }
-        if session.tool == .eyedropper {
+        // Option samples a color with the Brush, Spot Healing and the Gradient, as the Eyedropper does, as on the Mac.
+        if session.tool == .eyedropper || (keys.contains(.alternate) && session.tool.samplesColorWithOption && session.brushStroke == nil) {
             let original = session.foregroundColor
             drag = .sample(original: original)
             sample(at: point, pixel: pixel, original: original)
+            return true
+        }
+        if session.tool.isBrushTool {
+            // Shift paints a straight line on from where the last stroke ended, as in Photoshop.
+            if keys.contains(.shift), let from = session.shiftLineStart() {
+                session.beginBrush(at: from)
+                session.continueBrush(at: pixel)
+            } else {
+                session.beginBrush(at: pixel)
+            }
+            drag = .paint(BrushAxisLock(start: pixel, shift: keys.contains(.shift)), last: pixel)
             return true
         }
         if session.tool == .zoom {
@@ -172,9 +179,12 @@ import UIKit
     func moved(to point: CGPoint, keys: UIKeyModifierFlags = []) {
         guard let drag, let pixel = pixel(point) else { return }
         switch drag {
-        case .paint:
+        case .paint(var axis, _):
+            // Shift keeps the stroke straight, horizontal or vertical, from wherever it was pressed; letting go carries
+            // on freehand.
+            let pixel = axis.point(for: pixel, shift: keys.contains(.shift))
             session.continueBrush(at: pixel)
-            self.drag = .paint(last: pixel)
+            self.drag = .paint(axis, last: pixel)
         case .sample(let original):
             sample(at: point, pixel: pixel, original: original)
         case .zoom(let start, let zoom, var moved):
@@ -257,15 +267,17 @@ import UIKit
         defer { finish() }
         guard let drag else { return }
         switch drag {
-        case .paint:
-            let pixel = pixel(point)
+        case .paint(var axis, _):
+            // The stroke ends on its line, where the Mac's runs on to where the mouse came up.
+            let pixel = pixel(point).map { axis.point(for: $0, shift: keys.contains(.shift)) }
             if let pixel { session.continueBrush(at: pixel) }
             session.finishBrushImmediately()
             strokeEnded(at: pixel)
         case .sample:
             sampleChanged(nil)
         case .zoom(let start, _, let moved):
-            if !moved { session.zoom(to: session.viewport.zoom * 2, anchor: start) }
+            // Option zooms out, as on the Mac.
+            if !moved { session.zoom(to: session.viewport.zoom * (keys.contains(.alternate) ? 0.5 : 2), anchor: start) }
         case .transform:
             // As the Mac's does: a drag applies itself when it's let go, unless it's part of an edit waiting for Apply.
             if session.transformEdit?.persistent == false { session.commitTransform() }
@@ -324,7 +336,7 @@ import UIKit
         defer { finish() }
         guard let drag else { return }
         switch drag {
-        case .paint(let last):
+        case .paint(_, let last):
             session.cancelBrush()
             strokeEnded(at: last)
         case .sample:

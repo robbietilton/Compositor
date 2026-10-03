@@ -298,9 +298,13 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     /// Whether a one-finger touch moves the canvas rather than using the tool: always with the Hand or with Space held,
     /// as on the Mac, and, once Apple Pencil has painted, with the tools that paint or draw, as in other iPad painting
-    /// apps. A finger still moves layers, selects, crops, picks colors and zooms.
-    static func touchMovesCanvas(tool: NavigationTool, pencil: Bool, fingerPaints: Bool, spaceHeld: Bool = false) -> Bool {
-        tool == .hand || spaceHeld || (!pencil && !fingerPaints && (tool.isBrushTool || tool == .gradient || tool == .shape))
+    /// apps. A finger still moves layers, selects, crops, picks colors and zooms, and samples a color with `option`
+    /// held, as it sets Clone Stamp's source.
+    static func touchMovesCanvas(tool: NavigationTool, pencil: Bool, fingerPaints: Bool, spaceHeld: Bool = false,
+                                 option: Bool = false) -> Bool {
+        if tool == .hand || spaceHeld { return true }
+        if option, tool.samplesColorWithOption { return false }
+        return !pencil && !fingerPaints && (tool.isBrushTool || tool == .gradient || tool == .shape)
     }
 
     /// Touched, the canvas takes the keyboard and the edit menu's commands from a field that had them, as the Mac's
@@ -324,7 +328,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         let point = touch.location(in: self)
         let keys = event?.modifierFlags ?? []
         let adjusting = session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
-        let paints = !Self.touchMovesCanvas(tool: tool, pencil: touch.type == .pencil, fingerPaints: fingerPaints, spaceHeld: spaceHeld)
+        let paints = !Self.touchMovesCanvas(tool: tool, pencil: touch.type == .pencil, fingerPaints: fingerPaints, spaceHeld: spaceHeld,
+                                            option: keys.contains(.alternate))
         if tool == .cloneStamp, !spaceHeld, !adjusting, input.beginSourceDrag(at: point, keys: keys, paints: paints) {
             // Clone Stamp's source, set where the touch lands or moved by its crosshair, by a finger as by Apple Pencil.
             activeTouch = touch
@@ -340,7 +345,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             guard input.began(at: point, keys: keys, tapCount: touch.tapCount) else { return }
             activeTouch = touch
             drag = .tool
-            if tool.isBrushTool { (touchPointer, touchKeys) = (point, keys) }
+            if input.isPainting { (touchPointer, touchKeys) = (point, keys) }
         }
         setNeedsRender()
     }
