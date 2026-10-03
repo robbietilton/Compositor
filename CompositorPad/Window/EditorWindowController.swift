@@ -222,7 +222,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let session = tab.session
         let shown = presentedViewController as? AdjustmentEditorController
         if let shown, !shown.isOpen {
-            shown.dismiss(animated: true)
+            // With whatever is over it, as its color picker.
+            dismiss(animated: true)
             return
         }
         if let id = session.adjustmentEditingID, session.adjustmentOriginal == nil, session.levels == nil,
@@ -379,7 +380,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tab.session.finishBrushImmediately()
         // Its editor goes with it; closing cancels the edit.
         if let editor = presentedViewController as? AdjustmentEditorController, editor.session === tab.session {
-            editor.dismiss(animated: true)
+            dismiss(animated: true)
         }
         guard let document = tab.document else {
             remove(tab)
@@ -1035,7 +1036,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                 guard let editor = presented as? AdjustmentEditorController else { return false }
                 // Escape and Return are the editor's Cancel and OK, as on the Mac.
                 if action == #selector(escapeKey(_:)) || action == #selector(returnKey(_:)) { return editor.isOpen }
-                guard session?.levels == nil else { return false }
+                // Over what the editor shows, its color picker, there are none, as over any dialog.
+                guard editor.presentedViewController == nil, session?.levels == nil else { return false }
             }
             // A stroke being drawn takes no key but Escape, as on the Mac.
             if session?.brushStroke != nil || session?.warpStroke != nil, action != #selector(escapeKey(_:)) { return false }
@@ -1385,7 +1387,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     // outline, and with the Move tool the layer.
     @objc private func escapeKey(_ command: UIKeyCommand) {
         if let editor = presentedViewController as? AdjustmentEditorController {
-            editor.cancel()
+            // A color being picked first: put back, as the Mac picker's Cancel puts it back.
+            if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
+                editor.session.closeColorPicker(commit: false)
+            } else {
+                editor.cancel()
+            }
             return
         }
         guard let tab = activeTab else { return }
@@ -1406,7 +1413,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
     @objc private func returnKey(_ sender: Any?) {
         if let editor = presentedViewController as? AdjustmentEditorController {
-            editor.commit()
+            // A color being picked first: kept, as the Mac picker's OK keeps it.
+            if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
+                editor.session.closeColorPicker(commit: true)
+            } else {
+                editor.commit()
+            }
             return
         }
         guard let tab = activeTab else { return }

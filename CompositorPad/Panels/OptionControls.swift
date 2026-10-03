@@ -404,13 +404,14 @@ final class SliderField: UIView {
         return (value * step).rounded() / step
     }
 
-    /// Gives every row's caption the widest one's width, so their sliders start and end in the same place, as the
-    /// Mac's filter panel lines them up.
-    static func alignCaptions(_ rows: [SliderField]) {
-        let width = rows.map { ceil($0.label.intrinsicContentSize.width) }.max() ?? 0
-        for row in rows {
-            row.label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            row.label.widthAnchor.constraint(equalToConstant: width).isActive = true
+    /// Gives every row's caption, and `labels` beside them, the widest one's width, so their sliders start and end in
+    /// the same place, as the Mac's filter panel lines them up.
+    static func alignCaptions(_ rows: [SliderField], with labels: [UILabel] = []) {
+        let all = rows.map(\.label) + labels
+        let width = all.map { ceil($0.intrinsicContentSize.width) }.max() ?? 0
+        for label in all {
+            label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            label.widthAnchor.constraint(equalToConstant: width).isActive = true
         }
     }
 
@@ -445,5 +446,54 @@ final class SliderField: UIView {
     /// though the slider be logarithmic, as on the Mac.
     func scrubbed(from start: Double, by distance: CGFloat) -> Double {
         min(fieldRange.upperBound, max(fieldRange.lowerBound, start + Double(distance) * sensitivity))
+    }
+}
+
+/// A color, as the Mac's swatches draw it: a rounded rectangle with a white inner and a black outer edge. The rail's are
+/// 30 points square; a filter's, 24; an effect's, 36 by 18. A finger can tap one from a little way off.
+final class SwatchButton: UIControl {
+    var color = PaletteColor.black {
+        didSet { fill.backgroundColor = UIColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1) }
+    }
+    private let fill = UIView()
+
+    init(size: CGSize, cornerRadius: CGFloat, inner: CGFloat = 1.5) {
+        super.init(frame: .zero)
+        fill.isUserInteractionEnabled = false
+        fill.layer.cornerRadius = cornerRadius - 1
+        fill.layer.cornerCurve = .continuous
+        fill.layer.borderWidth = inner
+        fill.layer.borderColor = UIColor.white.cgColor
+        layer.cornerRadius = cornerRadius
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 1
+        layer.borderColor = UIColor.black.cgColor
+        addSubview(fill)
+        fill.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: size.width), heightAnchor.constraint(equalToConstant: size.height),
+            fill.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1), fill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
+            fill.topAnchor.constraint(equalTo: topAnchor, constant: 1), fill.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// At least 44 points to a finger, around a smaller swatch.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
+    }
+
+    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        super.endTracking(touch, with: event)
+        if let touch, self.point(inside: touch.location(in: self), with: event) { sendActions(for: .primaryActionTriggered) }
+    }
+
+    /// `color` as the palette has colors, in sRGB.
+    static func paletteColor(_ color: UIColor) -> PaletteColor? {
+        guard let sRGB = color.cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
+              let c = sRGB.components, c.count >= 3 else { return nil }
+        return PaletteColor(red: min(1, max(0, c[0])), green: min(1, max(0, c[1])), blue: min(1, max(0, c[2])))
     }
 }

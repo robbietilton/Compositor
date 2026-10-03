@@ -209,6 +209,29 @@ import UIKit
         }
     }
 
+    /// The editors' own rows line up after their captions, the Color caption's too, and a drag along a caption moves the
+    /// value a row's step a point, as the Mac's panels do.
+    @Test func anEditorsRowsLineUpAndScrubByTheirStep() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.vignette), in: controller)
+        var editor = try await filterEditor(over: controller)
+        let starts = views(SliderField.self, in: editor.view).compactMap { views(UISlider.self, in: $0).first }
+            .map { $0.convert($0.bounds, to: editor.view).minX }
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        #expect(starts.count == 5 && Set(starts).count == 1, "\(starts)")
+        #expect(abs(swatch.convert(swatch.bounds, to: editor.view).minX - (starts.first ?? 0)) < 1)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+
+        choose(filterCommand(.gaussianBlur), in: controller)
+        editor = try await filterEditor(over: controller)
+        let radius = try #require(views(SliderField.self, in: editor.view).first)
+        #expect(abs(radius.scrubbed(from: 10, by: 3) - 10.3) < 0.0001)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     /// Filter › Gaussian Blur… opens its editor, with the Mac's Radius row.
     @Test func gaussianBlurOpensFromTheFilterMenu() async throws {
         let (window, controller, session) = try await shownWindow()
@@ -601,5 +624,130 @@ import UIKit
         session.filterEdit?.committing = false
         session.cancelFilter()
         try await eventually { controller.presentedViewController == nil }
+    }
+
+    // MARK: Vignette and colors
+
+    /// Filter › Vignette… frames an empty layer too, as on the Mac, filling the canvas.
+    @Test func vignetteFramesAnEmptyLayer() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.addBlankLayer()
+        try #require(session.activeLayer?.asset == nil)
+        #expect(choose(filterCommand(.vignette), in: controller))
+        let editor = try await filterEditor(over: controller)
+        #expect(captions(of: editor) == ["Amount", "Midpoint", "Roundness", "Feather", "Highlights"])
+        try press("\r", in: controller)
+        try await eventually { session.filterEdit == nil }
+        #expect(session.activeLayer?.asset != nil && session.activeLayer?.transform.size == CGSize(width: 200, height: 100))
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A vignette of no amount closes on OK without a step to undo.
+    @Test func noVignetteLeavesNoStep() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let steps = session.history.undoCount
+        choose(filterCommand(.vignette), in: controller)
+        let editor = try await filterEditor(over: controller)
+        try slide(0, to: 0, in: editor, logarithmic: false)
+        try press("\r", in: controller)
+        try await eventually { session.filterEdit == nil }
+        #expect(session.history.undoCount == steps)
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// The editor's color swatch, with the editor open and its color picker showing over it.
+    private func pickingVignetteColor() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession,
+                                                         editor: FilterEditorController, picker: UIColorPickerViewController) {
+        let (window, controller, session) = try await shownWindow()
+        choose(filterCommand(.vignette), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        #expect(swatch.accessibilityLabel == "Color")
+        swatch.sendActions(for: .primaryActionTriggered)
+        #expect(session.colorPicker?.target == .vignette)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        return (window, controller, session, editor, picker)
+    }
+
+    /// A finger can take a swatch from a little way off, above or below it too, though its row is only as tall as the
+    /// swatch: 44 points a side, as decision 10 asked.
+    @Test func aSwatchTakesATouchFromALittleWayOff() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.vignette), in: controller)
+        let editor = try await filterEditor(over: controller)
+        // Once the popover has given the editor its size.
+        try await eventually { editor.view.bounds.height > 0 }
+        editor.view.layoutIfNeeded()
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        let middle = swatch.convert(CGPoint(x: swatch.bounds.midX, y: swatch.bounds.midY), to: editor.view)
+        for offset in [CGPoint(x: 0, y: -18), CGPoint(x: 0, y: 18), CGPoint(x: 18, y: 0)] {
+            let hit = editor.view.hitTest(CGPoint(x: middle.x + offset.x, y: middle.y + offset.y), with: nil)
+            #expect(hit === swatch, "\(offset)")
+        }
+        #expect(editor.view.hitTest(CGPoint(x: middle.x, y: middle.y - 30), with: nil) !== swatch)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// The Color swatch opens the color picker over the editor, and the canvas shows the color as it's picked.
+    @Test func theSwatchPicksAndPreviews() async throws {
+        let (window, controller, session, _, picker) = try await pickingVignetteColor()
+        defer { window.isHidden = true }
+        picker.delegate?.colorPickerViewController?(picker, didSelect: .red, continuously: false)
+        let color = try #require(session.filterEdit?.settings.vignetteColor)
+        #expect(color.red == 1 && color.green == 0 && color.blue == 0)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Escape with the picker up puts the color back and closes the picker, as the Mac picker's Cancel; Return keeps it,
+    /// as its OK. The editor stays.
+    @Test func escapeRestoresAndReturnKeepsThePickersColor() async throws {
+        let (window, controller, session, editor, picker) = try await pickingVignetteColor()
+        defer { window.isHidden = true }
+        let original = try #require(session.filterEdit?.settings.vignetteColor)
+        picker.delegate?.colorPickerViewController?(picker, didSelect: .red, continuously: false)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        #expect(session.colorPicker == nil && session.filterEdit?.settings.vignetteColor == original)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        #expect(controller.presentedViewController === editor && session.filterEdit != nil)
+
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        swatch.sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        let again = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        again.delegate?.colorPickerViewController?(again, didSelect: .red, continuously: false)
+        try press("\r", in: controller)
+        #expect(session.colorPicker == nil && session.filterEdit?.settings.vignetteColor.red == 1)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        #expect(controller.presentedViewController === editor && session.filterEdit != nil)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Cancel with the picker up closes both, picker and editor.
+    @Test func cancelWithThePickerUpClosesBoth() async throws {
+        let (window, controller, session, _, _) = try await pickingVignetteColor()
+        defer { window.isHidden = true }
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+        #expect(controller.presentedViewController == nil && session.colorPicker == nil)
+    }
+
+    /// Closing the tab with the picker up takes both with it.
+    @Test func closingTheTabWithThePickerUpTakesBoth() async throws {
+        let (window, controller, session, _, _) = try await pickingVignetteColor()
+        defer { window.isHidden = true }
+        let url = controller.activeTab?.document?.fileURL
+        controller.closeTab(nil)
+        try await eventually { controller.presentedViewController == nil }
+        #expect(controller.presentedViewController == nil && session.colorPicker == nil)
+        if let url { try? FileManager.default.removeItem(at: url) }
     }
 }

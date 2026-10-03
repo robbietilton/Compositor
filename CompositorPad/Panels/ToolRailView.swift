@@ -16,7 +16,8 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
 
     private let tools = NavigationTool.allCases.filter { $0 != .idle }
     private var buttons: [NavigationTool: UIButton] = [:]
-    private let foreground = SwatchButton(), background = SwatchButton()
+    private let foreground = SwatchButton(size: CGSize(width: 30, height: 30), cornerRadius: 8),
+                background = SwatchButton(size: CGSize(width: 30, height: 30), cornerRadius: 8)
     private var pickingBackground = false
 
     override init(frame: CGRect) {
@@ -178,41 +179,5 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         button.accessibilityLabel = label
         button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
         return button
-    }
-}
-
-/// A color, as the Mac's swatches draw it: a rounded square with a white inner and a black outer edge.
-private final class SwatchButton: UIControl {
-    var color = PaletteColor.black {
-        didSet { fill.backgroundColor = UIColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1) }
-    }
-    private let fill = UIView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        fill.isUserInteractionEnabled = false
-        fill.layer.cornerRadius = 7
-        fill.layer.cornerCurve = .continuous
-        fill.layer.borderWidth = 1.5
-        fill.layer.borderColor = UIColor.white.cgColor
-        layer.cornerRadius = 8
-        layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.black.cgColor
-        addSubview(fill)
-        fill.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 30), heightAnchor.constraint(equalToConstant: 30),
-            fill.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1), fill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
-            fill.topAnchor.constraint(equalTo: topAnchor, constant: 1), fill.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
-        ])
-        isAccessibilityElement = true
-        accessibilityTraits = .button
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
-        super.endTracking(touch, with: event)
-        if let touch, bounds.contains(touch.location(in: self)) { sendActions(for: .primaryActionTriggered) }
     }
 }

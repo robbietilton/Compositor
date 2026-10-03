@@ -25,6 +25,8 @@ final class FilterEditorController: AdjustmentEditorController {
         /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it.
         case choice(caption: String?, titles: [String], help: String?, chosen: (FilterSettings) -> Int, choose: (inout FilterSettings, Int) -> Void)
         case checkbox(String, WritableKeyPath<FilterSettings, Bool>)
+        /// A color, as a swatch that opens the color picker on it.
+        case color(caption: String, help: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
         /// What the filter does, in the panel's words.
         case text(String)
         /// A note on a setting, quieter.
@@ -81,6 +83,16 @@ final class FilterEditorController: AdjustmentEditorController {
             .slider(Row(caption: "Shift Edge", key: \.shiftEdge, range: -10...10, unit: "px", decimals: 0, logarithmic: false,
                         help: "Shrink the mask to drop the rim of background color around the subject, or grow it",
                         shown: { $0.backgroundQuality == .advanced })),
+        ],
+        .vignette: [
+            .color(caption: "Color", help: "Choose the vignette color", value: \.vignetteColor, open: { $0.openVignetteColorPicker() }),
+            .slider(Row(caption: "Amount", key: \.vignetteAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "Blend the chosen color into the edges while keeping the center unchanged")),
+            .slider(Row(caption: "Midpoint", key: \.vignetteMidpoint, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Roundness", key: \.vignetteRoundness, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Feather", key: \.vignetteFeather, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Highlights", key: \.vignetteHighlights, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "Protect bright areas near the edge")),
         ],
         .lensCorrection: [
             .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
@@ -145,6 +157,7 @@ final class FilterEditorController: AdjustmentEditorController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        var captions: [UILabel] = []
         for control in Self.controls[kind] ?? [] {
             switch control {
             case .slider(let row):
@@ -166,6 +179,23 @@ final class FilterEditorController: AdjustmentEditorController {
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
                 refreshers.append { box.isSelected = $0[keyPath: key] }
                 content.addArrangedSubview(OptionControls.row([box, UIView()]))
+            case .color(let caption, let help, let value, let open):
+                let label = OptionControls.caption(caption, color: .secondaryLabel)
+                let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
+                swatch.accessibilityLabel = caption
+                swatch.toolTip = help
+                swatch.addAction(UIAction { [weak self, weak swatch] _ in
+                    guard let self else { return }
+                    self.pickerSource = swatch
+                    open(self.session)
+                }, for: .primaryActionTriggered)
+                refreshers.append { settings in
+                    let color = value(settings)
+                    swatch.color = PaletteColor(red: color.red, green: color.green, blue: color.blue)
+                }
+                captions.append(label)
+                // Spaced as a row's slider is from its caption, so the swatch starts where the sliders do.
+                content.addArrangedSubview(OptionControls.row([label, swatch, UIView()], spacing: 8))
             case .text(let text):
                 let label = OptionControls.caption(text, color: .label)
                 label.numberOfLines = 0
@@ -176,7 +206,7 @@ final class FilterEditorController: AdjustmentEditorController {
                 content.addArrangedSubview(note)
             }
         }
-        SliderField.alignCaptions(fields.map(\.field))
+        SliderField.alignCaptions(fields.map(\.field), with: captions)
         error.numberOfLines = 0
         notes.insertArrangedSubview(error, at: 0)
     }

@@ -25,7 +25,7 @@ enum AdjustmentEditors {
 /// under it, and Cancel and OK apart along the foot, under a line. The controls scroll when the editor is given less room
 /// than they need, as the keyboard or a short window gives it. Editors stay open until OK or Cancel; the canvas behind
 /// them can still be moved and zoomed.
-class AdjustmentEditorController: UIViewController {
+class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerDelegate {
     let session: EditorSession
     let content = UIStackView()
     /// Notes under the row with Preview, as each Mac panel has its own.
@@ -76,12 +76,64 @@ class AdjustmentEditorController: UIViewController {
     /// Whether OK can be pressed now: not while a slow filter's preview is worked out, or can't be.
     var canCommit: Bool { true }
 
+    // MARK: Picking colors
+
+    /// The swatch the color picker points at.
+    weak var pickerSource: UIView?
+    private weak var shownPicker: UIColorPickerViewController?
+
+    /// Whether the editor picks colors for `target`: a filter's, an adjustment's or an effect's.
+    static func picks(_ target: ColorPickerTarget) -> Bool {
+        switch target {
+        case .vignette, .gradientMap, .dither, .effect: true
+        case .palette, .text, .dialog: false
+        }
+    }
+
+    /// Shows the system's color picker over the editor while one of its colors is being picked, as the Mac's opens on a
+    /// swatch, and takes it away when the picking ends: by Escape or Return, or the edit's ending, which ends it too.
+    private func followColorPicker() {
+        let picking = session.colorPicker.map { Self.picks($0.target) } == true
+        if picking, shownPicker == nil, presentedViewController == nil, let colorPicker = session.colorPicker {
+            let picker = UIColorPickerViewController()
+            picker.supportsAlpha = false
+            let color = colorPicker.original
+            picker.selectedColor = UIColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1)
+            picker.delegate = self
+            picker.modalPresentationStyle = .popover
+            picker.popoverPresentationController?.sourceView = pickerSource ?? view
+            present(picker, animated: true)
+            shownPicker = picker
+        } else if !picking, let picker = shownPicker {
+            shownPicker = nil
+            picker.dismiss(animated: true)
+        }
+    }
+
+    /// The canvas follows the color as it's picked, as on the Mac.
+    func colorPickerViewController(_ viewController: UIColorPickerViewController, didSelect color: UIColor, continuously: Bool) {
+        guard let colorPicker = session.colorPicker, let picked = SwatchButton.paletteColor(color) else { return }
+        colorPicker.hsb.setRGB(picked)
+        session.previewVignetteColor()
+        session.previewGradientMapColor()
+        session.previewDitherColor()
+        session.previewEffectColor()
+    }
+
+    /// The picker put away with a tap off it, which is how the system's says OK: the color stays.
+    func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
+        guard session.colorPicker.map({ Self.picks($0.target) }) == true else { return }
+        session.closeColorPicker(commit: true)
+    }
+
     /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
     /// window passes it on otherwise. Return there is the field's, which Hue/Saturation's take as OK, as on the Mac.
     override var keyCommands: [UIKeyCommand]? {
         [UIKeyCommand(title: "Cancel", action: #selector(cancelKey(_:)), input: UIKeyCommand.inputEscape)]
     }
     @objc private func cancelKey(_ command: UIKeyCommand) { cancel() }
+
+    override func loadView() { view = EditorView() }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -175,6 +227,7 @@ class AdjustmentEditorController: UIViewController {
         view.isUserInteractionEnabled = activity?.holds != true
         ok.isEnabled = canCommit
         refresh()
+        followColorPicker()
     }
 }
 
@@ -191,6 +244,30 @@ private final class EditorScrollView: UIScrollView {
 
     override func touchesShouldCancel(in view: UIView) -> Bool {
         view is CurveView || view is LevelsHandlesView ? false : super.touchesShouldCancel(in: view)
+    }
+}
+
+/// An editor's view, where a touch a little way off a swatch, within the 44 points a finger needs, goes to the swatch,
+/// though the swatch's row is shorter than that and UIKit asks no view about a point outside its parents.
+private final class EditorView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        guard !(hit is UIControl) else { return hit }
+        return swatch(at: point, in: self, visible: bounds, with: event) ?? hit
+    }
+
+    /// The swatch in `view` whose finger-sized area holds `point`, of those at least partly in sight: not hidden, and
+    /// not scrolled out of `visible`, the part of the editor the views clipping it show.
+    private func swatch(at point: CGPoint, in view: UIView, visible: CGRect, with event: UIEvent?) -> SwatchButton? {
+        guard !view.isHidden, view.alpha > 0.01, view.isUserInteractionEnabled else { return nil }
+        let frame = view.convert(view.bounds, to: self)
+        if let swatch = view as? SwatchButton {
+            let near = swatch.isEnabled && swatch.point(inside: swatch.convert(point, from: self), with: event)
+            return near && frame.intersects(visible) ? swatch : nil
+        }
+        let shown = view.clipsToBounds ? visible.intersection(frame) : visible
+        guard !shown.isNull else { return nil }
+        return view.subviews.reversed().lazy.compactMap { self.swatch(at: point, in: $0, visible: shown, with: event) }.first
     }
 }
 
