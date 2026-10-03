@@ -15,12 +15,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return configuration
     }
 
-    /// The menu bar, with the Mac's File, Edit, Image, Layer, Select and View commands and their shortcuts. The commands
-    /// go to the window in front (`EditorWindowController`), which enables the ones that apply.
+    /// The menu bar, with the Mac's File, Edit, View, Select, Image and Layer commands, in the Mac's order, and their
+    /// shortcuts. The commands go to the window in front (`EditorWindowController`), which enables the ones that apply.
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
         guard builder.system == .main else { return }
         builder.remove(menu: .format)
+        // The Mac has no Find: its ⌘G, ⇧⌘G and ⌘E are the Layer menu's.
+        builder.remove(menu: .find)
         typealias Window = EditorWindowController
         let recent = UIMenu(title: "Open Recent", children: [UIDeferredMenuElement.uncached { completion in
             Task { @MainActor in
@@ -33,7 +35,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }])
         let open = UIMenu(options: .displayInline, children: [
-            UIKeyCommand(title: "New Canvas", action: #selector(Window.newCanvasTab(_:)), input: "n", modifierFlags: .command),
+            UIKeyCommand(title: "New Canvas…", action: #selector(Window.newCanvasTab(_:)), input: "n", modifierFlags: .command),
             UIKeyCommand(title: "Open Project…", action: #selector(Window.openProject(_:)), input: "o", modifierFlags: .command),
             recent,
             UICommand(title: "Import Images…", action: #selector(Window.importImages(_:))),
@@ -43,12 +45,24 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Save", action: #selector(Window.saveProject(_:)), input: "s", modifierFlags: .command),
             UIKeyCommand(title: "Duplicate", action: #selector(Window.duplicateProject(_:)), input: "s", modifierFlags: [.command, .shift]),
             UICommand(title: "Rename…", action: #selector(Window.renameProject(_:))),
+        ])
+        // The exports in a group of their own, as on the Mac.
+        let export = UIMenu(options: .displayInline, children: [
             UIKeyCommand(title: "Export PNG…", action: #selector(Window.exportPNG(_:)), input: "e", modifierFlags: [.command, .shift]),
             UIKeyCommand(title: "Export JPEG…", action: #selector(Window.exportJPEG(_:)), input: "s", modifierFlags: [.command, .alternate, .shift]),
         ])
+        builder.insertChild(export, atStartOfMenu: .file)
         builder.insertChild(save, atStartOfMenu: .file)
         builder.insertChild(open, atStartOfMenu: .file)
-        // Cut, Copy and Paste are the system's own; Copy Merged follows them, then the fills, as on the Mac.
+        // The Mac's Cut, Copy, Copy Merged and Paste in place of the system's group, then the fills. A field being edited
+        // takes Cut, Copy and Paste, and the canvas otherwise; Select All is Select › All.
+        let pasteboard = UIMenu.Identifier("com.wonderassembly.compositor.pasteboard")
+        builder.replace(menu: .standardEdit, with: UIMenu(identifier: pasteboard, options: .displayInline, children: [
+            UIKeyCommand(title: "Cut", action: #selector(UIResponderStandardEditActions.cut(_:)), input: "x", modifierFlags: .command),
+            UIKeyCommand(title: "Copy", action: #selector(UIResponderStandardEditActions.copy(_:)), input: "c", modifierFlags: .command),
+            UIKeyCommand(title: "Copy Merged", action: #selector(Window.copyMerged(_:)), input: "c", modifierFlags: [.command, .shift]),
+            UIKeyCommand(title: "Paste", action: #selector(UIResponderStandardEditActions.paste(_:)), input: "v", modifierFlags: .command),
+        ]))
         let fills = UIMenu(identifier: UIMenu.Identifier("com.wonderassembly.compositor.fill"), options: .displayInline, children: [
             UIKeyCommand(title: "Fill with Foreground Color", action: #selector(Window.fillWithForeground(_:)),
                          input: UIKeyCommand.inputDelete, modifierFlags: .alternate),
@@ -56,12 +70,25 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                          input: UIKeyCommand.inputDelete, modifierFlags: .command),
             UICommand(title: "Clear Selection Pixels", action: #selector(Window.clearSelectionPixels(_:))),
         ])
-        builder.insertSibling(fills, afterMenu: .standardEdit)
-        builder.insertSibling(UIMenu(options: .displayInline, children: [
-            UIKeyCommand(title: "Copy Merged", action: #selector(Window.copyMerged(_:)), input: "c", modifierFlags: [.command, .shift]),
-        ]), afterMenu: .standardEdit)
-        // The Mac's Image, Layer and Select menus, so far as the iPad has them. ⌘A is the system's Select All, in the Edit
-        // menu. Adjustments without an editor on iPad yet are listed, dimmed.
+        builder.insertSibling(fills, afterMenu: pasteboard)
+        // The Mac's Select, Image and Layer menus, after View as there, so far as the iPad has them. Adjustments without
+        // an editor on iPad yet are listed, dimmed.
+        let select = UIMenu.Identifier("com.wonderassembly.compositor.select")
+        builder.insertSibling(UIMenu(title: "Select", identifier: select, children: [
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "All", action: #selector(UIResponderStandardEditActions.selectAll(_:)), input: "a", modifierFlags: .command),
+                UIKeyCommand(title: "Deselect", action: #selector(Window.deselect(_:)), input: "d", modifierFlags: .command),
+                UIKeyCommand(title: "Inverse", action: #selector(Window.invertSelection(_:)), input: "i", modifierFlags: [.command, .shift]),
+                UICommand(title: "Layer’s Pixels", action: #selector(Window.selectLayerPixels(_:))),
+                UIKeyCommand(title: "Subject", action: #selector(Window.selectSubject(_:)), input: "a", modifierFlags: [.command, .alternate]),
+                UICommand(title: "Mask’s Black Areas", action: #selector(Window.selectMaskBlackAreas(_:))),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UICommand(title: "Expand…", action: #selector(Window.expandSelection(_:))),
+                UICommand(title: "Contract…", action: #selector(Window.contractSelection(_:))),
+                UICommand(title: "Feather…", action: #selector(Window.featherSelection(_:))),
+            ]),
+        ]), afterMenu: .view)
         let image = UIMenu.Identifier("com.wonderassembly.compositor.image")
         builder.insertSibling(UIMenu(title: "Image", identifier: image, children: [
             UIKeyCommand(title: "Curves…", action: #selector(Window.curves(_:)), input: "m", modifierFlags: .command),
@@ -72,7 +99,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Canvas Size…", action: #selector(Window.canvasSize(_:)), input: "c", modifierFlags: [.command, .alternate]),
                 UIKeyCommand(title: "Image Size…", action: #selector(Window.imageSize(_:)), input: "i", modifierFlags: [.command, .alternate]),
             ]),
-        ]), afterMenu: .edit)
+        ]), afterMenu: select)
         let layer = UIMenu.Identifier("com.wonderassembly.compositor.layer")
         builder.insertSibling(UIMenu(title: "Layer", identifier: layer, children: [
             UIMenu(title: "New Adjustment Layer", children: AdjustmentKind.allCases.map { kind in
@@ -85,21 +112,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Duplicate Layer", action: #selector(Window.layerViaCopy(_:)), input: "j", modifierFlags: .command),
             ]),
         ]), afterMenu: image)
-        builder.insertSibling(UIMenu(title: "Select", identifier: UIMenu.Identifier("com.wonderassembly.compositor.select"), children: [
-            UIMenu(options: .displayInline, children: [
-                UICommand(title: "All", action: #selector(Window.selectAll(_:))),
-                UIKeyCommand(title: "Deselect", action: #selector(Window.deselect(_:)), input: "d", modifierFlags: .command),
-                UIKeyCommand(title: "Inverse", action: #selector(Window.invertSelection(_:)), input: "i", modifierFlags: [.command, .shift]),
-                UICommand(title: "Layer’s Pixels", action: #selector(Window.selectLayerPixels(_:))),
-                UIKeyCommand(title: "Subject", action: #selector(Window.selectSubject(_:)), input: "a", modifierFlags: [.command, .alternate]),
-                UICommand(title: "Mask’s Black Areas", action: #selector(Window.selectMaskBlackAreas(_:))),
-            ]),
-            UIMenu(options: .displayInline, children: [
-                UICommand(title: "Expand…", action: #selector(Window.expandSelection(_:))),
-                UICommand(title: "Contract…", action: #selector(Window.contractSelection(_:))),
-                UICommand(title: "Feather…", action: #selector(Window.featherSelection(_:))),
-            ]),
-        ]), afterMenu: layer)
         builder.replace(menu: .close, with: UIMenu(options: .displayInline, children: [
             UIKeyCommand(title: "Close Tab", action: #selector(Window.closeTab(_:)), input: "w", modifierFlags: .command),
         ]))

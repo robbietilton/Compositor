@@ -928,6 +928,15 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         #selector(toolModeKey(_:)), #selector(opacityKey(_:)), #selector(brushHardnessKey(_:)), #selector(blendModeKey(_:)),
     ]
 
+    /// Whether a field in the window or the text on the canvas has the keyboard, as the Mac asks whether an NSText is
+    /// the first responder.
+    var isTyping: Bool {
+        func typing(in view: UIView) -> Bool {
+            (view.isFirstResponder && view is UITextInput) || view.subviews.contains(where: typing)
+        }
+        return typing(in: view)
+    }
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         let hasFile = activeTab?.document != nil
         let hasDocument = activeTab?.session.document != nil
@@ -943,6 +952,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             }
             // A stroke being drawn takes no key but Escape, as on the Mac.
             if session?.brushStroke != nil || session?.warpStroke != nil, action != #selector(escapeKey(_:)) { return false }
+        }
+        // A field or the text being typed that can't cut, copy, paste or select all doesn't pass the key on to the canvas,
+        // as on the Mac, where they're the text's whenever it has the keyboard.
+        if [#selector(cut(_:)), #selector(copy(_:)), #selector(paste(_:)), #selector(selectAll(_:))].contains(action), isTyping {
+            return false
         }
         switch action {
         case #selector(saveProject(_:)), #selector(duplicateProject(_:)):

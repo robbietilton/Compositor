@@ -177,4 +177,19 @@ import UIKit
         try await Task.sleep(for: .milliseconds(300))
         #expect(!x.field.isFirstResponder)
     }
+
+    /// Cut, Copy, Paste and Select All are a field's while it has the keyboard, as on the Mac: one it can't do there
+    /// doesn't pass on to the canvas.
+    @Test func theClipboardKeysAreAFieldsWhileItHasTheKeyboard() async throws {
+        let controller = EditorWindowController()
+        let window = try await window(showing: controller)
+        defer { window.isHidden = true }
+        let tab = try await project(in: controller)
+        tab.session.selectAll()
+        let actions = [#selector(UIResponderStandardEditActions.copy(_:)), #selector(UIResponderStandardEditActions.selectAll(_:))]
+        #expect(actions.allSatisfy { controller.canPerformAction($0, withSender: nil) })
+        let x = try barField("X", in: controller)
+        try await focus(x.field)
+        #expect(actions.allSatisfy { !controller.canPerformAction($0, withSender: nil) })
+    }
 }
