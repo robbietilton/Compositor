@@ -255,11 +255,33 @@ final class NumberField: UIView, UITextFieldDelegate {
         return true
     }
 
+    /// How far Up and Down step the value while the field has the keyboard, Shift ten times as far, as the Mac's effect
+    /// fields step; nil for the field's own arrows.
+    var arrowStep: Double?
+
     override var keyCommands: [UIKeyCommand]? {
-        guard onCommit != nil, field.isFirstResponder else { return super.keyCommands }
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapePressed))
-        escape.wantsPriorityOverSystemBehavior = true
-        return [escape]
+        guard field.isFirstResponder else { return super.keyCommands }
+        var commands: [UIKeyCommand] = []
+        if onCommit != nil { commands.append(UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapePressed))) }
+        if arrowStep != nil {
+            for input in [UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow] {
+                for flags in [UIKeyModifierFlags(), .shift] {
+                    commands.append(UIKeyCommand(input: input, modifierFlags: flags, action: #selector(arrowPressed(_:))))
+                }
+            }
+        }
+        // Before the field's own Escape and arrows.
+        for command in commands { command.wantsPriorityOverSystemBehavior = true }
+        return commands.isEmpty ? super.keyCommands : commands
+    }
+
+    @objc private func arrowPressed(_ command: UIKeyCommand) {
+        guard let step = arrowStep else { return }
+        let steps = (command.input == UIKeyCommand.inputUpArrow ? 1.0 : -1.0) * (command.modifierFlags.contains(.shift) ? 10 : 1)
+        let value = min(range.upperBound, max(range.lowerBound, (parsed ?? shown) + steps * step))
+        onChange(value)
+        show(value)
+        field.text = format(value)
     }
 
     @objc private func escapePressed() {
@@ -418,6 +440,12 @@ final class SliderField: UIView {
     var isEnabled: Bool {
         get { slider.isEnabled }
         set { slider.isEnabled = newValue; number.isEnabled = newValue }
+    }
+
+    /// How far Up and Down step the field's value while it has the keyboard, as the Mac's effect fields step.
+    var arrowStep: Double? {
+        get { number.arrowStep }
+        set { number.arrowStep = newValue }
     }
 
     /// What the row does, shown by the slider when the pointer rests on it, as the Mac's help.

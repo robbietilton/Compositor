@@ -122,14 +122,14 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
         let footerRow = UIStackView()
         footerRow.alignment = .center
-        func footerButton(_ symbol: String, _ label: String, enabled: @escaping (EditorSession) -> Bool,
+        func footerButton(_ symbol: String, _ label: String, help: String? = nil, enabled: @escaping (EditorSession) -> Bool,
                           action: ((EditorSession) -> Void)?) -> UIButton {
             var configuration = UIButton.Configuration.plain()
             configuration.image = UIImage(systemName: symbol)
             configuration.baseForegroundColor = .secondaryLabel
             let button = UIButton(configuration: configuration)
             button.accessibilityLabel = label
-            button.toolTip = label
+            button.toolTip = help ?? label
             button.widthAnchor.constraint(equalToConstant: 40).isActive = true
             button.heightAnchor.constraint(equalToConstant: 44).isActive = true
             if let action {
@@ -142,9 +142,13 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         let group = footerButton("folder.badge.plus", "New folder", enabled: { $0.canEditLayers }) { $0.groupSelectedLayers() }
         let mask = footerButton("rectangle.inset.filled", "Add layer mask",
                                 enabled: { $0.canEditMask && $0.activeLayer?.mask == nil }) { $0.addMask(revealing: true) }
-        // Effects are edited in a panel the iPad doesn't have yet; shown dimmed, as the rail's tools that don't work by
-        // touch are, so the footer reads as the Mac's does.
-        let effects = footerButton("sparkles", "Layer effects (not on iPad yet)", enabled: { _ in false }, action: nil)
+        // The Mac's effects, each opening its panel; its help, as the Mac's has it.
+        let effects = footerButton("sparkles", "Layer effects", help: "Layer effects: stroke, drop shadow, color overlay, inner shadow, outer glow and inner glow",
+                                   enabled: { $0.canEditEffects }, action: nil)
+        effects.menu = UIMenu(children: LayerEffectKind.allCases.map { kind in
+            UIAction(title: kind.rawValue + "…") { [weak self] _ in self?.session?.addEffect(kind) }
+        })
+        effects.showsMenuAsPrimaryAction = true
         let adjustments = footerButton("circle.lefthalf.filled", "New adjustment layer", enabled: { $0.canEditLayers && $0.document != nil },
                                        action: nil)
         // The Mac's list; the kinds without an editor on iPad yet are dimmed.

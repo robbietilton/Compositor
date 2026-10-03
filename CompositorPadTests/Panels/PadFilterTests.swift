@@ -178,7 +178,7 @@ import UIKit
     }
 
     /// Every row's field shows its values whole, however many digits and decimals they have: Exposure's Offset as
-    /// 0.0125.
+    /// 0.0125, an effect's Distance as 5000.
     @Test func everyFieldShowsItsValuesWhole() throws {
         let session = EditorSession()
         session.createDocument(width: 200, height: 100)
@@ -206,6 +206,16 @@ import UIKit
                 #expect(try showsWhole(field, [row.range.lowerBound, row.range.upperBound, between] + negative).isEmpty, "\(kind) \(row.caption)")
             }
             session.cancelFilter()
+        }
+        for kind in LayerEffectKind.allCases {
+            session.addEffect(kind)
+            let selection = try #require(session.effectsEditing)
+            let editor = EffectEditorController(session: session, selection: selection)
+            laidOut(editor)
+            for (row, field) in zip(EffectEditorController.rows[kind] ?? [], views(SliderField.self, in: editor.view)) {
+                #expect(try showsWhole(field, [row.field.lowerBound, row.field.upperBound]).isEmpty, "\(kind) \(row.caption)")
+            }
+            session.finishEffectsEditing(commit: false)
         }
     }
 

@@ -209,7 +209,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             DispatchQueue.main.async { [weak self] in self?.presentEditorRequests(for: tab) }
         }
         if session.adjustmentEditingID != nil || session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
-            || presentedViewController is AdjustmentEditorController {
+            || session.effectsEditing != nil || presentedViewController is AdjustmentEditorController {
             DispatchQueue.main.async { [weak self] in self?.followAdjustmentEditing(for: tab) }
         }
     }
@@ -220,10 +220,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private func followAdjustmentEditing(for tab: EditorTab) {
         guard tab.id == activeID else { return }
         let session = tab.session
+        // An effect undone, or gone with its layer, takes its editing with it.
+        session.endEffectsEditingIfGone()
         let shown = presentedViewController as? AdjustmentEditorController
         if let shown, !shown.isOpen {
-            // With whatever is over it, as its color picker.
-            dismiss(animated: true)
+            // With whatever is over it, as its color picker; then the next editor, as one effect's follows another's.
+            dismiss(animated: true) { [weak self] in self?.followAdjustmentEditing(for: tab) }
             return
         }
         if let id = session.adjustmentEditingID, session.adjustmentOriginal == nil, session.levels == nil,

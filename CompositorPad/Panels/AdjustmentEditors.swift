@@ -17,6 +17,7 @@ enum AdjustmentEditors {
         if let kind = session.filterEdit?.kind, FilterEditorController.kinds.contains(kind) {
             return FilterEditorController(session: session, kind: kind)
         }
+        if let editing = session.effectsEditing { return EffectEditorController(session: session, selection: editing) }
         return nil
     }
 }
@@ -31,6 +32,7 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     /// Notes under the row with Preview, as each Mac panel has its own.
     let notes = UIStackView()
     private let titleLabel: UILabel
+    private let heading = OptionControls.row([], spacing: 10)
     private let body = UIStackView()
     private let scroll = EditorScrollView()
     private let footer: UIStackView
@@ -58,8 +60,15 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     func commit() {}
     /// Puts the edit's values into the controls; run on every update, so UIKit follows what it reads.
     func refresh() {}
-    /// The row with Preview, laid out as the editor's Mac panel lays it out, `reset` being its Reset.
+    /// The row with Preview, laid out as the editor's Mac panel lays it out, `reset` being its Reset; none if empty, as
+    /// an effect's panel has none.
     func previewRow(preview: UIView, reset: UIView) -> [UIView] { [preview, UIView()] }
+    /// What sits at the far end of the title's row, as an effect's color does on the Mac.
+    func headingAccessory() -> UIView? { nil }
+    /// The foot of the editor: Cancel and OK apart under a line, as the Mac's filter panels have them, or together at
+    /// the far end, as its effect panels do.
+    enum Foot { case panel, effect }
+    var foot: Foot { .panel }
     /// Whether the editor says when the selection limits it, as the Mac's filter and Hue/Saturation panels do. Never on
     /// an adjustment layer, which a selection doesn't limit.
     var notesSelection: Bool { true }
@@ -149,8 +158,10 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
             self.setPreview(!self.previews)
         }, for: .primaryActionTriggered)
         let reset = OptionControls.button("Reset") { [weak self] in self?.reset() }
-        let row = OptionControls.row(previewRow(preview: preview, reset: reset), spacing: 18)
-        for view in [content, row, notes] { body.addArrangedSubview(view) }
+        let rowViews = previewRow(preview: preview, reset: reset)
+        body.addArrangedSubview(content)
+        if !rowViews.isEmpty { body.addArrangedSubview(OptionControls.row(rowViews, spacing: 18)) }
+        body.addArrangedSubview(notes)
         body.axis = .vertical
         body.spacing = 14
         body.setCustomSpacing(18, after: content)
@@ -159,11 +170,16 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
         let cancel = OptionControls.button("Cancel") { [weak self] in self?.cancel() }
         ok.addAction(UIAction { [weak self] _ in self?.commit() }, for: .primaryActionTriggered)
         spinner.hidesWhenStopped = true
-        for view in [cancel, UIView(), spinner, activityLabel, ok] { footer.addArrangedSubview(view) }
+        let feet: [UIView] = foot == .panel ? [cancel, UIView(), spinner, activityLabel, ok] : [UIView(), spinner, activityLabel, cancel, ok]
+        for view in feet { footer.addArrangedSubview(view) }
         let line = UIView()
         line.backgroundColor = .separator
+        line.isHidden = foot == .effect
+        heading.addArrangedSubview(titleLabel)
+        heading.addArrangedSubview(UIView())
+        if let accessory = headingAccessory() { heading.addArrangedSubview(accessory) }
 
-        for view in [titleLabel, scroll, line, footer] {
+        for view in [heading, scroll, line, footer] {
             view.translatesAutoresizingMaskIntoConstraints = false
             self.view.addSubview(view)
         }
@@ -174,10 +190,10 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
         let fits = scroll.heightAnchor.constraint(equalTo: body.heightAnchor)
         fits.priority = .defaultLow
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            scroll.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 18),
+            heading.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
+            heading.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            heading.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            scroll.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 18),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             fits,
@@ -209,7 +225,7 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
             view.systemLayoutSizeFitting(CGSize(width: Self.width, height: UIView.layoutFittingCompressedSize.height),
                                          withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
         }
-        let tall = view.safeAreaInsets.top + 18 + height(titleLabel) + 18 + height(body) + 14 + 1 + 14 + height(footer) + 18
+        let tall = view.safeAreaInsets.top + 18 + height(heading) + 18 + height(body) + 14 + 1 + 14 + height(footer) + 18
             + view.safeAreaInsets.bottom
         let size = CGSize(width: Self.width + 40, height: ceil(tall))
         if preferredContentSize != size { preferredContentSize = size }
