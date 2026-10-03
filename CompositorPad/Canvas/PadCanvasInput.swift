@@ -1,8 +1,8 @@
 import UIKit
 
-/// What a touch does with the Move, Crop, Gradient, Shape, Type and selection tools, and with Clone Stamp's source, as
-/// the Mac's canvas does with the mouse, apart from UIKit's touches: a press, drag and lift at points in the canvas's
-/// coordinates, with the keys a hardware keyboard holds. The iPad canvas feeds it touches; tests feed it points.
+/// What a touch does with the tools, all but the Hand, and with Clone Stamp's source, as the Mac's canvas does with the
+/// mouse, apart from UIKit's touches: a press, drag and lift at points in the canvas's coordinates, with the keys a
+/// hardware keyboard holds. The iPad canvas feeds it touches; tests feed it points.
 @MainActor final class PadCanvasInput {
     let session: EditorSession
     /// Asks for the overlay to be drawn again though nothing it observes changed, as the lines a drag snaps to.
@@ -14,6 +14,9 @@ import UIKit
     var textOpened: (CGPoint) -> Void = { _ in }
     /// The box being dragged out for new text, in document pixels, for the overlay to draw.
     private(set) var textBox: CGRect?
+    /// The Eyedropper's ring while a touch samples: the color under the touch at `point`, in the canvas's coordinates,
+    /// and the foreground color it replaced; nil once the touch lifts.
+    var sampleChanged: ((point: CGPoint, color: PaletteColor, original: PaletteColor)?) -> Void = { _ in }
 
     /// How far a finger may land from a handle, or from a polygonal lasso's first corner to close it.
     static let reach: CGFloat = 22
@@ -22,6 +25,12 @@ import UIKit
 
     private lazy var overlay = CanvasOverlay(session: session)
     private enum Drag {
+        /// A brush stroke, which last reached `last`, in document pixels.
+        case paint(last: CGPoint)
+        /// The Eyedropper taking colors, and the foreground color it replaced.
+        case sample(original: PaletteColor)
+        /// The Zoom tool, as on the Mac: a tap zooms in, a drag right or left zooms smoothly in or out.
+        case zoom(start: CGPoint, zoom: CGFloat, moved: Bool)
         /// The Move tool: a handle or the layer, and whether its first step drags a copy (Option).
         case transform(TransformDrag, duplicates: Bool)
         /// A marquee or lasso outline being drawn.
@@ -57,9 +66,15 @@ import UIKit
     /// Whether this handles touches with `tool`.
     static func handles(_ tool: NavigationTool) -> Bool {
         tool == .move || tool == .crop || tool == .gradient || tool == .shape || tool == .type || tool.isSelectionTool
+            || tool.isBrushTool || tool == .eyedropper || tool == .zoom
     }
 
     var isDragging: Bool { drag != nil }
+    /// Whether a touch is drawing a brush stroke.
+    var isPainting: Bool {
+        if case .paint = drag { return true }
+        return false
+    }
 
     private func pixel(_ point: CGPoint) -> CGPoint? {
         session.document.map { session.viewport.documentPoint(from: point, documentSize: $0.size) }
@@ -70,6 +85,21 @@ import UIKit
     @discardableResult
     func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) -> Bool {
         guard let pixel = pixel(point) else { return false }
+        if session.tool.isBrushTool {
+            session.beginBrush(at: pixel)
+            drag = .paint(last: pixel)
+            return true
+        }
+        if session.tool == .eyedropper {
+            let original = session.foregroundColor
+            drag = .sample(original: original)
+            sample(at: point, pixel: pixel, original: original)
+            return true
+        }
+        if session.tool == .zoom {
+            drag = .zoom(start: point, zoom: session.viewport.zoom, moved: false)
+            return true
+        }
         // A double tap on text with the Move tool opens it, as a double click does on the Mac.
         if session.tool == .move, tapCount >= 2, session.canEditLayers, let layer = liveText(at: pixel) {
             session.commitTransform()
@@ -142,6 +172,17 @@ import UIKit
     func moved(to point: CGPoint, keys: UIKeyModifierFlags = []) {
         guard let drag, let pixel = pixel(point) else { return }
         switch drag {
+        case .paint:
+            session.continueBrush(at: pixel)
+            self.drag = .paint(last: pixel)
+        case .sample(let original):
+            sample(at: point, pixel: pixel, original: original)
+        case .zoom(let start, let zoom, var moved):
+            let dx = point.x - start.x
+            if abs(dx) >= 3 { moved = true }
+            // Doubling for every 100 points dragged, as on the Mac.
+            if moved { session.zoom(to: zoom * pow(2, dx / 100), anchor: start) }
+            self.drag = .zoom(start: start, zoom: zoom, moved: moved)
         case .transform(let transform, let duplicates):
             if duplicates {
                 self.drag = .transform(transform, duplicates: false)
@@ -216,6 +257,15 @@ import UIKit
         defer { finish() }
         guard let drag else { return }
         switch drag {
+        case .paint:
+            let pixel = pixel(point)
+            if let pixel { session.continueBrush(at: pixel) }
+            session.finishBrushImmediately()
+            strokeEnded(at: pixel)
+        case .sample:
+            sampleChanged(nil)
+        case .zoom(let start, _, let moved):
+            if !moved { session.zoom(to: session.viewport.zoom * 2, anchor: start) }
         case .transform:
             // As the Mac's does: a drag applies itself when it's let go, unless it's part of an edit waiting for Apply.
             if session.transformEdit?.persistent == false { session.commitTransform() }
@@ -274,6 +324,13 @@ import UIKit
         defer { finish() }
         guard let drag else { return }
         switch drag {
+        case .paint(let last):
+            session.cancelBrush()
+            strokeEnded(at: last)
+        case .sample:
+            sampleChanged(nil)
+        case .zoom:
+            break
         case .transform(let transform, _):
             session.previewTransform(transform.original)
             if let corners = transform.originalCorners { session.previewCorners(corners) }
@@ -412,6 +469,13 @@ import UIKit
         if (rect.minX...rect.maxX).contains(point.x) { edges += [1, 5].map { (index: $0, distance: abs(point.y - handles[$0].y)) } }
         if (rect.minY...rect.maxY).contains(point.y) { edges += [3, 7].map { (index: $0, distance: abs(point.x - handles[$0].x)) } }
         return nearest(edges)
+    }
+
+    /// The Eyedropper at `point`, over `pixel`: the color there, as the canvas shows it, becomes the foreground color.
+    private func sample(at point: CGPoint, pixel: CGPoint, original: PaletteColor) {
+        guard session.canEditPalette, let color = session.sampleCompositeColor(at: pixel) else { return }
+        session.foregroundColor = color
+        sampleChanged((point, color, original))
     }
 
     /// The Magic tool at `pixel`: the object there, or the pixels of similar color.

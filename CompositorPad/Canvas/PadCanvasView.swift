@@ -13,7 +13,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     var pencilSeen: () -> Void = {}
     private let surface = MetalCanvasView(frame: .zero)
     private(set) lazy var overlayView = PadOverlayView(session: session)
-    /// What touches do with the Move, Crop, Gradient, Shape, Type and selection tools, and with Clone Stamp's source.
+    /// What touches do with the tools, all but the Hand, and with Clone Stamp's source.
     private(set) lazy var input: PadCanvasInput = {
         let input = PadCanvasInput(session: session)
         input.overlayChanged = { [weak self] in
@@ -22,6 +22,14 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             self.overlayView.setNeedsDisplay()
         }
         input.textOpened = { [weak self] point in self?.openedText(at: point) }
+        input.sampleChanged = { [weak self] sample in
+            guard let self else { return }
+            guard let sample else { sampleRing.isHidden = true; return }
+            // The ring shows the color under the touch against the one it replaces, as the finger hides the pixel.
+            sampleRing.original = sample.original
+            sampleRing.sampled = sample.color
+            if session.showsSampleRing { sampleRing.show(at: sample.point) }
+        }
         return input
     }()
     /// The text being typed, while there is some, over the canvas and its overlays.
@@ -39,13 +47,9 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// The touch drawing or dragging with the current tool, and what it's doing.
     private var activeTouch: UITouch?
     private enum Drag {
-        case paint
-        /// The Move tool or a selection tool, which `input` follows.
+        /// A tool, or Clone Stamp's source, which `input` follows.
         case tool
         case pan(CGPoint)
-        case sample
-        /// The Zoom tool, as on the Mac: a tap zooms in, a drag right or left zooms smoothly in or out.
-        case zoom(start: CGPoint, zoom: CGFloat, moved: Bool)
     }
     private var drag: Drag?
     private var pinchStart: (zoom: CGFloat, anchor: CGPoint)?
@@ -299,11 +303,6 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         tool == .hand || spaceHeld || (!pencil && !fingerPaints && (tool.isBrushTool || tool == .gradient || tool == .shape))
     }
 
-    private func documentPoint(_ touch: UITouch) -> CGPoint? {
-        guard let document = session.document else { return nil }
-        return session.viewport.documentPoint(from: touch.location(in: self), documentSize: document.size)
-    }
-
     /// Touched, the canvas takes the keyboard and the edit menu's commands from a field that had them, as the Mac's
     /// canvas takes the focus back; undo and redo, the system's three-finger gestures among them, reach the window's
     /// undo manager through it.
@@ -337,23 +336,11 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         } else if adjusting, tool != .zoom {
             // While an adjustment's editor is open the canvas only moves and zooms: the edit holds the layers, as on the Mac.
             return
-        } else if tool.isBrushTool, let pixel = documentPoint(touch) {
-            activeTouch = touch
-            drag = .paint
-            (touchPointer, touchKeys) = (point, keys)
-            session.beginBrush(at: pixel)
         } else if PadCanvasInput.handles(tool) {
-            guard input.began(at: touch.location(in: self), keys: event?.modifierFlags ?? [], tapCount: touch.tapCount) else { return }
+            guard input.began(at: point, keys: keys, tapCount: touch.tapCount) else { return }
             activeTouch = touch
             drag = .tool
-        } else if tool == .eyedropper {
-            activeTouch = touch
-            drag = .sample
-            sampleRing.original = session.foregroundColor
-            sample(touch)
-        } else if tool == .zoom {
-            activeTouch = touch
-            drag = .zoom(start: touch.location(in: self), zoom: session.viewport.zoom, moved: false)
+            if tool.isBrushTool { (touchPointer, touchKeys) = (point, keys) }
         }
         setNeedsRender()
     }
@@ -362,27 +349,15 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         guard let touch = activeTouch, touches.contains(touch), let drag else { return }
         if touchPointer != nil { (touchPointer, touchKeys) = (touch.location(in: self), event?.modifierFlags ?? []) }
         switch drag {
-        case .paint:
-            // Apple Pencil reports up to 240 points a second; the display shows every fourth. All of them go into the
-            // stroke.
-            for sample in event?.coalescedTouches(for: touch) ?? [touch] {
-                guard let pixel = documentPoint(sample) else { continue }
-                session.continueBrush(at: pixel)
-            }
         case .tool:
-            input.moved(to: touch.location(in: self), keys: event?.modifierFlags ?? [])
+            // Apple Pencil reports up to 240 points a second; the display shows every fourth. All of them go into a
+            // stroke.
+            let samples = input.isPainting ? event?.coalescedTouches(for: touch) ?? [touch] : [touch]
+            for sample in samples { input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? []) }
         case .pan(let last):
             let point = touch.location(in: self)
             session.viewport.translate(by: CGSize(width: point.x - last.x, height: point.y - last.y))
             self.drag = .pan(point)
-        case .sample:
-            sample(touch)
-        case .zoom(let start, let zoom, var moved):
-            let dx = touch.location(in: self).x - start.x
-            if abs(dx) >= 3 { moved = true }
-            // Doubling for every 100 points dragged, as on the Mac.
-            if moved { session.zoom(to: zoom * pow(2, dx / 100), anchor: start) }
-            self.drag = .zoom(start: start, zoom: zoom, moved: moved)
         }
         setNeedsRender()
     }
@@ -405,33 +380,13 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             setNeedsRender()
         }
         switch drag {
-        case .paint:
-            let pixel = documentPoint(touch)
-            defer { input.strokeEnded(at: pixel) }
-            // A second finger coming down to zoom takes the canvas back, and the stroke it interrupted with it.
-            if cancelled { session.cancelBrush(); return }
-            if let pixel { session.continueBrush(at: pixel) }
-            session.finishBrushImmediately()
         case .tool:
+            // A second finger coming down to zoom takes the canvas back, and what the touch was doing with it.
             if cancelled { input.cancelled() }
             else { input.ended(at: touch.location(in: self), keys: keys, tapCount: touch.tapCount) }
-        case .zoom(let start, _, let moved):
-            if !cancelled, !moved { session.zoom(to: session.viewport.zoom * 2, anchor: start) }
-        case .sample:
-            sampleRing.isHidden = true
         case .pan, nil:
             break
         }
-    }
-
-    /// The Eyedropper: the color under the touch, as the canvas shows it, becomes the foreground color, and the ring
-    /// around the touch shows it against the color it replaces.
-    private func sample(_ touch: UITouch) {
-        guard session.canEditPalette, let pixel = documentPoint(touch),
-              let color = session.sampleCompositeColor(at: pixel) else { return }
-        session.foregroundColor = color
-        sampleRing.sampled = color
-        if session.showsSampleRing { sampleRing.show(at: touch.location(in: self)) }
     }
 
     // MARK: Gestures
@@ -442,7 +397,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// A hand resting on the screen while Apple Pencil paints doesn't take the canvas away from the stroke, and three
     /// fingers are left to iPadOS's undo and redo.
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        if case .paint = drag, activeTouch?.type == .pencil { return false }
+        if input.isPainting, activeTouch?.type == .pencil { return false }
         return gestureRecognizer.numberOfTouches <= 2
     }
 
