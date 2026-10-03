@@ -152,8 +152,9 @@ import UIKit
         for command in filter.commands + image.commands.filter({ ["Black & White…", "Color Balance…", "Exposure…", "Gradient Map…",
                                                                   "Grain…"].contains($0.title) }) + [fill] {
             let kind = try #require((command.propertyList as? String).flatMap(FilterKind.init), "\(command.title)")
-            #expect(controller.canPerformAction(command.action, withSender: command) == FilterEditorController.kinds.contains(kind),
-                    "\(command.title)")
+            // Content-Aware Fill waits for a selection too, which this project hasn't.
+            let opens = FilterEditorController.kinds.contains(kind) && kind != .contentAwareFill
+            #expect(controller.canPerformAction(command.action, withSender: command) == opens, "\(command.title)")
         }
         let select = try #require(bar.menu(titled: "Select"))
         let selectItems = select.children.flatMap { item -> [UIMenuElement] in

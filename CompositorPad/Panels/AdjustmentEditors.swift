@@ -73,6 +73,8 @@ class AdjustmentEditorController: UIViewController {
     }
     /// What the editor is doing that OK waits on, if anything.
     var activity: Activity? { nil }
+    /// Whether OK can be pressed now: not while a slow filter's preview is worked out, or can't be.
+    var canCommit: Bool { true }
 
     /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
     /// window passes it on otherwise. Return there is the field's, which Hue/Saturation's take as OK, as on the Mac.
@@ -171,6 +173,7 @@ class AdjustmentEditorController: UIViewController {
         activityLabel.text = activity?.text
         activityLabel.isHidden = activity?.text == nil
         view.isUserInteractionEnabled = activity?.holds != true
+        ok.isEnabled = canCommit
         refresh()
     }
 }

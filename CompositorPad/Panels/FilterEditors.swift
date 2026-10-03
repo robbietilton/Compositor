@@ -21,7 +21,9 @@ final class FilterEditorController: AdjustmentEditorController {
         /// A choice of two, `titles` for false and true, as segments captioned `caption`.
         case choice(caption: String, titles: [String], key: WritableKeyPath<FilterSettings, Bool>)
         case checkbox(String, WritableKeyPath<FilterSettings, Bool>)
-        /// A line saying what the filter does.
+        /// What the filter does, in the panel's words.
+        case text(String)
+        /// A note on a setting, quieter.
         case note(String)
     }
 
@@ -60,6 +62,7 @@ final class FilterEditorController: AdjustmentEditorController {
             .slider(Row(caption: "Highlights", key: \.tonalHighlights, range: -100...100, unit: "%", decimals: 0, logarithmic: false)),
             .slider(Row(caption: "Radius", key: \.tonalRadius, range: 1...100, unit: "px", decimals: 0, logarithmic: true)),
         ],
+        .contentAwareFill: [.text("Fill the selection using surrounding pixels from this layer.")],
         .lensCorrection: [
             .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
             .note("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)."),
@@ -77,6 +80,8 @@ final class FilterEditorController: AdjustmentEditorController {
 
     let kind: FilterKind
     private var fields: [(row: Row, field: SliderField)] = []
+    /// Why the preview couldn't be made, in orange, as the Mac's panel says it.
+    private let error = OptionControls.caption("", color: .systemOrange)
     /// Puts the edit's values into the controls other than sliders.
     private var refreshers: [(FilterSettings) -> Void] = []
 
@@ -101,8 +106,14 @@ final class FilterEditorController: AdjustmentEditorController {
     }
     override func cancel() { session.cancelFilter() }
     override func commit() {
+        // OK waits for a slow filter's preview, as the Mac's disabled OK does; Return with it.
+        guard canCommit else { return }
         let session = session
         Task { await session.commitFilter() }
+    }
+    override var canCommit: Bool {
+        guard let edit else { return false }
+        return !(kind.isAutomatic && (edit.preparing || edit.previewError != nil))
     }
     /// Applying… while OK applies the filter; Working… while a slow one (Remove Background, Content-Aware Fill) works out
     /// its preview, as the Mac's panel says. A quick one says nothing, so the panel doesn't flicker as a slider moves.
@@ -134,6 +145,10 @@ final class FilterEditorController: AdjustmentEditorController {
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
                 refreshers.append { box.isSelected = $0[keyPath: key] }
                 content.addArrangedSubview(OptionControls.row([box, UIView()]))
+            case .text(let text):
+                let label = OptionControls.caption(text, color: .label)
+                label.numberOfLines = 0
+                content.addArrangedSubview(label)
             case .note(let text):
                 let note = OptionControls.caption(text, color: .secondaryLabel)
                 note.numberOfLines = 0
@@ -141,11 +156,15 @@ final class FilterEditorController: AdjustmentEditorController {
             }
         }
         SliderField.alignCaptions(fields.map(\.field))
+        error.numberOfLines = 0
+        notes.insertArrangedSubview(error, at: 0)
     }
 
     override func refresh() {
         guard let settings = edit?.settings else { return }
         for (row, field) in fields { field.show(settings[keyPath: row.key]) }
         for refresh in refreshers { refresh(settings) }
+        error.text = edit?.previewError
+        error.isHidden = edit?.previewError == nil
     }
 }

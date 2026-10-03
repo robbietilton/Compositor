@@ -432,4 +432,106 @@ import UIKit
         session.cancelFilter()
         try await eventually { controller.presentedViewController == nil }
     }
+
+    // MARK: Content-Aware Fill
+
+    /// Selects `rect`, in document pixels, as a marquee does.
+    private func select(_ rect: CGRect, in session: EditorSession) {
+        session.document?.selection = DocumentSelection(path: CGPath(rect: rect, transform: nil), antialiased: false)
+    }
+
+    /// The active layer's pixel at (`x`, `y`), its red, green and blue.
+    private func pixel(_ session: EditorSession, x: Int, y: Int) throws -> (Int, Int, Int) {
+        let context = try BrushRaster.copy(try #require(session.activeLayer?.asset?.image))
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        let i = y * context.bytesPerRow + x * 4
+        return (Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2]))
+    }
+
+    /// Whether `editor`'s OK can be pressed.
+    private func okEnabled(_ editor: UIViewController) throws -> Bool {
+        try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "OK" }).isEnabled
+    }
+
+    /// Edit › Content-Aware Fill… needs a selection to fill, as on the Mac.
+    @Test func contentAwareFillNeedsASelection() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let fill = filterCommand(.contentAwareFill)
+        #expect(!controller.canPerformAction(fill.action, withSender: fill))
+        select(CGRect(x: 80, y: 30, width: 40, height: 40), in: session)
+        #expect(controller.canPerformAction(fill.action, withSender: fill))
+    }
+
+    /// While the fill is worked out the editor says so and OK waits, Return too, as the Mac's disabled OK does; once it's
+    /// ready OK fills the selection, as one step to undo.
+    @Test func itWaitsThenFills() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        // A white square on the gray, selected: filled from the gray around it.
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        context.fill(CGRect(x: 90, y: 40, width: 20, height: 20))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Square"))
+        select(CGRect(x: 85, y: 35, width: 30, height: 30), in: session)
+        try #require(pixel(session, x: 100, y: 50) == (255, 255, 255))
+        #expect(choose(filterCommand(.contentAwareFill), in: controller))
+        let editor = try await filterEditor(over: controller)
+        #expect(views(UILabel.self, in: editor.view).contains { $0.text == "Fill the selection using surrounding pixels from this layer." })
+        try await eventually { session.filterEdit?.preparing == false }
+        // Still working: as before the fill is ready.
+        session.filterEdit?.preparing = true
+        editor.updatePropertiesIfNeeded()
+        #expect(views(UILabel.self, in: editor.view).contains { $0.text == "Working…" && !$0.isHidden })
+        #expect(try !okEnabled(editor))
+        try press("\r", in: controller)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(session.filterEdit != nil)
+        session.filterEdit?.preparing = false
+        editor.updatePropertiesIfNeeded()
+        #expect(try okEnabled(editor))
+        try press("\r", in: controller)
+        try await eventually { session.filterEdit == nil }
+        #expect(session.history.undoName == "Content-Aware Fill")
+        #expect(try pixel(session, x: 100, y: 50) != (255, 255, 255))
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// With nothing around the selection to fill from, the editor says why in orange, as the Mac's does, and OK can't be
+    /// pressed.
+    @Test func withNothingToFillFromItSaysWhy() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.selectAll()
+        #expect(choose(filterCommand(.contentAwareFill), in: controller))
+        let editor = try await filterEditor(over: controller)
+        try await eventually { session.filterEdit?.previewError != nil }
+        editor.updatePropertiesIfNeeded()
+        let error = try #require(session.filterEdit?.previewError)
+        #expect(views(UILabel.self, in: editor.view).contains { $0.text == error && !$0.isHidden && $0.textColor == .systemOrange })
+        #expect(try !okEnabled(editor))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A selection reaching past the layer's edge fills there too, the layer growing over it, as on the Mac.
+    @Test func itFillsPastTheLayersEdge() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let index = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        session.document?.layers[index].transform.origin = CGPoint(x: -60, y: 0)
+        select(CGRect(x: 120, y: 30, width: 40, height: 40), in: session)
+        try #require(session.activeLayer.map { $0.transform.origin.x + $0.transform.size.width } == 140)
+        #expect(choose(filterCommand(.contentAwareFill), in: controller))
+        _ = try await filterEditor(over: controller)
+        try await eventually { session.filterEdit?.preparing == false }
+        try press("\r", in: controller)
+        try await eventually { session.filterEdit == nil }
+        let grown = try #require(session.activeLayer?.transform)
+        #expect(grown.origin.x + grown.size.width >= 160)
+        try await eventually { controller.presentedViewController == nil }
+    }
 }
