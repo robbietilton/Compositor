@@ -134,6 +134,9 @@ final class NumberField: UIView, UITextFieldDelegate {
     var onFinish: () -> Void = {}
     /// A scrub began.
     var onScrubStart: () -> Void = {}
+    /// Return or Escape ended the typing. A tool's bar hands the keyboard back to the canvas then, as the Mac's do; a
+    /// dialog's fields leave Escape to the dialog, whose Cancel it is.
+    var onCommit: (() -> Void)?
     /// Whether each keystroke that makes a number applies it, as the Transform bar's fields do; otherwise the value
     /// applies when the field is left, as the brush's do.
     var live = false
@@ -224,14 +227,28 @@ final class NumberField: UIView, UITextFieldDelegate {
         return min(range.upperBound, max(range.lowerBound, value))
     }
 
-    /// A tap selects the whole value, so a new one is typed over it.
+    /// A tap selects the whole value, so a new one is typed over it; not once the field is left, which selecting would
+    /// take the keyboard back to.
     func textFieldDidBeginEditing(_ textField: UITextField) {
-        DispatchQueue.main.async { textField.selectAll(nil) }
+        DispatchQueue.main.async { if textField.isFirstResponder { textField.selectAll(nil) } }
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         textField.resignFirstResponder()
+        onCommit?()
         return true
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard onCommit != nil, field.isFirstResponder else { return super.keyCommands }
+        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapePressed))
+        escape.wantsPriorityOverSystemBehavior = true
+        return [escape]
+    }
+
+    @objc private func escapePressed() {
+        field.resignFirstResponder()
+        onCommit?()
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
@@ -271,6 +288,11 @@ final class SliderField: UIView {
     /// A drag on the slider or the caption began, or ended.
     var onStart: () -> Void = {}
     var onFinish: () -> Void = {}
+    /// Return or Escape ended typing in the field.
+    var onCommit: (() -> Void)? {
+        get { number.onCommit }
+        set { number.onCommit = newValue }
+    }
 
     private let slider = UISlider()
     private let number: NumberField

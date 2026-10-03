@@ -177,6 +177,29 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         }
     }
 
+    // MARK: The keyboard
+
+    /// The editor's last request for the keyboard, and whether it had a project when it last looked.
+    private var focusRequest = 0
+    private var hadDocument = false
+
+    /// Takes the keyboard when the editor asks for it, as a field of a tool's bar is done with it, and when a project
+    /// appears, as the Mac's canvas does: text being typed takes it instead, so typing and ⌘Return still reach it.
+    /// Not while a dialog or sheet is over the window, which keeps it; an editor's popover, which the canvas works
+    /// beside, doesn't count.
+    func consumeFocusRequest(_ request: Int, hasDocument: Bool) {
+        let appeared = hasDocument && !hadDocument
+        hadDocument = hasDocument
+        guard request != focusRequest || appeared else { return }
+        focusRequest = request
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            let presented = window.rootViewController?.presentedViewController
+            guard presented == nil || presented is AdjustmentEditorController || presented?.isBeingDismissed == true else { return }
+            if let text = textEditor?.textView, session.textDraft != nil { text.becomeFirstResponder() } else { becomeFirstResponder() }
+        }
+    }
+
     // MARK: Text
 
     /// Lays the editor over the text being typed, making it when typing starts and taking it away when it ends.

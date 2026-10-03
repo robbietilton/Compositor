@@ -72,6 +72,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         opacity.onStart = { [weak self] in self?.session?.beginOpacityEdit() }
         opacity.onChange = { [weak self] in self?.session?.setLayerOpacity($0) }
         opacity.onFinish = { [weak self] in self?.session?.finishOpacityEdit() }
+        opacity.onCommit = { [weak self] in self?.session?.canvasFocusRequest += 1 }
         let appearance = UIStackView(arrangedSubviews: [blendRow, opacity])
         appearance.axis = .vertical
         appearance.spacing = 10

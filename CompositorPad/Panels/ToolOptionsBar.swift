@@ -99,6 +99,15 @@ final class ToolOptionsBar: UIView {
         // The room to spare goes after the settings, unless the bar's own space keeps its last controls at its end.
         if !hasSpace { add(UIView()) }
         scroll.contentOffset = .zero
+        // Return or Escape in a field gives the keyboard back to the canvas, so a tool's key works straight away, as
+        // on the Mac.
+        for field in Self.numberFields(in: content) {
+            field.onCommit = { [weak self] in self?.session?.canvasFocusRequest += 1 }
+        }
+    }
+
+    private static func numberFields(in view: UIView) -> [NumberField] {
+        view.subviews.flatMap { subview in ((subview as? NumberField).map { [$0] } ?? []) + numberFields(in: subview) }
     }
 
     private func add(_ view: UIView) { content.addArrangedSubview(view) }

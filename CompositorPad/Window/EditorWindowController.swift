@@ -184,6 +184,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         redoItem.isEnabled = textUndo?.canRedo ?? session.canRedo
         let hasDocument = session.document != nil
         for item in [fitItem, actualItem, zoomInItem, zoomOutItem] { item.isEnabled = hasDocument }
+        tab.canvas.consumeFocusRequest(session.canvasFocusRequest, hasDocument: hasDocument)
         newCanvas.isHidden = !tab.isEmpty
         // The opening tab's Loading card, in the same pass that hides New canvas.
         loadingCard.progress = tab.loading
