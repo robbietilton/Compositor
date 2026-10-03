@@ -406,6 +406,21 @@ extension EditorSession {
         if var draft = textDraft, draft.style != original { draft.style = original; textDraft = draft }
     }
 
+    /// An arrow key held with Option, for the text's spacing.
+    enum SpacingArrow { case left, right, up, down }
+    /// Option with an arrow sets the spacing, as in Photoshop: left and right the tracking, up and down the leading,
+    /// up closing the lines up and down opening them out, counting from whatever Auto works out to. Shift (`large`)
+    /// makes each step ten.
+    func stepTextSpacing(_ arrow: SpacingArrow, large: Bool) {
+        let step: CGFloat = large ? 10 : 1
+        switch arrow {
+        case .left: changeTextStyle { $0.tracking -= step }
+        case .right: changeTextStyle { $0.tracking += step }
+        case .up: changeTextStyle { $0.leading = max(1, $0.lineHeight - step) }
+        case .down: changeTextStyle { $0.leading = $0.lineHeight + step }
+        }
+    }
+
     func changeTextStyle(_ change: (inout LayerTextStyle) -> Void) {
         if textDraft == nil, activeLayer?.liveText != nil { editActiveText() }
         if var draft = textDraft {

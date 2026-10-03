@@ -43,16 +43,9 @@ final class CanvasTextView: NSTextView {
         if event.keyCode == 53 { editor?.canvas?.session.cancelText(); return }
         // Option with the arrows sets spacing, as in Photoshop: left and right the tracking, up and down the
         // leading. Shift makes each step ten.
-        if event.modifierFlags.contains(.option), [123, 124, 125, 126].contains(event.keyCode),
-           let session = editor?.canvas?.session {
-            let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
-            switch event.keyCode {
-            case 123: session.changeTextStyle { $0.tracking -= step }
-            case 124: session.changeTextStyle { $0.tracking += step }
-            // Up closes the lines up, down opens them out, counting from whatever Auto works out to.
-            case 126: session.changeTextStyle { $0.leading = max(1, $0.lineHeight - step) }
-            default: session.changeTextStyle { $0.leading = $0.lineHeight + step }
-            }
+        let arrows: [UInt16: EditorSession.SpacingArrow] = [123: .left, 124: .right, 125: .down, 126: .up]
+        if event.modifierFlags.contains(.option), let arrow = arrows[event.keyCode], let session = editor?.canvas?.session {
+            session.stepTextSpacing(arrow, large: event.modifierFlags.contains(.shift))
             return
         }
         if (event.keyCode == 36 || event.keyCode == 76), event.modifierFlags.contains(.command) {

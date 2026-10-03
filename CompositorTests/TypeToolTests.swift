@@ -529,4 +529,33 @@ struct TypeToolTests {
         session.closeColorPicker(commit: false)
         #expect(session.textDraft?.style == colored)
     }
+
+    /// Option with the arrows sets the spacing while typing, as in Photoshop: left and right the tracking, up and down
+    /// the leading, counting from what Auto works out to; Shift makes each step ten.
+    @Test func optionArrowsSetTheSpacing() throws {
+        let session = makeSession()
+        beginEditingText(in: session)
+        let view = CanvasView(session: session)
+        view.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        view.synchronizeDisplay()
+        let editor = try #require(view.inlineTextEditor)
+        func press(_ keyCode: UInt16, _ arrow: Int, shift: Bool = false) throws {
+            let key = String(Character(try #require(Unicode.Scalar(UInt32(arrow)))))
+            let flags: NSEvent.ModifierFlags = shift ? [.option, .shift, .function, .numericPad] : [.option, .function, .numericPad]
+            editor.textView.keyDown(with: try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: 0, windowNumber: 0, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false,
+                keyCode: keyCode)))
+        }
+        let style = try #require(session.textDraft?.style)
+        try press(124, NSRightArrowFunctionKey)
+        #expect(session.textDraft?.style.tracking == style.tracking + 1)
+        try press(123, NSLeftArrowFunctionKey, shift: true)
+        #expect(session.textDraft?.style.tracking == style.tracking - 9)
+        try press(126, NSUpArrowFunctionKey, shift: true)
+        #expect(session.textDraft?.style.leading == style.lineHeight - 10)
+        let leading = try #require(session.textDraft?.style.lineHeight)
+        try press(125, NSDownArrowFunctionKey)
+        #expect(session.textDraft?.style.leading == leading + 1)
+        #expect(session.textDraft?.style.content == "Editing")
+    }
 }
