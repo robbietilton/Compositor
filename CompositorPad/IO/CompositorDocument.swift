@@ -14,6 +14,19 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     private let readSnapshot = Mutex<ProjectSnapshot?>(nil)
     /// Why the last open or save failed, for saying so.
     private let lastError = Mutex<(any Error)?>(nil)
+    /// The saves over the file have failed since the last one that worked: only the first of them says why.
+    private let failing = Mutex(false)
+    /// Whether the save starting now says why it failed, through the editor. One made through `saveNow` leaves that to
+    /// its caller.
+    private let saysFailure = Mutex(true)
+    /// Saving nothing more: what the project hasn't saved is let go as it closes.
+    private let discarding = Mutex(false)
+    /// Changes made elsewhere waiting to go in, or being read: saves wait while there are any, so neither version is
+    /// lost before it's settled. Should iPadOS end the app meanwhile, what the editor hasn't saved is lost; the other
+    /// version is kept.
+    private let holds = Mutex(0)
+    /// The last save was refused for a change made elsewhere on its way in.
+    private let heldSave = Mutex(false)
     /// The project's images as its package holds them, so a save encodes only what changed.
     let encoded = EncodedImages()
     /// A URL from the Files app is the app's to use only between these calls; `open` starts, `closeDocument` stops.
@@ -82,8 +95,12 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
         return document
     }
 
-    /// Saves what hasn't been, and lets go of the file.
+    /// Saves what hasn't been, and lets go of the file. A change made elsewhere still waiting to go in is kept out, as
+    /// Keep Mine keeps it, and what the editor has is saved over it.
     @MainActor func closeDocument() async {
+        isClosing = true
+        answerChangeOnDisk(revert: false)
+        holds.withLock { $0 = 0 }
         // An edit made in this turn of the main actor, which hasn't marked the document changed yet, is saved too.
         if session.history.isModified { updateChangeCount(.done) }
         _ = await close()
@@ -103,6 +120,7 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     override func read(from url: URL) throws {
         let snapshot = try ProjectStore.readPackage(url, encoded: encoded, progress: reading.withLock { $0 })
         readSnapshot.withLock { $0 = snapshot }
+        known.withLock { $0 = try? ProjectDigest.compute(for: url) }
     }
 
     override func handleError(_ error: any Error, userInteractionPermitted: Bool) {
@@ -112,14 +130,63 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     // MARK: Saving
 
-    /// Every save, asked for or UIDocument's own, from start to finish.
+    /// Saves now, as Save asks. Throws why it couldn't, for the caller to say: the document doesn't say it too. A change
+    /// made elsewhere on its way in is settled first: checked, and asked about if it has to be.
+    @MainActor func saveNow() async throws {
+        while true {
+            await settleChange()
+            saysFailure.withLock { $0 = false }
+            heldSave.withLock { $0 = false }
+            if await save(to: fileURL, for: .forOverwriting) { return }
+            // Refused for a change noticed just now, which is settled first in turn.
+            guard heldSave.withLock({ $0 }) else {
+                throw lastError.withLock { $0 } ?? CocoaError(.fileWriteUnknown)
+            }
+        }
+    }
+
+    /// Waits for every change made elsewhere on its way in to be settled: checked, and asked about if it has to be.
+    @MainActor func settleChange() async {
+        while changeWaits {
+            _ = await takingUp?.value
+            // One just noticed is on its way to the main actor.
+            await Task.yield()
+        }
+    }
+
+    /// Every save, asked for or UIDocument's own, from start to finish. One over the file that fails says why, through
+    /// the editor, as every failed save does on the Mac; but only the first of a run of them, as UIDocument tries again
+    /// on its own while there's something to save, until one works. A new project's first save is said by whoever made it.
     override func save(to url: URL, for saveOperation: UIDocument.SaveOperation, completionHandler: (@Sendable (Bool) -> Void)? = nil) {
+        let says = saysFailure.withLock { says in defer { says = true }; return says }
+        // Nothing left to save, as far as the person is concerned.
+        guard !discarding.withLock({ $0 }) else {
+            completionHandler?(true)
+            return
+        }
+        // Nothing is written over a change made elsewhere before it's settled.
+        guard holds.withLock({ $0 }) == 0 else {
+            heldSave.withLock { $0 = true }
+            completionHandler?(false)
+            return
+        }
         let saving = Timing.begin("Save project")
-        super.save(to: url, for: saveOperation) { success in
+        super.save(to: url, for: saveOperation) { [self] success in
             if success { Timing.end(saving) }
+            if saveOperation == .forOverwriting {
+                let first = failing.withLock { failing in defer { failing = !success }; return !failing }
+                if !success, first, says {
+                    // UIDocument has handled the error by now.
+                    let message = (lastError.withLock { $0 } ?? CocoaError(.fileWriteUnknown)).localizedDescription
+                    Task { @MainActor in session.saveError = message }
+                }
+            }
             completionHandler?(success)
         }
     }
+
+    /// Saves nothing from now on, as Don't Save asks: what the project hasn't saved is let go as it closes.
+    @MainActor func stopSaving() { discarding.withLock { $0 = true } }
 
     /// What a save writes: the document as its last finished edit left it, captured on the main queue. Edits carry on
     /// while it's written.
@@ -131,6 +198,13 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
         }
         Timing.end(capturing)
         return snapshot
+    }
+
+    /// The package, written where it goes: what it holds is what the document knows of it now.
+    override func writeContents(_ contents: Any, andAttributes additionalFileAttributes: [AnyHashable: Any]? = nil,
+                                safelyTo url: URL, for saveOperation: UIDocument.SaveOperation) throws {
+        try super.writeContents(contents, andAttributes: additionalFileAttributes, safelyTo: url, for: saveOperation)
+        known.withLock { $0 = try? ProjectDigest.compute(for: url) }
     }
 
     override func writeContents(_ contents: Any, to url: URL, for saveOperation: UIDocument.SaveOperation,
@@ -207,17 +281,133 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     }
 
     /// Something else wrote the package: the editor takes it up in place, keeping the view and the selected layers,
-    /// as the Mac's does.
+    /// as the Mac's does. Not in the middle of an edit, and not over unsaved work without asking.
     override func revert(toContentsOf url: URL, completionHandler: ((Bool) -> Void)? = nil) {
-        super.revert(toContentsOf: url) { [weak self] success in
-            Task { @MainActor [weak self] in
-                // Until the project is in the editor, the open takes up what was read itself.
-                if success, let self, self.session.projectURL != nil, let snapshot = self.takeReadSnapshot() {
-                    self.session.reloadProject(snapshot)
-                }
-                completionHandler?(success)
+        // Nothing is written over it from now until it's settled.
+        holds.withLock { $0 += 1 }
+        Task { @MainActor in
+            let success = await takeUpChange()
+            completionHandler?(success)
+        }
+    }
+
+    /// Something else changed the package. UIDocument reverts to it on its own only until the document first saves, so
+    /// the document checks too.
+    override func presentedItemDidChange() {
+        super.presentedItemDidChange()
+        revert(toContentsOf: fileURL, completionHandler: nil)
+    }
+
+    /// What the package held when the document last read or wrote it, or kept what the editor has over it. Only a
+    /// change to that counts, as on the Mac: a package that was only touched is left alone.
+    private let known = Mutex<ProjectDigest?>(nil)
+
+    /// What the package holds now, once UIDocument's own reading and writing is done; nil when it can't be told, as
+    /// for a package caught half written, which waits for the next change.
+    @MainActor private func packageOnDisk() async -> ProjectDigest? {
+        await withCheckedContinuation { continuation in
+            performAsynchronousFileAccess { [self] in
+                continuation.resume(returning: try? ProjectDigest.compute(for: fileURL))
             }
         }
+    }
+
+    /// Changes made elsewhere go in one at a time, each once the one before is settled.
+    @MainActor private var takingUp: Task<Bool, Never>?
+    /// A change made elsewhere is on its way in: being checked, waiting for an edit to end or for the answer to whether
+    /// to take it up, or being read.
+    var changeWaits: Bool { holds.withLock { $0 } > 0 }
+    /// The answer to whether to take up a change made elsewhere.
+    @MainActor private var answer: CheckedContinuation<Bool, Never>?
+    /// Closing: a change made elsewhere from now on is kept out.
+    @MainActor private var isClosing = false
+    /// Tests hold a change made elsewhere here: found to be one, and not yet read.
+    @MainActor var beforeReadingChange: (() async -> Void)?
+
+    /// Takes up the package, once the changes before it are settled and it can, unless it's kept out, and lets saves go
+    /// on. False only when the package didn't load; true when it was taken up, kept out, or there was nothing new.
+    @MainActor private func takeUpChange() async -> Bool {
+        let previous = takingUp
+        let current = Task { @MainActor in
+            _ = await previous?.value
+            defer { holds.withLock { $0 = max(0, $0 - 1) } }
+            return await takeUp()
+        }
+        takingUp = current
+        return await current.value
+    }
+
+    @MainActor private func takeUp() async -> Bool {
+        guard !isClosing else { return true }
+        // Only a real change counts.
+        guard let onDisk = await packageOnDisk(), onDisk != known.withLock({ $0 }) else { return true }
+        // Until the project is in the editor, the open takes up what's read itself.
+        let inEditor = session.projectURL != nil
+        if inEditor {
+            guard await waitsAndAsks(countingAsSeen: true) else { return true }
+            // The project is busy while it's read, as the Mac's is; an open is busy already.
+            session.isProjectBusy = true
+        }
+        await beforeReadingChange?()
+        let read = await readChange()
+        if inEditor { session.isProjectBusy = false }
+        guard let read else { return false }
+        // Until the project is in the editor, the open takes up what was read itself.
+        guard session.projectURL != nil else {
+            readSnapshot.withLock { $0 = read }
+            return true
+        }
+        // Read while the project opened, but too late for the open to take up: it goes in as any change made elsewhere
+        // does. What was read is what's asked about.
+        if !inEditor { guard await waitsAndAsks(countingAsSeen: false) else { return true } }
+        // The file holds this now, not text it was saved with.
+        fileHoldsDraft = false
+        session.reloadProject(read)
+        return true
+    }
+
+    /// Reads the package from wherever it is now, moved meanwhile or not, coordinated with other apps as UIDocument's
+    /// own reading is, once that's done. Not through UIDocument's revert, which closes a document whose package doesn't
+    /// load: one that doesn't is left alone, as on the Mac, and the next change is checked afresh.
+    @MainActor private func readChange() async -> ProjectSnapshot? {
+        await withCheckedContinuation { continuation in
+            performAsynchronousFileAccess { [self] in
+                var read: ProjectSnapshot?, coordinationError: NSError?
+                NSFileCoordinator(filePresenter: self).coordinate(readingItemAt: fileURL, options: [], error: &coordinationError) { url in
+                    guard let snapshot = try? ProjectStore.readPackage(url, encoded: encoded) else { return }
+                    read = snapshot
+                    known.withLock { $0 = try? ProjectDigest.compute(for: url) }
+                }
+                continuation.resume(returning: read)
+            }
+        }
+    }
+
+    /// Waits for an edit under way to end, as the Mac's watch does, and with unsaved work asks whether to take the change
+    /// up. False when it's kept out, or the document closes meanwhile. Keep Mine counts the version asked about as seen,
+    /// as the Mac's watch does, so the next save writes over it; `countingAsSeen` is off when what was read already is.
+    @MainActor private func waitsAndAsks(countingAsSeen counts: Bool) async -> Bool {
+        // Checked again four times a second; the Mac's watch backs off instead, as its check reads the package. A
+        // stroke ending, or the project no longer being busy, isn't something the editor announces.
+        while session.hasEditInProgress, !isClosing {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        guard !isClosing else { return false }
+        guard session.isModified else { return true }
+        let asked = counts ? await packageOnDisk() : nil
+        guard !isClosing else { return false }
+        session.changedOnDisk = true
+        let reverts = await withCheckedContinuation { answer = $0 }
+        session.changedOnDisk = false
+        if !reverts, let asked { known.withLock { $0 = asked } }
+        return reverts
+    }
+
+    /// The answer to whether to take up a change made elsewhere: Revert takes it up, letting go of the unsaved work;
+    /// Keep Mine keeps the work, and the next save writes it over the other version, as on the Mac.
+    @MainActor func answerChangeOnDisk(revert: Bool) {
+        answer?.resume(returning: revert)
+        answer = nil
     }
 
     // MARK: The file
@@ -260,10 +450,10 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     /// A copy of the package beside the app's own projects, named after this one.
     @MainActor func duplicate() async throws -> URL {
         let duplicating = Timing.begin("Duplicate project")
+        // Saved first, so the copy has everything the editor holds; then copied from wherever it is by then.
+        try await saveNow()
         let destination = Self.unusedURL(named: localizedName + " copy")
         let source = fileURL
-        // Saved first, so the copy has everything the editor holds.
-        _ = await save(to: fileURL, for: .forOverwriting)
         let copying = Timing.begin("Copy package")
         try await Task.detached {
             var coordinationError: NSError?, copyError: Error?

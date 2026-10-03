@@ -203,8 +203,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tab.canvas.fingerPaints = input.fingerPaints
         // What the editor asks of whoever shows it: a Photoshop file's conversion report, a RAW file's development,
         // and the errors it runs into. Shown once the update is over.
-        if session.showsConversionSheet || session.showsRawDevelop || session.importError != nil
-            || session.brushError != nil || session.cropError != nil || session.selectionAmountOperation != nil {
+        if session.showsConversionSheet || session.showsRawDevelop || session.importError != nil || session.brushError != nil
+            || session.cropError != nil || session.saveError != nil || session.changedOnDisk || session.selectionAmountOperation != nil {
             DispatchQueue.main.async { [weak self] in self?.presentEditorRequests(for: tab) }
         }
         if session.adjustmentEditingID != nil || session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
@@ -253,8 +253,21 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
 
     private func presentEditorRequests(for tab: EditorTab) {
-        guard tab.id == activeID, presentedViewController == nil else { return }
+        guard tab.id == activeID else { return }
         let session = tab.session
+        guard presentedViewController == nil else {
+            // A failed save or a change made elsewhere comes whenever it comes: it waits for what's over the window to
+            // go, checked twice a second.
+            if session.saveError != nil || (session.changedOnDisk && presentedViewController !== changeQuestion),
+               !rechecksRequests {
+                rechecksRequests = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.rechecksRequests = false
+                    self?.setNeedsUpdateProperties()
+                }
+            }
+            return
+        }
         if session.showsConversionSheet {
             presentSheet(PSDConversionController(session: session))
         } else if session.showsRawDevelop, let develop = session.rawDevelop {
@@ -268,10 +281,34 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         } else if let message = session.cropError {
             session.cropError = nil
             showMessage("Couldn’t crop", message)
+        } else if let message = session.saveError {
+            session.saveError = nil
+            showMessage("Couldn’t save the project", message)
+        } else if session.changedOnDisk, let document = tab.document {
+            askAboutChange(to: tab, document: document)
         } else if let operation = session.selectionAmountOperation {
             askSelectionAmount(operation, for: session)
         }
     }
+
+    /// Something else changed the project's file while it has unsaved work: the Mac's question, whether to take that
+    /// version up. Return reverts, as the Mac's default button does, and Escape keeps what the editor has.
+    private func askAboutChange(to tab: EditorTab, document: CompositorDocument) {
+        let alert = UIAlertController(title: "“\(tab.url?.lastPathComponent ?? "Untitled")” was changed on disk.",
+                                      message: "Another app changed this project. You can revert to the version on disk, losing your unsaved changes, or keep what you have.",
+                                      preferredStyle: .alert)
+        let revert = UIAlertAction(title: "Revert", style: .destructive) { _ in document.answerChangeOnDisk(revert: true) }
+        alert.addAction(revert)
+        alert.addAction(UIAlertAction(title: "Keep Mine", style: .cancel) { _ in document.answerChangeOnDisk(revert: false) })
+        alert.preferredAction = revert
+        changeQuestion = alert
+        present(alert, animated: true)
+    }
+
+    /// The question a change made elsewhere asks, while it's shown.
+    private weak var changeQuestion: UIAlertController?
+    /// A check for what the editor asks is due, once what's over the window may have gone.
+    private var rechecksRequests = false
 
     /// Expand, Contract or Feather from the Select menu asks by how many pixels, as the Mac's sheet does.
     private func askSelectionAmount(_ operation: EditorSession.SelectionAmountOperation, for session: EditorSession) {
@@ -318,11 +355,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         becomeFirstResponder()
     }
 
-    /// Saves and closes the tab's project, keeping what's in progress as the Mac's Quit does. The last tab is replaced
-    /// by an empty one, as on the Mac.
+    /// Saves and closes the tab's project, keeping what's in progress as the Mac's Quit does. A project that can't be
+    /// saved keeps its tab, which says why, as the Mac's close does when its Save fails. The last tab is replaced by an
+    /// empty one, as on the Mac.
     func close(_ id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let tab = tabs[index]
+        guard let tab = tabs.first(where: { $0.id == id }), !closing.contains(id) else { return }
+        // A change made elsewhere is asked about first, as the Mac's question keeps its window open.
+        if tab.session.changedOnDisk {
+            select(id)
+            return
+        }
         // Text that can't be drawn keeps the tab, as it keeps the Mac from quitting.
         guard tab.session.finishText() else { return }
         // Its dialog, which holds the project, ends as its Cancel would.
@@ -333,11 +375,59 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         if let editor = presentedViewController as? AdjustmentEditorController, editor.session === tab.session {
             editor.dismiss(animated: true)
         }
+        guard let document = tab.document else {
+            remove(tab)
+            return
+        }
+        closing.insert(id)
+        Task {
+            defer { closing.remove(id) }
+            await tab.settle()
+            // A change made elsewhere is settled first, in front, where its question shows: taken up, there may be
+            // nothing left to save.
+            if document.changeWaits, tabs.contains(where: { $0 === tab }) { select(id) }
+            await document.settleChange()
+            if tab.session.isModified || document.hasUnsavedChanges {
+                do { try await document.saveNow() } catch {
+                    guard tabs.contains(where: { $0 === tab }) else { return }
+                    select(id)
+                    askToClose(tab, unsaved: error)
+                    return
+                }
+            }
+            remove(tab)
+        }
+    }
+
+    /// Tabs saving as they close.
+    private var closing: Set<UUID> = []
+
+    /// Takes the tab out of the window and closes its file.
+    private func remove(_ tab: EditorTab) {
+        guard let index = tabs.firstIndex(where: { $0 === tab }) else { return }
         tabs.remove(at: index)
         Task { await tab.close() }
         if tabs.isEmpty { addTab() }
-        else if activeID == id { select(tabs[min(index, tabs.count - 1)].id) }
+        else if activeID == tab.id { select(tabs[min(index, tabs.count - 1)].id) }
         else { setNeedsUpdateProperties() }
+    }
+
+    /// A tab's project couldn't be saved as it closed. It stays, unless what isn't saved is let go, as the Mac's close
+    /// asks.
+    private func askToClose(_ tab: EditorTab, unsaved error: any Error) {
+        let alert = UIAlertController(title: "Couldn’t save the project",
+                                      message: error.localizedDescription + " Your changes will be lost if you don’t save them.",
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Don’t Save", style: .destructive) { [weak self] _ in self?.closeWithoutSaving(tab.id) })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        (presentedViewController ?? self).present(alert, animated: true)
+    }
+
+    /// Closes the tab, letting go of what its project hasn't saved: Don't Save, once a save has failed as it closed.
+    func closeWithoutSaving(_ id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        tab.document?.stopSaving()
+        remove(tab)
     }
 
     private func tabMenu(_ id: UUID) -> UIMenu? {
@@ -574,13 +664,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         if let reference = sender.propertyList as? Data, let url = PadRecentProjects.resolve(reference) { open([url]) }
     }
 
-    /// Saves now, though the project saves itself as it changes; ⌘S is a habit worth keeping.
+    /// Saves now, though the project saves itself as it changes; ⌘S is a habit worth keeping. Each failure says why, as
+    /// on the Mac.
     @objc func saveProject(_ sender: Any?) {
         guard let tab = activeTab, let document = tab.document, beginSave(on: tab.session) else { return }
         saving = Task {
-            if !(await document.save(to: document.fileURL, for: .forOverwriting)) {
-                showMessage("Couldn’t save the project", "It will be saved again when it next changes.")
-            }
+            do { try await document.saveNow() }
+            catch { tab.session.saveError = error.localizedDescription }
         }
     }
 
@@ -709,7 +799,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                 let raster = try await ImageExporter.shared.render(snapshot)
                 // Another export's share sheet may have opened meanwhile, or the tab closed.
                 guard let self, self.presentedViewController == nil, self.tabs.contains(where: { $0 === tab }),
-                      !tab.isClosed else {
+                      !self.closing.contains(tab.id), !tab.isClosed else {
                     session.isProjectBusy = false
                     return
                 }
@@ -841,7 +931,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let session = activeTab?.session
         if presentedViewController != nil, Self.canvasKeys.contains(action) { return false }
         switch action {
-        case #selector(saveProject(_:)), #selector(duplicateProject(_:)): return hasFile && session?.canStartProjectOperation == true
+        case #selector(saveProject(_:)), #selector(duplicateProject(_:)):
+            return hasFile && session?.canStartProjectOperation == true && session?.changedOnDisk == false
         case #selector(renameProject(_:)): return hasFile
         case #selector(exportPNG(_:)), #selector(exportJPEG(_:)), #selector(canvasSize(_:)), #selector(imageSize(_:)):
             return hasDocument && session?.canStartProjectOperation == true && presentedViewController == nil
