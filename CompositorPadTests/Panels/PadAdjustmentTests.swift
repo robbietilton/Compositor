@@ -256,4 +256,205 @@ import UIKit
         session.cancelLevels()
         try await eventually { controller.presentedViewController == nil }
     }
+
+    // MARK: Layout
+
+    /// The editor of `type` the window shows, once it shows it.
+    private func editor<T: AdjustmentEditorController>(_ type: T.Type, over controller: EditorWindowController) async throws -> T {
+        try await eventually { controller.presentedViewController is T }
+        let editor = try #require(controller.presentedViewController as? T)
+        editor.view.layoutIfNeeded()
+        return editor
+    }
+
+    /// The titles of the buttons in the row holding the one titled `title`, in order.
+    private func rowTitles(holding title: String, in editor: UIViewController) throws -> [String] {
+        let button = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == title }, "\(title)")
+        let row = try #require(button.superview as? UIStackView)
+        return row.arrangedSubviews.compactMap { ($0 as? UIButton)?.configuration?.title }
+    }
+
+    /// The titles of every button in `editor`.
+    private func buttonTitles(in editor: UIViewController) -> [String] {
+        views(UIButton.self, in: editor.view).compactMap { $0.configuration?.title }
+    }
+
+    /// Whether `editor` shows a label reading `text`, none of its own or its containers' hidden.
+    private func shows(_ text: String, in editor: UIViewController) -> Bool {
+        views(UILabel.self, in: editor.view).contains { label in
+            guard label.text == text else { return false }
+            var view: UIView? = label
+            while let current = view, current !== editor.view {
+                if current.isHidden { return false }
+                view = current.superview
+            }
+            return true
+        }
+    }
+
+    /// Each editor lays out as its Mac panel: its own controls, then Preview in the row the Mac gives it, then Cancel and
+    /// OK apart along the foot. Curves resets its curve among its own controls.
+    @Test func editorsLayOutAsTheMac() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        controller.levels(nil)
+        let levels = try await editor(LevelsEditorController.self, over: controller)
+        #expect(try rowTitles(holding: "Preview", in: levels) == ["Preview", "Reset"])
+        #expect(try rowTitles(holding: "OK", in: levels) == ["Cancel", "OK"])
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+
+        session.beginHueSaturation()
+        let hue = try await editor(HueSaturationEditorController.self, over: controller)
+        #expect(try rowTitles(holding: "Preview", in: hue) == ["Colorize", "Preview", "Reset"])
+        #expect(try rowTitles(holding: "OK", in: hue) == ["Cancel", "OK"])
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.curves(nil)
+        let curves = try await editor(CurvesEditorController.self, over: controller)
+        #expect(try rowTitles(holding: "Preview", in: curves) == ["Preview"])
+        #expect(try rowTitles(holding: "OK", in: curves) == ["Cancel", "OK"])
+        let titles = buttonTitles(in: curves)
+        #expect(titles.contains("Reset curve") && titles.contains("Remove point") && !titles.contains("Reset"))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Hue/Saturation and Curves say when the selection limits them, as the Mac's do, but not on an adjustment layer,
+    /// which a selection doesn't limit; Levels says which pixels its histogram reads instead.
+    @Test func editorsSayWhenTheSelectionLimitsThem() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.selectAll()
+        session.beginHueSaturation()
+        let hue = try await editor(HueSaturationEditorController.self, over: controller)
+        #expect(shows("Limited to the selection", in: hue))
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.curves(nil)
+        let curves = try await editor(CurvesEditorController.self, over: controller)
+        #expect(shows("Limited to the selection", in: curves))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.levels(nil)
+        let levels = try await editor(LevelsEditorController.self, over: controller)
+        #expect(!shows("Limited to the selection", in: levels))
+        #expect(shows("Original pixels · selection and alpha-weighted histogram", in: levels))
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+
+        session.addAdjustment(.hsv)
+        let layer = try await editor(HueSaturationEditorController.self, over: controller)
+        #expect(session.selection != nil && !shows("Limited to the selection", in: layer))
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// While OK applies the edit, Levels shows a spinner by it and Curves says "Applying…", as their Mac panels do, and
+    /// neither takes a touch meanwhile.
+    @Test func applyingShowsWhatTheMacShows() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        func spinning(_ editor: UIViewController) -> Bool {
+            views(UIActivityIndicatorView.self, in: editor.view).contains { $0.isAnimating && !$0.isHidden }
+        }
+        controller.levels(nil)
+        let levels = try await editor(LevelsEditorController.self, over: controller)
+        #expect(!spinning(levels))
+        session.levels?.committing = true
+        try await eventually { spinning(levels) }
+        #expect(spinning(levels) && !shows("Applying…", in: levels) && !levels.view.isUserInteractionEnabled)
+        session.levels?.committing = false
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.curves(nil)
+        let curves = try await editor(CurvesEditorController.self, over: controller)
+        #expect(!spinning(curves) && !shows("Applying…", in: curves))
+        session.filterEdit?.committing = true
+        try await eventually { shows("Applying…", in: curves) }
+        #expect(spinning(curves) && shows("Applying…", in: curves) && !curves.view.isUserInteractionEnabled)
+        session.filterEdit?.committing = false
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Whether the editor's button titled `title` has its own height, not squashed to fit.
+    private func keepsItsHeight(_ title: String, in editor: UIViewController) throws -> Bool {
+        let button = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == title })
+        return button.bounds.height >= button.intrinsicContentSize.height - 0.5
+    }
+
+    /// An editor given less room than it needs scrolls, its Cancel and OK still in view, as the keyboard or a short
+    /// window would otherwise push them off; its controls keep their size.
+    @Test func aTallEditorScrolls() throws {
+        let session = try session()
+        session.beginLevels()
+        let editor = LevelsEditorController(session: session)
+        editor.loadViewIfNeeded()
+        editor.view.frame = CGRect(x: 0, y: 0, width: 440, height: 1200)
+        editor.view.layoutIfNeeded()
+        let tall = editor.preferredContentSize.height
+        try #require(tall > 400)
+        editor.view.frame.size.height = 300
+        editor.view.layoutIfNeeded()
+        let scroll = try #require(views(UIScrollView.self, in: editor.view).first)
+        #expect(scroll.contentSize.height > scroll.bounds.height + 50)
+        let ok = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "OK" })
+        #expect(ok.convert(ok.bounds, to: editor.view).maxY <= 300)
+        #expect(try keepsItsHeight("Preview", in: editor) && keepsItsHeight("Reset", in: editor))
+        // A little short, too.
+        editor.view.frame.size.height = tall - 20
+        editor.view.layoutIfNeeded()
+        #expect(try keepsItsHeight("Preview", in: editor) && keepsItsHeight("Reset", in: editor))
+        #expect(scroll.contentSize.height > scroll.bounds.height)
+        #expect(editor.preferredContentSize.height == tall)
+        session.cancelLevels()
+    }
+
+    /// An editor that scrolls leaves a drag that starts on a curve or a Levels triangle to it, and doesn't hold the
+    /// touch back first; the editor still scrolls from anywhere else.
+    @Test func aScrollingEditorLeavesItsDragsToThem() throws {
+        let session = try session()
+        session.beginFilter(.curves)
+        let editor = CurvesEditorController(session: session)
+        editor.loadViewIfNeeded()
+        let scroll = try #require(views(UIScrollView.self, in: editor.view).first)
+        #expect(!scroll.delaysContentTouches)
+        #expect(!scroll.touchesShouldCancel(in: try #require(views(CurveView.self, in: editor.view).first)))
+        #expect(!scroll.touchesShouldCancel(in: LevelsHandlesView(count: 3)))
+        #expect(scroll.touchesShouldCancel(in: UIView()))
+        session.cancelFilter()
+    }
+
+    /// The room the popover keeps for its arrow, at the editor's top, counts in the editor's height, so the controls
+    /// don't scroll for it.
+    @Test func theArrowsRoomCounts() async throws {
+        let session = try session()
+        session.beginLevels()
+        let editor = LevelsEditorController(session: session)
+        editor.additionalSafeAreaInsets.top = 13
+        // In a window, where safe areas count.
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 440, height: 1200)
+        window.rootViewController = editor
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        editor.view.layoutIfNeeded()
+        try #require(editor.view.safeAreaInsets.top >= 13)
+        let tall = editor.preferredContentSize.height
+        window.frame.size.height = tall
+        try await Task.sleep(for: .milliseconds(100))
+        window.layoutIfNeeded()
+        editor.view.layoutIfNeeded()
+        try #require(editor.view.bounds.height == tall)
+        let scroll = try #require(views(UIScrollView.self, in: editor.view).first)
+        #expect(scroll.contentSize.height <= scroll.bounds.height + 0.5)
+        #expect(try keepsItsHeight("Preview", in: editor))
+        session.cancelLevels()
+    }
 }

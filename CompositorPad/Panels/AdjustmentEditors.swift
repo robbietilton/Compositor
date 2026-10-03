@@ -15,19 +15,29 @@ enum AdjustmentEditors {
     }
 }
 
-/// What the editors share: a title, their own controls, and Preview, Reset, Cancel and OK along the foot, as the Mac's
-/// panels have them. They stay open until OK or Cancel; the canvas behind them can still be moved and zoomed.
+/// What the editors share, laid out as the Mac's panels: a title, the editor's own controls, the row with Preview, notes
+/// under it, and Cancel and OK apart along the foot, under a line. The controls scroll when the editor is given less room
+/// than they need, as the keyboard or a short window gives it. Editors stay open until OK or Cancel; the canvas behind
+/// them can still be moved and zoomed.
 class AdjustmentEditorController: UIViewController {
     let session: EditorSession
     let content = UIStackView()
-    private let stack = UIStackView()
-    private let heading: String
+    /// Notes under the row with Preview, as each Mac panel has its own.
+    let notes = UIStackView()
+    private let titleLabel: UILabel
+    private let body = UIStackView()
+    private let scroll = EditorScrollView()
+    private let footer: UIStackView
     private let preview = OptionControls.checkbox("Preview") { _ in }
     private let ok = OptionControls.button("OK", prominent: true) {}
+    private let limited = OptionControls.caption("Limited to the selection", color: .secondaryLabel)
+    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let activityLabel = OptionControls.caption("", color: .secondaryLabel)
 
     init(session: EditorSession, title: String) {
         self.session = session
-        heading = title
+        titleLabel = OptionControls.title(title)
+        footer = OptionControls.row([], spacing: 10)
         super.init(nibName: nil, bundle: nil)
         isModalInPresentation = true
     }
@@ -42,6 +52,21 @@ class AdjustmentEditorController: UIViewController {
     func commit() {}
     /// Puts the edit's values into the controls; run on every update, so UIKit follows what it reads.
     func refresh() {}
+    /// The row with Preview, laid out as the editor's Mac panel lays it out, `reset` being its Reset.
+    func previewRow(preview: UIView, reset: UIView) -> [UIView] { [preview, UIView()] }
+    /// Whether the editor says when the selection limits it, as the Mac's filter and Hue/Saturation panels do. Never on
+    /// an adjustment layer, which a selection doesn't limit.
+    var notesSelection: Bool { true }
+
+    /// What OK waits on, shown beside it as the Mac's panels show it.
+    struct Activity {
+        /// What the editor says it's doing, or nil for a spinner alone, as Levels has.
+        var text: String?
+        /// Whether the editor takes nothing meanwhile, as while OK applies the edit.
+        var holds: Bool
+    }
+    /// What the editor is doing that OK waits on, if anything.
+    var activity: Activity? { nil }
 
     /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
     /// window passes it on otherwise. Return there is the field's, which Hue/Saturation's take as OK, as on the Mac.
@@ -53,36 +78,80 @@ class AdjustmentEditorController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .secondarySystemBackground
-        let title = OptionControls.title(heading)
         content.axis = .vertical
         content.spacing = 14
+        notes.axis = .vertical
+        notes.spacing = 6
+        limited.numberOfLines = 0
+        notes.addArrangedSubview(limited)
         preview.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             self.setPreview(!self.previews)
         }, for: .primaryActionTriggered)
         let reset = OptionControls.button("Reset") { [weak self] in self?.reset() }
+        let row = OptionControls.row(previewRow(preview: preview, reset: reset), spacing: 18)
+        for view in [content, row, notes] { body.addArrangedSubview(view) }
+        body.axis = .vertical
+        body.spacing = 14
+        body.setCustomSpacing(18, after: content)
+        scroll.addSubview(body)
+
         let cancel = OptionControls.button("Cancel") { [weak self] in self?.cancel() }
         ok.addAction(UIAction { [weak self] _ in self?.commit() }, for: .primaryActionTriggered)
-        let footer = OptionControls.row([preview, reset, UIView(), cancel, ok], spacing: 10)
-        for view in [title, content, footer] { stack.addArrangedSubview(view) }
-        stack.axis = .vertical
-        stack.spacing = 18
-        view.addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        spinner.hidesWhenStopped = true
+        for view in [cancel, UIView(), spinner, activityLabel, ok] { footer.addArrangedSubview(view) }
+        let line = UIView()
+        line.backgroundColor = .separator
+
+        for view in [titleLabel, scroll, line, footer] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            self.view.addSubview(view)
+        }
+        body.translatesAutoresizingMaskIntoConstraints = false
+        let guide = view.safeAreaLayoutGuide
+        // As tall as the controls when there's room; less, scrolling, when there isn't: below the controls' own resistance
+        // to being squashed, so they scroll rather than shrink.
+        let fits = scroll.heightAnchor.constraint(equalTo: body.heightAnchor)
+        fits.priority = .defaultLow
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18),
-            stack.widthAnchor.constraint(equalToConstant: 400),
+            titleLabel.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            scroll.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 18),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            fits,
+            body.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            body.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            body.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            body.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
+            body.widthAnchor.constraint(equalToConstant: Self.width),
+            line.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 14),
+            line.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            line.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            line.heightAnchor.constraint(equalToConstant: 1 / max(1, traitCollection.displayScale)),
+            footer.topAnchor.constraint(equalTo: line.bottomAnchor, constant: 14),
+            footer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            footer.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            footer.bottomAnchor.constraint(lessThanOrEqualTo: guide.bottomAnchor, constant: -18),
         ])
     }
 
-    /// As tall as the controls, which change as the edit does: a range's own settings, say.
+    /// How wide the editor's controls are.
+    private static let width: CGFloat = 400
+
+    /// As tall as everything in it, which changes as the edit does: a range's own settings, say; and as the room the
+    /// popover keeps for its arrow, which it counts in the editor.
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let fitting = stack.systemLayoutSizeFitting(CGSize(width: 400, height: UIView.layoutFittingCompressedSize.height),
-                                                    withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
-        let size = CGSize(width: 440, height: ceil(fitting.height) + 36)
+        func height(_ view: UIView) -> CGFloat {
+            view.systemLayoutSizeFitting(CGSize(width: Self.width, height: UIView.layoutFittingCompressedSize.height),
+                                         withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+        }
+        let tall = view.safeAreaInsets.top + 18 + height(titleLabel) + 18 + height(body) + 14 + 1 + 14 + height(footer) + 18
+            + view.safeAreaInsets.bottom
+        let size = CGSize(width: Self.width + 40, height: ceil(tall))
         if preferredContentSize != size { preferredContentSize = size }
     }
 
@@ -90,11 +159,31 @@ class AdjustmentEditorController: UIViewController {
         super.updateProperties()
         guard isOpen else { return }
         preview.isSelected = previews
+        limited.isHidden = !(notesSelection && session.adjustmentOriginal == nil && session.selection != nil)
+        let activity = activity
+        if activity == nil { spinner.stopAnimating() } else { spinner.startAnimating() }
+        activityLabel.text = activity?.text
+        activityLabel.isHidden = activity?.text == nil
+        view.isUserInteractionEnabled = activity?.holds != true
         refresh()
     }
 }
 
 // MARK: Levels
+
+/// An editor's scrolling, which leaves a drag that starts on a curve or a Levels triangle to it, rather than taking it
+/// to scroll, and holds no touch back first; the editor still scrolls from anywhere else.
+private final class EditorScrollView: UIScrollView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delaysContentTouches = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        view is CurveView || view is LevelsHandlesView ? false : super.touchesShouldCancel(in: view)
+    }
+}
 
 final class LevelsEditorController: AdjustmentEditorController {
     private let channel = OptionControls.segments(LevelsChannel.allCases.map(\.rawValue)) { _ in }
@@ -141,6 +230,11 @@ final class LevelsEditorController: AdjustmentEditorController {
         let session = session
         Task { await session.commitLevels() }
     }
+    // Reset at the far end of Preview's row; a spinner alone while OK applies; the histogram's note in place of the
+    // selection's, as the Mac's Levels has them.
+    override func previewRow(preview: UIView, reset: UIView) -> [UIView] { [preview, UIView(), reset] }
+    override var notesSelection: Bool { false }
+    override var activity: Activity? { edit?.committing == true ? Activity(text: nil, holds: true) : nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -169,9 +263,10 @@ final class LevelsEditorController: AdjustmentEditorController {
         let gradient = GradientBar()
         let inputFields = OptionControls.row([black, UIView(), gamma, UIView(), white])
         let outputFields = OptionControls.row([outputBlack, UIView(), outputWhite])
-        for view in [channel, histogram, input, inputFields, gradient, output, outputFields, OptionControls.row([auto, UIView()]), note] as [UIView] {
+        for view in [channel, histogram, input, inputFields, gradient, output, outputFields, OptionControls.row([auto, UIView()])] as [UIView] {
             content.addArrangedSubview(view)
         }
+        notes.addArrangedSubview(note)
         content.setCustomSpacing(0, after: histogram)
         content.setCustomSpacing(0, after: gradient)
         note.numberOfLines = 0
@@ -206,7 +301,6 @@ final class LevelsEditorController: AdjustmentEditorController {
         auto.isEnabled = edit.histogramReady && !edit.committing
         note.text = session.adjustmentOriginal != nil ? "Underlying pixels · alpha-weighted histogram"
             : session.selection == nil ? "Original pixels · alpha-weighted histogram" : "Original pixels · selection and alpha-weighted histogram"
-        view.isUserInteractionEnabled = !edit.committing
     }
 }
 
@@ -359,7 +453,7 @@ final class CurvesEditorController: AdjustmentEditorController {
     private let channel = OptionControls.segments(LevelsChannel.allCases.map(\.rawValue)) { _ in }
     private let curve = CurveView()
     private let point = OptionControls.caption("", color: .secondaryLabel)
-    private let remove = OptionControls.button("Remove Point") {}
+    private let remove = OptionControls.button("Remove point") {}
 
     init(session: EditorSession) { super.init(session: session, title: "Curves") }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -386,6 +480,7 @@ final class CurvesEditorController: AdjustmentEditorController {
         let session = session
         Task { await session.commitFilter() }
     }
+    override var activity: Activity? { edit?.committing == true ? Activity(text: "Applying…", holds: true) : nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -403,7 +498,11 @@ final class CurvesEditorController: AdjustmentEditorController {
             self.update { $0.channels[$0.channel.index].remove(at: selected) }
         }, for: .primaryActionTriggered)
         let hint = OptionControls.caption("Tap to add a point. Drag to adjust.", color: .secondaryLabel)
-        for view in [channel, curve, hint, OptionControls.row([point, UIView(), remove])] as [UIView] { content.addArrangedSubview(view) }
+        // The channel's curve back to a line, among the curve's own controls, as on the Mac.
+        let reset = OptionControls.button("Reset curve") { [weak self] in self?.reset() }
+        for view in [channel, curve, hint, OptionControls.row([point, UIView(), remove]), OptionControls.row([reset, UIView()])] as [UIView] {
+            content.addArrangedSubview(view)
+        }
     }
 
     override func refresh() {
@@ -527,6 +626,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     override func setPreview(_ on: Bool) { session.updateHueSaturation(settings, preview: on) }
     override func reset() { update { $0 = $0.colorize ? .colorizeStart : HueSaturationSettings() } }
     override func cancel() { session.cancelHueSaturation() }
+    /// Colorize first in Preview's row, as on the Mac.
+    override func previewRow(preview: UIView, reset: UIView) -> [UIView] { [colorize, preview, reset, UIView()] }
     override func commit() {
         let session = session
         Task { await session.commitHueSaturation() }
@@ -546,8 +647,7 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         }, for: .primaryActionTriggered)
         sliders.axis = .vertical
         sliders.spacing = 12
-        for view in [OptionControls.row([range, UIView()]), sliders, OptionControls.row([invert, UIView()]),
-                     OptionControls.row([colorize, UIView()])] as [UIView] {
+        for view in [OptionControls.row([range, UIView()]), sliders, OptionControls.row([invert, UIView()])] as [UIView] {
             content.addArrangedSubview(view)
         }
     }
