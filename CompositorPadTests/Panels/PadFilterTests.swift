@@ -165,6 +165,50 @@ import UIKit
         }
     }
 
+    /// Whether every value `values` makes `row` show fits its field whole, as the Mac's filter fields show them.
+    private func showsWhole(_ row: SliderField, _ values: [Double]) throws -> [String] {
+        let field = try #require(views(UITextField.self, in: row).first)
+        let room = field.textRect(forBounds: field.bounds).width
+        return values.compactMap { value in
+            row.show(value)
+            let text = field.text ?? ""
+            let width = (text as NSString).size(withAttributes: [.font: field.font as Any]).width
+            return width <= room ? nil : "\(text) needs \(width), has \(room)"
+        }
+    }
+
+    /// Every row's field shows its values whole, however many digits and decimals they have: Exposure's Offset as
+    /// 0.0125.
+    @Test func everyFieldShowsItsValuesWhole() throws {
+        let session = EditorSession()
+        session.createDocument(width: 200, height: 100)
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Gray"))
+        func laidOut(_ editor: UIViewController) {
+            editor.loadViewIfNeeded()
+            editor.view.frame = CGRect(x: 0, y: 0, width: 480, height: 1400)
+            editor.updatePropertiesIfNeeded()
+            editor.view.layoutIfNeeded()
+        }
+        for (kind, rows) in FilterEditorController.rows {
+            session.beginFilter(kind)
+            guard session.filterEdit?.kind == kind else { continue }
+            let editor = FilterEditorController(session: session, kind: kind)
+            laidOut(editor)
+            for row in rows {
+                let field = try #require(views(SliderField.self, in: editor.view).first { views(UILabel.self, in: $0).first?.text == row.caption })
+                let step = pow(10, Double(row.decimals))
+                let between = ((row.range.lowerBound + (row.range.upperBound - row.range.lowerBound) * 0.3719) * step).rounded() / step
+                let negative = row.range.lowerBound < 0 ? [((row.range.lowerBound * 0.0371) * step).rounded() / step] : []
+                #expect(try showsWhole(field, [row.range.lowerBound, row.range.upperBound, between] + negative).isEmpty, "\(kind) \(row.caption)")
+            }
+            session.cancelFilter()
+        }
+    }
+
     /// Filter › Gaussian Blur… opens its editor, with the Mac's Radius row.
     @Test func gaussianBlurOpensFromTheFilterMenu() async throws {
         let (window, controller, session) = try await shownWindow()
@@ -291,5 +335,101 @@ import UIKit
             #expect(item.attributes.contains(.disabled) == !(AdjustmentEditors.kinds.contains(kind) || kind == .invert), "\(kind)")
         }
         _ = session
+    }
+
+    // MARK: The slider filters
+
+    /// The captions of the editor's slider rows, in order.
+    private func captions(of editor: UIViewController) -> [String] { rows(of: editor).compactMap(\.first) }
+
+    /// Each filter's rows are the Mac panel's, in its order.
+    @Test(arguments: [(FilterKind.motionBlur, ["Angle", "Distance"]), (.addNoise, ["Amount"]), (.exposure, ["Exposure", "Offset", "Gamma"]),
+                      (.grain, ["Amount", "Size", "Roughness"]), (.bloomGlow, ["Amount", "Radius"]),
+                      (.tonalContrast, ["Amount", "Shadows", "Midtones", "Highlights", "Radius"]), (.lensCorrection, ["Remove Distortion"])])
+    func rowsMatchTheMac(kind: FilterKind, captions expected: [String]) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        #expect(choose(filterCommand(kind), in: controller), "\(kind)")
+        let editor = try await filterEditor(over: controller)
+        #expect(editor.kind == kind)
+        #expect(captions(of: editor) == expected)
+        if kind == .lensCorrection {
+            #expect(views(UILabel.self, in: editor.view).contains { $0.text?.hasPrefix("Positive straightens lines that bow outward") == true })
+        }
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Add Noise's Distribution is Uniform or Gaussian, and Monochromatic a box to tick, as on the Mac.
+    @Test func addNoiseDistributionAndMonochromatic() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.addNoise), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let distribution = try #require(views(UISegmentedControl.self, in: editor.view).first)
+        #expect((0..<distribution.numberOfSegments).map { distribution.titleForSegment(at: $0) } == ["Uniform", "Gaussian"])
+        distribution.selectedSegmentIndex = 1
+        distribution.sendActions(for: .valueChanged)
+        #expect(session.filterEdit?.settings.gaussian == true)
+        let monochromatic = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Monochromatic" })
+        let was = session.filterEdit?.settings.monochromatic ?? false
+        monochromatic.isSelected.toggle()
+        monochromatic.sendActions(for: .primaryActionTriggered)
+        #expect(session.filterEdit?.settings.monochromatic == !was)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A filter set to do nothing closes on OK without a step to undo, as on the Mac.
+    @Test(arguments: [FilterKind.exposure, .lensCorrection, .bloomGlow, .tonalContrast, .grain])
+    func nothingToDoClosesWithoutAStep(kind: FilterKind) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let steps = session.history.undoCount
+        choose(filterCommand(kind), in: controller)
+        let editor = try await filterEditor(over: controller)
+        // Each to its value that does nothing, through the editor's own rows.
+        let nothing: [Int: Double] = switch kind {
+        case .exposure: [0: 0, 1: 0, 2: 1]
+        default: [0: 0]
+        }
+        let logarithmic = FilterEditorController.rows[kind]?.map(\.logarithmic) ?? []
+        for (index, value) in nothing { try slide(index, to: value, in: editor, logarithmic: logarithmic[index]) }
+        try press("\r", in: controller)
+        try await eventually { session.filterEdit == nil }
+        #expect(session.filterEdit == nil && session.history.undoCount == steps, "\(kind)")
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Motion Blur, Add Noise, Exposure and Grain layers open the same editor as their menu commands, and OK keeps what's
+    /// set as one step.
+    @Test(arguments: [AdjustmentKind.motionBlur, .addNoise, .exposure, .grain])
+    func adjustmentLayersAreEdited(kind: AdjustmentKind) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let new = UICommand(title: kind.rawValue, action: #selector(EditorWindowController.newAdjustmentLayer(_:)), propertyList: kind.rawValue)
+        #expect(choose(new, in: controller), "\(kind)")
+        let id = try #require(session.activeLayerID)
+        let editor = try await filterEditor(over: controller)
+        #expect(editor.kind == kind.filterKind)
+        let row = try #require(FilterEditorController.rows[editor.kind]?.first)
+        // Three tenths of the way along, which no row starts at.
+        let step = pow(10, Double(row.decimals))
+        let along = row.logarithmic ? row.range.lowerBound * pow(row.range.upperBound / row.range.lowerBound, 0.3)
+            : row.range.lowerBound + (row.range.upperBound - row.range.lowerBound) * 0.3
+        let value = (along * step).rounded() / step
+        try #require(value != FilterSettings()[keyPath: row.key])
+        try slide(0, to: value, in: editor, logarithmic: row.logarithmic)
+        try press("\r", in: controller)
+        try await eventually { session.adjustmentEditingID == nil && session.filterEdit == nil }
+        #expect(session.history.undoName == "Edit \(kind.rawValue) Adjustment")
+        try await eventually { controller.presentedViewController == nil }
+        // The layer keeps it: opened again, the editor starts from it.
+        session.adjustmentEditingID = id
+        try await eventually { session.filterEdit != nil }
+        let kept = try #require(session.filterEdit?.settings[keyPath: row.key])
+        #expect(abs(kept - value) < 0.5 / step, "\(kind) \(row.caption): \(kept), not \(value)")
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
     }
 }

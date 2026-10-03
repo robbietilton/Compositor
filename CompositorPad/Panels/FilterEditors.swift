@@ -15,17 +15,70 @@ final class FilterEditorController: AdjustmentEditorController {
         let logarithmic: Bool
     }
 
+    /// What the Mac's filter panel puts in a filter's editor, in order.
+    enum Control {
+        case slider(Row)
+        /// A choice of two, `titles` for false and true, as segments captioned `caption`.
+        case choice(caption: String, titles: [String], key: WritableKeyPath<FilterSettings, Bool>)
+        case checkbox(String, WritableKeyPath<FilterSettings, Bool>)
+        /// A line saying what the filter does.
+        case note(String)
+    }
+
+    /// Each kind's controls, as the Mac's filter panel (FilterSheet) lays them out, with its ranges, units and decimals.
+    static let controls: [FilterKind: [Control]] = [
+        .gaussianBlur: [.slider(Row(caption: "Radius", key: \.radius, range: 0.1...250, unit: "px", decimals: 1, logarithmic: true))],
+        .motionBlur: [
+            .slider(Row(caption: "Angle", key: \.angle, range: -90...90, unit: "°", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Distance", key: \.distance, range: 1...2000, unit: "px", decimals: 0, logarithmic: true)),
+        ],
+        .addNoise: [
+            .slider(Row(caption: "Amount", key: \.amount, range: 0.1...400, unit: "%", decimals: 1, logarithmic: true)),
+            .choice(caption: "Distribution", titles: ["Uniform", "Gaussian"], key: \.gaussian),
+            .checkbox("Monochromatic", \.monochromatic),
+        ],
+        .exposure: [
+            .slider(Row(caption: "Exposure", key: \.exposure.exposure, range: ExposureSettings.exposureRange, unit: nil, decimals: 2,
+                        logarithmic: false)),
+            .slider(Row(caption: "Offset", key: \.exposure.offset, range: ExposureSettings.offsetRange, unit: nil, decimals: 4, logarithmic: false)),
+            .slider(Row(caption: "Gamma", key: \.exposure.gamma, range: ExposureSettings.gammaRange, unit: nil, decimals: 2, logarithmic: true)),
+        ],
+        .grain: [
+            .slider(Row(caption: "Amount", key: \.grain.amount, range: GrainSettings.amountRange, unit: nil, decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Size", key: \.grain.size, range: GrainSettings.sizeRange, unit: "px", decimals: 1, logarithmic: true)),
+            .slider(Row(caption: "Roughness", key: \.grain.roughness, range: GrainSettings.roughnessRange, unit: nil, decimals: 0,
+                        logarithmic: false)),
+        ],
+        .bloomGlow: [
+            .slider(Row(caption: "Amount", key: \.bloomAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Radius", key: \.bloomRadius, range: 1...150, unit: "px", decimals: 0, logarithmic: true)),
+        ],
+        .tonalContrast: [
+            .slider(Row(caption: "Amount", key: \.tonalAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Shadows", key: \.tonalShadows, range: -100...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Midtones", key: \.tonalMidtones, range: -100...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Highlights", key: \.tonalHighlights, range: -100...100, unit: "%", decimals: 0, logarithmic: false)),
+            .slider(Row(caption: "Radius", key: \.tonalRadius, range: 1...100, unit: "px", decimals: 0, logarithmic: true)),
+        ],
+        .lensCorrection: [
+            .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
+            .note("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)."),
+        ],
+    ]
+
     /// The kinds the iPad has this editor for; the Filter and Image menus offer them, and New Adjustment Layer the
     /// adjustments among them.
-    static let kinds: Set<FilterKind> = [.gaussianBlur]
+    static let kinds = Set(controls.keys)
 
-    /// Each kind's rows, as the Mac's filter panel (FilterSheet) lays them out, with its ranges, units and decimals.
-    static let rows: [FilterKind: [Row]] = [
-        .gaussianBlur: [Row(caption: "Radius", key: \.radius, range: 0.1...250, unit: "px", decimals: 1, logarithmic: true)],
-    ]
+    /// Each kind's slider rows, in order.
+    static let rows: [FilterKind: [Row]] = controls.mapValues { controls in
+        controls.compactMap { if case .slider(let row) = $0 { row } else { nil } }
+    }
 
     let kind: FilterKind
     private var fields: [(row: Row, field: SliderField)] = []
+    /// Puts the edit's values into the controls other than sliders.
+    private var refreshers: [(FilterSettings) -> Void] = []
 
     init(session: EditorSession, kind: FilterKind) {
         self.kind = kind
@@ -62,14 +115,30 @@ final class FilterEditorController: AdjustmentEditorController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        for row in Self.rows[kind] ?? [] {
-            let step = pow(10, Double(row.decimals))
-            let field = SliderField(caption: row.caption, unit: row.unit, sliderRange: row.range, fieldRange: row.range,
-                                    sensitivity: 1 / step, logarithmic: row.logarithmic, decimals: row.decimals, sliderWidth: nil,
-                                    fieldWidth: NumberField.width(toShow: row.range, decimals: row.decimals))
-            field.onChange = { [weak self] value in self?.update { $0[keyPath: row.key] = value } }
-            fields.append((row, field))
-            content.addArrangedSubview(field)
+        for control in Self.controls[kind] ?? [] {
+            switch control {
+            case .slider(let row):
+                let step = pow(10, Double(row.decimals))
+                let field = SliderField(caption: row.caption, unit: row.unit, sliderRange: row.range, fieldRange: row.range,
+                                        sensitivity: 1 / step, logarithmic: row.logarithmic, decimals: row.decimals, sliderWidth: nil,
+                                        fieldWidth: NumberField.width(toShow: row.range, decimals: row.decimals))
+                field.onChange = { [weak self] value in self?.update { $0[keyPath: row.key] = value } }
+                fields.append((row, field))
+                content.addArrangedSubview(field)
+            case .choice(let caption, let titles, let key):
+                let segments = OptionControls.segments(titles) { [weak self] index in self?.update { $0[keyPath: key] = index == 1 } }
+                refreshers.append { segments.selectedSegmentIndex = $0[keyPath: key] ? 1 : 0 }
+                content.addArrangedSubview(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), segments, UIView()],
+                                                              spacing: 10))
+            case .checkbox(let title, let key):
+                let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
+                refreshers.append { box.isSelected = $0[keyPath: key] }
+                content.addArrangedSubview(OptionControls.row([box, UIView()]))
+            case .note(let text):
+                let note = OptionControls.caption(text, color: .secondaryLabel)
+                note.numberOfLines = 0
+                content.addArrangedSubview(note)
+            }
         }
         SliderField.alignCaptions(fields.map(\.field))
     }
@@ -77,5 +146,6 @@ final class FilterEditorController: AdjustmentEditorController {
     override func refresh() {
         guard let settings = edit?.settings else { return }
         for (row, field) in fields { field.show(settings[keyPath: row.key]) }
+        for refresh in refreshers { refresh(settings) }
     }
 }
