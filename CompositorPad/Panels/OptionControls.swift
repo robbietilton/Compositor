@@ -161,7 +161,7 @@ final class NumberField: UIView, UITextFieldDelegate {
         self.sensitivity = sensitivity
         self.format = format
         super.init(frame: .zero)
-        field.font = .monospacedDigitSystemFont(ofSize: 14, weight: .regular)
+        field.font = Self.font
         field.textAlignment = .right
         // A quiet well, as the Mac's rounded fields read against its dark bars.
         field.borderStyle = .none
@@ -196,6 +196,18 @@ final class NumberField: UIView, UITextFieldDelegate {
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private static let font = UIFont.monospacedDigitSystemFont(ofSize: 14, weight: .regular)
+
+    /// How wide a field must be to show any value of `range` with up to `decimals` decimals, as the Mac's filter fields
+    /// show them whole: the usual 50 points, or more for long values, such as Exposure's Offset, 0.0125.
+    static func width(toShow range: ClosedRange<Double>, decimals: Int) -> CGFloat {
+        let whole = max(1, String(Int(max(abs(range.lowerBound), abs(range.upperBound)))).count)
+        let widest = (range.lowerBound < 0 ? "-" : "") + String(repeating: "8", count: whole)
+            + (decimals > 0 ? "." + String(repeating: "8", count: decimals) : "")
+        // The text, the insets either side and a point for the caret.
+        return max(50, ceil((widest as NSString).size(withAttributes: [.font: font]).width) + 16 + 1)
+    }
 
     /// Shows `value`, unless it's being typed over.
     func show(_ value: Double) {
@@ -284,6 +296,17 @@ final class NumberField: UIView, UITextFieldDelegate {
     nonisolated static func upToTwoDecimals(_ value: Double) -> String {
         abs(value - value.rounded()) < 0.005 ? String(Int(value.rounded())) : String(format: "%.2f", value)
     }
+    /// As many decimals as a value needs, up to `decimals`, as the Mac's filter fields show them.
+    nonisolated static func upTo(_ decimals: Int) -> (Double) -> String {
+        { value in
+            var text = String(format: "%.\(decimals)f", value)
+            if text.contains(".") {
+                while text.hasSuffix("0") { text.removeLast() }
+                if text.hasSuffix(".") { text.removeLast() }
+            }
+            return text == "-0" ? "0" : text
+        }
+    }
 }
 
 /// A caption to scrub, a slider and a field for the same value, as the Mac's brush settings have them.
@@ -304,9 +327,14 @@ final class SliderField: UIView {
     }
 
     private let slider = UISlider()
+    private let label: UILabel
     private let number: NumberField
     /// The slider's range in the value's own units; the field and the caption may reach past it (see Radius).
     private let sliderRange: ClosedRange<Double>
+    /// Whether the slider gives the small values most of its travel, as the Mac's logarithmic sliders do.
+    private let logarithmic: Bool
+    /// How many decimals the slider sets values to, as the Mac's filter rows round them; nil for any.
+    private let decimals: Int?
     private let fieldRange: ClosedRange<Double>
     /// What the field shows for a value: percentages show 0...1 as 0...100.
     private let fieldScale: Double
@@ -317,27 +345,32 @@ final class SliderField: UIView {
 
     /// `sliderWidth` fixes the slider's width, as in the tool options bar; without it the slider takes the room there
     /// is, as in the Layers panel.
+    /// `decimals` shows the field with as many decimals as a value needs, up to that many, in place of `format`.
+    /// `fieldWidth` is the field's; an editor's rows make it as wide as their values need (`NumberField.width`).
     init(caption: String, unit: String? = nil, sliderRange: ClosedRange<Double>, fieldRange: ClosedRange<Double>,
-         fieldScale: Double = 1, sensitivity: Double, sliderWidth: CGFloat? = 110,
-         format: @escaping (Double) -> String = NumberField.whole) {
+         fieldScale: Double = 1, sensitivity: Double, logarithmic: Bool = false, decimals: Int? = nil, sliderWidth: CGFloat? = 110,
+         fieldWidth: CGFloat = 50, format: @escaping (Double) -> String = NumberField.whole) {
         self.sliderRange = sliderRange
         self.fieldRange = fieldRange
         self.fieldScale = fieldScale
         self.sensitivity = sensitivity
-        number = NumberField(caption: nil, unit: unit, width: 50,
-                             range: fieldRange.lowerBound * fieldScale...fieldRange.upperBound * fieldScale, format: format)
+        self.logarithmic = logarithmic
+        self.decimals = decimals
+        number = NumberField(caption: nil, unit: unit, width: fieldWidth,
+                             range: fieldRange.lowerBound * fieldScale...fieldRange.upperBound * fieldScale,
+                             format: decimals.map(NumberField.upTo) ?? format)
+        label = OptionControls.caption(caption, color: .secondaryLabel)
         super.init(frame: .zero)
-        let label = OptionControls.caption(caption, color: .secondaryLabel)
         label.isUserInteractionEnabled = true
         label.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(scrubbed(_:))))
-        slider.minimumValue = Float(sliderRange.lowerBound)
-        slider.maximumValue = Float(sliderRange.upperBound)
+        slider.minimumValue = Float(sliderPosition(sliderRange.lowerBound))
+        slider.maximumValue = Float(sliderPosition(sliderRange.upperBound))
         slider.accessibilityLabel = caption
         if let sliderWidth { slider.widthAnchor.constraint(equalToConstant: sliderWidth).isActive = true }
         slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
         slider.addAction(UIAction { [weak self] _ in
             guard let self else { return }
-            self.onChange(Double(self.slider.value))
+            self.onChange(self.sliderValue(Double(self.slider.value)))
         }, for: .valueChanged)
         slider.addAction(UIAction { [weak self] _ in self?.onStart() }, for: .touchDown)
         slider.addAction(UIAction { [weak self] _ in self?.onFinish() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
@@ -357,8 +390,28 @@ final class SliderField: UIView {
 
     func show(_ value: Double) {
         self.value = value
-        if !slider.isTracking { slider.value = Float(min(sliderRange.upperBound, max(sliderRange.lowerBound, value))) }
+        if !slider.isTracking { slider.value = Float(sliderPosition(min(sliderRange.upperBound, max(sliderRange.lowerBound, value)))) }
         number.show(value * fieldScale)
+    }
+
+    /// Where the slider stands for `value`.
+    private func sliderPosition(_ value: Double) -> Double { logarithmic ? log(value) : value }
+    /// The value the slider sets standing at `position`, to the row's decimals.
+    private func sliderValue(_ position: Double) -> Double {
+        let value = logarithmic ? exp(position) : position
+        guard let decimals else { return value }
+        let step = pow(10, Double(decimals))
+        return (value * step).rounded() / step
+    }
+
+    /// Gives every row's caption the widest one's width, so their sliders start and end in the same place, as the
+    /// Mac's filter panel lines them up.
+    static func alignCaptions(_ rows: [SliderField]) {
+        let width = rows.map { ceil($0.label.intrinsicContentSize.width) }.max() ?? 0
+        for row in rows {
+            row.label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            row.label.widthAnchor.constraint(equalToConstant: width).isActive = true
+        }
     }
 
     var isEnabled: Bool {
@@ -374,12 +427,17 @@ final class SliderField: UIView {
             onStart()
         case .changed:
             guard let start = scrubStart else { return }
-            let next = min(fieldRange.upperBound, max(fieldRange.lowerBound, start + Double(gesture.translation(in: self).x) * sensitivity))
-            onChange(next)
+            onChange(scrubbed(from: start, by: gesture.translation(in: self).x))
         default:
             guard scrubStart != nil else { return }
             scrubStart = nil
             onFinish()
         }
+    }
+
+    /// The value a drag of `distance` points along the caption makes of `start`: evenly, at the row's sensitivity,
+    /// though the slider be logarithmic, as on the Mac.
+    func scrubbed(from start: Double, by distance: CGFloat) -> Double {
+        min(fieldRange.upperBound, max(fieldRange.lowerBound, start + Double(distance) * sensitivity))
     }
 }
