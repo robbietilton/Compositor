@@ -157,4 +157,24 @@ import UIKit
         input.ended(at: tap)
         #expect(abs(session.viewport.zoom - start) < 0.0001)
     }
+
+    /// Option let go while sampling ends the sample, as on the Mac: the color stays the one taken, and the rest of the
+    /// touch does nothing.
+    @Test func lettingOptionGoEndsTheSample() throws {
+        for letGo in [false, true] {
+            let session = try session(.brush, halves: true)
+            session.foregroundColor = .white
+            let input = PadCanvasInput(session: session)
+            var rings: [Bool] = []
+            input.sampleChanged = { rings.append($0 != nil) }
+            input.began(at: point(100, 150, in: session), keys: .alternate)
+            // Let go with the touch still, or as it moves on.
+            if letGo { input.keysChanged([]) }
+            input.moved(to: point(300, 150, in: session), keys: [])
+            input.ended(at: point(300, 150, in: session), keys: [])
+            #expect(session.foregroundColor == PaletteColor(red: 1, green: 0, blue: 0))
+            #expect(rings == [true, false])
+            #expect(session.brushStroke == nil)
+        }
+    }
 }

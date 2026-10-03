@@ -25,6 +25,8 @@ final class ToolOptionsBar: UIView {
     private var shownKey: Key?
     /// Puts the session's current values into the controls. Run on every update, so UIKit follows what they read.
     private var refreshers: [(EditorSession) -> Void] = []
+    /// The modifier keys held, which Auto Select and the aspect-ratio lock show turned the other way, as on the Mac.
+    var heldKeys: UIKeyModifierFlags = [] { didSet { if heldKeys != oldValue { setNeedsUpdateProperties() } } }
     /// Whether the bar being built has space of its own, which keeps what follows it at the bar's end.
     private var hasSpace = false
 
@@ -138,14 +140,21 @@ final class ToolOptionsBar: UIView {
 
     private func buildTransform() {
         let title = OptionControls.title("Transform")
-        let autoSelect = OptionControls.checkbox("Auto Select") { [weak self] in self?.session?.transformAutoSelect = $0 }
+        // Command flips Auto Select while it's held, and Shift the lock, and they show it flipped, as on the Mac.
+        let autoSelect = OptionControls.checkbox("Auto Select") { [weak self] in
+            guard let self else { return }
+            session?.transformAutoSelect = $0 != heldKeys.contains(.command)
+        }
         // Hidden, a drag anywhere moves the layer, with no handle in the way.
         let controls = OptionControls.checkbox("Show Controls") { [weak self] in self?.session?.showsTransformControls = $0 }
         let x = transformField("X") { $0.origin.x = $1 }
         let y = transformField("Y") { $0.origin.y = $1 }
         let width = transformField("W", range: 1...30_000) { [weak self] value, number in self?.resize(&value, to: number, width: true) }
         let height = transformField("H", range: 1...30_000) { [weak self] value, number in self?.resize(&value, to: number, width: false) }
-        let lock = OptionControls.checkbox("") { [weak self] in self?.session?.locksTransformRatio = $0 }
+        let lock = OptionControls.checkbox("") { [weak self] in
+            guard let self else { return }
+            session?.locksTransformRatio = $0 != heldKeys.contains(.shift)
+        }
         lock.configurationUpdateHandler = { button in
             button.configuration?.image = UIImage(systemName: "link")
             button.configuration?.baseForegroundColor = button.isSelected ? .tintColor : .secondaryLabel
@@ -183,11 +192,11 @@ final class ToolOptionsBar: UIView {
         refreshers.append { [weak self] session in
             guard let self else { return }
             title.text = session.transformTargetsMask ? "Transform Mask" : "Transform"
-            autoSelect.isSelected = session.transformAutoSelect
+            autoSelect.isSelected = session.transformAutoSelect != self.heldKeys.contains(.command)
             autoSelect.isEnabled = session.document != nil
             controls.isSelected = session.showsTransformControls
             controls.isEnabled = session.document != nil
-            lock.isSelected = session.locksTransformRatio
+            lock.isSelected = session.locksTransformRatio != self.heldKeys.contains(.shift)
             let value = self.shownTransform
             x.show(value.origin.x)
             y.show(value.origin.y)

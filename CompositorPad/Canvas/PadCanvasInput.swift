@@ -27,8 +27,9 @@ import UIKit
     private enum Drag {
         /// A brush stroke, kept straight while Shift is held, which last reached `last`, in document pixels.
         case paint(BrushAxisLock, last: CGPoint)
-        /// The Eyedropper taking colors, and the foreground color it replaced.
-        case sample(original: PaletteColor)
+        /// The Eyedropper taking colors, or a brush or the Gradient while Option is held, and the foreground color it
+        /// replaced.
+        case sample(original: PaletteColor, byOption: Bool)
         /// The Zoom tool, as on the Mac: a tap zooms in, a drag right or left zooms smoothly in or out.
         case zoom(start: CGPoint, zoom: CGFloat, moved: Bool)
         /// The Move tool: a handle or the layer, and whether its first step drags a copy (Option).
@@ -58,6 +59,8 @@ import UIKit
     private var squareArmed = false
     /// Where the last Clone Stamp stroke ended, in document pixels.
     private var cloneStrokeEnd: CGPoint?
+    /// Where the touch last was, in the canvas's coordinates, for a drag to follow keys held with the touch still.
+    private var lastPoint: CGPoint?
 
     init(session: EditorSession) {
         self.session = session
@@ -88,7 +91,7 @@ import UIKit
         // Option samples a color with the Brush, Spot Healing and the Gradient, as the Eyedropper does, as on the Mac.
         if session.tool == .eyedropper || (keys.contains(.alternate) && session.tool.samplesColorWithOption && session.brushStroke == nil) {
             let original = session.foregroundColor
-            drag = .sample(original: original)
+            drag = .sample(original: original, byOption: session.tool != .eyedropper)
             sample(at: point, pixel: pixel, original: original)
             return true
         }
@@ -178,6 +181,7 @@ import UIKit
 
     func moved(to point: CGPoint, keys: UIKeyModifierFlags = []) {
         guard let drag, let pixel = pixel(point) else { return }
+        lastPoint = point
         switch drag {
         case .paint(var axis, _):
             // Shift keeps the stroke straight, horizontal or vertical, from wherever it was pressed; letting go carries
@@ -185,7 +189,9 @@ import UIKit
             let pixel = axis.point(for: pixel, shift: keys.contains(.shift))
             session.continueBrush(at: pixel)
             self.drag = .paint(axis, last: pixel)
-        case .sample(let original):
+        case .sample(let original, let byOption):
+            // Option let go, the rest of the touch does nothing, as on the Mac.
+            if byOption, !keys.contains(.alternate) { stopSampling(); return }
             sample(at: point, pixel: pixel, original: original)
         case .zoom(let start, let zoom, var moved):
             let dx = point.x - start.x
@@ -262,13 +268,24 @@ import UIKit
         }
     }
 
+    /// The modifier keys held changing to `keys` with the touch still: a marquee or crop being dragged follows them at
+    /// once, as on the Mac.
+    func keysChanged(_ keys: UIKeyModifierFlags) {
+        if case .sample(_, true) = drag, !keys.contains(.alternate) { stopSampling(); return }
+        guard let point = lastPoint else { return }
+        switch drag {
+        case .outline where session.lassoDraft?.kind == .rectangle || session.lassoDraft?.kind == .ellipse: moved(to: point, keys: keys)
+        case .crop: moved(to: point, keys: keys)
+        default: break
+        }
+    }
     /// The touch lifting at `point`, after `tapCount` taps in quick succession.
     func ended(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) {
         defer { finish() }
         guard let drag else { return }
         switch drag {
         case .paint(var axis, _):
-            // The stroke ends on its line, where the Mac's runs on to where the mouse came up.
+            // With Shift held the stroke ends on its line too, not where the touch lifted.
             let pixel = pixel(point).map { axis.point(for: $0, shift: keys.contains(.shift)) }
             if let pixel { session.continueBrush(at: pixel) }
             session.finishBrushImmediately()
@@ -369,8 +386,15 @@ import UIKit
         }
     }
 
+    /// Ends a color sample taken with Option, which was let go: the ring goes, and the touch takes no more.
+    private func stopSampling() {
+        sampleChanged(nil)
+        finish()
+    }
+
     private func finish() {
         drag = nil
+        lastPoint = nil
         session.snapGuides = ([], [])
         overlayChanged()
     }

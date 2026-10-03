@@ -343,11 +343,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     func select(_ id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        // Keys held go with the canvas that had them: one let up after the switch never reaches this window.
+        releaseKeys()
         activeID = id
         canvasHost.subviews.forEach { $0.removeFromSuperview() }
         let canvas = tab.canvas
         canvas.fingerPaints = input.fingerPaints
         canvas.pencilSeen = { [weak self] in self?.pencilTurnedUp() }
+        canvas.keysSeen = { [weak self] in self?.holdKeys($0) }
         canvasHost.addSubview(canvas)
         canvas.frame = canvasHost.bounds
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1173,18 +1176,58 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     // Space held down moves the canvas under a touch, as on the Mac. It's no key command: those come when a key goes
     // down, not up. A field or the text being typed takes it as a space before it reaches here.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        heldKeysChange(presses, down: true, event: event)
         let space = presses.filter { $0.key?.keyCode == .keyboardSpacebar }
-        let rest = space.isEmpty || !holdSpace() ? presses : presses.subtracting(space)
+        if !space.isEmpty, holdSpace() { takenPresses.formUnion(space) }
+        let rest = presses.subtracting(takenPresses)
         if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        heldKeysChange(presses, down: false, event: event)
         if presses.contains(where: { $0.key?.keyCode == .keyboardSpacebar }) { releaseSpace() }
-        super.pressesEnded(presses, with: event)
+        let rest = presses.subtracting(takenPresses)
+        takenPresses.subtract(presses)
+        if !rest.isEmpty { super.pressesEnded(rest, with: event) }
     }
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if presses.contains(where: { $0.key?.keyCode == .keyboardSpacebar }) { releaseSpace() }
-        super.pressesCancelled(presses, with: event)
+        releaseKeys()
+        let rest = presses.subtracting(takenPresses)
+        takenPresses.subtract(presses)
+        if !rest.isEmpty { super.pressesCancelled(rest, with: event) }
     }
+    /// Presses the window kept from the responders above it, as Space held for the canvas: they don't hear its end
+    /// either.
+    private var takenPresses: Set<UIPress> = []
+    /// The modifier keys down, left and right apart, as presses reported them.
+    private var modifierKeysDown: Set<UIKeyboardHIDUsage> = []
+    /// The modifier keys among the keys `presses` put `down` or let up, and the ones the event says are held besides.
+    private func heldKeysChange(_ presses: Set<UIPress>, down: Bool, event: UIPressesEvent?) {
+        let codes = presses.compactMap { $0.key?.keyCode }
+        guard !codes.isEmpty || event != nil else { return }
+        holdKeys(Self.heldKeys(event?.modifierFlags ?? heldKeys, changing: codes, down: down, keysDown: &modifierKeysDown))
+    }
+    /// The modifier keys held once the keys `codes` go `down` or up, from the ones `flags` says are held and those in
+    /// `keysDown`, the modifier keys down so far, which it keeps: a key let up while the same one on the keyboard's
+    /// other side stays down leaves it held.
+    static func heldKeys(_ flags: UIKeyModifierFlags, changing codes: [UIKeyboardHIDUsage], down: Bool,
+                         keysDown: inout Set<UIKeyboardHIDUsage>) -> UIKeyModifierFlags {
+        var held = flags
+        for code in codes {
+            guard let flag = modifierKeys[code] else { continue }
+            if down {
+                keysDown.insert(code)
+                held.insert(flag)
+            } else {
+                keysDown.remove(code)
+                if keysDown.contains(where: { modifierKeys[$0] == flag }) { held.insert(flag) } else { held.remove(flag) }
+            }
+        }
+        return held
+    }
+    private static let modifierKeys: [UIKeyboardHIDUsage: UIKeyModifierFlags] = [
+        .keyboardLeftShift: .shift, .keyboardRightShift: .shift, .keyboardLeftAlt: .alternate, .keyboardRightAlt: .alternate,
+        .keyboardLeftControl: .control, .keyboardRightControl: .control, .keyboardLeftGUI: .command, .keyboardRightGUI: .command,
+    ]
     /// Holds Space down for the canvas in front, when it has the keyboard and no stroke is being drawn, which takes no
     /// key but Escape on the Mac; whether it did.
     func holdSpace() -> Bool {
@@ -1192,6 +1235,26 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
               tab.session.brushStroke == nil, tab.session.warpStroke == nil else { return false }
         tab.canvas.spaceHeld = true
         return true
+    }
+    /// The modifier keys held now, for what a held key changes at once, as on the Mac: Shift and Option show the
+    /// selection's mode, Command and Shift flip Auto Select and the aspect-ratio lock, Option shows Clone Stamp's
+    /// crosshair, and a marquee or crop being dragged follows them.
+    private(set) var heldKeys: UIKeyModifierFlags = []
+    /// Holds `flags` down, as the keyboard, a touch or the pointer reports them. Keys held while typing in a field or
+    /// the text don't count, as on the Mac: ⌘A there shouldn't flicker the options bar.
+    func holdKeys(_ flags: UIKeyModifierFlags) {
+        let held = isTyping ? [] : flags.intersection([.command, .shift, .alternate, .control])
+        guard held != heldKeys else { return }
+        heldKeys = held
+        optionsBar.heldKeys = held
+        activeTab?.session.updateHeldSelectionKeys(shift: held.contains(.shift), option: held.contains(.alternate))
+        activeTab?.canvas.keysChanged(held)
+    }
+    /// Lets go of every key held: they came up, or went with the keyboard or the app.
+    func releaseKeys() {
+        releaseSpace()
+        modifierKeysDown = []
+        holdKeys([])
     }
     /// Lets Space go: it came up, or went with the keyboard or the app.
     func releaseSpace() {
@@ -1204,7 +1267,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         if resigned {
             Task { @MainActor [weak self] in
                 guard let self, let tab = activeTab, !isFirstResponder, !tab.canvas.isFirstResponder else { return }
-                releaseSpace()
+                releaseKeys()
             }
         }
         return resigned

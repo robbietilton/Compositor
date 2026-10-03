@@ -247,8 +247,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func stateRestorationActivity(for scene: UIScene) -> NSUserActivity? { editor?.restorationActivity }
 
-    /// The switcher or another app taking the keyboard takes Space's coming up with it.
-    func sceneWillResignActive(_ scene: UIScene) { editor?.releaseSpace() }
+    /// The switcher or another app taking the keyboard takes the keys' coming up with it.
+    func sceneWillResignActive(_ scene: UIScene) { editor?.releaseKeys() }
     func sceneDidEnterBackground(_ scene: UIScene) { editor?.saveAll() }
 
     func sceneDidDisconnect(_ scene: UIScene) { editor?.closeAll() }

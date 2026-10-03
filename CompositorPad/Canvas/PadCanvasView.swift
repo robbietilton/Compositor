@@ -11,6 +11,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     var fingerPaints = true
     /// Apple Pencil touched the canvas, hovered over it, or was tapped or squeezed.
     var pencilSeen: () -> Void = {}
+    /// The modifier keys a touch or the pointer came with, which the window holds.
+    var keysSeen: (UIKeyModifierFlags) -> Void = { _ in }
     private let surface = MetalCanvasView(frame: .zero)
     private(set) lazy var overlayView = PadOverlayView(session: session)
     /// What touches do with the tools, all but the Hand, and with Clone Stamp's source.
@@ -245,8 +247,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// stamp. Holding Option, or setting the source, brings the crosshair back.
     func synchronizeBrushCursor() {
         let tool = session.tool
-        // Space held, the pointer moves the canvas, so it shows rather than the brush's circle.
-        let brushes = tool.isBrushTool && !spaceHeld
+        let brushes = showsBrush
         if pointerHidden != brushes {
             pointerHidden = brushes
             pointerInteraction.invalidate()
@@ -258,7 +259,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         let pointer = touchPointer ?? hoverPointer
         let brush = pointer.map { session.viewport.documentPoint(from: $0, documentSize: document.size) }
         let diameter = session.brushStroke?.settings.diameter ?? session.brushSettings.diameter
-        let picking = (touchPointer == nil ? hoverKeys : touchKeys).contains(.alternate) || input.isDraggingSource
+        let picking = heldKeys.contains(.alternate) || input.isDraggingSource
         let cloning = tool == .cloneStamp && session.cloneSource != nil && !picking
         var preview: CGImage?
         if cloning, session.brushStroke == nil, let brush, let offset = session.cloneStrokeOffset(at: brush) {
@@ -272,8 +273,17 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             tip: preview == nil ? nil : clonePreview.tip(diameter: diameter, hardness: session.brushSettings.hardness))
     }
 
+    /// The modifier keys held changing to `keys` with nothing moving: the brush cursor and a drag follow them at once,
+    /// as on the Mac.
+    func keysChanged(_ keys: UIKeyModifierFlags) {
+        if touchPointer != nil { touchKeys = keys } else { hoverKeys = keys }
+        synchronizeBrushCursor()
+        input.keysChanged(keys)
+        setNeedsRender()
+    }
     /// The pointer, or Apple Pencil, hovering at `point` with `keys` held, or gone from over the canvas.
     func hover(at point: CGPoint?, keys: UIKeyModifierFlags = []) {
+        if point != nil { keysSeen(keys) }
         hoverPointer = point
         hoverKeys = keys
         synchronizeBrushCursor()
@@ -291,7 +301,17 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// With a brush in hand the pointer hides over the canvas: the brush cursor's crosshair stands in for it, as the
     /// Mac's crosshair pointer does in the brush's circle.
     func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
-        session.tool.isBrushTool && !spaceHeld ? .hidden() : nil
+        showsBrush ? .hidden() : nil
+    }
+
+    /// The keys held with the touch, or with the pointer.
+    private var heldKeys: UIKeyModifierFlags { touchPointer == nil ? hoverKeys : touchKeys }
+    /// Whether the brush's circle shows rather than the pointer: with a brush in hand, unless Space is held, which moves
+    /// the canvas, or Option, with which the Brush, Spot Healing and the Gradient sample a color, as on the Mac.
+    private var showsBrush: Bool {
+        let tool = session.tool
+        return tool.isBrushTool && !spaceHeld
+            && !(heldKeys.contains(.alternate) && tool.samplesColorWithOption && session.brushStroke == nil)
     }
 
     // MARK: Touches
@@ -327,6 +347,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         let tool = session.tool
         let point = touch.location(in: self)
         let keys = event?.modifierFlags ?? []
+        keysSeen(keys)
         let adjusting = session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
         let paints = !Self.touchMovesCanvas(tool: tool, pencil: touch.type == .pencil, fingerPaints: fingerPaints, spaceHeld: spaceHeld,
                                             option: keys.contains(.alternate))
@@ -352,6 +373,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = activeTouch, touches.contains(touch), let drag else { return }
+        keysSeen(event?.modifierFlags ?? [])
         if touchPointer != nil { (touchPointer, touchKeys) = (touch.location(in: self), event?.modifierFlags ?? []) }
         switch drag {
         case .tool:
@@ -369,6 +391,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = activeTouch, touches.contains(touch) else { return }
+        keysSeen(event?.modifierFlags ?? [])
         finishDrag(at: touch, cancelled: false, keys: event?.modifierFlags ?? [])
     }
 
