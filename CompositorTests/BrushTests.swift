@@ -458,4 +458,76 @@ struct BrushTests {
         session.toggleLayerMask()
         #expect(!session.canPaint)
     }
+
+    /// A canvas showing `session` in a window, the document fitted to it.
+    private func canvas(for session: EditorSession) throws -> (view: CanvasView, window: NSWindow) {
+        let view = CanvasView(session: session)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.contentView = view
+        window.orderFrontRegardless()
+        session.viewport.resize(to: view.bounds.size, backingScale: 1, documentSize: try #require(session.document?.size))
+        return (view, window)
+    }
+    /// A mouse event of `type` over document pixel `pixel` on `canvas`, with Shift or without.
+    private func mouse(_ type: NSEvent.EventType, _ pixel: CGPoint, shift: Bool = false,
+                       on canvas: (view: CanvasView, window: NSWindow), _ session: EditorSession) throws -> NSEvent {
+        let point = session.viewport.viewPoint(from: pixel, documentSize: try #require(session.document?.size))
+        return try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: canvas.view.bounds.height - point.y),
+            modifierFlags: shift ? .shift : [], timestamp: 0, windowNumber: canvas.window.windowNumber, context: nil, eventNumber: 0,
+            clickCount: 1, pressure: 1))
+    }
+    /// Shift held from the press keeps the stroke on the axis its first few pixels go along, as in Photoshop.
+    @Test func shiftKeepsAStrokeStraight() async throws {
+        let session = makeSession(width: 200, height: 100)
+        session.brushSettings.diameter = 4
+        let canvas = try canvas(for: session)
+        defer { canvas.window.orderOut(nil) }
+        canvas.view.mouseDown(with: try mouse(.leftMouseDown, CGPoint(x: 20, y: 20), shift: true, on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 40, y: 30), shift: true, on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 60, y: 20), shift: true, on: canvas, session))
+        canvas.view.mouseUp(with: try mouse(.leftMouseUp, CGPoint(x: 60, y: 20), shift: true, on: canvas, session))
+        let result = try await render(session)
+        #expect(try pixel(result, x: 40, y: 20) == [255, 0, 0, 255])
+        #expect(try pixel(result, x: 40, y: 30)[3] == 0)
+        #expect(try pixel(result, x: 30, y: 25)[3] == 0)
+    }
+    /// Shift pressed mid-stroke locks it from where it had got to; let go, the stroke carries on freehand.
+    @Test func shiftMidStrokeLocksFromThereUntilLetGo() async throws {
+        let session = makeSession(width: 200, height: 100)
+        session.brushSettings.diameter = 4
+        let canvas = try canvas(for: session)
+        defer { canvas.window.orderOut(nil) }
+        canvas.view.mouseDown(with: try mouse(.leftMouseDown, CGPoint(x: 20, y: 60), on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 30, y: 60), on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 50, y: 70), shift: true, on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 70, y: 64), shift: true, on: canvas, session))
+        canvas.view.mouseDragged(with: try mouse(.leftMouseDragged, CGPoint(x: 70, y: 90), on: canvas, session))
+        canvas.view.mouseUp(with: try mouse(.leftMouseUp, CGPoint(x: 70, y: 90), on: canvas, session))
+        let result = try await render(session)
+        #expect(try pixel(result, x: 50, y: 60) == [255, 0, 0, 255])
+        #expect(try pixel(result, x: 50, y: 70)[3] == 0)
+        #expect(try pixel(result, x: 60, y: 64)[3] == 0)
+        #expect(try pixel(result, x: 70, y: 80) == [255, 0, 0, 255])
+    }
+    /// Shift settles the stroke's axis once it has gone 3 pixels from where Shift went down, along whichever way it went
+    /// further, and holds it still until then. Let go, the stroke is freehand again; pressed again, it locks afresh
+    /// from where the stroke had got to.
+    @Test func shiftSettlesTheAxisAfterThreePixels() {
+        var lock = BrushAxisLock(start: CGPoint(x: 10, y: 10), shift: true)
+        #expect(lock.point(for: CGPoint(x: 11, y: 11), shift: true) == CGPoint(x: 10, y: 10))
+        #expect(lock.point(for: CGPoint(x: 12, y: 15), shift: true) == CGPoint(x: 10, y: 15))
+        #expect(lock.point(for: CGPoint(x: 30, y: 20), shift: true) == CGPoint(x: 10, y: 20))
+        #expect(lock.point(for: CGPoint(x: 30, y: 25), shift: false) == CGPoint(x: 30, y: 25))
+        #expect(lock.point(for: CGPoint(x: 40, y: 26), shift: true) == CGPoint(x: 40, y: 25))
+
+        var free = BrushAxisLock(start: CGPoint(x: 10, y: 10), shift: false)
+        #expect(free.point(for: CGPoint(x: 20, y: 14), shift: false) == CGPoint(x: 20, y: 14))
+        #expect(free.point(for: CGPoint(x: 25, y: 16), shift: true) == CGPoint(x: 25, y: 14))
+    }
+    /// Option samples a color with the Brush, Spot Healing and Gradient, as in Photoshop; Clone Stamp's Option sets its
+    /// source, and Smear has none.
+    @Test func optionSamplesWithTheBrushSpotHealingAndGradient() {
+        #expect(NavigationTool.allCases.filter(\.samplesColorWithOption) == [.brush, .spotHealing, .gradient])
+    }
 }

@@ -55,13 +55,8 @@ final class CanvasView: NSView {
     private var lastDragPoint: CGPoint?
     /// Where a middle-button pan last was (see otherMouseDown).
     private var middlePanPoint: CGPoint?
-    /// Where Shift was last pressed in the stroke in progress (or where the stroke started, if it was held then):
-    /// the line the stroke is kept on while Shift stays down.
-    private var brushAxisAnchor: CGPoint?
-    /// The axis that line runs along, chosen by which way the stroke first moves once Shift is down.
-    private var brushAxisHorizontal: Bool?
-    /// Where the stroke last went, so pressing Shift mid-stroke locks from there rather than from its start.
-    private var brushLastPixel: CGPoint?
+    /// Shift keeping the stroke in progress straight.
+    private var brushAxis = BrushAxisLock()
     private var transformDrag: TransformDrag? {
         didSet { if transformDrag == nil { releaseDragCursor() } }
     }
@@ -79,7 +74,7 @@ final class CanvasView: NSView {
     private var displayedPicking = false
     private var displayedTargeting = false
     private var optionHeld = false
-    private var palettePicking: Bool { session.tool == .eyedropper || (optionHeld && (session.tool == .brush || session.tool == .spotHealing || session.tool == .gradient) && session.brushStroke == nil && gradientDrag == nil) }
+    private var palettePicking: Bool { session.tool == .eyedropper || (optionHeld && session.tool.samplesColorWithOption && session.brushStroke == nil && gradientDrag == nil) }
     private var picking: Bool {
         palettePicking || (session.colorPicker != nil && !session.pickingForDialog) || session.hueSampleMode != nil || session.levels?.sampleMode != nil
             || session.colorRange != nil
@@ -1659,9 +1654,7 @@ final class CanvasView: NSView {
             } else {
                 session.beginBrush(at: pixel)
             }
-            brushAxisAnchor = event.modifierFlags.contains(.shift) ? pixel : nil
-            brushAxisHorizontal = nil
-            brushLastPixel = pixel
+            brushAxis = BrushAxisLock(start: pixel, shift: event.modifierFlags.contains(.shift))
             synchronizeDisplay()
         } else if session.tool.isSelectionTool {
             lassoMouseDown(at: point, event: event)
@@ -1763,25 +1756,10 @@ final class CanvasView: NSView {
         brushPointer = point
         updateBrushCursor()
         if session.brushStroke != nil || session.warpStroke != nil, !session.isProjectBusy, let document = session.document {
-            var pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
             // Shift keeps the stroke straight, horizontal or vertical, from wherever it was pressed; letting go carries
-            // on freehand. The axis is settled by the first few pixels of movement, so it doesn't flip mid-line.
-            if event.modifierFlags.contains(.shift) {
-                let anchor = brushAxisAnchor ?? brushLastPixel ?? pixel
-                if brushAxisAnchor == nil { brushAxisAnchor = anchor; brushAxisHorizontal = nil }
-                if brushAxisHorizontal == nil, hypot(pixel.x - anchor.x, pixel.y - anchor.y) >= 3 {
-                    brushAxisHorizontal = abs(pixel.x - anchor.x) >= abs(pixel.y - anchor.y)
-                }
-                if let horizontal = brushAxisHorizontal {
-                    pixel = horizontal ? CGPoint(x: pixel.x, y: anchor.y) : CGPoint(x: anchor.x, y: pixel.y)
-                } else {
-                    pixel = anchor
-                }
-            } else {
-                brushAxisAnchor = nil
-                brushAxisHorizontal = nil
-            }
-            brushLastPixel = pixel
+            // on freehand.
+            let pixel = brushAxis.point(for: session.viewport.documentPoint(from: point, documentSize: document.size),
+                                        shift: event.modifierFlags.contains(.shift))
             session.continueBrush(at: pixel)
             synchronizeDisplay()
             return
