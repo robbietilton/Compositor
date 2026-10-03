@@ -280,17 +280,37 @@ final class PadTextEditor: UIView, UITextViewDelegate {
     }
 }
 
-/// The text view the editor types into. Escape puts the text back as it was and ⌘Return keeps it, as on the Mac.
+/// The text view the editor types into. Escape puts the text back as it was and ⌘Return keeps it, and Option with the
+/// arrows sets the spacing, as on the Mac.
 final class PadCanvasTextView: UITextView {
     weak var editor: PadTextEditor?
     /// Undo and Redo take back what was typed since the text opened, as the Mac's do, apart from the project's history.
     private let textUndo = UndoManager()
     override var undoManager: UndoManager? { textUndo }
 
-    override var keyCommands: [UIKeyCommand]? {
-        [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey(_:))),
-         UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(commandReturnKey(_:)))]
-    }
+    override var keyCommands: [UIKeyCommand]? { Self.commands }
+    private static let commands: [UIKeyCommand] = {
+        // Named as the Mac's Keyboard Shortcuts lists them.
+        let arrows = [("Decrease tracking", UIKeyCommand.inputLeftArrow), ("Increase tracking", UIKeyCommand.inputRightArrow),
+                      ("Decrease leading", UIKeyCommand.inputUpArrow), ("Increase leading", UIKeyCommand.inputDownArrow)]
+        // Before the text view's own Option-arrows, which move by word and paragraph, as the Mac's replace NSTextView's.
+        let spacing = [(UIKeyModifierFlags.alternate, ""), ([.alternate, .shift], " by 10")].flatMap { flags, step in
+            arrows.map { title, arrow in
+                let command = UIKeyCommand(title: title + step, action: #selector(optionArrowKey(_:)), input: arrow, modifierFlags: flags)
+                command.wantsPriorityOverSystemBehavior = true
+                return command
+            }
+        }
+        return [UIKeyCommand(title: "Cancel current canvas operation", action: #selector(escapeKey(_:)), input: UIKeyCommand.inputEscape),
+                UIKeyCommand(title: "Finish editing text", action: #selector(commandReturnKey(_:)), input: "\r", modifierFlags: .command)]
+            + spacing
+    }()
     @objc private func escapeKey(_ command: UIKeyCommand) { editor?.session.cancelText() }
     @objc private func commandReturnKey(_ command: UIKeyCommand) { _ = editor?.session.finishText() }
+    @objc private func optionArrowKey(_ command: UIKeyCommand) {
+        let arrows: [String: EditorSession.SpacingArrow] = [UIKeyCommand.inputLeftArrow: .left, UIKeyCommand.inputRightArrow: .right,
+                                                            UIKeyCommand.inputUpArrow: .up, UIKeyCommand.inputDownArrow: .down]
+        guard let input = command.input, let arrow = arrows[input] else { return }
+        editor?.session.stepTextSpacing(arrow, large: command.modifierFlags.contains(.shift))
+    }
 }

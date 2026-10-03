@@ -140,4 +140,39 @@ import UIKit
         }
         #expect(red > 500, "\(red) red pixels")
     }
+
+    /// Option with the arrows sets the spacing while typing, as on the Mac: left and right the tracking, up and down the
+    /// leading, counting from what Auto works out to, each a step of ten with Shift. They go before the text view's own
+    /// Option-arrows, which move by word.
+    @Test func optionArrowsSetTheSpacing() throws {
+        let session = try session()
+        session.beginText(at: CGPoint(x: 20, y: 20), newLayer: true)
+        session.textDraft?.style.content = "Spacing"
+        let editor = PadTextEditor(session: session)
+        editor.synchronize(try #require(session.textDraft))
+        func command(_ input: String, _ flags: UIKeyModifierFlags) throws -> UIKeyCommand {
+            try #require(editor.textView.keyCommands?.first { $0.input == input && $0.modifierFlags == flags })
+        }
+        func press(_ input: String, _ flags: UIKeyModifierFlags) throws {
+            let key = try command(input, flags)
+            #expect(key.wantsPriorityOverSystemBehavior)
+            #expect(key.title.hasSuffix(flags.contains(.shift) ? "by 10" : "ing"))
+            editor.textView.perform(key.action, with: key)
+        }
+        // Named as the Mac's Keyboard Shortcuts names them.
+        #expect(try command(UIKeyCommand.inputRightArrow, .alternate).title == "Increase tracking")
+        #expect(try command(UIKeyCommand.inputUpArrow, [.alternate, .shift]).title == "Decrease leading by 10")
+        #expect(try command("\r", .command).title == "Finish editing text")
+        let style = try #require(session.textDraft?.style)
+        try press(UIKeyCommand.inputRightArrow, .alternate)
+        #expect(session.textDraft?.style.tracking == style.tracking + 1)
+        try press(UIKeyCommand.inputLeftArrow, [.alternate, .shift])
+        #expect(session.textDraft?.style.tracking == style.tracking - 9)
+        try press(UIKeyCommand.inputUpArrow, [.alternate, .shift])
+        #expect(session.textDraft?.style.leading == style.lineHeight - 10)
+        let leading = try #require(session.textDraft?.style.lineHeight)
+        try press(UIKeyCommand.inputDownArrow, .alternate)
+        #expect(session.textDraft?.style.leading == leading + 1)
+        #expect(session.textDraft?.style.content == "Spacing")
+    }
 }
