@@ -970,10 +970,17 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         case #selector(levels(_:)), #selector(curves(_:)): return session.map { $0.canAdjustColors && $0.hueSaturation == nil } ?? false
         case #selector(hueSaturation(_:)): return session?.canAdjustColors ?? false
         case #selector(invertPixels(_:)): return session?.canInvert ?? false
-        case #selector(escapeKey(_:)), #selector(returnKey(_:)):
+        case #selector(escapeKey(_:)):
+            guard let session else { return false }
+            // A stroke takes Escape only, unless the project is busy; text and a box for it take it too, as on the Mac.
+            if session.brushStroke != nil || session.warpStroke != nil { return !session.isProjectBusy }
+            return activeTab?.canvas.input.textBox != nil || session.textDraft != nil || session.lassoDraft != nil
+                || session.shapeDraft != nil || session.gradientEdit != nil || (session.tool == .crop && session.cropRect != nil)
+                || session.transformEdit != nil
+        case #selector(returnKey(_:)):
             return session.map {
-                $0.lassoDraft != nil || $0.shapeDraft != nil || $0.gradientEdit != nil || ($0.tool == .crop && $0.cropRect != nil)
-                    || $0.transformEdit != nil
+                $0.brushStroke == nil && $0.warpStroke == nil
+                    && ($0.lassoDraft != nil || $0.gradientEdit != nil || ($0.tool == .crop && $0.cropRect != nil) || $0.transformEdit != nil)
             } ?? false
         case #selector(deleteKey(_:)): return hasDocument
         case #selector(arrowKey(_:)):
@@ -1043,7 +1050,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     // or a gradient, a crop, and a transform. The arrows move a step, or ten with Shift: with ⌘ the selected pixels, with a selection tool the
     // outline, and with the Move tool the layer.
     @objc private func escapeKey(_ command: UIKeyCommand) {
-        guard let session = activeTab?.session else { return }
+        guard let tab = activeTab else { return }
+        let session = tab.session, input = tab.canvas.input
+        if input.textBox != nil { input.endDrag(); return }
+        if session.textDraft != nil { session.cancelText(); return }
+        if session.brushStroke != nil || session.warpStroke != nil {
+            if !session.isProjectBusy { session.cancelBrush() }
+            return
+        }
+        // The finger still down draws no new frame or line, as on the Mac.
+        input.endDrag()
         if session.lassoDraft != nil { session.cancelLasso() }
         else if session.shapeDraft != nil { session.cancelShape() }
         else if session.gradientEdit != nil { session.cancelGradient() }
@@ -1051,7 +1067,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         else { session.cancelTransform() }
     }
     @objc private func returnKey(_ command: UIKeyCommand) {
-        guard let session = activeTab?.session else { return }
+        guard let tab = activeTab else { return }
+        let session = tab.session
+        tab.canvas.input.endDrag()
         if session.lassoDraft != nil { session.finishLasso() }
         else if session.gradientEdit != nil { Task { await session.commitGradient() } }
         else if session.tool == .crop, session.cropRect != nil { Task { await session.commitCrop() } }

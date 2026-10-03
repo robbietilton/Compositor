@@ -258,6 +258,17 @@ import UIKit
         }
     }
 
+    /// Lets go of a crop, gradient or transform drag, or a box for new text, without taking it back, as a key that
+    /// settles the edit does on the Mac: the touch still down moves nothing more.
+    func endDrag() {
+        switch drag {
+        case .crop, .gradient, .transform, .textBox:
+            textBox = nil
+            finish()
+        default: break
+        }
+    }
+
     /// The touch taken away, as by a second finger coming down to zoom: what it was doing is undone.
     func cancelled() {
         defer { finish() }
