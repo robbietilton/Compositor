@@ -279,39 +279,20 @@ extension EditorSession {
         guard canEditLayers else { textDraft = pending; return false }
         var succeeded = false
         defer { if !succeeded { textDraft = pending } }
-        if draft.layerID == nil, draft.style.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            succeeded = true
-            return true
+        // Text whose layer has gone stays open.
+        if let id = draft.layerID, document?.layers.first(where: { $0.id == id }).map({ $0.liveText != nil && $0.asset != nil }) != true {
+            return false
         }
         do {
-            let image = try Self.textImage(draft.style)
-            let text = LayerText(style: draft.style, image: image)
-            if let id = draft.layerID {
-                guard let index = document?.layers.firstIndex(where: { $0.id == id }),
-                      let layer = document?.layers[index], layer.liveText != nil, let asset = layer.asset else { return false }
-                if layer.liveText?.style == draft.style && (draft.transform == nil || draft.transform == layer.transform) { succeeded = true; return true }
-                let thumbnail = try PixelInvert.thumbnail(of: image)
-                var transform = draft.transform ?? layer.transform
-                // Keep the transformed upper-left corner and the user's scale, rotation and flips.
-                let anchor = transform.point(.zero)
-                if draft.transform == nil || draft.style.boxSize == nil {
-                    transform.size = CGSize(width: CGFloat(image.width) * transform.size.width / CGFloat(asset.image.width),
-                                            height: CGFloat(image.height) * transform.size.height / CGFloat(asset.image.height))
-                    let moved = transform.point(.zero)
-                    transform.origin.x += anchor.x - moved.x
-                    transform.origin.y += anchor.y - moved.y
-                }
-                guard transform.isValid else { throw ProjectError.tooLarge }
-                beginEdit("Edit Text")
-                if layer.mask?.placement == nil { document?.layers[index].mask?.placement = layer.maskTransform }
-                document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
-                document?.layers[index].text = text
-                document?.layers[index].transform = transform
-                endEdit()
-            } else {
-                addPixelLayer(image, at: draft.origin, name: Self.layerName(for: draft.style.content), editName: "New Text Layer",
-                              dropsSelection: false, text: text)
+            guard let applied = try applyingText(draft) else {
+                succeeded = true
+                return true
             }
+            finishOpacityEdit()
+            beginEdit(applied.name)
+            document = applied.document
+            if activeLayerID != applied.activeLayerID { activeLayerID = applied.activeLayerID }
+            endEdit()
             succeeded = true
             textDefaults = draft.style
             textDefaults.colorRuns = nil
@@ -323,6 +304,47 @@ extension EditorSession {
             brushError = error.localizedDescription
             return false
         }
+    }
+
+    /// The project as Done leaves it with `draft`: the document, the layer selected then, and the name of the step to
+    /// undo. Nil when Done changes nothing: new text with nothing typed, text as it was, or text that can't go in.
+    func applyingText(_ draft: TextDraft) throws -> (document: CanvasDocument, activeLayerID: UUID?, name: String)? {
+        guard var document, document.id == draft.documentID, draft.style.isValid else { return nil }
+        if draft.layerID == nil, draft.style.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+        let image = try Self.textImage(draft.style)
+        let text = LayerText(style: draft.style, image: image)
+        guard let id = draft.layerID else {
+            let name = Self.layerName(for: draft.style.content)
+            var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: try PixelInvert.thumbnail(of: image), name: name),
+                                   origin: draft.origin)
+            layer.name = name
+            layer.text = text
+            let place = newLayerPlace(in: document)
+            layer.parentID = place.parentID
+            document.layers.insert(layer, at: place.index)
+            return (document, layer.id, "New Text Layer")
+        }
+        guard let index = document.layers.firstIndex(where: { $0.id == id }) else { return nil }
+        let layer = document.layers[index]
+        guard layer.liveText != nil, let asset = layer.asset else { return nil }
+        if layer.liveText?.style == draft.style && (draft.transform == nil || draft.transform == layer.transform) { return nil }
+        let thumbnail = try PixelInvert.thumbnail(of: image)
+        var transform = draft.transform ?? layer.transform
+        // Keep the transformed upper-left corner and the user's scale, rotation and flips.
+        let anchor = transform.point(.zero)
+        if draft.transform == nil || draft.style.boxSize == nil {
+            transform.size = CGSize(width: CGFloat(image.width) * transform.size.width / CGFloat(asset.image.width),
+                                    height: CGFloat(image.height) * transform.size.height / CGFloat(asset.image.height))
+            let moved = transform.point(.zero)
+            transform.origin.x += anchor.x - moved.x
+            transform.origin.y += anchor.y - moved.y
+        }
+        guard transform.isValid else { throw ProjectError.tooLarge }
+        if layer.mask?.placement == nil { document.layers[index].mask?.placement = layer.maskTransform }
+        document.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
+        document.layers[index].text = text
+        document.layers[index].transform = transform
+        return (document, activeLayerID, "Edit Text")
     }
 
     @discardableResult

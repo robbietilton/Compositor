@@ -135,25 +135,9 @@ final class ProjectWorkspace {
         }
         return true
     }
-    /// Readies the project on screen for quitting or closing, rather than refusing over what's in progress. Edits on
-    /// the canvas (a gradient waiting for Apply, pixels being moved) are applied, as switching tools does; an open dialog
-    /// (a filter, Levels, Hue/Saturation, the color picker…) is cancelled, as its Cancel button would, so nothing is
-    /// applied that wasn't OK'd.
-    func settlePendingEdits() async {
-        let session = current.session
-        if session.gradientEdit != nil { await session.commitGradient() }
-        if session.pixelMove != nil { await session.finishPixelMove() }
-        session.cancelFilter()
-        session.cancelHueSaturation()
-        session.cancelLevels()
-        session.finishAdjustmentEditing(commit: false)
-        session.cancelColorRange()
-        session.selectionAmountOperation = nil
-        if session.colorPicker != nil { session.closeColorPicker(commit: false) }
-    }
     func confirmQuit() async -> Bool {
         guard !isManaging, finishTextEditing() else { return false }
-        await settlePendingEdits()
+        await current.session.settlePendingEdits()
         guard canSwitch else { NSSound.beep(); return false }
         isManaging = true; defer { isManaging = false }
         for tab in quitOrder {

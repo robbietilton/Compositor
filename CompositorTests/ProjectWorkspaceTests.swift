@@ -32,7 +32,7 @@ import Testing
         session.endGradientDrag()
         #expect(!workspace.canSwitch)
         let count = session.history.undoCount
-        await workspace.settlePendingEdits()
+        await session.settlePendingEdits()
         #expect(session.gradientEdit == nil)
         #expect(session.history.undoCount == count + 1)
         #expect(workspace.canSwitch)
@@ -48,7 +48,7 @@ import Testing
         for open in [{ session.beginFilter(.gaussianBlur) }, { session.beginHueSaturation() }, { session.beginLevels() }] {
             open()
             #expect(!workspace.canSwitch)
-            await workspace.settlePendingEdits()
+            await session.settlePendingEdits()
             #expect(workspace.canSwitch)
             #expect(session.activeLayer?.asset?.image === original)
         }

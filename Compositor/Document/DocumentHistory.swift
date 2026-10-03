@@ -42,6 +42,8 @@ final class DocumentHistory {
     var currentRevision: UUID { revision }
     /// A save of `saved` finished. Edits made while it was writing leave the document modified; undoing back to it doesn't.
     func markSaved(_ saved: UUID) { savedRevision = saved }
+    /// The document as it was before the edit still open, if one is: the last finished edit's, at `currentRevision`.
+    var beforeOpenEdit: Snapshot? { depth > 0 ? pending : nil }
     func reset() {
         past.removeAll()
         future.removeAll()

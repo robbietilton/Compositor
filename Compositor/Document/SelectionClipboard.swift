@@ -247,14 +247,21 @@ extension EditorSession {
         layer.name = name
         layer.shape = shape
         layer.text = text
-        layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
-        let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
+        let place = newLayerPlace(in: document)
+        layer.parentID = place.parentID
         finishOpacityEdit()
         beginEdit(editName)
-        self.document?.layers.insert(layer, at: index)
+        self.document?.layers.insert(layer, at: place.index)
         if dropsSelection { self.document?.selection = nil }
         activeLayerID = layer.id
         endEdit()
+    }
+
+    /// Where a new layer goes in `document`: just above the active layer, in its folder, or into the folder that's
+    /// active.
+    func newLayerPlace(in document: CanvasDocument) -> (index: Int, parentID: UUID?) {
+        (document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count,
+         activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID)
     }
 
     func nextLayerName() -> String {

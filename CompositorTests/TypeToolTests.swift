@@ -36,6 +36,7 @@ struct TypeToolTests {
         #expect(session.activeLayer?.liveText?.style == draft.style)
         #expect(session.activeLayer?.origin == start.origin)
         #expect(session.history.undoCount == before + 1)
+        #expect(session.history.undoName == "New Text Layer")
         session.editActiveText()
         session.textDraft = nil
         #expect(session.history.undoCount == before + 1)
@@ -43,6 +44,7 @@ struct TypeToolTests {
         draft = try #require(session.textDraft)
         draft.style.content = "Changed"
         #expect(session.applyText(draft))
+        #expect(session.history.undoName == "Edit Text")
         session.undo()
         #expect(session.activeLayer?.liveText?.style.content == "Hello\nCompositor")
         session.undo()
@@ -291,6 +293,31 @@ struct TypeToolTests {
         NSCursor.setHiddenUntilMouseMoves(true)
         editor.pointerMoved(try move(to: NSPoint(x: -10, y: -10)))
         #expect(NSCursor.current === NSCursor.arrow, "off the canvas, the arrow")
+    }
+
+    /// A save made while text is typed takes it as Done would put it, new text or changed, and leaves the editor
+    /// as it was: the text still open, the document and its history untouched.
+    @Test func aSaveWhileTypingTakesTheTextAsDoneWould() throws {
+        let session = makeSession()
+        session.beginText(at: CGPoint(x: 30, y: 40))
+        session.textDraft?.style.content = "Hello"
+        let document = session.document, undoCount = session.history.undoCount
+        let typed = try #require(session.saveSnapshot())
+        #expect(typed.manifest.layers.compactMap(\.text?.content) == ["Hello"])
+        #expect(typed.manifest.activeLayerID == typed.manifest.layers.last?.id)
+        #expect(session.textDraft?.style.content == "Hello")
+        #expect(session.document == document && session.history.undoCount == undoCount)
+
+        #expect(session.finishText())
+        session.editActiveText()
+        session.textDraft?.style.content = "Changed"
+        let changed = try #require(session.saveSnapshot())
+        #expect(changed.manifest.layers.compactMap(\.text?.content) == ["Changed"])
+        #expect(session.activeLayer?.liveText?.style.content == "Hello")
+        // Nothing typed yet in new text: nothing to put in.
+        session.cancelText()
+        session.beginText(at: CGPoint(x: 300, y: 300), newLayer: true)
+        #expect(session.saveSnapshot()?.manifest.layers.count == 2)
     }
 
     @Test func invalidAndStaleDraftsDoNotChangeDocument() throws {

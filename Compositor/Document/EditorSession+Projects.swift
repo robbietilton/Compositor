@@ -2,7 +2,22 @@ import CoreGraphics
 import Foundation
 
 extension EditorSession {
-    func projectSnapshot() -> ProjectSnapshot? {
+    func projectSnapshot() -> ProjectSnapshot? { projectSnapshot(of: document, activeLayerID: activeLayerID) }
+
+    /// What a save made while editing goes on writes: the project as its last finished edit left it. An edit still
+    /// open, as a selection being transformed or an adjustment layer being edited holds one, isn't in it, so the file
+    /// never has it half done. Text being typed is in it as Done would put it, though it's still open.
+    func saveSnapshot() -> ProjectSnapshot? {
+        if let before = history.beforeOpenEdit {
+            return projectSnapshot(of: before.document, activeLayerID: before.activeLayerID)
+        }
+        if let draft = textDraft, let applied = try? applyingText(draft) {
+            return projectSnapshot(of: applied.document, activeLayerID: applied.activeLayerID)
+        }
+        return projectSnapshot()
+    }
+
+    func projectSnapshot(of document: CanvasDocument?, activeLayerID: UUID?) -> ProjectSnapshot? {
         guard let document else { return nil }
         var images: [UUID: ImportedImage] = [:]
         var masks: [UUID: ImportedImage] = [:]
@@ -49,6 +64,22 @@ extension EditorSession {
             activeLayerID = active
             selectedLayerIDs = selected.intersection(ids).union([active])
         }
+    }
+
+    /// Readies the project for quitting or closing, rather than refusing over what's in progress. Edits on the canvas
+    /// (a gradient waiting for Apply, pixels being moved) are applied, as switching tools does; an open dialog (a filter,
+    /// Levels, Hue/Saturation, the color picker…) is cancelled, as its Cancel button would, so nothing is applied that
+    /// wasn't OK'd.
+    func settlePendingEdits() async {
+        if gradientEdit != nil { await commitGradient() }
+        if pixelMove != nil { await finishPixelMove() }
+        cancelFilter()
+        cancelHueSaturation()
+        cancelLevels()
+        finishAdjustmentEditing(commit: false)
+        cancelColorRange()
+        selectionAmountOperation = nil
+        if colorPicker != nil { closeColorPicker(commit: false) }
     }
 
     func clearProject() {
