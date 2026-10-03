@@ -316,4 +316,116 @@ import UIKit
         #expect(!takes(try command("Rename Layer…", in: "Layer", of: bar), in: controller))
         alert.dismiss(animated: false)
     }
+
+    // MARK: View
+
+    /// The View menu is the Mac's after the zoom commands: its switches, with their shortcuts, and Clear Guides.
+    @Test func theViewMenuIsTheMacs() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let view = try #require(bar.menu(titled: "View"))
+        func elements(_ menu: MenuBarModel.Menu) -> [UIMenuElement] {
+            menu.children.flatMap { item -> [UIMenuElement] in
+                switch item {
+                case .menu(let menu): menu.options.contains(.displayInline) ? elements(menu) : [UIMenu(title: menu.title, children: [])]
+                case .element(let element): [element]
+                }
+            }
+        }
+        #expect(elements(view).map(\.title) == ["Fit Canvas", "Actual Pixels", "Zoom In", "Zoom Out", "Pixel Grid (800% and above)",
+                                                "Snap", "Show Transform Controls", "Show", "Grid Settings…", "Rulers", "Snap", "Snap To",
+                                                "Lock Guides", "Clear Guides"])
+        #expect(view.submenus.map(\.title) == ["Show", "Snap To"])
+        #expect(view.submenus[0].commands.map(\.title) == ["Grid", "Guides"])
+        #expect(view.submenus[1].commands.map(\.title) == ["Guides", "Grid", "Layers", "Document Bounds"])
+        #expect(view.commands.map(shortcut) == ["⌘0", "⌘1", "⌘=", "⌘-", "", "", "⌘H", "⌘'", "⌘;", "⌘R", "⇧⌘;", "", "", "", "",
+                                                "⌥⌘;", ""])
+    }
+
+    /// The View menu's switches turn the window's settings on and off, checked when they're on, as on the Mac.
+    @Test func theViewSwitchesTurnSettingsOnAndOff() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let view = try #require(bar.menu(titled: "View"))
+        let controller = EditorWindowController()
+        controller.loadViewIfNeeded()
+        let session = try #require(controller.activeTab?.session)
+        let switches: [(UICommand, ReferenceWritableKeyPath<EditorSession, Bool>)] = [
+            (view.commands[5], \.snappingEnabled), (view.submenus[0].commands[0], \.showsGrid),
+            (view.submenus[0].commands[1], \.showsGuides), (view.commands[10], \.snapEnabled),
+            (view.submenus[1].commands[0], \.snapToGuides), (view.submenus[1].commands[1], \.snapToGrid),
+            (view.submenus[1].commands[2], \.snapToLayers), (view.submenus[1].commands[3], \.snapToDocumentBounds),
+        ]
+        // Without a project only the first Snap, which is the window's, as on the Mac.
+        #expect(switches.map { takes($0.0, in: controller) } == [true] + Array(repeating: false, count: 7))
+        session.createNewProject(width: 200, height: 100)
+        for (command, setting) in switches {
+            let was = session[keyPath: setting]
+            let shown = try #require(command.copy() as? UICommand)
+            controller.validate(shown)
+            #expect(shown.state == (was ? .on : .off), "\(command.title)")
+            choose(command, in: controller)
+            #expect(session[keyPath: setting] == !was, "\(command.title)")
+            controller.validate(shown)
+            #expect(shown.state == (was ? .off : .on), "\(command.title)")
+        }
+    }
+
+    /// Show Transform Controls is the Move tool's, as on the Mac, and its bar's Show Controls follows it.
+    @Test func showTransformControlsIsTheMoveTools() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let command = try command("Show Transform Controls", in: "View", of: bar)
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        session.selectTool(.brush)
+        #expect(!takes(command, in: controller))
+        session.selectTool(.move)
+        let options = ToolOptionsBar(frame: CGRect(x: 0, y: 0, width: 1000, height: ToolOptionsBar.height))
+        options.session = session
+        options.updatePropertiesIfNeeded()
+        func views<T: UIView>(_ type: T.Type, in view: UIView) -> [T] {
+            view.subviews.flatMap { subview -> [T] in ((subview as? T).map { [$0] } ?? []) + views(type, in: subview) }
+        }
+        let checkbox = try #require(views(UIButton.self, in: options).first { $0.configuration?.title == "Show Controls" })
+        #expect(session.showsTransformControls && checkbox.isSelected)
+        choose(command, in: controller)
+        options.updatePropertiesIfNeeded()
+        #expect(!session.showsTransformControls && !checkbox.isSelected)
+    }
+
+    /// Clear Guides takes the project's guides away as one undo step, and only when it has some.
+    @Test func clearGuidesTakesTheGuidesAway() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let command = try command("Clear Guides", in: "View", of: bar)
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        #expect(!takes(command, in: controller))
+        session.addGuide(CanvasGuide(id: UUID(), axis: .vertical, position: 50))
+        choose(command, in: controller)
+        #expect(session.document?.guides.isEmpty == true)
+        #expect(session.history.undoName == "Clear Guides")
+        #expect(!takes(command, in: controller))
+    }
+
+    /// What the iPad doesn't draw yet — the pixel grid and rulers — and Lock Guides, while guides can't be dragged, are
+    /// listed as on the Mac, dimmed, and unchecked, since they do nothing.
+    @Test func whatTheViewCantDoYetIsDimmed() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let view = try #require(bar.menu(titled: "View"))
+        let controller = try window()
+        for command in view.commands where ["Pixel Grid (800% and above)", "Rulers", "Lock Guides"].contains(command.title) {
+            #expect(!takes(command, in: controller), "\(command.title)")
+            let shown = try #require(command.copy() as? UICommand)
+            controller.validate(shown)
+            #expect(shown.state == .off, "\(command.title)")
+        }
+        func elements(_ menu: MenuBarModel.Menu) -> [UIMenuElement] {
+            menu.children.flatMap { item -> [UIMenuElement] in
+                switch item {
+                case .menu(let menu): elements(menu)
+                case .element(let element): [element]
+                }
+            }
+        }
+        let settings = try #require(elements(view).first { $0.title == "Grid Settings…" } as? UIAction)
+        #expect(settings.attributes.contains(.disabled))
+    }
 }

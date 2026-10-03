@@ -151,12 +151,42 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         builder.replace(menu: .close, with: UIMenu(options: .displayInline, children: [
             UIKeyCommand(title: "Close Tab", action: #selector(Window.closeTab(_:)), input: "w", modifierFlags: .command),
         ]))
-        builder.insertChild(UIMenu(options: .displayInline, children: [
-            UIKeyCommand(title: "Fit Canvas", action: #selector(Window.fitCanvas(_:)), input: "0", modifierFlags: .command),
-            UIKeyCommand(title: "Actual Pixels", action: #selector(Window.actualPixels(_:)), input: "1", modifierFlags: .command),
-            UIKeyCommand(title: "Zoom In", action: #selector(Window.zoomIn(_:)), input: "=", modifierFlags: .command),
-            UIKeyCommand(title: "Zoom Out", action: #selector(Window.zoomOut(_:)), input: "-", modifierFlags: .command),
-        ]), atStartOfMenu: .view)
+        // The Mac's View menu. What the iPad doesn't do yet is listed, dimmed.
+        func toggle(_ title: String, _ viewSwitch: Window.ViewSwitch, _ input: String? = nil,
+                    _ flags: UIKeyModifierFlags = .command) -> UICommand {
+            if let input {
+                return UIKeyCommand(title: title, action: #selector(Window.toggleView(_:)), input: input, modifierFlags: flags,
+                                    propertyList: viewSwitch.rawValue)
+            }
+            return UICommand(title: title, action: #selector(Window.toggleView(_:)), propertyList: viewSwitch.rawValue)
+        }
+        builder.insertElements([
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "Fit Canvas", action: #selector(Window.fitCanvas(_:)), input: "0", modifierFlags: .command),
+                UIKeyCommand(title: "Actual Pixels", action: #selector(Window.actualPixels(_:)), input: "1", modifierFlags: .command),
+                UIKeyCommand(title: "Zoom In", action: #selector(Window.zoomIn(_:)), input: "=", modifierFlags: .command),
+                UIKeyCommand(title: "Zoom Out", action: #selector(Window.zoomOut(_:)), input: "-", modifierFlags: .command),
+                toggle("Pixel Grid (800% and above)", .pixelGrid),
+                toggle("Snap", .snapping),
+                toggle("Show Transform Controls", .transformControls, "h"),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UIMenu(title: "Show", children: [toggle("Grid", .grid, "'"), toggle("Guides", .guides, ";")]),
+                UIAction(title: "Grid Settings…", attributes: .disabled) { _ in },
+                toggle("Rulers", .rulers, "r"),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                toggle("Snap", .snap, ";", [.command, .shift]),
+                UIMenu(title: "Snap To", children: [
+                    toggle("Guides", .snapToGuides), toggle("Grid", .snapToGrid), toggle("Layers", .snapToLayers),
+                    toggle("Document Bounds", .snapToDocumentBounds),
+                ]),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                toggle("Lock Guides", .lockGuides, ";", [.command, .alternate]),
+                UICommand(title: "Clear Guides", action: #selector(Window.clearGuides(_:))),
+            ]),
+        ], atStartOfMenu: .view)
     }
 }
 

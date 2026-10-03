@@ -844,6 +844,39 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc func zoomIn(_ sender: Any?) { activeTab?.session.zoomKeyboard(by: 1) }
     @objc func zoomOut(_ sender: Any?) { activeTab?.session.zoomKeyboard(by: -1) }
 
+    /// A switch in the View menu: which of the window's settings it turns on and off.
+    enum ViewSwitch: String {
+        case pixelGrid, snapping, transformControls, grid, guides, rulers, snap, snapToGuides, snapToGrid, snapToLayers,
+             snapToDocumentBounds, lockGuides
+
+        var setting: ReferenceWritableKeyPath<EditorSession, Bool> {
+            switch self {
+            case .pixelGrid: \.showsPixelGrid
+            case .snapping: \.snappingEnabled
+            case .transformControls: \.showsTransformControls
+            case .grid: \.showsGrid
+            case .guides: \.showsGuides
+            case .rulers: \.showsRulers
+            case .snap: \.snapEnabled
+            case .snapToGuides: \.snapToGuides
+            case .snapToGrid: \.snapToGrid
+            case .snapToLayers: \.snapToLayers
+            case .snapToDocumentBounds: \.snapToDocumentBounds
+            case .lockGuides: \.locksGuides
+            }
+        }
+        /// Whether the iPad does what it says yet: it doesn't draw the pixel grid or rulers, and guides can't be
+        /// dragged, which locking them stops.
+        var isAvailable: Bool { ![.pixelGrid, .rulers, .lockGuides].contains(self) }
+    }
+    /// Turns the View menu's switch on or off, as named by the command.
+    @objc func toggleView(_ sender: UICommand) {
+        guard let session = activeTab?.session, let name = sender.propertyList as? String,
+              let viewSwitch = ViewSwitch(rawValue: name), viewSwitch.isAvailable else { return }
+        session[keyPath: viewSwitch.setting].toggle()
+    }
+    @objc func clearGuides(_ sender: Any?) { activeTab?.session.clearGuides() }
+
     // Cut, Copy and Paste reach here from the menu bar and the keyboard when no text field is being edited, as the
     // Mac's do when the canvas has focus.
     @objc override func cut(_ sender: Any?) {
@@ -1039,6 +1072,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return session?.canMoveActiveLayer(by: offset) ?? false
         case #selector(mergeLayers(_:)): return session?.canMergeLayers ?? false
         case #selector(flipLayers(_:)): return session?.canTransform ?? false
+        case #selector(toggleView(_:)):
+            guard let viewSwitch = ((sender as? UICommand)?.propertyList as? String).flatMap(ViewSwitch.init),
+                  viewSwitch.isAvailable else { return false }
+            // Snap is the window's, with or without a project; Show Transform Controls is the Move tool's.
+            switch viewSwitch {
+            case .snapping: return true
+            case .transformControls: return hasDocument && session?.tool == .move
+            default: return hasDocument
+            }
+        case #selector(clearGuides(_:)): return session?.canClearGuides ?? false
         case #selector(selectAll(_:)): return hasDocument
         case #selector(deselect(_:)), #selector(invertSelection(_:)):
             return session.map { $0.selection != nil && $0.canEditSelection } ?? false
@@ -1113,6 +1156,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             command.title = activeTab?.session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer"
         } else if command.action == #selector(mergeLayers(_:)) {
             command.title = activeTab?.session.mergeTitle ?? "Merge Down"
+        } else if command.action == #selector(toggleView(_:)), let session = activeTab?.session,
+                  let viewSwitch = (command.propertyList as? String).flatMap(ViewSwitch.init), viewSwitch.isAvailable {
+            command.state = session[keyPath: viewSwitch.setting] ? .on : .off
         } else if command.action == #selector(deleteLayer(_:)), let session = activeTab?.session {
             command.title = if let effect = session.selectedEffect { "Delete " + effect.kind.rawValue }
                 else if session.isMaskSelected && session.activeLayer?.mask != nil { "Delete Layer Mask" }
