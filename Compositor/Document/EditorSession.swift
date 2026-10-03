@@ -165,6 +165,9 @@ final class EditorSession {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
         return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
     }
+    /// An edit under way, which a change to the project made elsewhere waits for rather than pulling the document out
+    /// from under it: whatever a project operation waits for, and a transform.
+    var hasEditInProgress: Bool { !canStartProjectOperation || transformEdit != nil }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
             await withCheckedContinuation { fileRequestWaiters.append($0) }
@@ -655,6 +658,11 @@ final class EditorSession {
     var showsImporter = false { didSet { resumeFileRequests() } }
     var isImporting = false { didSet { resumeFileRequests() } }
     var importError: String? { didSet { resumeFileRequests() } }
+    /// Why the project couldn't be saved, for whoever shows the editor to say so.
+    var saveError: String?
+    /// Something else changed the project's file while it has unsaved work, for whoever shows the editor to ask
+    /// whether to take that version up.
+    var changedOnDisk = false
     var showsConversionSheet = false { didSet { resumeFileRequests() } }
     var conversionRequest: PSDConversionRequest?
     /// Tests assign this to skip the conversion sheet.

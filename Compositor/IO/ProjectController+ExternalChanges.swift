@@ -46,7 +46,7 @@ extension ProjectController {
             guard let digest = await Task.detached(priority: .utility, operation: { try? ProjectDigest.compute(for: url) }).value,
                   digest != externalChanges.knownDigest else { continue }
             // Wait for an edit in progress to finish rather than pulling the document out from under it.
-            guard session.canStartProjectOperation, session.transformEdit == nil, workspace?.isManaging != true else {
+            guard !session.hasEditInProgress, workspace?.isManaging != true else {
                 scheduleRecheck(); return
             }
             if session.isModified {
