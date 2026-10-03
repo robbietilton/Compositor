@@ -610,4 +610,136 @@ import UIKit
         #expect(session.effectsEditing == nil && session.document?.layers.contains { $0.effects != nil } != true)
         if let url = tab.document?.fileURL { try? FileManager.default.removeItem(at: url) }
     }
+
+    // MARK: Selecting
+
+    /// The gray layer's row in the Layers panel, laid out, with a Stroke and a Drop Shadow under it and neither selected.
+    private func rowWithTwoEffects() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession,
+                                                     panel: LayersPanelView, cell: LayerRowCell, layer: UUID) {
+        let (window, controller, session) = try await shownWindow()
+        let layer = try #require(session.activeLayerID)
+        for kind in [LayerEffectKind.stroke, .shadow] {
+            try add(kind, in: controller)
+            _ = try await effectEditor(for: kind, over: controller)
+            try press("\r", in: controller)
+            try await closes(controller)
+        }
+        // No effect selected yet, as adding one leaves it selected.
+        session.effectSelection = nil
+        let panel = try #require(views(LayersPanelView.self, in: controller.view).first)
+        let cell = try self.cell(for: layer, in: panel)
+        try #require(cell.contentView.bounds.height == LayerRowCell.height + 2 * LayerRowCell.effectHeight)
+        return (window, controller, session, panel, cell, layer)
+    }
+
+    private func cell(for layer: UUID, in panel: LayersPanelView) throws -> LayerRowCell {
+        panel.updatePropertiesIfNeeded()
+        panel.layoutIfNeeded()
+        let cell = try #require(views(LayerRowCell.self, in: panel).first { $0.layerID == layer })
+        cell.layoutIfNeeded()
+        return cell
+    }
+
+    /// The middle of the effect row `index` under the layer, in the cell.
+    private func effectPoint(_ index: Int, in cell: LayerRowCell) -> CGPoint {
+        CGPoint(x: cell.contentView.bounds.midX, y: LayerRowCell.height + LayerRowCell.effectHeight * (CGFloat(index) + 0.5))
+    }
+
+    /// Whether the effect's row reads as selected.
+    private func shownSelected(_ kind: LayerEffectKind, in cell: LayerRowCell) throws -> Bool {
+        let label = try #require(views(UILabel.self, in: cell).first { $0.accessibilityLabel == kind.rawValue + " effect" })
+        return label.accessibilityTraits.contains(.selected)
+    }
+
+    /// A point on an effect's row finds that effect; one on the layer's own row, none.
+    @Test func aPointFindsItsEffect() async throws {
+        let (window, _, _, _, cell, _) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        #expect(cell.effect(at: effectPoint(0, in: cell)) == .stroke)
+        #expect(cell.effect(at: effectPoint(1, in: cell)) == .shadow)
+        #expect(cell.effect(at: CGPoint(x: cell.contentView.bounds.midX, y: LayerRowCell.height / 2)) == nil)
+    }
+
+    /// A tap on an effect's row selects it, highlighted in place of its layer, as a click does on the Mac; a tap on
+    /// the layer's own row lets it go.
+    @Test func aTapSelectsTheEffect() async throws {
+        let (window, _, session, panel, cell, layer) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        cell.tap(at: effectPoint(1, in: cell))
+        #expect(session.selectedEffect == LayerEffectSelection(layerID: layer, kind: .shadow))
+        var shown = try self.cell(for: layer, in: panel)
+        #expect(try shownSelected(.shadow, in: shown) && !shownSelected(.stroke, in: shown))
+        let name = try #require(views(UILabel.self, in: shown).first { $0.text == "Gray" })
+        #expect(!name.accessibilityTraits.contains(.selected))
+
+        shown.tap(at: CGPoint(x: shown.contentView.bounds.midX, y: LayerRowCell.height / 2))
+        #expect(session.selectedEffect == nil && session.effectSelection == nil && session.selectedLayerIDs == [layer])
+        shown = try self.cell(for: layer, in: panel)
+        #expect(try !shownSelected(.shadow, in: shown))
+    }
+
+    /// Delete takes away the effect tapped, and only it, as the Mac's does; the Layer menu names it.
+    @Test func deleteRemovesTheTappedEffect() async throws {
+        let (window, controller, session, _, cell, layer) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        let layers = session.document?.layers.count
+        cell.tap(at: effectPoint(0, in: cell))
+        let delete = UICommand(title: "Delete Layer", action: #selector(EditorWindowController.deleteLayer(_:)))
+        let shown = try #require(delete.copy() as? UICommand)
+        controller.validate(shown)
+        #expect(shown.title == "Delete Stroke")
+        try press(UIKeyCommand.inputDelete, in: controller)
+        #expect(session.history.undoName == "Remove Stroke")
+        let effects = session.document?.layers.first { $0.id == layer }?.effects
+        #expect(effects?.stroke == nil && effects?.shadow != nil && session.document?.layers.count == layers)
+    }
+
+    /// A double tap on an effect's row opens its panel rather than renaming the layer; one on another effect gives way
+    /// to that one's.
+    @Test func aDoubleTapEdits() async throws {
+        let (window, controller, session, _, cell, layer) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        cell.tap(at: effectPoint(0, in: cell))
+        cell.doubleTap(at: effectPoint(0, in: cell))
+        #expect(session.effectsEditing == LayerEffectSelection(layerID: layer, kind: .stroke))
+        _ = try await effectEditor(for: .stroke, over: controller)
+        #expect(!(controller.presentedViewController is UIAlertController))
+        cell.doubleTap(at: effectPoint(1, in: cell))
+        _ = try await effectEditor(for: .shadow, over: controller)
+        #expect(session.document?.layers.first { $0.id == layer }?.effects?.stroke != nil)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// Pressing an effect's row selects the effect, and its menu deletes it, named as the Layer menu names it.
+    @Test func theRowsMenuDeletesThePressedEffect() async throws {
+        let (window, _, session, panel, cell, layer) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        let list = try #require(views(UICollectionView.self, in: panel).first)
+        let indexPath = try #require(list.indexPath(for: cell))
+        let point = cell.contentView.convert(effectPoint(1, in: cell), to: list)
+        #expect(panel.collectionView(list, contextMenuConfigurationForItemsAt: [indexPath], point: point) != nil)
+        #expect(session.selectedEffect == LayerEffectSelection(layerID: layer, kind: .shadow))
+        func titles(_ menu: UIMenu) -> [String] {
+            menu.children.flatMap { ($0 as? UIMenu).map(titles) ?? [$0.title] }
+        }
+        let menu = panel.menu(for: layer, in: session)
+        #expect(titles(menu).contains("Delete Drop Shadow") && !titles(menu).contains("Delete Layer"))
+
+        let layerPoint = cell.contentView.convert(CGPoint(x: cell.contentView.bounds.midX, y: LayerRowCell.height / 2), to: list)
+        _ = panel.collectionView(list, contextMenuConfigurationForItemsAt: [indexPath], point: layerPoint)
+        #expect(session.selectedEffect == nil)
+        #expect(titles(panel.menu(for: layer, in: session)).contains("Delete Layer"))
+    }
+
+    /// A touch on the canvas lets go of a selected effect, as a click on the Mac's canvas does.
+    @Test func aCanvasTouchLetsGoOfTheEffect() async throws {
+        let (window, controller, session, _, cell, _) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        cell.tap(at: effectPoint(0, in: cell))
+        try #require(session.selectedEffect != nil)
+        let canvas = try #require(views(PadCanvasView.self, in: controller.view).first)
+        canvas.touchesBegan([], with: nil)
+        #expect(session.selectedEffect == nil && session.effectSelection == nil)
+    }
 }

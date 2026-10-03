@@ -348,6 +348,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Any touch lets go of a selected effect, as a click on the Mac's canvas does.
+        session.effectSelection = nil
         if !isFirstResponder { becomeFirstResponder() }
         guard activeTouch == nil, let touch = touches.first, event?.allTouches?.count == 1,
               session.document != nil, !session.isProjectBusy, !session.isImporting else { return }

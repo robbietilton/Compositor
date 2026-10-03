@@ -47,6 +47,8 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         let enabled: Bool
         let canvas: CGSize
         let clippedTo: String?
+        /// The layer's effect that's selected, highlighted in place of the layer, as on the Mac.
+        let effect: LayerEffectKind?
         var id: UUID { layer.id }
         enum Target { case image, mask }
     }
@@ -228,7 +230,8 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
             return Row(layer: layer, depth: entry.depth, visible: entry.visible,
                        selected: session.selectedEffect == nil && session.selectedLayerIDs.contains(layer.id),
                        target: target, collapsed: session.collapsedGroupIDs.contains(layer.id), enabled: enabled, canvas: canvas,
-                       clippedTo: layer.maskSourceID.map { source in byID[source]?.name ?? "Missing source" })
+                       clippedTo: layer.maskSourceID.map { source in byID[source]?.name ?? "Missing source" },
+                       effect: session.selectedEffect.flatMap { $0.layerID == layer.id ? $0.kind : nil })
         }
     }
 
@@ -298,9 +301,16 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
     func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemsAt indexPaths: [IndexPath],
                         point: CGPoint) -> UIContextMenuConfiguration? {
         guard let session, let indexPath = indexPaths.first, let id = dataSource.itemIdentifier(for: indexPath) else { return nil }
-        // As on the Mac, the row pressed becomes the selection unless it's already part of it.
-        if !session.selectedLayerIDs.contains(id) { session.selectLayerTarget(id, mask: false) }
-        else if session.activeLayerID != id { session.selectLayers(session.selectedLayerIDs, primary: id) }
+        // As on the Mac, an effect pressed is selected, so the menu deletes it; otherwise the row pressed becomes the
+        // selection unless it's already part of it.
+        if let cell = collectionView.cellForItem(at: indexPath) as? LayerRowCell,
+           let kind = cell.effect(at: cell.contentView.convert(point, from: collectionView)) {
+            session.selectEffect(kind, on: id)
+        } else {
+            session.effectSelection = nil
+            if !session.selectedLayerIDs.contains(id) { session.selectLayerTarget(id, mask: false) }
+            else if session.activeLayerID != id { session.selectLayers(session.selectedLayerIDs, primary: id) }
+        }
         return UIContextMenuConfiguration(identifier: id as NSUUID, previewProvider: nil) { [weak self] _ in
             self?.menu(for: id, in: session)
         }
@@ -317,7 +327,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
     }
 
     /// The Mac's menu for a layer's row, in its order.
-    private func menu(for id: UUID, in session: EditorSession) -> UIMenu {
+    func menu(for id: UUID, in session: EditorSession) -> UIMenu {
         let layer = session.activeLayer
         func action(_ title: String, _ symbol: String? = nil, enabled: Bool, destructive: Bool = false,
                     _ perform: @escaping (EditorSession) -> Void) -> UIAction {
@@ -328,8 +338,9 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
             }
         }
         let editable = session.canEditLayers && layer != nil
-        let deleteTitle = session.isMaskSelected && layer?.mask != nil ? "Delete Mask"
-            : session.selectedLayerIDs.count > 1 ? "Delete Selected Layers" : "Delete Layer"
+        let deleteTitle = session.selectedEffect.map { "Delete " + $0.kind.rawValue }
+            ?? (session.isMaskSelected && layer?.mask != nil ? "Delete Mask"
+                : session.selectedLayerIDs.count > 1 ? "Delete Selected Layers" : "Delete Layer")
         let adjustment = session.document?.layers.first { $0.id == id }?.adjustment
         let basics = UIMenu(options: .displayInline, children: (adjustment == nil ? [] : [
             action("Edit Adjustment…", "slider.horizontal.3", enabled: editable && AdjustmentEditors.kinds.contains(adjustment!.kind)) {
@@ -496,7 +507,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
 /// A layer's row: its visibility, the folder's disclosure, its picture framed by the canvas, its mask and the link
 /// between them, its name and size, and its effects under it, as the Mac's rows are.
-private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
+final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
     static let height: CGFloat = 56
     static let effectHeight: CGFloat = 28
 
@@ -504,8 +515,10 @@ private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDeleg
     /// A double tap on an adjustment layer's thumbnail.
     var onEditAdjustment: () -> Void = {}
     private weak var session: EditorSession?
-    private var layerID: UUID?
+    private(set) var layerID: UUID?
     private var rowIDs: () -> [UUID] = { [] }
+    /// The effects listed under the layer, in their rows' order.
+    private var effectKinds: [LayerEffectKind] = []
 
     private let background = UIView()
     private let eye = UIButton(configuration: .plain())
@@ -682,8 +695,10 @@ private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDeleg
         contentView.alpha = row.visible ? 1 : 0.35
 
         effects.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for kind in layer.effects?.kinds ?? [] {
-            effects.addArrangedSubview(effectRow(kind, enabled: layer.effects?.isEnabled(kind) == true, indent: indent, editable: row.enabled))
+        effectKinds = layer.effects?.kinds ?? []
+        for kind in effectKinds {
+            effects.addArrangedSubview(effectRow(kind, enabled: layer.effects?.isEnabled(kind) == true, indent: indent, editable: row.enabled,
+                                                 selected: row.effect == kind))
         }
         height.constant = Self.height + CGFloat(layer.effects?.kinds.count ?? 0) * Self.effectHeight
 
@@ -692,8 +707,9 @@ private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDeleg
         name.accessibilityTraits = row.selected ? [.button, .selected] : .button
     }
 
-    /// An effect under its layer, with its own visibility, as the Mac's effect rows. Editing it is the Mac's for now.
-    private func effectRow(_ kind: LayerEffectKind, enabled: Bool, indent: CGFloat, editable: Bool) -> UIView {
+    /// An effect under its layer, with its own visibility, as the Mac's effect rows: a tap selects it, highlighted, and a
+    /// double tap edits it.
+    private func effectRow(_ kind: LayerEffectKind, enabled: Bool, indent: CGFloat, editable: Bool, selected: Bool) -> UIView {
         var configuration = UIButton.Configuration.plain()
         configuration.image = UIImage(systemName: enabled ? "eye" : "eye.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))
         configuration.baseForegroundColor = .secondaryLabel
@@ -705,13 +721,23 @@ private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDeleg
         label.text = kind.rawValue
         label.font = .systemFont(ofSize: 12)
         label.textColor = enabled ? .label : .secondaryLabel
+        label.accessibilityLabel = kind.rawValue + " effect"
+        label.accessibilityTraits = selected ? [.button, .selected] : .button
+        let highlight = UIView()
+        highlight.backgroundColor = selected ? UIColor.tintColor.withAlphaComponent(0.28) : .clear
+        highlight.layer.cornerRadius = 6
+        highlight.layer.cornerCurve = .continuous
+        highlight.isUserInteractionEnabled = false
         let row = UIView()
-        for view in [eye, label] as [UIView] {
+        for view in [highlight, eye, label] as [UIView] {
             row.addSubview(view)
             view.translatesAutoresizingMaskIntoConstraints = false
         }
         NSLayoutConstraint.activate([
             row.heightAnchor.constraint(equalToConstant: Self.effectHeight),
+            highlight.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 4),
+            highlight.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -4),
+            highlight.topAnchor.constraint(equalTo: row.topAnchor), highlight.bottomAnchor.constraint(equalTo: row.bottomAnchor),
             eye.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 40 + indent),
             eye.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             eye.widthAnchor.constraint(equalToConstant: 28), eye.heightAnchor.constraint(equalToConstant: Self.effectHeight),
@@ -727,14 +753,36 @@ private final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDeleg
         action(session, layerID)
     }
 
-    @objc private func tapped(_ gesture: UITapGestureRecognizer) {
-        guard let session, let layerID else { return }
-        LayersPanelView.select(layerID, in: session, rows: rowIDs(), modifiers: gesture.modifierFlags)
+    /// The effect whose row is at `point`, in the cell's content.
+    func effect(at point: CGPoint) -> LayerEffectKind? {
+        let inList = effects.convert(point, from: contentView)
+        guard let index = effects.arrangedSubviews.firstIndex(where: { $0.frame.contains(inList) }),
+              effectKinds.indices.contains(index) else { return nil }
+        return effectKinds[index]
     }
 
-    /// A double tap renames, or on an adjustment's thumbnail opens its editor, as a double click does on the Mac.
-    @objc private func doubleTapped(_ gesture: UITapGestureRecognizer) {
-        let onThumbnail = thumbnail.frame.insetBy(dx: -8, dy: -8).contains(gesture.location(in: contentView))
+    @objc private func tapped(_ gesture: UITapGestureRecognizer) { tap(at: gesture.location(in: contentView), modifiers: gesture.modifierFlags) }
+    @objc private func doubleTapped(_ gesture: UITapGestureRecognizer) { doubleTap(at: gesture.location(in: contentView)) }
+
+    /// A tap on an effect selects it, as a click does on the Mac; anywhere else on the row, the layer, and no effect.
+    func tap(at point: CGPoint, modifiers: UIKeyModifierFlags = []) {
+        guard let session, let layerID else { return }
+        if let kind = effect(at: point) {
+            session.selectEffect(kind, on: layerID)
+            return
+        }
+        session.effectSelection = nil
+        LayersPanelView.select(layerID, in: session, rows: rowIDs(), modifiers: modifiers)
+    }
+
+    /// A double tap on an effect opens its panel; elsewhere it renames, or on an adjustment's thumbnail opens its editor,
+    /// as a double click does on the Mac.
+    func doubleTap(at point: CGPoint) {
+        if let kind = effect(at: point), let session, let layerID {
+            session.selectEffect(kind, on: layerID, editing: true)
+            return
+        }
+        let onThumbnail = thumbnail.frame.insetBy(dx: -8, dy: -8).contains(point)
         if onThumbnail, let session, let layerID, session.document?.layers.first(where: { $0.id == layerID })?.adjustment != nil {
             onEditAdjustment()
         } else {
