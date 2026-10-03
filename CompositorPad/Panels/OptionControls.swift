@@ -419,6 +419,12 @@ final class SliderField: UIView {
         set { slider.isEnabled = newValue; number.isEnabled = newValue }
     }
 
+    /// What the row does, shown by the slider when the pointer rests on it, as the Mac's help.
+    var toolTip: String? {
+        get { slider.toolTip }
+        set { slider.toolTip = newValue }
+    }
+
     @objc private func scrubbed(_ gesture: UIPanGestureRecognizer) {
         switch gesture.state {
         case .began:

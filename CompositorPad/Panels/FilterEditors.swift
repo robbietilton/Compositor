@@ -13,13 +13,17 @@ final class FilterEditorController: AdjustmentEditorController {
         let decimals: Int
         /// Whether the slider gives the small values most of its travel.
         let logarithmic: Bool
+        /// What the row does, as the Mac's help says it.
+        var help: String? = nil
+        /// When the row shows, as Remove Background's Advanced rows; always if nil.
+        var shown: ((FilterSettings) -> Bool)? = nil
     }
 
     /// What the Mac's filter panel puts in a filter's editor, in order.
     enum Control {
         case slider(Row)
-        /// A choice of two, `titles` for false and true, as segments captioned `caption`.
-        case choice(caption: String, titles: [String], key: WritableKeyPath<FilterSettings, Bool>)
+        /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it.
+        case choice(caption: String?, titles: [String], help: String?, chosen: (FilterSettings) -> Int, choose: (inout FilterSettings, Int) -> Void)
         case checkbox(String, WritableKeyPath<FilterSettings, Bool>)
         /// What the filter does, in the panel's words.
         case text(String)
@@ -36,7 +40,8 @@ final class FilterEditorController: AdjustmentEditorController {
         ],
         .addNoise: [
             .slider(Row(caption: "Amount", key: \.amount, range: 0.1...400, unit: "%", decimals: 1, logarithmic: true)),
-            .choice(caption: "Distribution", titles: ["Uniform", "Gaussian"], key: \.gaussian),
+            .choice(caption: "Distribution", titles: ["Uniform", "Gaussian"], help: nil, chosen: { $0.gaussian ? 1 : 0 },
+                    choose: { $0.gaussian = $1 == 1 }),
             .checkbox("Monochromatic", \.monochromatic),
         ],
         .exposure: [
@@ -63,6 +68,20 @@ final class FilterEditorController: AdjustmentEditorController {
             .slider(Row(caption: "Radius", key: \.tonalRadius, range: 1...100, unit: "px", decimals: 0, logarithmic: true)),
         ],
         .contentAwareFill: [.text("Fill the selection using surrounding pixels from this layer.")],
+        .removeBackground: [
+            .text("Hide the background behind a layer mask, keeping the foreground subjects. The pixels stay, so the background can be painted back at any time."),
+            .choice(caption: nil, titles: BackgroundQuality.allCases.map(\.rawValue),
+                    help: "Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur",
+                    chosen: { BackgroundQuality.allCases.firstIndex(of: $0.backgroundQuality) ?? 0 },
+                    choose: { $0.backgroundQuality = BackgroundQuality.allCases[$1] }),
+            .slider(Row(caption: "Refine", key: \.refineEdges, range: 0...40, unit: "px", decimals: 0, logarithmic: false,
+                        help: "Pull the mask onto the image's own edges, which recovers hair and fur", shown: { $0.backgroundQuality == .advanced })),
+            .slider(Row(caption: "Contrast", key: \.matteContrast, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "Clear the haze that leaves background showing through thin areas", shown: { $0.backgroundQuality == .advanced })),
+            .slider(Row(caption: "Shift Edge", key: \.shiftEdge, range: -10...10, unit: "px", decimals: 0, logarithmic: false,
+                        help: "Shrink the mask to drop the rim of background color around the subject, or grow it",
+                        shown: { $0.backgroundQuality == .advanced })),
+        ],
         .lensCorrection: [
             .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
             .note("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)."),
@@ -134,13 +153,15 @@ final class FilterEditorController: AdjustmentEditorController {
                                         sensitivity: 1 / step, logarithmic: row.logarithmic, decimals: row.decimals, sliderWidth: nil,
                                         fieldWidth: NumberField.width(toShow: row.range, decimals: row.decimals))
                 field.onChange = { [weak self] value in self?.update { $0[keyPath: row.key] = value } }
+                field.toolTip = row.help
                 fields.append((row, field))
                 content.addArrangedSubview(field)
-            case .choice(let caption, let titles, let key):
-                let segments = OptionControls.segments(titles) { [weak self] index in self?.update { $0[keyPath: key] = index == 1 } }
-                refreshers.append { segments.selectedSegmentIndex = $0[keyPath: key] ? 1 : 0 }
-                content.addArrangedSubview(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), segments, UIView()],
-                                                              spacing: 10))
+            case .choice(let caption, let titles, let help, let chosen, let choose):
+                let segments = OptionControls.segments(titles) { [weak self] index in self?.update { choose(&$0, index) } }
+                if let help { segments.addInteraction(UIToolTipInteraction(defaultToolTip: help)) }
+                refreshers.append { segments.selectedSegmentIndex = chosen($0) }
+                let views = (caption.map { [OptionControls.caption($0, color: .secondaryLabel)] } ?? []) + [segments, UIView()]
+                content.addArrangedSubview(OptionControls.row(views, spacing: 10))
             case .checkbox(let title, let key):
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
                 refreshers.append { box.isSelected = $0[keyPath: key] }
@@ -162,7 +183,10 @@ final class FilterEditorController: AdjustmentEditorController {
 
     override func refresh() {
         guard let settings = edit?.settings else { return }
-        for (row, field) in fields { field.show(settings[keyPath: row.key]) }
+        for (row, field) in fields {
+            field.show(settings[keyPath: row.key])
+            field.isHidden = row.shown?(settings) == false
+        }
         for refresh in refreshers { refresh(settings) }
         error.text = edit?.previewError
         error.isHidden = edit?.previewError == nil

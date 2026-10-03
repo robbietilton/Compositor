@@ -534,4 +534,72 @@ import UIKit
         #expect(grown.origin.x + grown.size.width >= 160)
         try await eventually { controller.presentedViewController == nil }
     }
+
+    // MARK: Remove Background
+
+    /// The captions of the editor's slider rows that show, in order.
+    private func shownCaptions(of editor: UIViewController) -> [String] {
+        views(SliderField.self, in: editor.view).filter { row in
+            var view: UIView? = row
+            while let current = view, current !== editor.view {
+                if current.isHidden { return false }
+                view = current.superview
+            }
+            return true
+        }.compactMap { row in views(UILabel.self, in: row).first?.text }
+    }
+
+    /// Remove Background says what it does, and chooses Basic or Advanced; Advanced shows Refine, Contrast and Shift
+    /// Edge, and the editor grows to hold them, as on the Mac.
+    @Test func advancedShowsItsRows() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        #expect(choose(filterCommand(.removeBackground), in: controller))
+        let editor = try await filterEditor(over: controller)
+        #expect(views(UILabel.self, in: editor.view).contains { $0.text?.hasPrefix("Hide the background behind a layer mask") == true })
+        let quality = try #require(views(UISegmentedControl.self, in: editor.view).first)
+        #expect((0..<quality.numberOfSegments).map { quality.titleForSegment(at: $0) } == ["Basic", "Advanced"])
+        let help = quality.interactions.compactMap { $0 as? UIToolTipInteraction }.first?.defaultToolTip
+        #expect(help?.hasPrefix("Basic is quick") == true)
+        #expect(shownCaptions(of: editor) == [])
+        let short = editor.preferredContentSize.height
+        quality.selectedSegmentIndex = 1
+        quality.sendActions(for: .valueChanged)
+        #expect(session.filterEdit?.settings.backgroundQuality == .advanced)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        #expect(shownCaptions(of: editor) == ["Refine", "Contrast", "Shift Edge"])
+        #expect(editor.preferredContentSize.height > short)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// While the mask is worked out, or when it can't be, OK waits; a change of settings works it out again, and the
+    /// editor says so; applying, it says so too.
+    @Test func removeBackgroundWaitsForItsMask() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.removeBackground), in: controller)
+        let editor = try await filterEditor(over: controller)
+        func says(_ text: String) -> Bool { views(UILabel.self, in: editor.view).contains { $0.text == text && !$0.isHidden } }
+        // The simulator has no Vision to find a subject with, so the first mask ends in an error.
+        try await eventually { session.filterEdit?.preparing == false }
+        session.filterEdit?.previewError = "No subject"
+        editor.updatePropertiesIfNeeded()
+        #expect(try says("No subject") && !okEnabled(editor))
+        let quality = try #require(views(UISegmentedControl.self, in: editor.view).first)
+        quality.selectedSegmentIndex = 1
+        quality.sendActions(for: .valueChanged)
+        #expect(session.filterEdit?.preparing == true)
+        editor.updatePropertiesIfNeeded()
+        #expect(try says("Working…") && !okEnabled(editor))
+        try await eventually { session.filterEdit?.preparing == false }
+        session.filterEdit?.previewError = nil
+        session.filterEdit?.committing = true
+        editor.updatePropertiesIfNeeded()
+        #expect(says("Applying…"))
+        session.filterEdit?.committing = false
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
 }
