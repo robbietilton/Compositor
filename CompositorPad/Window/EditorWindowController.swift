@@ -1022,16 +1022,24 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         }
     }
 
-    /// The Mac's single-key tools and color keys, on a hardware keyboard.
-    override var keyCommands: [UIKeyCommand]? {
-        let tools: [(String, NavigationTool)] = [("v", .move), ("m", .marquee), ("l", .lasso), ("w", .wand), ("c", .crop), ("b", .brush),
-                                                 ("j", .spotHealing), ("s", .cloneStamp), ("r", .blur), ("g", .gradient), ("u", .shape),
-                                                 ("t", .type), ("i", .eyedropper), ("h", .hand), ("z", .zoom)]
-        let letters: [UIKeyCommand] = tools.map { key, tool in
-            UIKeyCommand(title: tool.label, action: #selector(toolKey(_:)), input: key, propertyList: tool.rawValue)
+    /// The canvas's keys, as the Mac's Keyboard Shortcuts lists them, on a hardware keyboard.
+    override var keyCommands: [UIKeyCommand]? { Self.canvasCommands }
+
+    /// The canvas's keys, by the names the Mac's Keyboard Shortcuts list gives them. Made once: whether each applies is
+    /// asked when it's pressed.
+    private static let canvasCommands: [UIKeyCommand] = {
+        let tools: [(String, NavigationTool, String)] = [
+            ("v", .move, "Move / Transform tool"), ("m", .marquee, "Marquee / cycle shape"), ("l", .lasso, "Lasso / cycle mode"),
+            ("w", .wand, "Magic"), ("c", .crop, "Crop tool"), ("b", .brush, "Brush tool"), ("j", .spotHealing, "Spot Healing"),
+            ("s", .cloneStamp, "Clone Stamp"), ("r", .blur, "Blur / Smudge / Liquify"), ("g", .gradient, "Gradient tool"),
+            ("u", .shape, "Shape tool"), ("t", .type, "Type tool"), ("i", .eyedropper, "Eyedropper tool"), ("h", .hand, "Hand tool"),
+            ("z", .zoom, "Zoom tool"), ("a", .idle, "Select tool"),
+        ]
+        let letters: [UIKeyCommand] = tools.map { key, tool, name in
+            UIKeyCommand(title: name, action: #selector(toolKey(_:)), input: key, propertyList: tool.rawValue)
         }
         // Shift with a letter does what the letter does, as on the Mac, which reads it without Shift; Shift-U has its own.
-        let shiftedTools: [UIKeyCommand] = (tools.filter { $0.0 != "u" } + [("a", .idle)]).map { key, tool in
+        let shiftedTools: [UIKeyCommand] = tools.filter { $0.0 != "u" }.map { key, tool, _ in
             UIKeyCommand(title: "", action: #selector(toolKey(_:)), input: key, modifierFlags: .shift, propertyList: tool.rawValue)
         }
         let shiftedOthers: [UIKeyCommand] = [("e", #selector(eraserKey(_:))), ("x", #selector(swapColorsKey(_:))),
@@ -1046,14 +1054,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let toolMode = UIKeyCommand(title: "Cycle tool mode", action: #selector(toolModeKey(_:)), input: "\t")
         toolMode.wantsPriorityOverSystemBehavior = true
         let others: [UIKeyCommand] = [
-            UIKeyCommand(title: "Select tool", action: #selector(toolKey(_:)), input: "a", propertyList: NavigationTool.idle.rawValue),
             toolMode,
             UIKeyCommand(title: "Eraser", action: #selector(eraserKey(_:)), input: "e"),
-            UIKeyCommand(title: "Next Shape", action: #selector(shapeKindKey(_:)), input: "u", modifierFlags: .shift),
-            UIKeyCommand(title: "Swap Colors", action: #selector(swapColorsKey(_:)), input: "x"),
-            UIKeyCommand(title: "Default Colors", action: #selector(defaultColorsKey(_:)), input: "d"),
-            UIKeyCommand(title: "Smaller Brush", action: #selector(brushSizeKey(_:)), input: "[", propertyList: false),
-            UIKeyCommand(title: "Larger Brush", action: #selector(brushSizeKey(_:)), input: "]", propertyList: true),
+            UIKeyCommand(title: "Cycle shape kind", action: #selector(shapeKindKey(_:)), input: "u", modifierFlags: .shift),
+            UIKeyCommand(title: "Swap foreground/background", action: #selector(swapColorsKey(_:)), input: "x"),
+            UIKeyCommand(title: "Reset colors", action: #selector(defaultColorsKey(_:)), input: "d"),
+            UIKeyCommand(title: "Decrease brush size", action: #selector(brushSizeKey(_:)), input: "[", propertyList: false),
+            UIKeyCommand(title: "Increase brush size", action: #selector(brushSizeKey(_:)), input: "]", propertyList: true),
             UIKeyCommand(title: "Decrease brush hardness", action: #selector(brushHardnessKey(_:)), input: "[", modifierFlags: .shift,
                          propertyList: false),
             UIKeyCommand(title: "Increase brush hardness", action: #selector(brushHardnessKey(_:)), input: "]", modifierFlags: .shift,
@@ -1064,16 +1071,20 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                          propertyList: true),
             // ⌘+ is ⌘ and Shift with =: it zooms in as ⌘= does, as on the Mac.
             UIKeyCommand(title: "", action: #selector(zoomIn(_:)), input: "=", modifierFlags: [.command, .shift]),
-            UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey(_:))),
-            UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(returnKey(_:))),
-            UIKeyCommand(input: UIKeyCommand.inputDelete, modifierFlags: [], action: #selector(deleteKey(_:))),
+            UIKeyCommand(title: "Cancel current canvas operation", action: #selector(escapeKey(_:)), input: UIKeyCommand.inputEscape),
+            UIKeyCommand(title: "Apply current canvas operation", action: #selector(returnKey(_:)), input: "\r"),
+            UIKeyCommand(title: "Delete selection / layer / effect / lasso point", action: #selector(deleteKey(_:)),
+                         input: UIKeyCommand.inputDelete),
         ]
-        let arrows: [UIKeyCommand] = [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow, UIKeyCommand.inputUpArrow,
-                                      UIKeyCommand.inputDownArrow].flatMap { arrow in
-            [[], .shift, .command, [.command, .shift]].map { UIKeyCommand(input: arrow, modifierFlags: $0, action: #selector(arrowKey(_:))) }
+        let arrows: [UIKeyCommand] = [("Left", UIKeyCommand.inputLeftArrow), ("Right", UIKeyCommand.inputRightArrow),
+                                      ("Up", UIKeyCommand.inputUpArrow), ("Down", UIKeyCommand.inputDownArrow)].flatMap { name, arrow in
+            [([], "Nudge \(name) 1 px"), (.shift, "Nudge \(name) 10 px"), (.command, "Move selected pixels \(name) 1 px"),
+             ([.command, .shift], "Move selected pixels \(name) 10 px")].map { (flags: UIKeyModifierFlags, title: String) in
+                UIKeyCommand(title: title, action: #selector(arrowKey(_:)), input: arrow, modifierFlags: flags)
+            }
         }
         return letters + shiftedTools + shiftedOthers + digits + others + arrows
-    }
+    }()
     @objc private func toolKey(_ command: UIKeyCommand) {
         guard let raw = command.propertyList as? String, let tool = NavigationTool(rawValue: raw),
               let session = activeTab?.session, session.document != nil else { return }

@@ -301,5 +301,24 @@ import UIKit
         session.cancelLevels()
         try await eventually { controller.presentedViewController == nil }
     }
+
+    // MARK: Names
+
+    /// The canvas's keys go by the names the Mac's Keyboard Shortcuts list gives them, and are made once.
+    @Test func theKeysHaveTheMacsNames() throws {
+        let (controller, _) = try window()
+        let names: [(String, UIKeyModifierFlags, String)] = [
+            ("v", [], "Move / Transform tool"), ("b", [], "Brush tool"), ("e", [], "Eraser"), ("m", [], "Marquee / cycle shape"),
+            ("x", [], "Swap foreground/background"), ("d", [], "Reset colors"), ("[", [], "Decrease brush size"),
+            ("]", [], "Increase brush size"), ("u", .shift, "Cycle shape kind"), (UIKeyCommand.inputEscape, [], "Cancel current canvas operation"),
+            ("\r", [], "Apply current canvas operation"), (UIKeyCommand.inputLeftArrow, .shift, "Nudge Left 10 px"),
+            (UIKeyCommand.inputUpArrow, .command, "Move selected pixels Up 1 px"),
+        ]
+        for (input, flags, name) in names {
+            #expect(try command(input, flags, in: controller).title == name, "\(input)")
+        }
+        let first = try #require(controller.keyCommands), second = try #require(controller.keyCommands)
+        #expect(first.count == second.count && zip(first, second).allSatisfy { $0 === $1 })
+    }
 }
 
