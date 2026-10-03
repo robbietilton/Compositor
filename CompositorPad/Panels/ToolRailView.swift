@@ -6,6 +6,9 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
     var session: EditorSession? { didSet { if session !== oldValue { setNeedsUpdateProperties() } } }
     /// Shows the color picker and the mask's color choice over the window.
     weak var presenter: UIViewController?
+    /// A tool lent for the moment, shown in hand and tinted in place of the session's own, as Space lends the Hand
+    /// while it's held; the session's tool stays as it is.
+    var heldTool: NavigationTool? { didSet { if heldTool != oldValue { setNeedsUpdateProperties() } } }
 
     /// What a finger or Apple Pencil can do on the canvas so far.
     static let touchTools: Set<NavigationTool> = [.move, .marquee, .lasso, .wand, .crop, .brush, .spotHealing, .cloneStamp,
@@ -86,11 +89,13 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         guard let session else { return }
         for tool in tools {
             guard let button = buttons[tool] else { continue }
-            let selected = session.tool == tool
+            let selected = (heldTool ?? session.tool) == tool
+            let held = heldTool == tool
             button.configuration?.image = Self.image(for: tool, in: session)
-            button.backgroundColor = selected ? UIColor(white: 1, alpha: 0.12) : .clear
+            button.configuration?.baseForegroundColor = held ? .tintColor : .label
+            button.backgroundColor = held ? UIColor.tintColor.withAlphaComponent(0.22) : selected ? UIColor(white: 1, alpha: 0.12) : .clear
             button.layer.borderWidth = selected ? 1 : 0
-            button.layer.borderColor = UIColor(white: 1, alpha: 0.14).cgColor
+            button.layer.borderColor = (held ? UIColor.tintColor.withAlphaComponent(0.5) : UIColor(white: 1, alpha: 0.14)).cgColor
             button.accessibilityTraits = selected ? [.button, .selected] : .button
             let available = Self.touchTools.contains(tool)
             button.isEnabled = available && session.document != nil

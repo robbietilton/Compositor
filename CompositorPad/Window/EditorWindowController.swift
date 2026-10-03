@@ -351,6 +351,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         canvas.fingerPaints = input.fingerPaints
         canvas.pencilSeen = { [weak self] in self?.pencilTurnedUp() }
         canvas.keysSeen = { [weak self] in self?.holdKeys($0) }
+        // Space lends the Hand, which the rail shows in hand while it's held.
+        canvas.spaceChanged = { [weak self] held in self?.rail.heldTool = held ? .hand : nil }
         canvasHost.addSubview(canvas)
         canvas.frame = canvasHost.bounds
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]

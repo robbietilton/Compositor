@@ -67,7 +67,15 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     private var pointerHidden = false
     /// Whether Space is held down, so a touch moves the canvas whatever the tool, as on the Mac. The window sets it from
     /// the keyboard.
-    var spaceHeld = false { didSet { if spaceHeld != oldValue { synchronizeBrushCursor() } } }
+    var spaceHeld = false {
+        didSet {
+            guard spaceHeld != oldValue else { return }
+            synchronizeBrushCursor()
+            spaceChanged(spaceHeld)
+        }
+    }
+    /// Space held down or let go, which the tool rail shows.
+    var spaceChanged: (Bool) -> Void = { _ in }
 
     init(session: EditorSession) {
         self.session = session

@@ -385,6 +385,29 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// Space held shows the Hand in the tool rail, tinted, as the tool it lends for the moment; the tool chosen stays
+    /// the session's, and shows again once Space is let go.
+    @Test func spaceShowsTheHandInTheRail() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        tab.session.selectTool(.brush)
+        func views<T: UIView>(_ type: T.Type, in view: UIView) -> [T] {
+            view.subviews.flatMap { subview -> [T] in ((subview as? T).map { [$0] } ?? []) + views(type, in: subview) }
+        }
+        let rail = try #require(views(ToolRailView.self, in: controller.view).first)
+        func selected() -> [String] {
+            rail.updatePropertiesIfNeeded()
+            return views(UIButton.self, in: rail).filter { $0.accessibilityTraits.contains(.selected) }.compactMap(\.accessibilityLabel)
+        }
+        #expect(selected() == [NavigationTool.brush.label])
+        #expect(controller.holdSpace())
+        #expect(selected() == [NavigationTool.hand.label])
+        #expect(tab.session.tool == .brush)
+        controller.releaseSpace()
+        #expect(selected() == [NavigationTool.brush.label])
+    }
+
     /// Space held, the brush's circle goes from under the pointer, which is a hand on the Mac.
     @Test func spaceHeldTheBrushShowsNoCircle() throws {
         let (_, tab) = try window()
