@@ -291,15 +291,17 @@ extension EditorSession {
             case .outerGlow: effects.outerGlow = original.outerGlow
             case .innerGlow: effects.innerGlow = original.innerGlow
             }
-            setEffects(effects, on: editing.layerID, name: "Cancel " + editing.kind.rawValue)
+            setEffects(effects, on: editing.layerID, name: "Cancel " + editing.kind.rawValue, fromPanel: true)
         }
         effectsEditing = nil
         effectsEditingOriginal = nil
         if selectedEffect == nil { effectSelection = nil }
     }
 
-    func setEffects(_ effects: LayerEffects, on id: UUID? = nil, name: String = "Layer Effects") {
-        guard canEditLayers, effects.isValid,
+    /// `fromPanel`: the open panel's own edits and its Cancel, which text, a transform, a crop or a gradient waiting for
+    /// Apply, started since, don't stop.
+    func setEffects(_ effects: LayerEffects, on id: UUID? = nil, name: String = "Layer Effects", fromPanel: Bool = false) {
+        guard fromPanel ? canEditBesideCanvasEdits : canEditLayers, effects.isValid,
               let index = document?.layers.firstIndex(where: { $0.id == (id ?? activeLayerID) }),
               document?.layers[index].isGroup == false, document?.layers[index].asset != nil,
               document?.layers[index].effects != (effects.isEmpty ? nil : effects) else { return }
@@ -316,7 +318,7 @@ extension EditorSession {
               layer.effects?.contains(editing.kind) == true else { return }
         var effects = layer.effects ?? LayerEffects()
         change(&effects)
-        setEffects(effects, on: layer.id, name: "Edit " + editing.kind.rawValue)
+        setEffects(effects, on: layer.id, name: "Edit " + editing.kind.rawValue, fromPanel: true)
     }
 
     func canCopyEffect(_ kind: LayerEffectKind, from source: UUID, to target: UUID) -> Bool {

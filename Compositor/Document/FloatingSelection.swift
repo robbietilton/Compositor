@@ -26,13 +26,17 @@ extension EditorSession {
     }
 
     func beginSelectionTransform() async {
-        guard canTransformSelection, let document, let source = activeLayer else { Platform.beep(); return }
+        guard canTransformSelection, let source = activeLayer else { Platform.beep(); return }
         let lifted: (image: CGImage, region: CGRect)
         do {
             guard let pixels = try renderSelectedPixels(from: source, mask: false) else { Platform.beep(); return }
             lifted = pixels
         } catch { brushError = error.localizedDescription; return }
-        let before = document, beforeActive = activeLayerID
+        // OK the effect panel first, keeping what it shows: Cancel puts back the project as it is here, so edits made
+        // in the panel during the transform would be lost with it.
+        finishEffectsEditing(commit: true)
+        guard let before = document else { return }
+        let beforeActive = activeLayerID
         // Outer edit: closed by commitTransform (merge) or cancelTransform (restore).
         beginEdit("Transform Selection")
         await clearSelectedPixels()

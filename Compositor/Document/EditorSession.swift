@@ -758,8 +758,15 @@ final class EditorSession {
     func endEdit() { history.end(document: document, selection: activeLayerID) }
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
     var canEditLayers: Bool {
+        textDraft == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && canEditBesideCanvasEdits
+    }
+    /// `canEditLayers`, but with text being typed, a transform, a crop or a gradient waiting for Apply open on the
+    /// canvas: none of them changes a layer's effects, and each is applied to the layer as it is then, so the effect
+    /// panel, which floats beside the canvas, keeps working through them. Transform Selection, whose Cancel puts back
+    /// the whole project, OKs the panel as it starts instead.
+    var canEditBesideCanvasEdits: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+        return selectionAmountOperation == nil && colorRange == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
 
     func addBlankLayer() {
