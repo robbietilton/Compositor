@@ -155,6 +155,16 @@ struct HueSaturationTests {
         return session
     }
 
+    /// A press on the band's handles takes the nearest of the four, round the hue circle, however far it is; a tie goes
+    /// to the first.
+    @Test func thePressTakesTheNearestHandle() {
+        let reds = ColorRange.reds.defaultBand // 315 / 345 / 15 / 45.
+        #expect(reds.nearestHandle(to: 5) == 2)
+        #expect(reds.nearestHandle(to: 350) == 1)
+        #expect(reds.nearestHandle(to: 330) == 0)
+        #expect(reds.nearestHandle(to: 120) == 3)
+    }
+
     @Test func bandWeightsRampThroughFalloffAndWrapAround() {
         let reds = ColorRange.reds.defaultBand // 315 / 345 / 15 / 45, wrapping past 0.
         #expect(reds.weight(of: 0) == 1 && reds.weight(of: 345) == 1 && reds.weight(of: 15) == 1)

@@ -115,6 +115,16 @@ nonisolated struct HueBand: Equatable, Sendable, Codable {
         }
     }
 
+    /// The handle nearest `degrees`, round the hue circle, however far: the one a press on the handles takes. A tie goes
+    /// to the first.
+    func nearestHandle(to degrees: Double) -> Int {
+        let distances = handles.map { handle -> Double in
+            let gap = abs(handle - degrees).truncatingRemainder(dividingBy: 360)
+            return min(gap, 360 - gap)
+        }
+        return distances.firstIndex(of: distances.min() ?? 0) ?? 0
+    }
+
     /// Moves one handle, keeping the four in order and the band under a full circle.
     mutating func setHandle(_ index: Int, to degrees: Double) {
         var updated = self

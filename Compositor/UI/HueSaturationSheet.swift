@@ -181,20 +181,12 @@ struct SpectrumEditor: View {
                 .onChanged { value in
                     guard width > 0 else { return }
                     let degrees = Double(min(max(0, value.location.x), width) / width) * 360
-                    let index = dragging ?? nearestHandle(to: degrees)
+                    let index = dragging ?? settings.band.nearestHandle(to: degrees)
                     dragging = index
                     settings.band.setHandle(index, to: degrees)
                 }
                 .onEnded { _ in dragging = nil })
         }
         .frame(height: 12)
-    }
-
-    private func nearestHandle(to degrees: Double) -> Int {
-        let distances = settings.band.handles.map { handle -> Double in
-            let gap = abs(handle - degrees).truncatingRemainder(dividingBy: 360)
-            return min(gap, 360 - gap)
-        }
-        return distances.firstIndex(of: distances.min() ?? 0) ?? 0
     }
 }
