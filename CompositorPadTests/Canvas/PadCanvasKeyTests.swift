@@ -81,6 +81,22 @@ import UIKit
         #expect(session.cropRect == nil)
     }
 
+    /// Keypad Enter applies as Return does, as on the Mac, and does nothing with nothing to apply.
+    @Test func keypadEnterAppliesAsReturnDoes() async throws {
+        let (controller, tab) = try window()
+        let session = tab.session, input = tab.canvas.input
+        session.selectTool(.move)
+        let applies = controller.keypadEnter()
+        #expect(!applies)
+        session.selectTool(.crop)
+        input.began(at: point(0, 0, in: session), keys: .control)
+        input.moved(to: point(200, 150, in: session), keys: .control)
+        input.ended(at: point(200, 150, in: session), keys: .control)
+        #expect(controller.keypadEnter())
+        try await eventually { session.document?.width == 200 }
+        #expect(session.document?.width == 200)
+    }
+
     /// A shape being drawn takes Escape, which takes it away, but not Return, as on the Mac.
     @Test func aShapeTakesEscapeButNotReturn() throws {
         let (controller, tab) = try window()

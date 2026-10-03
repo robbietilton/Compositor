@@ -1181,6 +1181,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         heldKeysChange(presses, down: true, event: event)
         let space = presses.filter { $0.key?.keyCode == .keyboardSpacebar }
         if !space.isEmpty, holdSpace() { takenPresses.formUnion(space) }
+        let enter = presses.filter { $0.key?.keyCode == .keypadEnter }
+        if !enter.isEmpty, keypadEnter() { takenPresses.formUnion(enter) }
         let rest = presses.subtracting(takenPresses)
         if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
@@ -1257,6 +1259,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         releaseSpace()
         modifierKeysDown = []
         holdKeys([])
+    }
+    /// Keypad Enter applies as Return does, as on the Mac; whether it did. It's known by its key, as UIKit may not give
+    /// it Return's character, and a field or the text being typed takes it first.
+    func keypadEnter() -> Bool {
+        guard canPerformAction(#selector(returnKey(_:)), withSender: nil) else { return false }
+        returnKey(nil)
+        return true
     }
     /// Lets Space go: it came up, or went with the keyboard or the app.
     func releaseSpace() {
@@ -1395,7 +1404,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         else if session.tool == .crop, session.cropRect != nil { session.cancelCrop() }
         else { session.cancelTransform() }
     }
-    @objc private func returnKey(_ command: UIKeyCommand) {
+    @objc private func returnKey(_ sender: Any?) {
         if let editor = presentedViewController as? AdjustmentEditorController {
             editor.commit()
             return
