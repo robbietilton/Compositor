@@ -924,13 +924,23 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private static let canvasKeys: Set<Selector> = [
         #selector(toolKey(_:)), #selector(eraserKey(_:)), #selector(shapeKindKey(_:)), #selector(swapColorsKey(_:)), #selector(defaultColorsKey(_:)),
         #selector(brushSizeKey(_:)), #selector(escapeKey(_:)), #selector(returnKey(_:)), #selector(deleteKey(_:)), #selector(arrowKey(_:)),
+        #selector(toolModeKey(_:)), #selector(opacityKey(_:)), #selector(brushHardnessKey(_:)), #selector(blendModeKey(_:)),
     ]
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         let hasFile = activeTab?.document != nil
         let hasDocument = activeTab?.session.document != nil
         let session = activeTab?.session
-        if presentedViewController != nil, Self.canvasKeys.contains(action) { return false }
+        if Self.canvasKeys.contains(action) {
+            // Beside an adjustment's editor the canvas keeps its keys, as on the Mac, but Levels holds them; over a dialog
+            // there are none. Escape and Return are the editor's.
+            if let presented = presentedViewController {
+                guard presented is AdjustmentEditorController, session?.levels == nil,
+                      action != #selector(escapeKey(_:)), action != #selector(returnKey(_:)) else { return false }
+            }
+            // A stroke being drawn takes no key but Escape, as on the Mac.
+            if session?.brushStroke != nil || session?.warpStroke != nil, action != #selector(escapeKey(_:)) { return false }
+        }
         switch action {
         case #selector(saveProject(_:)), #selector(duplicateProject(_:)):
             return hasFile && session?.canStartProjectOperation == true && session?.changedOnDisk == false
@@ -983,6 +993,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                     && ($0.lassoDraft != nil || $0.gradientEdit != nil || ($0.tool == .crop && $0.cropRect != nil) || $0.transformEdit != nil)
             } ?? false
         case #selector(deleteKey(_:)): return hasDocument
+        case #selector(toolModeKey(_:)):
+            // Only while the canvas has the keyboard, since it goes before a field's or the text's own Tab.
+            return hasDocument && session?.textDraft == nil && (isFirstResponder || activeTab?.canvas.isFirstResponder == true)
+        case #selector(opacityKey(_:)): return hasDocument && session?.usesOpacityKeys == true
+        case #selector(brushSizeKey(_:)), #selector(brushHardnessKey(_:)): return session?.tool.isBrushTool == true
+        case #selector(blendModeKey(_:)): return session?.activeLayer != nil
         case #selector(arrowKey(_:)):
             guard let session, hasDocument else { return false }
             // ⌘ moves the selected pixels with any tool; otherwise a selection tool nudges the outline and Move the layer.
@@ -1011,22 +1027,52 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let tools: [(String, NavigationTool)] = [("v", .move), ("m", .marquee), ("l", .lasso), ("w", .wand), ("c", .crop), ("b", .brush),
                                                  ("j", .spotHealing), ("s", .cloneStamp), ("r", .blur), ("g", .gradient), ("u", .shape),
                                                  ("t", .type), ("i", .eyedropper), ("h", .hand), ("z", .zoom)]
-        return tools.map { key, tool in
+        let letters: [UIKeyCommand] = tools.map { key, tool in
             UIKeyCommand(title: tool.label, action: #selector(toolKey(_:)), input: key, propertyList: tool.rawValue)
-        } + [
+        }
+        // Shift with a letter does what the letter does, as on the Mac, which reads it without Shift; Shift-U has its own.
+        let shiftedTools: [UIKeyCommand] = (tools.filter { $0.0 != "u" } + [("a", .idle)]).map { key, tool in
+            UIKeyCommand(title: "", action: #selector(toolKey(_:)), input: key, modifierFlags: .shift, propertyList: tool.rawValue)
+        }
+        let shiftedOthers: [UIKeyCommand] = [("e", #selector(eraserKey(_:))), ("x", #selector(swapColorsKey(_:))),
+                                             ("d", #selector(defaultColorsKey(_:)))].map { key, action in
+            UIKeyCommand(title: "", action: action, input: key, modifierFlags: .shift)
+        }
+        let digits: [UIKeyCommand] = (0...9).map { (digit: Int) -> UIKeyCommand in
+            UIKeyCommand(title: "Opacity digit \(digit) (type two for exact %)", action: #selector(opacityKey(_:)), input: String(digit),
+                         propertyList: NSNumber(value: digit))
+        }
+        // Tab switches the tool's mode, ahead of the system's own use of it, which would otherwise take it.
+        let toolMode = UIKeyCommand(title: "Cycle tool mode", action: #selector(toolModeKey(_:)), input: "\t")
+        toolMode.wantsPriorityOverSystemBehavior = true
+        let others: [UIKeyCommand] = [
+            UIKeyCommand(title: "Select tool", action: #selector(toolKey(_:)), input: "a", propertyList: NavigationTool.idle.rawValue),
+            toolMode,
             UIKeyCommand(title: "Eraser", action: #selector(eraserKey(_:)), input: "e"),
             UIKeyCommand(title: "Next Shape", action: #selector(shapeKindKey(_:)), input: "u", modifierFlags: .shift),
             UIKeyCommand(title: "Swap Colors", action: #selector(swapColorsKey(_:)), input: "x"),
             UIKeyCommand(title: "Default Colors", action: #selector(defaultColorsKey(_:)), input: "d"),
             UIKeyCommand(title: "Smaller Brush", action: #selector(brushSizeKey(_:)), input: "[", propertyList: false),
             UIKeyCommand(title: "Larger Brush", action: #selector(brushSizeKey(_:)), input: "]", propertyList: true),
+            UIKeyCommand(title: "Decrease brush hardness", action: #selector(brushHardnessKey(_:)), input: "[", modifierFlags: .shift,
+                         propertyList: false),
+            UIKeyCommand(title: "Increase brush hardness", action: #selector(brushHardnessKey(_:)), input: "]", modifierFlags: .shift,
+                         propertyList: true),
+            UIKeyCommand(title: "Previous blend mode", action: #selector(blendModeKey(_:)), input: "-", modifierFlags: .shift,
+                         propertyList: false),
+            UIKeyCommand(title: "Next blend mode", action: #selector(blendModeKey(_:)), input: "=", modifierFlags: .shift,
+                         propertyList: true),
+            // ⌘+ is ⌘ and Shift with =: it zooms in as ⌘= does, as on the Mac.
+            UIKeyCommand(title: "", action: #selector(zoomIn(_:)), input: "=", modifierFlags: [.command, .shift]),
             UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey(_:))),
             UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(returnKey(_:))),
             UIKeyCommand(input: UIKeyCommand.inputDelete, modifierFlags: [], action: #selector(deleteKey(_:))),
-        ] + [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow, UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow]
-            .flatMap { arrow in
-                [[], .shift, .command, [.command, .shift]].map { UIKeyCommand(input: arrow, modifierFlags: $0, action: #selector(arrowKey(_:))) }
-            }
+        ]
+        let arrows: [UIKeyCommand] = [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow, UIKeyCommand.inputUpArrow,
+                                      UIKeyCommand.inputDownArrow].flatMap { arrow in
+            [[], .shift, .command, [.command, .shift]].map { UIKeyCommand(input: arrow, modifierFlags: $0, action: #selector(arrowKey(_:))) }
+        }
+        return letters + shiftedTools + shiftedOthers + digits + others + arrows
     }
     @objc private func toolKey(_ command: UIKeyCommand) {
         guard let raw = command.propertyList as? String, let tool = NavigationTool(rawValue: raw),
@@ -1046,6 +1092,18 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
     @objc private func swapColorsKey(_ command: UIKeyCommand) { activeTab?.session.swapPaletteColors() }
     @objc private func defaultColorsKey(_ command: UIKeyCommand) { activeTab?.session.resetPaletteColors() }
+    @objc private func toolModeKey(_ command: UIKeyCommand) { activeTab?.session.cycleToolMode() }
+    /// 1 to 9 set a tenth to nine tenths, 0 all of it; two typed quickly set the exact percentage, as on the Mac.
+    @objc private func opacityKey(_ command: UIKeyCommand) {
+        guard let digit = command.propertyList as? Int else { return }
+        activeTab?.session.typeOpacityDigit(digit)
+    }
+    @objc private func brushHardnessKey(_ command: UIKeyCommand) {
+        activeTab?.session.changeBrushHardness(increase: command.propertyList as? Bool == true)
+    }
+    @objc private func blendModeKey(_ command: UIKeyCommand) {
+        activeTab?.session.cycleBlendMode(forward: command.propertyList as? Bool == true)
+    }
     // Escape, Return, Delete and the arrows on the canvas, in the Mac's order: an outline being drawn first, then a shape
     // or a gradient, a crop, and a transform. The arrows move a step, or ten with Shift: with ⌘ the selected pixels, with a selection tool the
     // outline, and with the Move tool the layer.

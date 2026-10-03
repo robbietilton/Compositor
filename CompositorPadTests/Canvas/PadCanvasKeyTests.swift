@@ -142,4 +142,164 @@ import UIKit
         #expect(session.textDraft == nil)
         #expect(session.document?.layers.count == 2)
     }
+
+    // MARK: Single keys
+
+    /// A window on the app's screen showing `controller`, once it has appeared, so the keyboard is where a test puts it.
+    private func shown(_ controller: EditorWindowController) async throws -> UIWindow {
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 1194, height: 834)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { controller.isFirstResponder }
+        return window
+    }
+
+    /// A puts the tool down, as on the Mac.
+    @Test func aPutsTheToolDown() throws {
+        let (controller, tab) = try window()
+        tab.session.selectTool(.brush)
+        press(try command("a", in: controller), in: controller)
+        #expect(tab.session.tool == .idle)
+    }
+
+    /// Shift with a tool's letter chooses the tool, as on the Mac, where the letter is read without Shift; Shift-U still
+    /// steps through the shapes, and Shift-X swaps the colors.
+    @Test func shiftWithAToolsLetterChoosesIt() throws {
+        let (controller, tab) = try window()
+        let session = tab.session
+        session.selectTool(.move)
+        session.brushMode = .erase
+        press(try command("b", .shift, in: controller), in: controller)
+        #expect(session.tool == .brush && session.brushMode == .paint)
+        press(try command("v", .shift, in: controller), in: controller)
+        #expect(session.tool == .move)
+        session.selectTool(.shape)
+        let kind = session.shapeKind
+        press(try command("u", .shift, in: controller), in: controller)
+        #expect(session.tool == .shape && session.shapeKind != kind)
+        let foreground = session.foregroundColor
+        press(try command("x", .shift, in: controller), in: controller)
+        #expect(session.backgroundColor == foreground)
+    }
+
+    /// Tab switches the tool's mode while the canvas has the keyboard, as on the Mac, and goes before the system's
+    /// own use of Tab; not while a field or text being typed has it.
+    @Test func tabSwitchesTheToolsMode() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        let session = tab.session
+        session.selectTool(.marquee)
+        session.marqueeKind = .rectangle
+        let tabKey = try command("\t", in: controller)
+        #expect(tabKey.wantsPriorityOverSystemBehavior)
+        press(tabKey, in: controller)
+        #expect(session.marqueeKind == .ellipse)
+
+        let field = UITextField(frame: CGRect(x: 0, y: 0, width: 100, height: 30))
+        controller.view.addSubview(field)
+        try #require(field.becomeFirstResponder())
+        #expect(!takes(tabKey, in: controller))
+        field.removeFromSuperview()
+        try #require(controller.becomeFirstResponder())
+        session.selectTool(.type)
+        session.beginText(at: CGPoint(x: 50, y: 50), newLayer: true)
+        #expect(!takes(tabKey, in: controller))
+        session.cancelText()
+    }
+
+    /// The digits set the opacity of the brush, or with the Move tool the layer's, as on the Mac: two typed quickly set
+    /// an exact value. Not with a tool that has none.
+    @Test func theDigitsSetTheOpacity() throws {
+        let (controller, tab) = try window()
+        let session = tab.session
+        session.selectTool(.brush)
+        press(try command("4", in: controller), in: controller)
+        press(try command("5", in: controller), in: controller)
+        #expect(abs(session.brushSettings.opacity - 0.45) < 0.001)
+
+        session.selectTool(.move)
+        press(try command("7", in: controller), in: controller)
+        #expect(abs((session.activeLayer?.opacity ?? 0) - 0.7) < 0.001)
+        session.selectTool(.marquee)
+        #expect(!takes(try command("3", in: controller), in: controller))
+    }
+
+    /// Shift-[ and Shift-] set a brush's hardness, as on the Mac; not with a tool that has none.
+    @Test func shiftBracketsSetTheHardness() throws {
+        let (controller, tab) = try window()
+        let session = tab.session
+        session.selectTool(.brush)
+        session.brushSettings.hardness = 0.5
+        press(try command("]", .shift, in: controller), in: controller)
+        #expect(session.brushSettings.hardness == 0.75)
+        press(try command("[", .shift, in: controller), in: controller)
+        #expect(session.brushSettings.hardness == 0.5)
+        session.selectTool(.move)
+        #expect(!takes(try command("]", .shift, in: controller), in: controller))
+    }
+
+    /// Shift-= and Shift-- step the layer's blend mode with any tool, as on the Mac.
+    @Test func shiftEqualsAndMinusStepTheBlendMode() throws {
+        let (controller, tab) = try window()
+        let session = tab.session
+        session.selectTool(.brush)
+        let modes = LayerBlendMode.allCases
+        try #require(session.activeLayer?.blendMode == .normal)
+        press(try command("=", .shift, in: controller), in: controller)
+        #expect(session.activeLayer?.blendMode == modes[1])
+        press(try command("-", .shift, in: controller), in: controller)
+        press(try command("-", .shift, in: controller), in: controller)
+        #expect(session.activeLayer?.blendMode == modes.last)
+    }
+
+    /// ⌘+, which is ⌘ and Shift with =, zooms in as ⌘= does, as on the Mac.
+    @Test func commandPlusZoomsIn() throws {
+        let (controller, tab) = try window()
+        let zoom = tab.session.viewport.zoom
+        press(try command("=", [.command, .shift], in: controller), in: controller)
+        #expect(tab.session.viewport.zoom > zoom)
+    }
+
+    /// While a stroke is drawn the canvas's keys do nothing but Escape, as on the Mac.
+    @Test func aStrokeTakesNoKeysButEscape() throws {
+        let (controller, tab) = try window()
+        let session = tab.session
+        session.selectTool(.brush)
+        session.beginBrush(at: CGPoint(x: 50, y: 50))
+        try #require(session.brushStroke != nil)
+        for (input, flags) in [("v", UIKeyModifierFlags()), ("5", []), ("]", .shift), ("]", []), ("=", .shift), ("x", [])] {
+            #expect(!takes(try command(input, flags, in: controller), in: controller), "\(input)")
+        }
+        #expect(takes(try command(UIKeyCommand.inputEscape, in: controller), in: controller))
+        session.cancelBrush()
+    }
+
+    /// With Hue/Saturation open beside the canvas a tool's key still chooses the tool, as on the Mac; with Levels open
+    /// it doesn't.
+    @Test func toolKeysWorkBesideAnEditorButLevels() async throws {
+        let (controller, tab) = try window()
+        let window = try await shown(controller)
+        defer { window.isHidden = true }
+        let session = tab.session
+        session.selectTool(.brush)
+        session.beginHueSaturation()
+        try await eventually { controller.presentedViewController is AdjustmentEditorController }
+        try #require(controller.presentedViewController is AdjustmentEditorController)
+        press(try command("v", in: controller), in: controller)
+        #expect(session.tool == .move)
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+
+        session.beginLevels()
+        try await eventually { controller.presentedViewController is AdjustmentEditorController }
+        #expect(!takes(try command("b", in: controller), in: controller))
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+    }
 }
+
