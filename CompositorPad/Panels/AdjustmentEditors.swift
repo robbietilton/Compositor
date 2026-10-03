@@ -249,8 +249,8 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
 
 // MARK: Levels
 
-/// An editor's scrolling, which leaves a drag that starts on a curve or a Levels triangle to it, rather than taking it
-/// to scroll, and holds no touch back first; the editor still scrolls from anywhere else.
+/// An editor's scrolling, which leaves a drag that starts on a curve, a Levels triangle or a band handle to it, rather
+/// than taking it to scroll, and holds no touch back first; the editor still scrolls from anywhere else.
 private final class EditorScrollView: UIScrollView {
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -259,7 +259,7 @@ private final class EditorScrollView: UIScrollView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func touchesShouldCancel(in view: UIView) -> Bool {
-        view is CurveView || view is LevelsHandlesView ? false : super.touchesShouldCancel(in: view)
+        view is CurveView || view is LevelsHandlesView || view is BandHandlesView ? false : super.touchesShouldCancel(in: view)
     }
 }
 
@@ -528,6 +528,123 @@ final class GradientBar: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
+// MARK: Hue/Saturation's band
+
+/// A color range's band, as the Mac's Hue/Saturation shows it: the hue circle before the adjustment, the band's four
+/// handles, the circle after it, and the handles in degrees.
+final class SpectrumView: UIView {
+    let handles = BandHandlesView()
+    private let before = HueStrip(after: false)
+    private let after = HueStrip(after: true)
+    private let readout = OptionControls.caption("", color: .secondaryLabel)
+
+    var settings = HueSaturationSettings() {
+        didSet {
+            guard settings != oldValue else { return }
+            before.settings = settings
+            after.settings = settings
+            handles.band = settings.band
+            readout.text = settings.band.handles.map { "\(Int($0.rounded()))°" }.joined(separator: "   ")
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        readout.font = .monospacedDigitSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .caption1).pointSize, weight: .regular)
+        let stack = UIStackView(arrangedSubviews: [before, handles, after, readout])
+        stack.axis = .vertical
+        stack.spacing = 5
+        addSubview(stack)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor), stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor), stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
+/// The hue circle, red to red, in 72 slices: each hue as it is, or as the adjustment turns it.
+final class HueStrip: UIView {
+    var settings = HueSaturationSettings() { didSet { if after, settings != oldValue { setNeedsDisplay() } } }
+    private let after: Bool
+    private static let slices = 72
+
+    init(after: Bool) {
+        self.after = after
+        super.init(frame: .zero)
+        isOpaque = false
+        backgroundColor = .clear
+        contentMode = .redraw
+        layer.cornerRadius = 3
+        clipsToBounds = true
+        heightAnchor.constraint(equalToConstant: 16).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        let width = bounds.width / CGFloat(Self.slices)
+        for slice in 0..<Self.slices {
+            let hue = Double(slice) / Double(Self.slices) * 360
+            let shown = after ? HueSaturationFilter.shiftedHue(hue, settings: settings) : hue
+            context.setFillColor(UIColor(hue: shown / 360, saturation: 1, brightness: 1, alpha: 1).cgColor)
+            context.fill(CGRect(x: CGFloat(slice) * width, y: 0, width: width + 0.5, height: bounds.height))
+        }
+    }
+}
+
+/// The band's four handles along the hue circle: the outer marks are the falloff's shoulders, the inner bars the
+/// range at full strength. A press takes the nearest handle however far it is, as on the Mac, and a drag moves it.
+final class BandHandlesView: UIView {
+    var band = ColorRange.master.defaultBand { didSet { if band != oldValue { setNeedsDisplay() } } }
+    var onDrag: (Int, Double) -> Void = { _, _ in }
+    private var dragging: Int?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        contentMode = .redraw
+        heightAnchor.constraint(equalToConstant: 12).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(UIColor.label.cgColor)
+        for (index, degrees) in band.handles.enumerated() {
+            let x = CGFloat(degrees / 360) * bounds.width
+            let inner = index == 1 || index == 2
+            context.fill(inner ? CGRect(x: x - 1, y: 0, width: 2, height: bounds.height)
+                               : CGRect(x: x - 3.5, y: bounds.height / 2 - 2.5, width: 7, height: 5))
+        }
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if let touch = touches.first { press(at: touch.location(in: self).x) }
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if let touch = touches.first { drag(to: touch.location(in: self).x) }
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { release() }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { release() }
+
+    /// A finger down at `x`: the nearest handle comes to it.
+    func press(at x: CGFloat) {
+        guard bounds.width > 0 else { return }
+        dragging = band.nearestHandle(to: degrees(at: x))
+        drag(to: x)
+    }
+    func drag(to x: CGFloat) {
+        guard let dragging, bounds.width > 0 else { return }
+        onDrag(dragging, degrees(at: x))
+    }
+    func release() { dragging = nil }
+
+    private func degrees(at x: CGFloat) -> Double { Double(min(max(0, x), bounds.width) / bounds.width) * 360 }
+}
+
 // MARK: Curves
 
 /// The Mac's rules for shaping a curve, in its own units, 0 to 255 on each axis: a press takes the nearest point within
@@ -710,6 +827,7 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     private let range = PopUpButton()
     private let sliders = UIStackView()
     private let invert = OptionControls.checkbox("Apply outside this range instead") { _ in }
+    private let spectrum = SpectrumView()
     private let colorize = OptionControls.checkbox("Colorize") { _ in }
     /// Whether the sliders were made for colorizing, whose ranges differ.
     private var slidersColorize: Bool?
@@ -752,7 +870,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         }, for: .primaryActionTriggered)
         sliders.axis = .vertical
         sliders.spacing = 12
-        for view in [OptionControls.row([range, UIView()]), sliders, OptionControls.row([invert, UIView()])] as [UIView] {
+        spectrum.handles.onDrag = { [weak self] index, degrees in self?.update { $0.band.setHandle(index, to: degrees) } }
+        for view in [OptionControls.row([range, UIView()]), sliders, spectrum, OptionControls.row([invert, UIView()])] as [UIView] {
             content.addArrangedSubview(view)
         }
     }
@@ -794,6 +913,9 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         saturation?.track = settings.saturationTrack
         lightness?.track = HueSaturationSettings.lightnessTrack
         invert.superview?.isHidden = settings.range == .master || settings.colorize
+        // The band, for a color range, as the Mac's shows it.
+        spectrum.isHidden = settings.range == .master || settings.colorize
+        spectrum.settings = settings
         invert.isSelected = settings.invertRange
         colorize.isSelected = settings.colorize
     }

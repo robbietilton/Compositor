@@ -415,8 +415,8 @@ import UIKit
         session.cancelLevels()
     }
 
-    /// An editor that scrolls leaves a drag that starts on a curve or a Levels triangle to it, and doesn't hold the
-    /// touch back first; the editor still scrolls from anywhere else.
+    /// An editor that scrolls leaves a drag that starts on a curve, a Levels triangle or a band handle to it, and
+    /// doesn't hold the touch back first; the editor still scrolls from anywhere else.
     @Test func aScrollingEditorLeavesItsDragsToThem() throws {
         let session = try session()
         session.beginFilter(.curves)
@@ -425,7 +425,7 @@ import UIKit
         let scroll = try #require(views(UIScrollView.self, in: editor.view).first)
         #expect(!scroll.delaysContentTouches)
         #expect(!scroll.touchesShouldCancel(in: try #require(views(CurveView.self, in: editor.view).first)))
-        #expect(!scroll.touchesShouldCancel(in: LevelsHandlesView(count: 3)))
+        #expect(!scroll.touchesShouldCancel(in: LevelsHandlesView(count: 3)) && !scroll.touchesShouldCancel(in: BandHandlesView()))
         #expect(scroll.touchesShouldCancel(in: UIView()))
         session.cancelFilter()
     }
@@ -612,6 +612,96 @@ import UIKit
         #expect((controller.presentedViewController as? UIAlertController)?.title == "Rename Layer")
         #expect(session.adjustmentEditingID == nil)
         controller.dismiss(animated: false)
+    }
+
+    // MARK: The band editor
+
+    /// The band editor, showing only while a color range is chosen and Colorize is off, as on the Mac.
+    private func spectrum(in editor: UIViewController) throws -> SpectrumView {
+        try #require(views(SpectrumView.self, in: editor.view).first)
+    }
+
+    private func choose(_ range: ColorRange, in session: EditorSession, editor: UIViewController) throws {
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.range = range
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+    }
+
+    /// The band shows for a color range, not for Master or while colorizing, above Apply outside this range.
+    @Test func theBandShowsOnlyForAColorRange() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        let band = try spectrum(in: editor)
+        #expect(band.isHidden)
+        try choose(.reds, in: session, editor: editor)
+        #expect(!band.isHidden)
+        let invert = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Apply outside this range instead" })
+        #expect(band.convert(band.bounds, to: editor.view).maxY <= invert.convert(invert.bounds, to: editor.view).minY)
+        session.updateHueSaturation(.colorizeStart, preview: true)
+        editor.updatePropertiesIfNeeded()
+        #expect(band.isHidden)
+        session.cancelHueSaturation()
+    }
+
+    /// Under the band, its four handles in degrees, as the Mac reads them: Reds' are 315°, 345°, 15° and 45°.
+    @Test func theBandReadsItsHandles() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        let readout = views(UILabel.self, in: try spectrum(in: editor)).compactMap(\.text)
+        #expect(readout == ["315°   345°   15°   45°"])
+        session.cancelHueSaturation()
+    }
+
+    /// A press on the handles takes the nearest one however far it is, as the Mac's does, and a drag moves it to where
+    /// the finger is on the hue circle; a move that would put the handles out of order is refused.
+    @Test func aPressTakesTheNearestHandleAnywhere() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        let handles = try spectrum(in: editor).handles
+        let width = handles.bounds.width
+        try #require(width > 0)
+        func x(_ degrees: Double) -> CGFloat { CGFloat(degrees / 360) * width }
+        handles.press(at: x(350))
+        #expect(session.hueSaturation?.settings.band.rangeStart == 350)
+        handles.drag(to: x(355))
+        #expect(session.hueSaturation?.settings.band.rangeStart == 355)
+        handles.release()
+        // Far from every handle, the nearest still moves: 100° is nearest the far shoulder, at 45°.
+        handles.press(at: x(100))
+        handles.release()
+        #expect(session.hueSaturation?.settings.band.falloffEnd == 100)
+        // The range's start past its end is refused.
+        handles.press(at: x(355))
+        handles.drag(to: x(30))
+        handles.release()
+        #expect(session.hueSaturation?.settings.band.rangeStart == 355)
+        session.cancelHueSaturation()
+    }
+
+    /// The band under the handles shows each hue as the adjustment turns it: Reds shifted by 60 shows red as yellow.
+    @Test func theAfterBandShowsTheShift() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.hue = 60
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        let strips = views(HueStrip.self, in: try spectrum(in: editor))
+        try #require(strips.count == 2)
+        func first(_ strip: HueStrip) throws -> PaletteColor {
+            let image = UIGraphicsImageRenderer(bounds: strip.bounds).image { strip.layer.render(in: $0.cgContext) }
+            return try pixel(image, at: CGPoint(x: 2, y: strip.bounds.midY))
+        }
+        let before = try first(strips[0]), after = try first(strips[1])
+        #expect(before.red > 0.9 && before.green < 0.2, "before \(before)")
+        #expect(after.red > 0.9 && after.green > 0.9 && after.blue < 0.2, "after \(after)")
+        session.cancelHueSaturation()
     }
 
     /// The color at `point` in `image`, in its points.
