@@ -586,6 +586,34 @@ import UIKit
         session.cancelHueSaturation()
     }
 
+    /// A double tap on an Invert layer's thumbnail renames it, as on the Mac, where only an adjustment with settings
+    /// opens an editor.
+    @Test func anInvertThumbnailDoubleTapRenames() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 1194, height: 834)
+        let controller = EditorWindowController()
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        controller.view.layoutIfNeeded()
+        let session = try #require(controller.activeTab?.session)
+        session.createNewProject(width: 200, height: 100)
+        session.addAdjustment(.invert)
+        let id = try #require(session.activeLayerID)
+        let panel = try #require(views(LayersPanelView.self, in: controller.view).first)
+        panel.updatePropertiesIfNeeded()
+        panel.layoutIfNeeded()
+        let cell = try #require(views(LayerRowCell.self, in: panel).first { $0.layerID == id })
+        cell.layoutIfNeeded()
+        let thumbnail = try #require(views(UIControl.self, in: cell).first { $0.accessibilityLabel == "Select image: Invert" })
+        cell.doubleTap(at: thumbnail.convert(CGPoint(x: thumbnail.bounds.midX, y: thumbnail.bounds.midY), to: cell.contentView))
+        try await eventually { controller.presentedViewController is UIAlertController }
+        #expect((controller.presentedViewController as? UIAlertController)?.title == "Rename Layer")
+        #expect(session.adjustmentEditingID == nil)
+        controller.dismiss(animated: false)
+    }
+
     /// The color at `point` in `image`, in its points.
     private func pixel(_ image: UIImage, at point: CGPoint) throws -> PaletteColor {
         let cgImage = try #require(image.cgImage)

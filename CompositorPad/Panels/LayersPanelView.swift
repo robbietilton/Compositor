@@ -153,12 +153,9 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         effects.showsMenuAsPrimaryAction = true
         let adjustments = footerButton("circle.lefthalf.filled", "New adjustment layer", enabled: { $0.canEditLayers && $0.document != nil },
                                        action: nil)
-        // The Mac's list; the kinds without an editor on iPad yet are dimmed.
+        // The Mac's list, titled as its Layers panel titles them.
         adjustments.menu = UIMenu(children: AdjustmentKind.allCases.map { kind in
-            let available = AdjustmentEditors.kinds.contains(kind) || kind == .invert
-            return UIAction(title: kind.rawValue + (kind.isEditable ? "…" : ""), attributes: available ? [] : .disabled) { [weak self] _ in
-                self?.session?.addAdjustment(kind)
-            }
+            UIAction(title: kind.rawValue) { [weak self] _ in self?.session?.addAdjustment(kind) }
         })
         adjustments.showsMenuAsPrimaryAction = true
         let delete = footerButton("trash", "Delete", enabled: { $0.canEditLayers && $0.activeLayer != nil }) { $0.deleteLayerOrMask() }
@@ -845,7 +842,9 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
             return
         }
         let onThumbnail = thumbnail.frame.insetBy(dx: -8, dy: -8).contains(point)
-        if onThumbnail, let session, let layerID, session.document?.layers.first(where: { $0.id == layerID })?.adjustment != nil {
+        // Only an adjustment with settings has an editor; an Invert layer's thumbnail renames, as on the Mac.
+        if onThumbnail, let session, let layerID,
+           session.document?.layers.first(where: { $0.id == layerID })?.adjustment?.kind.isEditable == true {
             onEditAdjustment()
         } else {
             onRename()

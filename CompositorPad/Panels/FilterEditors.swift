@@ -30,6 +30,11 @@ final class FilterEditorController: AdjustmentEditorController {
         case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil)
         /// A section's title, as Color Balance's Shadows, Midtones and Highlights.
         case heading(String)
+        /// The gradient the settings make, left to right, as Gradient Map's bar.
+        case gradient((FilterSettings) -> [AdjustmentColor])
+        /// Swatches side by side, each with its title after it, as Gradient Map's ends; a tap opens the color picker on
+        /// one.
+        case swatches([(title: String, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)])
         /// A color, as a swatch that opens the color picker on it.
         case color(caption: String, help: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
         /// What the filter does, in the panel's words.
@@ -99,6 +104,12 @@ final class FilterEditorController: AdjustmentEditorController {
             .slider(Row(caption: "Highlights", key: \.vignetteHighlights, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
                         help: "Protect bright areas near the edge")),
         ],
+        .gradientMap: [
+            .gradient { settings in [settings.gradientMap.ends.dark, settings.gradientMap.ends.light] },
+            .swatches([("Shadows", \.gradientMap.shadows, { $0.openGradientMapColorPicker(highlights: false) }),
+                       ("Highlights", \.gradientMap.highlights, { $0.openGradientMapColorPicker(highlights: true) })]),
+            .checkbox("Reverse", \.gradientMap.reversed),
+        ],
         // Each slider says how bright that family of colors becomes, as Photoshop's do.
         .blackWhite: [
             family("Reds", \.blackWhite.reds, hue: 0), family("Yellows", \.blackWhite.yellows, hue: 60),
@@ -131,6 +142,10 @@ final class FilterEditorController: AdjustmentEditorController {
             .note("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion)."),
         ],
     ]
+
+    nonisolated private static func palette(_ color: AdjustmentColor) -> PaletteColor {
+        PaletteColor(red: color.red, green: color.green, blue: color.blue)
+    }
 
     /// Black & White's row for a family of colors, its track dark to light in the family's hue.
     private static func family(_ caption: String, _ key: WritableKeyPath<FilterSettings, Double>, hue: Double) -> Control {
@@ -237,13 +252,33 @@ final class FilterEditorController: AdjustmentEditorController {
                     self.pickerSource = swatch
                     open(self.session)
                 }, for: .primaryActionTriggered)
-                refreshers.append { settings in
-                    let color = value(settings)
-                    swatch.color = PaletteColor(red: color.red, green: color.green, blue: color.blue)
-                }
+                refreshers.append { swatch.color = Self.palette(value($0)) }
                 captions.append(label)
                 // Spaced as a row's slider is from its caption, so the swatch starts where the sliders do.
                 content.addArrangedSubview(OptionControls.row([label, swatch, UIView()], spacing: 8))
+            case .gradient(let colors):
+                let bar = GradientBar(height: 20)
+                bar.layer.cornerRadius = 4
+                bar.layer.cornerCurve = .continuous
+                bar.layer.borderWidth = 1
+                bar.layer.borderColor = UIColor.black.withAlphaComponent(0.35).cgColor
+                bar.clipsToBounds = true
+                refreshers.append { bar.colors = colors($0).map(Self.palette) }
+                content.addArrangedSubview(bar)
+            case .swatches(let ends):
+                let pairs = ends.map { end -> UIView in
+                    let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
+                    swatch.accessibilityLabel = end.title + " color"
+                    swatch.toolTip = "Choose the \(end.title.lowercased()) color"
+                    swatch.addAction(UIAction { [weak self, weak swatch] _ in
+                        guard let self else { return }
+                        self.pickerSource = swatch
+                        end.open(self.session)
+                    }, for: .primaryActionTriggered)
+                    refreshers.append { swatch.color = Self.palette(end.value($0)) }
+                    return OptionControls.row([swatch, OptionControls.caption(end.title, color: .label)], spacing: 8)
+                }
+                content.addArrangedSubview(OptionControls.row(pairs + [UIView()], spacing: 20))
             case .heading(let title):
                 let label = OptionControls.caption(title, color: .label)
                 label.font = .preferredFont(forTextStyle: .headline)

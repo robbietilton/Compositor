@@ -511,16 +511,19 @@ final class LevelsHandlesView: UIView {
     }
 }
 
-/// The output ramp, black to white.
-private final class GradientBar: UIView {
+/// A ramp of colors, left to right: Levels' output, black to white, or Gradient Map's.
+final class GradientBar: UIView {
     override class var layerClass: AnyClass { CAGradientLayer.self }
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    var colors: [PaletteColor] = [.black, .white] {
+        didSet { (layer as! CAGradientLayer).colors = colors.map { CGColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) } }
+    }
+    init(height: CGFloat = 14) {
+        super.init(frame: .zero)
         let gradient = layer as! CAGradientLayer
-        gradient.colors = [UIColor.black.cgColor, UIColor.white.cgColor]
+        gradient.colors = colors.map { CGColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) }
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
-        heightAnchor.constraint(equalToConstant: 14).isActive = true
+        heightAnchor.constraint(equalToConstant: height).isActive = true
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

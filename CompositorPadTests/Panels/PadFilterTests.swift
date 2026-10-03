@@ -351,23 +351,20 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
-    /// The adjustment layers the iPad has no editor for yet are dimmed wherever they're offered, and can't be opened for
-    /// editing, which would hold the project with nothing to close it; those it has can.
-    @Test func adjustmentKindsWithoutAnEditorAreDimmed() async throws {
-        let (window, controller, session) = try await shownWindow()
+    /// New Adjustment Layer offers every kind, each with its editor on iPad, titled as the Mac's Layers panel titles them.
+    @Test func everyAdjustmentKindIsOffered() async throws {
+        let (window, controller, _) = try await shownWindow()
         defer { window.isHidden = true }
-        for kind in AdjustmentKind.allCases where kind != .invert {
+        for kind in AdjustmentKind.allCases {
             let new = UICommand(title: kind.rawValue, action: #selector(EditorWindowController.newAdjustmentLayer(_:)),
                                 propertyList: kind.rawValue)
-            #expect(controller.canPerformAction(new.action, withSender: new) == AdjustmentEditors.kinds.contains(kind), "\(kind)")
+            #expect(controller.canPerformAction(new.action, withSender: new), "\(kind)")
         }
-        #expect(AdjustmentEditors.kinds.contains(.gaussianBlur))
+        #expect(AdjustmentEditors.kinds == Set(AdjustmentKind.allCases.filter(\.isEditable)))
         let menu = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New adjustment layer" }?.menu)
-        for case let item as UIAction in menu.children {
-            let kind = try #require(AdjustmentKind.allCases.first { item.title.hasPrefix($0.rawValue) })
-            #expect(item.attributes.contains(.disabled) == !(AdjustmentEditors.kinds.contains(kind) || kind == .invert), "\(kind)")
-        }
-        _ = session
+        let items = menu.children.compactMap { $0 as? UIAction }
+        #expect(items.map(\.title) == AdjustmentKind.allCases.map(\.rawValue))
+        #expect(items.allSatisfy { !$0.attributes.contains(.disabled) })
     }
 
     // MARK: The slider filters
@@ -562,6 +559,64 @@ import UIKit
         // The middle row of Midtones is Midtones' Magenta / Green.
         rows[4].onChange(-35)
         #expect(session.filterEdit?.settings.colorBalance.midMagentaGreen == -35)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    // MARK: Gradient Map
+
+    /// The bar the editor draws the gradient in, left to right.
+    private func gradientBar(in editor: UIViewController) throws -> GradientBar {
+        try #require(views(GradientBar.self, in: editor.view).first)
+    }
+
+    /// Image › Gradient Map… starts from the foreground and background colors, as in Photoshop, shown in its swatches and
+    /// its bar, dark to light.
+    @Test func gradientMapStartsFromTheForegroundAndBackground() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.foregroundColor = PaletteColor(red: 1, green: 0, blue: 0)
+        session.backgroundColor = PaletteColor(red: 0, green: 0, blue: 1)
+        #expect(choose(filterCommand(.gradientMap), in: controller))
+        let editor = try await filterEditor(over: controller)
+        let red = PaletteColor(red: 1, green: 0, blue: 0), blue = PaletteColor(red: 0, green: 0, blue: 1)
+        let swatches = views(SwatchButton.self, in: editor.view)
+        #expect(swatches.map(\.accessibilityLabel) == ["Shadows color", "Highlights color"])
+        #expect(swatches.map(\.color) == [red, blue])
+        #expect(views(UILabel.self, in: editor.view).compactMap(\.text).contains("Highlights"))
+        #expect(try gradientBar(in: editor).colors == [red, blue])
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// A swatch picks its end's color with the system's picker, the bar following; Reverse swaps the ends.
+    @Test func gradientMapsSwatchesAndReverse() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.foregroundColor = .black
+        session.backgroundColor = .white
+        choose(filterCommand(.gradientMap), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let highlights = try #require(views(SwatchButton.self, in: editor.view).first { $0.accessibilityLabel == "Highlights color" })
+        highlights.sendActions(for: .primaryActionTriggered)
+        #expect(session.colorPicker?.target == .gradientMap(highlights: true))
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        picker.delegate?.colorPickerViewController?(picker, didSelect: .green, continuously: false)
+        try press("\r", in: controller)
+        let green = PaletteColor(red: 0, green: 1, blue: 0)
+        #expect(session.filterEdit?.settings.gradientMap.highlights == AdjustmentColor(green))
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        editor.updatePropertiesIfNeeded()
+        #expect(try gradientBar(in: editor).colors == [.black, green] && highlights.color == green)
+
+        let reverse = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Reverse" })
+        reverse.isSelected = true
+        reverse.sendActions(for: .primaryActionTriggered)
+        #expect(session.filterEdit?.settings.gradientMap.reversed == true)
+        editor.updatePropertiesIfNeeded()
+        #expect(try gradientBar(in: editor).colors == [green, .black])
         session.cancelFilter()
         try await eventually { controller.presentedViewController == nil }
     }
