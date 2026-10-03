@@ -15,7 +15,25 @@ import UIKit
     /// The app's menus come after View, in the Mac's order.
     @Test func theMenusComeInTheMacsOrder() {
         let bar = MenuBarModel.built(by: AppDelegate())
-        #expect(bar.titles == ["File", "Edit", "View", "Select", "Image", "Filter", "Layer", "Window", "Help"])
+        #expect(bar.titles == ["Compositor", "File", "Edit", "View", "Select", "Image", "Filter", "Layer", "Window", "Help"])
+    }
+
+    /// No shortcut the app adds clashes with one already in the system's menus, which UIKit would turn away, and with
+    /// it the whole group it came in.
+    @Test func noShortcutIsTurnedAway() {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        #expect(bar.conflicts.isEmpty, "\(bar.conflicts)")
+    }
+
+    /// File is the Mac's: New Canvas…, Open Project… and Open Recent in place of the system's Open…, the imports, the
+    /// saves, the exports, then Close Tab.
+    @Test func theFileMenuIsTheMacs() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let file = try #require(bar.menu(titled: "File"))
+        #expect(file.commands.map(\.title) == ["New Canvas…", "Open Project…", "Import Images…", "Import from Photos…", "Save",
+                                               "Duplicate", "Rename…", "Export PNG…", "Export JPEG…", "Close Tab"])
+        #expect(file.commands.map(shortcut) == ["⌘N", "⌘O", "", "", "⌘S", "⇧⌘S", "", "⇧⌘E", "⌥⇧⌘S", "⌘W"])
+        #expect(file.submenus.map(\.title) == ["Open Recent"])
     }
 
     /// Edit holds the Mac's Cut, Copy, Copy Merged and Paste, then the fills; no Find, whose ⌘G, ⇧⌘G and ⌘E the
@@ -23,10 +41,10 @@ import UIKit
     @Test func editIsTheMacs() throws {
         let bar = MenuBarModel.built(by: AppDelegate())
         let edit = try #require(bar.menu(titled: "Edit"))
-        #expect(edit.commands.map(\.title) == ["Cut", "Copy", "Copy Merged", "Paste", "Fill with Foreground Color",
+        #expect(edit.commands.map(\.title) == ["Undo", "Redo", "Cut", "Copy", "Copy Merged", "Paste", "Fill with Foreground Color",
                                                "Fill with Background Color", "Clear Selection Pixels", "Content-Aware Fill…"])
-        #expect(edit.commands.map(shortcut) == ["⌘X", "⌘C", "⇧⌘C", "⌘V", "⌥⌫", "⌘⌫", "", "⇧⌫"])
-        #expect(edit.submenus.isEmpty)
+        #expect(edit.commands.map(shortcut) == ["⌘Z", "⇧⌘Z", "⌘X", "⌘C", "⇧⌘C", "⌘V", "⌥⌫", "⌘⌫", "", "⇧⌫"])
+        #expect(!edit.submenus.map(\.title).contains("Find"))
     }
 
     /// Select › All has ⌘A, as on the Mac, and goes to whichever responds first: a field being edited, or the canvas.
@@ -333,12 +351,12 @@ import UIKit
         }
         #expect(elements(view).map(\.title) == ["Fit Canvas", "Actual Pixels", "Zoom In", "Zoom Out", "Pixel Grid (800% and above)",
                                                 "Snap", "Show Transform Controls", "Show", "Grid Settings…", "Rulers", "Snap", "Snap To",
-                                                "Lock Guides", "Clear Guides"])
+                                                "Lock Guides", "Clear Guides", "Customize Toolbar…"])
         #expect(view.submenus.map(\.title) == ["Show", "Snap To"])
         #expect(view.submenus[0].commands.map(\.title) == ["Grid", "Guides"])
         #expect(view.submenus[1].commands.map(\.title) == ["Guides", "Grid", "Layers", "Document Bounds"])
         #expect(view.commands.map(shortcut) == ["⌘0", "⌘1", "⌘=", "⌘-", "", "", "⌘H", "⌘'", "⌘;", "⌘R", "⇧⌘;", "", "", "", "",
-                                                "⌥⌘;", ""])
+                                                "⌥⌘;", "", ""])
     }
 
     /// The View menu's switches turn the window's settings on and off, checked when they're on, as on the Mac.

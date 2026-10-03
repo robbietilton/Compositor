@@ -21,6 +21,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         super.buildMenu(with: builder)
         guard builder.system == .main else { return }
         builder.remove(menu: .format)
+        // The Mac has no sidebar to show.
+        builder.remove(menu: .sidebar)
         // The Mac has no Find: its ⌘G, ⇧⌘G and ⌘E are the Layer menu's.
         builder.remove(menu: .find)
         typealias Window = EditorWindowController
@@ -44,9 +46,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Export PNG…", action: #selector(Window.exportPNG(_:)), input: "e", modifierFlags: [.command, .shift]),
             UIKeyCommand(title: "Export JPEG…", action: #selector(Window.exportJPEG(_:)), input: "s", modifierFlags: [.command, .alternate, .shift]),
         ])
-        builder.insertChild(export, atStartOfMenu: .file)
-        builder.insertChild(save, atStartOfMenu: .file)
-        builder.insertChild(open, atStartOfMenu: .file)
+        // In place of the system's Open… and Open Recent, whose ⌘O would otherwise turn ours away.
+        builder.replace(menu: .open, with: open)
+        builder.insertSibling(save, afterMenu: open.identifier)
+        builder.insertSibling(export, afterMenu: save.identifier)
         // The Mac's Cut, Copy, Copy Merged and Paste in place of the system's group, then the fills. A field being edited
         // takes Cut, Copy and Paste, and the canvas otherwise; Select All is Select › All.
         let pasteboard = UIMenu.Identifier("com.wonderassembly.compositor.pasteboard")
