@@ -107,12 +107,21 @@ import UIKit
         return scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
     }
 
-    /// Saves and closes the file; the tab is done with. A project still opening stops, and its file is closed.
+    /// Saves and closes the file; the tab is done with. What's in progress is kept as the Mac's Quit keeps it: text
+    /// being typed goes in as Done would put it, a stroke as lifting the finger would, edits on the canvas are applied
+    /// and a transform kept, and an open editor is cancelled, so nothing goes in that wasn't OK'd. A project still
+    /// opening stops, and its file is closed.
     func close() async {
         isClosed = true
         loading?.stopped()
         opening?.cancel()
         _ = await opening?.result
+        // An edit already OK'd finishes first.
+        await session.waitForProjectAccess()
+        _ = session.finishText()
+        session.finishBrushImmediately()
+        await session.settlePendingEdits()
+        session.commitTransform()
         await document?.closeDocument()
         document = nil
     }

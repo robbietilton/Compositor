@@ -84,6 +84,8 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     /// Saves what hasn't been, and lets go of the file.
     @MainActor func closeDocument() async {
+        // An edit made in this turn of the main actor, which hasn't marked the document changed yet, is saved too.
+        if session.history.isModified { updateChangeCount(.done) }
         _ = await close()
         stopAccessing()
     }
@@ -119,11 +121,12 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
         }
     }
 
-    /// What a save writes: the document as it stands, captured on the main queue. Edits carry on while it's written.
+    /// What a save writes: the document as its last finished edit left it, captured on the main queue. Edits carry on
+    /// while it's written.
     override func contents(forType typeName: String) throws -> Any {
         let capturing = Timing.begin("Snapshot")
         let snapshot = try MainActor.assumeIsolated { () throws -> ProjectSnapshot in
-            guard let snapshot = session.projectSnapshot() else { throw ProjectError.invalid }
+            guard let snapshot = session.saveSnapshot() else { throw ProjectError.invalid }
             return snapshot
         }
         Timing.end(capturing)
@@ -152,31 +155,54 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
 
     // MARK: Changes
 
+    /// The file holds text that was being typed, as Done would put it: once that text is done with, by Done or Cancel,
+    /// the project is to save again.
+    @MainActor private var fileHoldsDraft = false
+
     /// Marks the document changed whenever the editor's history moves away from what was saved, and unchanged when
-    /// undo takes it back, so UIDocument saves it when it should.
+    /// undo takes it back, so UIDocument saves it when it should; and changed when text the file holds is done with.
     @MainActor private func trackChanges() {
-        withObservationTracking { _ = session.history.currentRevision } onChange: { [weak self] in
+        withObservationTracking {
+            _ = session.history.currentRevision
+            _ = session.textDraft == nil
+        } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, !self.documentState.contains(.closed) else { return }
-                self.updateChangeCount(self.session.history.isModified ? .done : .cleared)
+                self.markChanges()
                 self.trackChanges()
             }
         }
     }
 
+    @MainActor private func markChanges() {
+        let changed = session.history.isModified || (fileHoldsDraft && session.textDraft == nil)
+        updateChangeCount(changed ? .done : .cleared)
+    }
+
+    /// A save made while text was being typed, which it wrote as Done would put it.
+    private struct DraftSave { let revision: UUID }
+
     /// A save is of the history's revision when it began: once written, that revision is the saved one, and whatever
-    /// the project has done since, edits or an undo back past it, is still to save.
+    /// the project has done since, edits or an undo back past it, is still to save. Text being typed is written too,
+    /// and is to save again once it's done with.
     override func changeCountToken(for saveOperation: UIDocument.SaveOperation) -> Any {
-        MainActor.assumeIsolated { session.history.currentRevision }
+        MainActor.assumeIsolated {
+            let revision = session.history.currentRevision
+            return session.textDraft == nil ? revision as Any : DraftSave(revision: revision)
+        }
     }
 
     override func updateChangeCount(withToken changeCountToken: Any, for saveOperation: UIDocument.SaveOperation) {
-        guard let saved = changeCountToken as? UUID else {
-            return super.updateChangeCount(withToken: changeCountToken, for: saveOperation)
+        let saved: (revision: UUID, draft: Bool)
+        switch changeCountToken {
+        case let revision as UUID: saved = (revision, false)
+        case let draft as DraftSave: saved = (draft.revision, true)
+        default: return super.updateChangeCount(withToken: changeCountToken, for: saveOperation)
         }
         Task { @MainActor in
-            session.history.markSaved(saved)
-            updateChangeCount(session.history.isModified ? .done : .cleared)
+            session.history.markSaved(saved.revision)
+            fileHoldsDraft = saved.draft
+            markChanges()
         }
     }
 

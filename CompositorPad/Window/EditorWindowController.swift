@@ -318,11 +318,22 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         becomeFirstResponder()
     }
 
-    /// Saves and closes the tab's project. The last tab is replaced by an empty one, as on the Mac.
+    /// Saves and closes the tab's project, keeping what's in progress as the Mac's Quit does. The last tab is replaced
+    /// by an empty one, as on the Mac.
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let tab = tabs.remove(at: index)
-        tab.session.commitTransform()
+        let tab = tabs[index]
+        // Text that can't be drawn keeps the tab, as it keeps the Mac from quitting.
+        guard tab.session.finishText() else { return }
+        // Its dialog, which holds the project, ends as its Cancel would.
+        if dialogSession === tab.session { cancelDialog() }
+        // Before its canvas goes, which takes back a stroke still being drawn.
+        tab.session.finishBrushImmediately()
+        // Its editor goes with it; closing cancels the edit.
+        if let editor = presentedViewController as? AdjustmentEditorController, editor.session === tab.session {
+            editor.dismiss(animated: true)
+        }
+        tabs.remove(at: index)
         Task { await tab.close() }
         if tabs.isEmpty { addTab() }
         else if activeID == id { select(tabs[min(index, tabs.count - 1)].id) }
@@ -565,9 +576,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     /// Saves now, though the project saves itself as it changes; ⌘S is a habit worth keeping.
     @objc func saveProject(_ sender: Any?) {
-        guard let tab = activeTab, let document = tab.document else { return }
-        tab.session.commitTransform()
-        Task {
+        guard let tab = activeTab, let document = tab.document, beginSave(on: tab.session) else { return }
+        saving = Task {
             if !(await document.save(to: document.fileURL, for: .forOverwriting)) {
                 showMessage("Couldn’t save the project", "It will be saved again when it next changes.")
             }
@@ -575,7 +585,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
 
     @objc func duplicateProject(_ sender: Any?) {
-        guard let document = activeTab?.document else { return }
+        guard let tab = activeTab, let document = tab.document, beginSave(on: tab.session) else { return }
         Task {
             do { open(project: try await document.duplicate()) }
             catch { showError("Couldn’t duplicate the project", error) }
@@ -612,6 +622,15 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return true
     }
 
+    /// Readies the project for a save, as the Mac's Save begins: not while text is being typed, a stroke drawn or an
+    /// adjustment layer edited, which the Mac's Save waits for; a crop in progress is set aside and a transform kept.
+    private func beginSave(on session: EditorSession) -> Bool {
+        guard session.canStartProjectOperation else { return false }
+        session.cancelCrop()
+        session.commitTransform()
+        return true
+    }
+
     /// The project as an export takes it.
     private func exportSnapshot(of session: EditorSession) -> ProjectSnapshot? {
         beginProjectOperation(on: session) ? session.projectSnapshot() : nil
@@ -628,6 +647,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     func canvasSizeDialog() -> CanvasSizeController? {
         guard let session = activeTab?.session, let document = session.document, beginProjectOperation(on: session) else { return nil }
         session.isProjectBusy = true
+        dialogSession = session
         return CanvasSizeController(document: document, session: session) { [weak self] options in
             self?.dismiss(animated: true)
             guard let options, let snapshot = session.projectSnapshot() else {
@@ -650,6 +670,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     func imageSizeDialog() -> ImageSizeController? {
         guard let session = activeTab?.session, let document = session.document, beginProjectOperation(on: session) else { return nil }
         session.isProjectBusy = true
+        dialogSession = session
         return ImageSizeController(document: document) { [weak self] options in
             self?.dismiss(animated: true)
             guard let options, let snapshot = session.projectSnapshot() else {
@@ -686,11 +707,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         Task { [weak self] in
             do {
                 let raster = try await ImageExporter.shared.render(snapshot)
-                // Another export's share sheet may have opened meanwhile.
-                guard let self, self.presentedViewController == nil else {
+                // Another export's share sheet may have opened meanwhile, or the tab closed.
+                guard let self, self.presentedViewController == nil, self.tabs.contains(where: { $0 === tab }),
+                      !tab.isClosed else {
                     session.isProjectBusy = false
                     return
                 }
+                self.dialogSession = session
                 let dialog = JPEGExportController(raster: raster) { [weak self] data in
                     session.isProjectBusy = false
                     self?.dismiss(animated: true) {
@@ -818,7 +841,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let session = activeTab?.session
         if presentedViewController != nil, Self.canvasKeys.contains(action) { return false }
         switch action {
-        case #selector(saveProject(_:)), #selector(duplicateProject(_:)), #selector(renameProject(_:)): return hasFile
+        case #selector(saveProject(_:)), #selector(duplicateProject(_:)): return hasFile && session?.canStartProjectOperation == true
+        case #selector(renameProject(_:)): return hasFile
         case #selector(exportPNG(_:)), #selector(exportJPEG(_:)), #selector(canvasSize(_:)), #selector(imageSize(_:)):
             return hasDocument && session?.canStartProjectOperation == true && presentedViewController == nil
         case #selector(fitCanvas(_:)), #selector(actualPixels(_:)),
@@ -985,13 +1009,68 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         }
     }
 
-    /// Before iPadOS may quit the app in the background, every changed project is saved.
+    /// The save Save or `saveAll` set going last. Tests wait for it.
+    private(set) var saving: Task<Void, Never>?
+
+    /// Before iPadOS may quit the app in the background, every changed project is saved, each on its own, with time
+    /// asked for to finish. What's in progress stays as it is, for coming back to. An edit already OK'd and still being
+    /// worked out goes in first if it's done in a moment, but a dialog left open, which holds its project too, doesn't
+    /// hold the save up. Text being typed stays open, as in Apple's own apps, and is saved as Done would put it.
     func saveAll() {
-        for tab in tabs { tab.document?.autosave(completionHandler: nil) }
+        let tabs = tabs
+        saving = Self.withBackgroundTime("Save projects") {
+            await withTaskGroup { group in
+                for tab in tabs {
+                    guard let document = tab.document else { continue }
+                    group.addTask { @MainActor in
+                        for _ in 0..<20 where tab.session.isProjectBusy { try? await Task.sleep(for: .milliseconds(100)) }
+                        // Including an edit just made, which hasn't marked the document changed yet.
+                        if tab.session.isModified || tab.session.textDraft != nil { document.updateChangeCount(.done) }
+                        _ = await document.autosave()
+                    }
+                }
+            }
+        }
     }
 
+    /// The window is gone: a dialog over it ends as its Cancel would, and every tab saves and closes, with time asked
+    /// for to finish.
     func closeAll() {
-        for tab in tabs { Task { await tab.close() } }
+        cancelDialog()
+        let tabs = tabs
+        _ = Self.withBackgroundTime("Close projects") {
+            await withTaskGroup { group in
+                for tab in tabs { group.addTask { await tab.close() } }
+            }
+        }
+    }
+
+    /// The project whose dialog is over the window, or was last.
+    private weak var dialogSession: EditorSession?
+
+    /// Ends a dialog over the window as its Cancel would, freeing the project it holds.
+    private func cancelDialog() {
+        switch presentedViewController {
+        case let dialog as SizeDialogController: dialog.cancel()
+        case let dialog as JPEGExportController: dialog.cancel()
+        default: break
+        }
+    }
+
+    /// Runs `work`, with time asked of iPadOS to finish it should the app leave the screen meanwhile.
+    private static func withBackgroundTime(_ name: String, _ work: @escaping () async -> Void) -> Task<Void, Never> {
+        final class Identifier { var value = UIBackgroundTaskIdentifier.invalid }
+        let identifier = Identifier()
+        let end = {
+            guard identifier.value != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(identifier.value)
+            identifier.value = .invalid
+        }
+        identifier.value = UIApplication.shared.beginBackgroundTask(withName: name, expirationHandler: end)
+        return Task {
+            await work()
+            end()
+        }
     }
 
     // MARK: Helpers
