@@ -621,6 +621,119 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    // MARK: Dither
+
+    /// Whether `view` shows, every view above it in the editor showing too.
+    private func shows(_ view: UIView, in editor: UIViewController) -> Bool {
+        var current: UIView? = view
+        while let shown = current, shown !== editor.view {
+            if shown.isHidden { return false }
+            current = shown.superview
+        }
+        return true
+    }
+
+    /// The editor's pop-up captioned `caption`.
+    private func popUp(_ caption: String, in editor: UIViewController) throws -> PopUpButton {
+        try #require(views(PopUpButton.self, in: editor.view).first { $0.accessibilityLabel == caption }, "\(caption)")
+    }
+
+    /// Filter › Dither… with `style` chosen, its rows laid out for it.
+    private func dither(_ style: DitherStyle, over controller: EditorWindowController) async throws -> FilterEditorController {
+        #expect(choose(filterCommand(.dither), in: controller))
+        let editor = try await filterEditor(over: controller)
+        let styles = try popUp("Style", in: editor)
+        styles.onChoose(style.rawValue)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        #expect(styles.configuration?.title == style.rawValue)
+        return editor
+    }
+
+    /// Each style shows the Mac's rows for it, and only those; ASCII its Characters; and the styles that draw marks,
+    /// Light on Dark.
+    @Test(arguments: DitherStyle.allCases)
+    func ditherShowsEachStylesRows(style: DitherStyle) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let editor = try await dither(style, over: controller)
+        let rows: [String] = switch style {
+        case .atkinson, .floydSteinberg: ["Pixel Size", "Tones", "Diffusion", "Density", "Contrast"]
+        case .bayer2, .bayer4, .bayer8: ["Pixel Size", "Tones", "Density", "Contrast"]
+        case .dots, .lines, .diamonds: ["Pixel Size", "Cell Size", "Angle", "Density", "Contrast"]
+        case .patterns: ["Pixel Size", "Density", "Contrast"]
+        case .ascii: ["Text Size", "Density", "Contrast"]
+        case .scanlines: ["Line Spacing", "Glow", "Dots", "Wobble", "Density", "Contrast"]
+        }
+        #expect(shownCaptions(of: editor) == rows)
+        let characters = try #require(views(UITextField.self, in: editor.view).first { $0.accessibilityLabel == "Characters" })
+        #expect(shows(characters, in: editor) == (style == .ascii))
+        let lightOnDark = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Light on Dark" })
+        #expect(shows(lightOnDark, in: editor) == [.dots, .lines, .diamonds, .patterns, .ascii].contains(style))
+        #expect(shows(try popUp("Colors", in: editor), in: editor))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Two Colors shows the Dark and Light swatches, each picking its color with the system's picker.
+    @Test func ditherTwoColorsShowsItsSwatches() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let editor = try await dither(.atkinson, over: controller)
+        let swatches = views(SwatchButton.self, in: editor.view)
+        #expect(swatches.map(\.accessibilityLabel) == ["Dark color", "Light color"])
+        #expect(swatches.allSatisfy { !shows($0, in: editor) })
+        try popUp("Colors", in: editor).onChoose(DitherColors.twoColors.rawValue)
+        #expect(session.filterEdit?.settings.dither.colors == .twoColors)
+        editor.updatePropertiesIfNeeded()
+        #expect(swatches.allSatisfy { shows($0, in: editor) })
+        swatches[1].sendActions(for: .primaryActionTriggered)
+        #expect(session.colorPicker?.target == .dither(light: true))
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Pixel Shape shows only for pixels bigger than one, in the styles drawn in chunky pixels.
+    @Test func ditherPixelShapeOnlyWithBigPixels() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let editor = try await dither(.atkinson, over: controller)
+        let shape = try popUp("Pixel Shape", in: editor)
+        #expect(shows(shape, in: editor))
+        shape.onChoose(DitherPixelShape.dot.rawValue)
+        #expect(session.filterEdit?.settings.dither.pixelShape == .dot)
+        try slide(0, to: 1, in: editor, logarithmic: false)
+        editor.updatePropertiesIfNeeded()
+        #expect(!shows(shape, in: editor))
+        try popUp("Style", in: editor).onChoose(DitherStyle.ascii.rawValue)
+        try slide(0, to: 20, in: editor, logarithmic: false)
+        editor.updatePropertiesIfNeeded()
+        #expect(!shows(shape, in: editor))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// ASCII's characters are typed into a field of their own, which takes letters before the tools' keys do.
+    @Test func ditherCharactersAreTyped() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let editor = try await dither(.ascii, over: controller)
+        let field = try #require(views(UITextField.self, in: editor.view).first { $0.accessibilityLabel == "Characters" })
+        #expect(field.text == DitherSettings.defaultCharacters)
+        field.text = " .oO@"
+        field.sendActions(for: .editingChanged)
+        #expect(session.filterEdit?.settings.dither.characters == " .oO@")
+        // B picks the Brush only when no text takes it: a field with the keyboard types it.
+        let brush = try #require(controller.keyCommands?.first { $0.input == "b" && $0.modifierFlags.isEmpty })
+        #expect(!brush.wantsPriorityOverSystemBehavior)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     // MARK: Content-Aware Fill
 
     /// Selects `rect`, in document pixels, as a marquee does.

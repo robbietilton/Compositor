@@ -22,19 +22,32 @@ final class FilterEditorController: AdjustmentEditorController {
         var track: ((FilterSettings) -> CameraRawSliderTrack)? = nil
     }
 
-    /// What the Mac's filter panel puts in a filter's editor, in order.
+    /// A color, as a swatch that opens the color picker on it, titled.
+    struct Swatch {
+        let title: String
+        let value: (FilterSettings) -> AdjustmentColor
+        let open: (EditorSession) -> Void
+    }
+
+    /// What the Mac's filter panel puts in a filter's editor, in order. A control with `shown` shows only when it says
+    /// so, as Dither's rows for its style.
     enum Control {
         case slider(Row)
         /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it.
         case choice(caption: String?, titles: [String], help: String?, chosen: (FilterSettings) -> Int, choose: (inout FilterSettings, Int) -> Void)
-        case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil)
+        /// A choice among `groups` of names, as a pop-up, captioned.
+        case popUp(caption: String, groups: [[String]], help: String? = nil, chosen: (FilterSettings) -> String,
+                   choose: (inout FilterSettings, String) -> Void, shown: ((FilterSettings) -> Bool)? = nil)
+        case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil, shown: ((FilterSettings) -> Bool)? = nil)
+        /// Text typed into a field, captioned, as Dither's Characters.
+        case field(caption: String, key: WritableKeyPath<FilterSettings, String>, help: String?, shown: ((FilterSettings) -> Bool)? = nil)
         /// A section's title, as Color Balance's Shadows, Midtones and Highlights.
         case heading(String)
         /// The gradient the settings make, left to right, as Gradient Map's bar.
         case gradient((FilterSettings) -> [AdjustmentColor])
-        /// Swatches side by side, each with its title after it, as Gradient Map's ends; a tap opens the color picker on
-        /// one.
-        case swatches([(title: String, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)])
+        /// Swatches side by side, each with its title after it, as Gradient Map's ends, or before it, as Dither's Dark
+        /// and Light; a tap opens the color picker on one.
+        case swatches([Swatch], titlesFirst: Bool = false, shown: ((FilterSettings) -> Bool)? = nil)
         /// A color, as a swatch that opens the color picker on it.
         case color(caption: String, help: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
         /// What the filter does, in the panel's words.
@@ -106,9 +119,54 @@ final class FilterEditorController: AdjustmentEditorController {
         ],
         .gradientMap: [
             .gradient { settings in [settings.gradientMap.ends.dark, settings.gradientMap.ends.light] },
-            .swatches([("Shadows", \.gradientMap.shadows, { $0.openGradientMapColorPicker(highlights: false) }),
-                       ("Highlights", \.gradientMap.highlights, { $0.openGradientMapColorPicker(highlights: true) })]),
+            .swatches([Swatch(title: "Shadows", value: \.gradientMap.shadows, open: { $0.openGradientMapColorPicker(highlights: false) }),
+                       Swatch(title: "Highlights", value: \.gradientMap.highlights, open: { $0.openGradientMapColorPicker(highlights: true) })]),
             .checkbox("Reverse", \.gradientMap.reversed),
+        ],
+        // The rows each style uses, as the Mac's panel shows them.
+        .dither: [
+            .popUp(caption: "Style", groups: DitherStyle.groups.map { $0.map(\.rawValue) }, chosen: { $0.dither.style.rawValue },
+                   choose: { settings, name in if let style = DitherStyle(rawValue: name) { settings.dither.style = style } }),
+            .slider(Row(caption: "Pixel Size", key: \.dither.pixelSize, range: DitherSettings.pixelSizeRange, unit: "px", decimals: 0,
+                        logarithmic: false, help: "Make each dithered pixel this many pixels across, for a chunky old-screen look",
+                        shown: { $0.dither.style.usesPixelSize })),
+            .slider(Row(caption: "Text Size", key: \.dither.textSize, range: DitherSettings.textSizeRange, unit: "px", decimals: 0,
+                        logarithmic: false, help: "The height of each line of characters", shown: { $0.dither.style == .ascii })),
+            .slider(Row(caption: "Line Spacing", key: \.dither.lineSpacing, range: DitherSettings.lineSpacingRange, unit: "px", decimals: 0,
+                        logarithmic: false, help: "How far apart the screen's lines are", shown: { $0.dither.style == .scanlines })),
+            .slider(Row(caption: "Glow", key: \.dither.glow, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "Light blooming around the lines, like a CRT's phosphors", shown: { $0.dither.style == .scanlines })),
+            .slider(Row(caption: "Dots", key: \.dither.dots, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "Break the lines into glowing beads", shown: { $0.dither.style == .scanlines })),
+            .slider(Row(caption: "Wobble", key: \.dither.wobble, range: DitherSettings.wobbleRange, unit: "px", decimals: 0, logarithmic: false,
+                        help: "Make the lines waver sideways down the screen, like a CRT losing sync", shown: { $0.dither.style == .scanlines })),
+            .slider(Row(caption: "Cell Size", key: \.dither.cellSize, range: DitherSettings.cellSizeRange, unit: "px", decimals: 0,
+                        logarithmic: false, shown: { $0.dither.style.isHalftone })),
+            .slider(Row(caption: "Angle", key: \.dither.angle, range: -90...90, unit: "°", decimals: 0, logarithmic: false,
+                        shown: { $0.dither.style.isHalftone })),
+            .field(caption: "Characters", key: \.dither.characters,
+                   help: "The characters to draw with, in any order: each spot gets the one whose ink best matches its tone",
+                   shown: { $0.dither.style == .ascii }),
+            .slider(Row(caption: "Tones", key: \.dither.levels, range: DitherSettings.levelsRange, unit: nil, decimals: 0, logarithmic: false,
+                        help: "Tones per channel: 2 is pure black and white", shown: { $0.dither.style.hasTones })),
+            .slider(Row(caption: "Diffusion", key: \.dither.diffusion, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
+                        help: "How much of each pixel's error spreads to its neighbors. Less gives flatter areas",
+                        shown: { $0.dither.style.diffuses })),
+            .slider(Row(caption: "Density", key: \.dither.density, range: -100...100, unit: nil, decimals: 0, logarithmic: false,
+                        help: "More ink (darker) or less before dithering")),
+            .slider(Row(caption: "Contrast", key: \.dither.contrast, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
+            .popUp(caption: "Colors", groups: [DitherColors.allCases.map(\.rawValue)], chosen: { $0.dither.colors.rawValue },
+                   choose: { settings, name in if let colors = DitherColors(rawValue: name) { settings.dither.colors = colors } }),
+            .swatches([Swatch(title: "Dark", value: \.dither.dark, open: { $0.openDitherColorPicker(light: false) }),
+                       Swatch(title: "Light", value: \.dither.light, open: { $0.openDitherColorPicker(light: true) })],
+                      titlesFirst: true, shown: { $0.dither.colors == .twoColors }),
+            .popUp(caption: "Pixel Shape", groups: [DitherPixelShape.allCases.map(\.rawValue)],
+                   help: "Draw each chunky pixel as a solid square, or as a round dot like a dot-matrix screen",
+                   chosen: { $0.dither.pixelShape.rawValue },
+                   choose: { settings, name in if let shape = DitherPixelShape(rawValue: name) { settings.dither.pixelShape = shape } },
+                   shown: { $0.dither.pixelSize > 1 && $0.dither.style.usesPixelSize }),
+            .checkbox("Light on Dark", \.dither.lightOnDark, help: "Draw the marks for the light tones on the dark color, like a glowing screen",
+                      shown: { $0.dither.style.drawsMarks }),
         ],
         // Each slider says how bright that family of colors becomes, as Photoshop's do.
         .blackWhite: [
@@ -216,6 +274,11 @@ final class FilterEditorController: AdjustmentEditorController {
     override func viewDidLoad() {
         super.viewDidLoad()
         var captions: [UILabel] = []
+        /// Adds `view` to the controls, showing only while `shown` says so.
+        func add(_ view: UIView, shown: ((FilterSettings) -> Bool)?) {
+            content.addArrangedSubview(view)
+            if let shown { refreshers.append { view.isHidden = !shown($0) } }
+        }
         for control in Self.controls[kind] ?? [] {
             switch control {
             case .slider(let row):
@@ -237,11 +300,35 @@ final class FilterEditorController: AdjustmentEditorController {
                 refreshers.append { segments.selectedSegmentIndex = chosen($0) }
                 let views = (caption.map { [OptionControls.caption($0, color: .secondaryLabel)] } ?? []) + [segments, UIView()]
                 content.addArrangedSubview(OptionControls.row(views, spacing: 10))
-            case .checkbox(let title, let key, let help):
+            case .popUp(let caption, let groups, let help, let chosen, let choose, let shown):
+                let popUp = PopUpButton()
+                popUp.accessibilityLabel = caption
+                popUp.toolTip = help
+                popUp.onChoose = { [weak self] name in self?.update { choose(&$0, name) } }
+                refreshers.append { popUp.show(groups, chosen: chosen($0)) }
+                add(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), popUp, UIView()], spacing: 10), shown: shown)
+            case .checkbox(let title, let key, let help, let shown):
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
                 box.toolTip = help
                 refreshers.append { box.isSelected = $0[keyPath: key] }
-                content.addArrangedSubview(OptionControls.row([box, UIView()]))
+                add(OptionControls.row([box, UIView()]), shown: shown)
+            case .field(let caption, let key, let help, let shown):
+                let field = UITextField()
+                field.borderStyle = .roundedRect
+                field.font = .monospacedSystemFont(ofSize: OptionControls.controlFont.pointSize, weight: .regular)
+                field.autocorrectionType = .no
+                field.autocapitalizationType = .none
+                field.spellCheckingType = .no
+                field.accessibilityLabel = caption
+                field.toolTip = help
+                field.addAction(UIAction { [weak self, weak field] _ in
+                    guard let text = field?.text else { return }
+                    self?.update { $0[keyPath: key] = text }
+                }, for: .editingChanged)
+                // Return only ends the typing, as in the Mac's field.
+                field.addAction(UIAction { _ in }, for: .editingDidEndOnExit)
+                refreshers.append { if !field.isEditing { field.text = $0[keyPath: key] } }
+                add(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), field], spacing: 10), shown: shown)
             case .color(let caption, let help, let value, let open):
                 let label = OptionControls.caption(caption, color: .secondaryLabel)
                 let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
@@ -265,7 +352,7 @@ final class FilterEditorController: AdjustmentEditorController {
                 bar.clipsToBounds = true
                 refreshers.append { bar.colors = colors($0).map(Self.palette) }
                 content.addArrangedSubview(bar)
-            case .swatches(let ends):
+            case .swatches(let ends, let titlesFirst, let shown):
                 let pairs = ends.map { end -> UIView in
                     let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
                     swatch.accessibilityLabel = end.title + " color"
@@ -276,9 +363,10 @@ final class FilterEditorController: AdjustmentEditorController {
                         end.open(self.session)
                     }, for: .primaryActionTriggered)
                     refreshers.append { swatch.color = Self.palette(end.value($0)) }
-                    return OptionControls.row([swatch, OptionControls.caption(end.title, color: .label)], spacing: 8)
+                    let title = OptionControls.caption(end.title, color: .label)
+                    return OptionControls.row(titlesFirst ? [title, swatch] : [swatch, title], spacing: 8)
                 }
-                content.addArrangedSubview(OptionControls.row(pairs + [UIView()], spacing: 20))
+                add(OptionControls.row(pairs + [UIView()], spacing: titlesFirst ? 18 : 20), shown: shown)
             case .heading(let title):
                 let label = OptionControls.caption(title, color: .label)
                 label.font = .preferredFont(forTextStyle: .headline)
