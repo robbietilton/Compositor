@@ -400,9 +400,28 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
     // MARK: Moving layers
 
+    /// An effect dragged from its row, to copy onto the layer it's dropped on.
+    struct EffectDrag {
+        let layerID: UUID
+        let kind: LayerEffectKind
+    }
+    /// The effect's row a drag lifted, in its cell, so the drag shows that row alone.
+    private var liftedEffect: (indexPath: IndexPath, frame: CGRect)?
+
     func collectionView(_ collectionView: UICollectionView, itemsForBeginning dragSession: UIDragSession,
                         at indexPath: IndexPath) -> [UIDragItem] {
+        liftedEffect = nil
         guard let session, session.canEditLayers, let id = dataSource.itemIdentifier(for: indexPath) else { return [] }
+        // From an effect's row, the effect alone, to copy onto another layer, as the Mac's Option-drag copies it: a touch
+        // has no Option, and the Mac's effect rows don't move their layer either.
+        if let cell = collectionView.cellForItem(at: indexPath) as? LayerRowCell,
+           let kind = cell.effect(at: cell.contentView.convert(dragSession.location(in: collectionView), from: collectionView)),
+           let frame = cell.frame(of: kind) {
+            let item = UIDragItem(itemProvider: NSItemProvider())
+            item.localObject = EffectDrag(layerID: id, kind: kind)
+            liftedEffect = (indexPath, frame)
+            return [item]
+        }
         // The row dragged brings the other selected rows along when it's one of them, as on the Mac.
         let ids = dragged(session.selectedLayerIDs.contains(id) ? session.selectedLayerIDs : [id], in: session)
         let item = UIDragItem(itemProvider: NSItemProvider())
@@ -417,9 +436,31 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         return session.layerRows.map(\.layer.id).filter { ids.contains($0) && !carried.contains($0) }
     }
 
+    func collectionView(_ collectionView: UICollectionView, dragPreviewParametersForItemAt indexPath: IndexPath) -> UIDragPreviewParameters? {
+        guard let liftedEffect, liftedEffect.indexPath == indexPath else { return nil }
+        let parameters = UIDragPreviewParameters()
+        parameters.visiblePath = UIBezierPath(roundedRect: liftedEffect.frame.insetBy(dx: 4, dy: 0), cornerRadius: 6)
+        return parameters
+    }
+
+    func collectionView(_ collectionView: UICollectionView, dragSessionDidEnd session: UIDragSession) { liftedEffect = nil }
+
     private func draggedIDs(_ dropSession: UIDropSession) -> [UUID]? {
         guard dropSession.localDragSession != nil, dropSession.items.count == 1 else { return nil }
         return dropSession.items.first?.localObject as? [UUID]
+    }
+
+    private func draggedEffect(_ dropSession: UIDropSession) -> EffectDrag? {
+        guard dropSession.localDragSession != nil, dropSession.items.count == 1 else { return nil }
+        return dropSession.items.first?.localObject as? EffectDrag
+    }
+
+    /// The row an effect dropped at `point` goes onto: the layer under it, when the effect can be copied there, as on
+    /// the Mac.
+    private func effectTarget(for effect: EffectDrag, at point: CGPoint) -> Int? {
+        guard let session, let indexPath = list.indexPathForItem(at: point), rows.indices.contains(indexPath.item),
+              session.canCopyEffect(effect.kind, from: effect.layerID, to: rows[indexPath.item].id) else { return nil }
+        return indexPath.item
     }
 
     /// Where a drop at `point` goes, as the Mac's list places it: above the row it's over (or below, past the row's
@@ -443,6 +484,15 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
     func collectionView(_ collectionView: UICollectionView, dropSessionDidUpdate dropSession: UIDropSession,
                         withDestinationIndexPath destinationIndexPath: IndexPath?) -> UICollectionViewDropProposal {
+        // An effect goes onto the layer it's over, outlined as a folder taking layers is.
+        if let effect = draggedEffect(dropSession) {
+            guard let row = effectTarget(for: effect, at: dropSession.location(in: list)) else {
+                showDropTarget(nil)
+                return UICollectionViewDropProposal(operation: .forbidden)
+            }
+            showDropTarget((row, true))
+            return UICollectionViewDropProposal(operation: .copy, intent: .unspecified)
+        }
         let target = dropTarget(at: dropSession.location(in: list))
         guard let ids = draggedIDs(dropSession), accepts(ids, at: target) else {
             showDropTarget(nil)
@@ -454,6 +504,11 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
     func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
         showDropTarget(nil)
+        if let effect = draggedEffect(coordinator.session) {
+            guard let row = effectTarget(for: effect, at: coordinator.session.location(in: list)) else { return }
+            session?.copyEffect(effect.kind, from: effect.layerID, to: rows[row].id)
+            return
+        }
         let target = dropTarget(at: coordinator.session.location(in: list))
         guard let ids = draggedIDs(coordinator.session), accepts(ids, at: target) else { return }
         place(ids, at: target.row, intoFolder: target.intoFolder)
@@ -462,7 +517,8 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
     func collectionView(_ collectionView: UICollectionView, dropSessionDidExit session: UIDropSession) { showDropTarget(nil) }
     func collectionView(_ collectionView: UICollectionView, dropSessionDidEnd session: UIDropSession) { showDropTarget(nil) }
 
-    /// A line where the layers will go, or an outline around the folder they'll go into, as the Mac's list shows.
+    /// A line where the layers will go, or an outline around the folder they'll go into or the layer an effect will go
+    /// onto, as the Mac's list shows.
     private func showDropTarget(_ target: (row: Int, intoFolder: Bool)?) {
         dropLine.isHidden = target == nil || target?.intoFolder == true
         dropFolder.isHidden = target?.intoFolder != true
@@ -751,6 +807,12 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
     private func perform(_ action: (EditorSession, UUID) -> Void) {
         guard let session, let layerID else { return }
         action(session, layerID)
+    }
+
+    /// Where the effect's row is, in the cell's content.
+    func frame(of kind: LayerEffectKind) -> CGRect? {
+        guard let index = effectKinds.firstIndex(of: kind), effects.arrangedSubviews.indices.contains(index) else { return nil }
+        return effects.convert(effects.arrangedSubviews[index].frame, to: contentView)
     }
 
     /// The effect whose row is at `point`, in the cell's content.

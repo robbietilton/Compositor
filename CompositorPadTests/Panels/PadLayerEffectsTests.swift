@@ -742,4 +742,169 @@ import UIKit
         canvas.touchesBegan([], with: nil)
         #expect(session.selectedEffect == nil && session.effectSelection == nil)
     }
+
+    // MARK: Copying by dragging
+
+    /// A Drop Shadow on the gray layer, which has a copy in a folder above it, and the blank layer the project began
+    /// with beneath.
+    private func layersToDropOn() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession,
+                                                   panel: LayersPanelView, list: UICollectionView, source: UUID) {
+        let (window, controller, session) = try await shownWindow()
+        let source = try #require(session.activeLayerID)
+        session.duplicateActiveLayer()
+        session.groupSelectedLayers()
+        session.selectLayers([source], primary: source)
+        try add(.shadow, in: controller)
+        let editor = try await effectEditor(for: .shadow, over: controller)
+        try row("Distance", in: editor).onChange(42)
+        try press("\r", in: controller)
+        try await closes(controller)
+        session.effectSelection = nil
+        let panel = try #require(views(LayersPanelView.self, in: controller.view).first)
+        let list = try #require(views(UICollectionView.self, in: panel).first)
+        _ = try cell(for: source, in: panel)
+        return (window, controller, session, panel, list, source)
+    }
+
+    /// The middle of the layer's own row, or of its effect row `effect`, in the list.
+    private func point(on layer: UUID, effect: Int? = nil, in panel: LayersPanelView, list: UICollectionView) throws -> CGPoint {
+        let cell = try self.cell(for: layer, in: panel)
+        let local = effect.map { effectPoint($0, in: cell) } ?? CGPoint(x: cell.contentView.bounds.midX, y: LayerRowCell.height / 2)
+        return cell.contentView.convert(local, to: list)
+    }
+
+    private func indexPath(of layer: UUID, in panel: LayersPanelView, list: UICollectionView) throws -> IndexPath {
+        try #require(list.indexPath(for: try cell(for: layer, in: panel)))
+    }
+
+    /// Dragging from an effect's row carries the effect alone, its row lifted on its own; from the layer's own row, the
+    /// layer, as before.
+    @Test func aDragFromAnEffectsRowCarriesTheEffect() async throws {
+        let (window, _, _, panel, list, source) = try await layersToDropOn()
+        defer { window.isHidden = true }
+        let at = try indexPath(of: source, in: panel, list: list)
+        let fromEffect = FakeDragSession(at: try point(on: source, effect: 0, in: panel, list: list), in: list)
+        let items = panel.collectionView(list, itemsForBeginning: fromEffect, at: at)
+        let effect = try #require(items.first?.localObject as? LayersPanelView.EffectDrag)
+        #expect(items.count == 1 && effect.layerID == source && effect.kind == .shadow)
+        let lifted = try #require(panel.collectionView(list, dragPreviewParametersForItemAt: at)?.visiblePath?.bounds)
+        #expect(abs(lifted.minY - LayerRowCell.height) < 0.5 && abs(lifted.height - LayerRowCell.effectHeight) < 0.5)
+
+        let fromLayer = FakeDragSession(at: try point(on: source, in: panel, list: list), in: list)
+        let layers = panel.collectionView(list, itemsForBeginning: fromLayer, at: at)
+        #expect(layers.first?.localObject as? [UUID] == [source])
+        #expect(panel.collectionView(list, dragPreviewParametersForItemAt: at) == nil)
+    }
+
+    /// An effect can go onto another layer with pixels, as on the Mac; not back onto its own, a folder, or a layer with
+    /// nothing in it.
+    @Test func anEffectGoesOntoAnotherLayerWithPixels() async throws {
+        let (window, _, session, panel, list, source) = try await layersToDropOn()
+        defer { window.isHidden = true }
+        let layers = try #require(session.document?.layers)
+        let copy = try #require(layers.first { $0.id != source && !$0.isGroup && $0.asset != nil }?.id)
+        let folder = try #require(layers.first(where: \.isGroup)?.id)
+        let blank = try #require(layers.first { !$0.isGroup && $0.asset == nil }?.id)
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.localObject = LayersPanelView.EffectDrag(layerID: source, kind: .shadow)
+        for (layer, operation) in [(copy, UIDropOperation.copy), (source, .forbidden), (folder, .forbidden), (blank, .forbidden)] {
+            let drop = FakeDropSession(items: [item], at: try point(on: layer, in: panel, list: list), in: list)
+            let proposal = panel.collectionView(list, dropSessionDidUpdate: drop, withDestinationIndexPath: nil)
+            #expect(proposal.operation == operation, "\(layers.first { $0.id == layer }?.name ?? "")")
+        }
+    }
+
+    /// Dropped on another layer, the effect is copied there with its settings, as one step, and selected there.
+    @Test func droppingCopiesTheEffect() async throws {
+        let (window, _, session, panel, list, source) = try await layersToDropOn()
+        defer { window.isHidden = true }
+        let copy = try #require(session.document?.layers.first { $0.id != source && !$0.isGroup && $0.asset != nil }?.id)
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.localObject = LayersPanelView.EffectDrag(layerID: source, kind: .shadow)
+        let drop = FakeDropSession(items: [item], at: try point(on: copy, in: panel, list: list), in: list)
+        panel.collectionView(list, performDropWith: FakeDropCoordinator(session: drop))
+        let effects = { (id: UUID) in session.document?.layers.first { $0.id == id }?.effects }
+        #expect(effects(copy)?.shadow?.distance == 42 && effects(copy)?.shadow == effects(source)?.shadow)
+        #expect(session.history.undoName == "Copy Drop Shadow")
+        #expect(session.selectedEffect == LayerEffectSelection(layerID: copy, kind: .shadow))
+    }
+
+    /// Dropped on a layer whose same effect's panel is open, the panel is OK'd first, so its Cancel can't take back the
+    /// copy, as on the Mac.
+    @Test func droppingOntoAnOpenEffectOKsItFirst() async throws {
+        let (window, controller, session, panel, list, source) = try await layersToDropOn()
+        defer { window.isHidden = true }
+        let copy = try #require(session.document?.layers.first { $0.id != source && !$0.isGroup && $0.asset != nil }?.id)
+        session.selectLayers([copy], primary: copy)
+        try add(.shadow, in: controller)
+        _ = try await effectEditor(for: .shadow, over: controller)
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.localObject = LayersPanelView.EffectDrag(layerID: source, kind: .shadow)
+        let drop = FakeDropSession(items: [item], at: try point(on: copy, in: panel, list: list), in: list)
+        panel.collectionView(list, performDropWith: FakeDropCoordinator(session: drop))
+        try await closes(controller)
+        #expect(session.effectsEditing == nil)
+        #expect(session.document?.layers.first { $0.id == copy }?.effects?.shadow?.distance == 42)
+    }
+}
+
+/// A drag begun at a point, as the system's drag session reports it.
+@MainActor private final class FakeDragSession: NSObject, UIDragSession {
+    private let point: CGPoint
+    private let view: UIView
+    var localContext: Any?
+    var items: [UIDragItem] = []
+    init(at point: CGPoint, in view: UIView) {
+        self.point = point
+        self.view = view
+    }
+    func location(in view: UIView) -> CGPoint { view.convert(point, from: self.view) }
+    var allowsMoveOperation: Bool { true }
+    var isRestrictedToDraggingApplication: Bool { false }
+    func hasItemsConforming(toTypeIdentifiers typeIdentifiers: [String]) -> Bool { false }
+    func canLoadObjects(ofClass aClass: any NSItemProviderReading.Type) -> Bool { false }
+}
+
+/// A drop from within the app, over a point, as the system's drop session reports it.
+@MainActor private final class FakeDropSession: NSObject, UIDropSession {
+    let items: [UIDragItem]
+    private let point: CGPoint
+    private let view: UIView
+    private let drag: FakeDragSession
+    init(items: [UIDragItem], at point: CGPoint, in view: UIView) {
+        self.items = items
+        self.point = point
+        self.view = view
+        drag = FakeDragSession(at: point, in: view)
+    }
+    var localDragSession: (any UIDragSession)? { drag }
+    var progressIndicatorStyle: UIDropSessionProgressIndicatorStyle = .none
+    nonisolated let progress = Progress()
+    func location(in view: UIView) -> CGPoint { view.convert(point, from: self.view) }
+    var allowsMoveOperation: Bool { true }
+    var isRestrictedToDraggingApplication: Bool { false }
+    func hasItemsConforming(toTypeIdentifiers typeIdentifiers: [String]) -> Bool { false }
+    func canLoadObjects(ofClass aClass: any NSItemProviderReading.Type) -> Bool { false }
+    func loadObjects(ofClass aClass: any NSItemProviderReading.Type, completion: @escaping ([any NSItemProviderReading]) -> Void) -> Progress {
+        progress
+    }
+}
+
+/// The drop's coordinator, which the panel only asks for the session.
+@MainActor private final class FakeDropCoordinator: NSObject, UICollectionViewDropCoordinator {
+    let session: any UIDropSession
+    init(session: any UIDropSession) { self.session = session }
+    var items: [any UICollectionViewDropItem] { [] }
+    var destinationIndexPath: IndexPath? { nil }
+    var proposal: UICollectionViewDropProposal { UICollectionViewDropProposal(operation: .copy) }
+    func drop(_ dragItem: UIDragItem, to placeholder: UICollectionViewDropPlaceholder) -> any UICollectionViewDropPlaceholderContext {
+        fatalError("The panel doesn't drop to a placeholder")
+    }
+    func drop(_ dragItem: UIDragItem, toItemAt indexPath: IndexPath) -> any UIDragAnimating { Animating() }
+    func drop(_ dragItem: UIDragItem, intoItemAt indexPath: IndexPath, rect: CGRect) -> any UIDragAnimating { Animating() }
+    func drop(_ dragItem: UIDragItem, to target: UIDragPreviewTarget) -> any UIDragAnimating { Animating() }
+    private final class Animating: NSObject, UIDragAnimating {
+        func addAnimations(_ animations: @escaping () -> Void) {}
+        func addCompletion(_ completion: @escaping (UIViewAnimatingPosition) -> Void) {}
+    }
 }
