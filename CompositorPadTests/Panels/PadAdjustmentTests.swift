@@ -108,4 +108,152 @@ import UIKit
         tab.session.adjustmentEditingID = nil
         #expect(window.canPerformAction(#selector(EditorWindowController.editAdjustment(_:)), withSender: nil))
     }
+
+    // MARK: Keys
+
+    /// A window controller on the app's screen, its tab in front holding a 200 × 100 project with a gray layer, once
+    /// it has appeared.
+    private func shownWindow() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession) {
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 1194, height: 834)
+        let controller = EditorWindowController()
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        let session = try #require(controller.activeTab?.session)
+        session.createNewProject(width: 200, height: 100)
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Gray"))
+        return (window, controller, session)
+    }
+
+    private func eventually(_ condition: () -> Bool) async throws {
+        for _ in 0..<250 where !condition() { try await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    /// Presses the window's key for `input` with `flags`, as the keyboard does once the window takes it; false when it
+    /// doesn't.
+    @discardableResult
+    private func press(_ input: String, _ flags: UIKeyModifierFlags = [], in controller: UIResponder) -> Bool {
+        guard let command = controller.keyCommands?.first(where: { $0.input == input && $0.modifierFlags == flags }),
+              let action = command.action, controller.canPerformAction(action, withSender: command) else { return false }
+        controller.perform(action, with: command)
+        return true
+    }
+
+    /// Escape cancels an adjustment's editor and Return applies it, as the Mac's do, though the keyboard is the
+    /// canvas's beside it.
+    @Test func escapeAndReturnAnswerTheEditor() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        controller.levels(nil)
+        try await eventually { controller.presentedViewController is LevelsEditorController }
+        try #require(controller.presentedViewController is LevelsEditorController)
+        #expect(press(UIKeyCommand.inputEscape, in: controller))
+        #expect(session.levels == nil)
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.levels(nil)
+        try await eventually { controller.presentedViewController is LevelsEditorController }
+        var settings = try #require(session.levels?.settings)
+        settings.current = LevelsEditorController.range(settings.current, input: 0, at: 40)
+        session.updateLevels(settings, preview: true)
+        #expect(press("\r", in: controller))
+        try await eventually { session.levels == nil }
+        #expect(session.history.undoName == "Levels")
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Option-P turns Levels' preview off and on, as on the Mac; Curves has no such key, and Escape cancels it too.
+    @Test func optionPTurnsLevelsPreviewOffAndOn() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        controller.levels(nil)
+        try await eventually { controller.presentedViewController is LevelsEditorController }
+        #expect(session.levels?.preview == true)
+        #expect(press("p", .alternate, in: controller))
+        #expect(session.levels?.preview == false)
+        #expect(press("p", .alternate, in: controller))
+        #expect(session.levels?.preview == true)
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.curves(nil)
+        try await eventually { controller.presentedViewController is CurvesEditorController }
+        #expect(!press("p", .alternate, in: controller))
+        #expect(press(UIKeyCommand.inputEscape, in: controller))
+        #expect(session.filterEdit == nil)
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// The views of `type` in `view`, depth first.
+    private func views<T: UIView>(_ type: T.Type, in view: UIView) -> [T] {
+        view.subviews.flatMap { subview -> [T] in ((subview as? T).map { [$0] } ?? []) + views(type, in: subview) }
+    }
+
+    /// The `index`th of the editor's fields that shows, with the keyboard, once the editor has settled.
+    private func focusedField(_ index: Int, in editor: AdjustmentEditorController) async throws -> NumberField {
+        func field() -> NumberField? {
+            editor.view.layoutIfNeeded()
+            let fields = views(NumberField.self, in: editor.view).filter { $0.window != nil && $0.field.bounds.width > 0 }
+            return fields.indices.contains(index) ? fields[index] : nil
+        }
+        try await eventually { field()?.field.becomeFirstResponder() == true }
+        let found = try #require(field())
+        try #require(found.field.isFirstResponder)
+        return found
+    }
+
+    /// Escape in one of the editor's own fields cancels it, as on the Mac, where the field passes it to Cancel.
+    @Test func escapeInAnEditorsFieldCancelsIt() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.beginHueSaturation()
+        try await eventually { controller.presentedViewController is HueSaturationEditorController }
+        let editor = try #require(controller.presentedViewController as? HueSaturationEditorController)
+        _ = try await focusedField(1, in: editor)
+        #expect(press(UIKeyCommand.inputEscape, in: editor))
+        #expect(session.hueSaturation == nil)
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Return in one of Hue/Saturation's fields applies it with the value typed, as on the Mac.
+    @Test func returnInHueSaturationsFieldsAppliesIt() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        session.beginHueSaturation()
+        try await eventually { controller.presentedViewController is HueSaturationEditorController }
+        let editor = try #require(controller.presentedViewController as? HueSaturationEditorController)
+        // Hue, Saturation, then Lightness.
+        let lightness = try await focusedField(2, in: editor)
+        lightness.field.text = "40"
+        _ = lightness.field.delegate?.textFieldShouldReturn?(lightness.field)
+        try await eventually { session.hueSaturation == nil }
+        #expect(session.hueSaturation == nil)
+        #expect(session.history.undoName == "Hue/Saturation")
+        let context = try BrushRaster.copy(try #require(session.activeLayer?.asset?.image))
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        #expect(bytes[50 * context.bytesPerRow + 100 * 4] > 160)
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Return in one of Levels' fields only ends the typing, as on the Mac, where the field keeps it.
+    @Test func returnInLevelsFieldsKeepsItOpen() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        controller.levels(nil)
+        try await eventually { controller.presentedViewController is LevelsEditorController }
+        let editor = try #require(controller.presentedViewController as? LevelsEditorController)
+        let field = try await focusedField(0, in: editor)
+        _ = field.field.delegate?.textFieldShouldReturn?(field.field)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(session.levels != nil && controller.presentedViewController is LevelsEditorController)
+        session.cancelLevels()
+        try await eventually { controller.presentedViewController == nil }
+    }
 }

@@ -919,8 +919,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return ids.isEmpty ? nil : ids
     }
 
-    /// The canvas's own keys, which wait while an editor or a dialog is open over the window, as the Mac's canvas ignores
-    /// them under Levels. A dialog has its own Return and Escape.
+    /// The canvas's own keys. Beside Hue/Saturation and Curves they work, as on the Mac, and Escape and Return answer
+    /// the editor; under Levels, which the Mac's canvas ignores them under, or a dialog, which has its own Return and
+    /// Escape, they wait.
     private static let canvasKeys: Set<Selector> = [
         #selector(toolKey(_:)), #selector(eraserKey(_:)), #selector(shapeKindKey(_:)), #selector(swapColorsKey(_:)), #selector(defaultColorsKey(_:)),
         #selector(brushSizeKey(_:)), #selector(escapeKey(_:)), #selector(returnKey(_:)), #selector(deleteKey(_:)), #selector(arrowKey(_:)),
@@ -935,8 +936,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             // Beside an adjustment's editor the canvas keeps its keys, as on the Mac, but Levels holds them; over a dialog
             // there are none. Escape and Return are the editor's.
             if let presented = presentedViewController {
-                guard presented is AdjustmentEditorController, session?.levels == nil,
-                      action != #selector(escapeKey(_:)), action != #selector(returnKey(_:)) else { return false }
+                guard let editor = presented as? AdjustmentEditorController else { return false }
+                // Escape and Return are the editor's Cancel and OK, as on the Mac.
+                if action == #selector(escapeKey(_:)) || action == #selector(returnKey(_:)) { return editor.isOpen }
+                guard session?.levels == nil else { return false }
             }
             // A stroke being drawn takes no key but Escape, as on the Mac.
             if session?.brushStroke != nil || session?.warpStroke != nil, action != #selector(escapeKey(_:)) { return false }
@@ -993,6 +996,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                     && ($0.lassoDraft != nil || $0.gradientEdit != nil || ($0.tool == .crop && $0.cropRect != nil) || $0.transformEdit != nil)
             } ?? false
         case #selector(deleteKey(_:)): return hasDocument
+        case #selector(levelsPreviewKey(_:)): return session?.levels != nil
         case #selector(toolModeKey(_:)):
             // Only while the canvas has the keyboard, since it goes before a field's or the text's own Tab.
             return hasDocument && session?.textDraft == nil && (isFirstResponder || activeTab?.canvas.isFirstResponder == true)
@@ -1075,6 +1079,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             UIKeyCommand(title: "Apply current canvas operation", action: #selector(returnKey(_:)), input: "\r"),
             UIKeyCommand(title: "Delete selection / layer / effect / lasso point", action: #selector(deleteKey(_:)),
                          input: UIKeyCommand.inputDelete),
+            UIKeyCommand(title: "Toggle Levels preview", action: #selector(levelsPreviewKey(_:)), input: "p", modifierFlags: .alternate),
         ]
         let arrows: [UIKeyCommand] = [("Left", UIKeyCommand.inputLeftArrow), ("Right", UIKeyCommand.inputRightArrow),
                                       ("Up", UIKeyCommand.inputUpArrow), ("Down", UIKeyCommand.inputDownArrow)].flatMap { name, arrow in
@@ -1104,6 +1109,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc private func swapColorsKey(_ command: UIKeyCommand) { activeTab?.session.swapPaletteColors() }
     @objc private func defaultColorsKey(_ command: UIKeyCommand) { activeTab?.session.resetPaletteColors() }
     @objc private func toolModeKey(_ command: UIKeyCommand) { activeTab?.session.cycleToolMode() }
+    /// Option-P turns Levels' preview off and on, as on the Mac.
+    @objc private func levelsPreviewKey(_ command: UIKeyCommand) {
+        guard let session = activeTab?.session, let levels = session.levels else { return }
+        session.updateLevels(levels.settings, preview: !levels.preview)
+    }
     /// 1 to 9 set a tenth to nine tenths, 0 all of it; two typed quickly set the exact percentage, as on the Mac.
     @objc private func opacityKey(_ command: UIKeyCommand) {
         guard let digit = command.propertyList as? Int else { return }
@@ -1119,6 +1129,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     // or a gradient, a crop, and a transform. The arrows move a step, or ten with Shift: with ⌘ the selected pixels, with a selection tool the
     // outline, and with the Move tool the layer.
     @objc private func escapeKey(_ command: UIKeyCommand) {
+        if let editor = presentedViewController as? AdjustmentEditorController {
+            editor.cancel()
+            return
+        }
         guard let tab = activeTab else { return }
         let session = tab.session, input = tab.canvas.input
         if input.textBox != nil { input.endDrag(); return }
@@ -1136,6 +1150,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         else { session.cancelTransform() }
     }
     @objc private func returnKey(_ command: UIKeyCommand) {
+        if let editor = presentedViewController as? AdjustmentEditorController {
+            editor.commit()
+            return
+        }
         guard let tab = activeTab else { return }
         let session = tab.session
         tab.canvas.input.endDrag()

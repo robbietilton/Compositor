@@ -43,6 +43,13 @@ class AdjustmentEditorController: UIViewController {
     /// Puts the edit's values into the controls; run on every update, so UIKit follows what it reads.
     func refresh() {}
 
+    /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
+    /// window passes it on otherwise. Return there is the field's, which Hue/Saturation's take as OK, as on the Mac.
+    override var keyCommands: [UIKeyCommand]? {
+        [UIKeyCommand(title: "Cancel", action: #selector(cancelKey(_:)), input: UIKeyCommand.inputEscape)]
+    }
+    @objc private func cancelKey(_ command: UIKeyCommand) { cancel() }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .secondarySystemBackground
@@ -553,6 +560,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
                     _ key: WritableKeyPath<HueSaturationSettings, Double>) -> SliderField {
             let field = SliderField(caption: caption, unit: unit, sliderRange: range, fieldRange: range, sensitivity: 1, sliderWidth: 220)
             field.onChange = { [weak self] value in self?.update { $0[keyPath: key] = value.rounded() } }
+            // Return in a field applies the adjustment, as on the Mac, where Levels' and Curves' fields keep it.
+            field.onReturn = { [weak self] in self?.commit() }
             sliders.addArrangedSubview(field)
             return field
         }

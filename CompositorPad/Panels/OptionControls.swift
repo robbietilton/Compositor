@@ -137,6 +137,9 @@ final class NumberField: UIView, UITextFieldDelegate {
     /// Return or Escape ended the typing. A tool's bar hands the keyboard back to the canvas then, as the Mac's do; a
     /// dialog's fields leave Escape to the dialog, whose Cancel it is.
     var onCommit: (() -> Void)?
+    /// Return in the field, once the value typed is in: what it confirms past the field, as Hue/Saturation's fields
+    /// apply it on the Mac.
+    var onReturn: (() -> Void)?
     /// Whether each keystroke that makes a number applies it, as the Transform bar's fields do; otherwise the value
     /// applies when the field is left, as the brush's do.
     var live = false
@@ -236,6 +239,7 @@ final class NumberField: UIView, UITextFieldDelegate {
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         textField.resignFirstResponder()
         onCommit?()
+        onReturn?()
         return true
     }
 
@@ -292,6 +296,11 @@ final class SliderField: UIView {
     var onCommit: (() -> Void)? {
         get { number.onCommit }
         set { number.onCommit = newValue }
+    }
+    /// Return in the field, once the value typed is in.
+    var onReturn: (() -> Void)? {
+        get { number.onReturn }
+        set { number.onReturn = newValue }
     }
 
     private let slider = UISlider()
