@@ -62,10 +62,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Fill with Background Color", action: #selector(Window.fillWithBackground(_:)),
                          input: UIKeyCommand.inputDelete, modifierFlags: .command),
             UICommand(title: "Clear Selection Pixels", action: #selector(Window.clearSelectionPixels(_:))),
+            UIKeyCommand(title: "Content-Aware Fill…", action: #selector(Window.applyFilter(_:)), input: UIKeyCommand.inputDelete,
+                         modifierFlags: .shift, propertyList: FilterKind.contentAwareFill.rawValue),
         ])
         builder.insertSibling(fills, afterMenu: pasteboard)
-        // The Mac's Select, Image and Layer menus, after View as there, so far as the iPad has them. Adjustments without
-        // an editor on iPad yet are listed, dimmed.
+        // The Mac's Select, Image, Filter and Layer menus, after View as there. What the iPad has no editor or dialog for
+        // yet is listed, dimmed.
         let select = UIMenu.Identifier("com.wonderassembly.compositor.select")
         builder.insertSibling(UIMenu(title: "Select", identifier: select, children: [
             UIMenu(options: .displayInline, children: [
@@ -74,6 +76,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Inverse", action: #selector(Window.invertSelection(_:)), input: "i", modifierFlags: [.command, .shift]),
                 UICommand(title: "Layer’s Pixels", action: #selector(Window.selectLayerPixels(_:))),
                 UIKeyCommand(title: "Subject", action: #selector(Window.selectSubject(_:)), input: "a", modifierFlags: [.command, .alternate]),
+                UIAction(title: "Color Range…", attributes: .disabled) { _ in },
                 UICommand(title: "Mask’s Black Areas", action: #selector(Window.selectMaskBlackAreas(_:))),
             ]),
             UIMenu(options: .displayInline, children: [
@@ -87,12 +90,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Curves…", action: #selector(Window.curves(_:)), input: "m", modifierFlags: .command),
             UIKeyCommand(title: "Levels…", action: #selector(Window.levels(_:)), input: "l", modifierFlags: .command),
             UIKeyCommand(title: "Hue/Saturation…", action: #selector(Window.hueSaturation(_:)), input: "u", modifierFlags: .command),
+        ] + [FilterKind.blackWhite, .colorBalance, .exposure, .gradientMap, .grain].map { kind in
+            UICommand(title: kind.rawValue + "…", action: #selector(Window.applyFilter(_:)), propertyList: kind.rawValue)
+        } + [
             UIKeyCommand(title: "Invert", action: #selector(Window.invertPixels(_:)), input: "i", modifierFlags: .command),
             UIMenu(options: .displayInline, children: [
                 UIKeyCommand(title: "Canvas Size…", action: #selector(Window.canvasSize(_:)), input: "c", modifierFlags: [.command, .alternate]),
                 UIKeyCommand(title: "Image Size…", action: #selector(Window.imageSize(_:)), input: "i", modifierFlags: [.command, .alternate]),
+                UIAction(title: "Trim…", attributes: .disabled) { _ in },
             ]),
         ]), afterMenu: select)
+        let filter = UIMenu.Identifier("com.wonderassembly.compositor.filter")
+        builder.insertSibling(UIMenu(title: "Filter", identifier: filter, children: FilterKind.allCases.filter {
+            $0 != .contentAwareFill && !$0.isImageAdjustment
+        }.map { kind in
+            UICommand(title: kind.rawValue + "…", action: #selector(Window.applyFilter(_:)), propertyList: kind.rawValue)
+        }), afterMenu: image)
         let layer = UIMenu.Identifier("com.wonderassembly.compositor.layer")
         builder.insertSibling(UIMenu(title: "Layer", identifier: layer, children: [
             UIMenu(title: "New Adjustment Layer", children: AdjustmentKind.allCases.map { kind in
@@ -104,7 +117,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Transform Layer", action: #selector(Window.transformLayer(_:)), input: "t", modifierFlags: .command),
                 UIKeyCommand(title: "Duplicate Layer", action: #selector(Window.layerViaCopy(_:)), input: "j", modifierFlags: .command),
             ]),
-        ]), afterMenu: image)
+        ]), afterMenu: filter)
         builder.replace(menu: .close, with: UIMenu(options: .displayInline, children: [
             UIKeyCommand(title: "Close Tab", action: #selector(Window.closeTab(_:)), input: "w", modifierFlags: .command),
         ]))

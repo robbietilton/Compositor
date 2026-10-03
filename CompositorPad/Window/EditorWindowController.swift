@@ -870,6 +870,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         session.adjustmentEditingID = session.activeLayerID
     }
     @objc func levels(_ sender: Any?) { activeTab?.session.beginLevels() }
+    /// The filters and adjustments with an editor on iPad, which the Filter and Image menus offer; the others are listed
+    /// there dimmed.
+    static let filterEditors: Set<FilterKind> = []
+    /// A filter or adjustment from the Filter, Image or Edit menu, by its kind.
+    @objc func applyFilter(_ sender: UICommand) {
+        guard let raw = sender.propertyList as? String, let kind = FilterKind(rawValue: raw), Self.filterEditors.contains(kind) else { return }
+        activeTab?.session.beginFilter(kind)
+    }
     @objc func curves(_ sender: Any?) { activeTab?.session.beginFilter(.curves) }
     @objc func hueSaturation(_ sender: Any?) { activeTab?.session.beginHueSaturation() }
     @objc func invertPixels(_ sender: Any?) {
@@ -1001,6 +1009,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                 session.canEditLayers && session.activeLayer?.adjustment.map { AdjustmentEditors.kinds.contains($0.kind) } == true
             } ?? false
         case #selector(levels(_:)), #selector(curves(_:)): return session.map { $0.canAdjustColors && $0.hueSaturation == nil } ?? false
+        case #selector(applyFilter(_:)):
+            // Never without an editor to close it, since an open filter holds the project.
+            guard let session, let raw = (sender as? UICommand)?.propertyList as? String, let kind = FilterKind(rawValue: raw),
+                  Self.filterEditors.contains(kind) else { return false }
+            if kind == .contentAwareFill { return session.canContentAwareFill }
+            return (kind == .vignette ? session.canVignette : session.canAdjustColors) && session.hueSaturation == nil
         case #selector(hueSaturation(_:)): return session?.canAdjustColors ?? false
         case #selector(invertPixels(_:)): return session?.canInvert ?? false
         case #selector(escapeKey(_:)):

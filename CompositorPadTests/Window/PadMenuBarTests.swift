@@ -15,7 +15,7 @@ import UIKit
     /// The app's menus come after View, in the Mac's order.
     @Test func theMenusComeInTheMacsOrder() {
         let bar = MenuBarModel.built(by: AppDelegate())
-        #expect(bar.titles == ["File", "Edit", "View", "Select", "Image", "Layer", "Window", "Help"])
+        #expect(bar.titles == ["File", "Edit", "View", "Select", "Image", "Filter", "Layer", "Window", "Help"])
     }
 
     /// Edit holds the Mac's Cut, Copy, Copy Merged and Paste, then the fills; no Find, whose ⌘G, ⇧⌘G and ⌘E the
@@ -24,8 +24,8 @@ import UIKit
         let bar = MenuBarModel.built(by: AppDelegate())
         let edit = try #require(bar.menu(titled: "Edit"))
         #expect(edit.commands.map(\.title) == ["Cut", "Copy", "Copy Merged", "Paste", "Fill with Foreground Color",
-                                               "Fill with Background Color", "Clear Selection Pixels"])
-        #expect(edit.commands.map(shortcut) == ["⌘X", "⌘C", "⇧⌘C", "⌘V", "⌥⌫", "⌘⌫", ""])
+                                               "Fill with Background Color", "Clear Selection Pixels", "Content-Aware Fill…"])
+        #expect(edit.commands.map(shortcut) == ["⌘X", "⌘C", "⇧⌘C", "⌘V", "⌥⌫", "⌘⌫", "", "⇧⌫"])
         #expect(edit.submenus.isEmpty)
     }
 
@@ -83,6 +83,60 @@ import UIKit
         #expect(projects.options.contains(.displayInline))
         #expect(projects.children.map(\.title) == ["Harbor"])
         #expect((some.last as? UICommand)?.title == "Clear Menu" && (some.last as? UICommand)?.attributes.contains(.disabled) == false)
+    }
+
+    /// A window with a 200 × 100 project of a gray layer, where every adjustment could be made.
+    private func window() throws -> EditorWindowController {
+        let controller = EditorWindowController()
+        controller.loadViewIfNeeded()
+        let session = try #require(controller.activeTab?.session)
+        session.createNewProject(width: 200, height: 100)
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Gray"))
+        try #require(session.canAdjustColors)
+        return controller
+    }
+
+    /// The Mac's adjustments, filters and other commands the iPad has no editor or dialog for yet are listed as on the
+    /// Mac, with its titles and shortcuts, dimmed.
+    @Test func whatTheIPadCantDoYetIsListedDimmed() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let image = try #require(bar.menu(titled: "Image"))
+        #expect(image.children.flatMap { item -> [UIMenuElement] in
+            switch item {
+            case .menu(let menu): menu.children.compactMap { if case .element(let element) = $0 { element } else { nil } }
+            case .element(let element): [element]
+            }
+        }.map(\.title) == ["Curves…", "Levels…", "Hue/Saturation…", "Black & White…", "Color Balance…", "Exposure…",
+                           "Gradient Map…", "Grain…", "Invert", "Canvas Size…", "Image Size…", "Trim…"])
+        let filter = try #require(bar.menu(titled: "Filter"))
+        #expect(filter.commands.map(\.title) == ["Gaussian Blur…", "Motion Blur…", "Add Noise…", "Vignette…", "Bloom / Glow…",
+                                                 "Dither…", "Tonal Contrast…", "Lens Correction…", "Camera Raw Filter…",
+                                                 "Remove Background…"])
+        let fill = try #require(bar.menu(titled: "Edit")?.commands.last)
+        for command in filter.commands + image.commands.filter({ ["Black & White…", "Color Balance…", "Exposure…", "Gradient Map…",
+                                                                  "Grain…"].contains($0.title) }) + [fill] {
+            let action = command.action
+            #expect(!controller.canPerformAction(action, withSender: command), "\(command.title)")
+        }
+        let select = try #require(bar.menu(titled: "Select"))
+        let selectItems = select.children.flatMap { item -> [UIMenuElement] in
+            if case .menu(let menu) = item { menu.children.compactMap { if case .element(let element) = $0 { element } else { nil } } } else { [] }
+        }
+        #expect(Array(selectItems.map(\.title).prefix(7)) == ["All", "Deselect", "Inverse", "Layer’s Pixels", "Subject", "Color Range…",
+                                                             "Mask’s Black Areas"])
+        let imageItems = image.children.flatMap { item -> [UIMenuElement] in
+            switch item {
+            case .menu(let menu): menu.children.compactMap { if case .element(let element) = $0 { element } else { nil } }
+            case .element(let element): [element]
+            }
+        }
+        let dimmed = (selectItems + imageItems).filter { ["Color Range…", "Trim…"].contains($0.title) }
+        #expect(dimmed.count == 2 && dimmed.allSatisfy { ($0 as? UIAction)?.attributes.contains(.disabled) == true })
     }
 }
 
