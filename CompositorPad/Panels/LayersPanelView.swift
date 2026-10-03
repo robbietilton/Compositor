@@ -270,7 +270,8 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         }
     }
 
-    private func rename(_ id: UUID) {
+    /// Asks for layer `id`'s new name, and names it so.
+    func rename(_ id: UUID) {
         guard let session, session.canEditLayers, let layer = session.document?.layers.first(where: { $0.id == id }),
               let presenter else { return }
         let alert = UIAlertController(title: "Rename Layer", message: nil, preferredStyle: .alert)

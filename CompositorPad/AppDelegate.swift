@@ -15,7 +15,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return configuration
     }
 
-    /// The menu bar, with the Mac's File, Edit, View, Select, Image and Layer commands, in the Mac's order, and their
+    /// The menu bar, with the Mac's File, Edit, View, Select, Image, Filter and Layer commands, in the Mac's order, and their
     /// shortcuts. The commands go to the window in front (`EditorWindowController`), which enables the ones that apply.
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
@@ -99,6 +99,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 UIKeyCommand(title: "Image Size…", action: #selector(Window.imageSize(_:)), input: "i", modifierFlags: [.command, .alternate]),
                 UIAction(title: "Trim…", attributes: .disabled) { _ in },
             ]),
+            UIMenu(options: .displayInline, children: [
+                UICommand(title: "Flip Canvas Horizontal", action: #selector(Window.flipCanvas(_:)), propertyList: true),
+                UICommand(title: "Flip Canvas Vertical", action: #selector(Window.flipCanvas(_:)), propertyList: false),
+            ]),
         ]), afterMenu: select)
         let filter = UIMenu.Identifier("com.wonderassembly.compositor.filter")
         builder.insertSibling(UIMenu(title: "Filter", identifier: filter, children: FilterKind.allCases.filter {
@@ -116,6 +120,32 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIMenu(options: .displayInline, children: [
                 UIKeyCommand(title: "Transform Layer", action: #selector(Window.transformLayer(_:)), input: "t", modifierFlags: .command),
                 UIKeyCommand(title: "Duplicate Layer", action: #selector(Window.layerViaCopy(_:)), input: "j", modifierFlags: .command),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "Create Clipping Mask", action: #selector(Window.toggleClippingMask(_:)), input: "g",
+                             modifierFlags: [.command, .alternate]),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "Group Selected Layers", action: #selector(Window.groupLayers(_:)), input: "g", modifierFlags: .command),
+                UIKeyCommand(title: "Ungroup Layers", action: #selector(Window.ungroupLayers(_:)), input: "g", modifierFlags: [.command, .shift]),
+                UICommand(title: "Move Out of Folder", action: #selector(Window.moveOutOfFolder(_:))),
+                UIKeyCommand(title: "New Blank Layer", action: #selector(Window.newBlankLayer(_:)), input: "n", modifierFlags: [.command, .shift]),
+                UICommand(title: "Rename Layer…", action: #selector(Window.renameLayer(_:))),
+                UICommand(title: "Hide Layer", action: #selector(Window.toggleLayerVisibility(_:))),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UIKeyCommand(title: "Move Layer Up", action: #selector(Window.moveLayer(_:)), input: "]", modifierFlags: .command,
+                             propertyList: 1),
+                UIKeyCommand(title: "Move Layer Down", action: #selector(Window.moveLayer(_:)), input: "[", modifierFlags: .command,
+                             propertyList: -1),
+                UIKeyCommand(title: "Merge Down", action: #selector(Window.mergeLayers(_:)), input: "e", modifierFlags: .command),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UICommand(title: "Flip Layer Horizontal", action: #selector(Window.flipLayers(_:)), propertyList: true),
+                UICommand(title: "Flip Layer Vertical", action: #selector(Window.flipLayers(_:)), propertyList: false),
+            ]),
+            UIMenu(options: .displayInline, children: [
+                UICommand(title: "Delete Layer", action: #selector(Window.deleteLayer(_:))),
             ]),
         ]), afterMenu: filter)
         builder.replace(menu: .close, with: UIMenu(options: .displayInline, children: [

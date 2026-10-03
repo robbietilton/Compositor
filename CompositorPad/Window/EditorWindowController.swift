@@ -860,6 +860,42 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// ⌘J: the selection's pixels as a new layer, or with no selection a copy of the layer.
     @objc func layerViaCopy(_ sender: Any?) { activeTab?.session.layerViaCopy() }
 
+    // Arranging layers, as the Mac's Layer menu does.
+    @objc func toggleClippingMask(_ sender: Any?) {
+        guard let session = activeTab?.session, let id = session.activeLayerID else { return }
+        session.toggleClippingMask(id)
+    }
+    @objc func groupLayers(_ sender: Any?) { activeTab?.session.groupSelectedLayers() }
+    @objc func ungroupLayers(_ sender: Any?) { activeTab?.session.ungroupLayers() }
+    @objc func moveOutOfFolder(_ sender: Any?) { activeTab?.session.moveActiveLayerOutOfGroup() }
+    @objc func newBlankLayer(_ sender: Any?) { activeTab?.session.addBlankLayer() }
+    /// Asks for the layer's new name as the Layers panel's Rename… does, where the Mac opens the name in its panel for
+    /// typing.
+    @objc func renameLayer(_ sender: Any?) {
+        if let id = activeTab?.session.activeLayerID { layersPanel.rename(id) }
+    }
+    @objc func toggleLayerVisibility(_ sender: Any?) {
+        guard let session = activeTab?.session, let id = session.activeLayerID else { return }
+        session.toggleLayerVisibility(id)
+    }
+    /// ⌘] and ⌘[: the layer up or down among those beside it, by the command's offset.
+    @objc func moveLayer(_ sender: UICommand) {
+        guard let offset = sender.propertyList as? Int else { return }
+        activeTab?.session.moveActiveLayer(by: offset)
+    }
+    @objc func mergeLayers(_ sender: Any?) { activeTab?.session.mergeLayers() }
+    /// Flip Layer Horizontal or Vertical, by the command's direction.
+    @objc func flipLayers(_ sender: UICommand) {
+        guard let horizontally = sender.propertyList as? Bool else { return }
+        activeTab?.session.flipLayers(horizontally: horizontally)
+    }
+    /// Image › Flip Canvas Horizontal or Vertical, by the command's direction.
+    @objc func flipCanvas(_ sender: UICommand) {
+        guard let horizontally = sender.propertyList as? Bool else { return }
+        activeTab?.session.flipCanvas(horizontally: horizontally)
+    }
+    @objc func deleteLayer(_ sender: Any?) { activeTab?.session.deleteLayerOrMask() }
+
     // Adjustments, as the Mac's Layer and Image menus have them: as layers, or applied to a layer's own pixels.
     @objc func newAdjustmentLayer(_ sender: UICommand) {
         guard let name = sender.propertyList as? String, let kind = AdjustmentKind(rawValue: name) else { return }
@@ -989,6 +1025,20 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         case #selector(transformLayer(_:)): return session.map { $0.canTransform || $0.canTransformSelection } ?? false
         case #selector(layerViaCopy(_:)):
             return session.map { $0.canCopyPixels || ($0.selection == nil && $0.canEditLayers && $0.activeLayer != nil) } ?? false
+        case #selector(toggleClippingMask(_:)): return session.map { session in session.activeLayerID.map(session.canToggleClippingMask) ?? false } ?? false
+        case #selector(groupLayers(_:)), #selector(newBlankLayer(_:)), #selector(flipCanvas(_:)): return session?.canEditLayers ?? false
+        case #selector(ungroupLayers(_:)): return session?.canUngroupLayers ?? false
+        case #selector(moveOutOfFolder(_:)): return session.map { $0.canEditLayers && $0.activeLayer?.parentID != nil } ?? false
+        case #selector(renameLayer(_:)):
+            // It asks in an alert, which can't come over another.
+            return session.map { $0.canEditLayers && $0.activeLayer != nil } == true && presentedViewController == nil
+        case #selector(toggleLayerVisibility(_:)), #selector(deleteLayer(_:)):
+            return session.map { $0.canEditLayers && $0.activeLayer != nil } ?? false
+        case #selector(moveLayer(_:)):
+            guard let offset = (sender as? UICommand)?.propertyList as? Int else { return false }
+            return session?.canMoveActiveLayer(by: offset) ?? false
+        case #selector(mergeLayers(_:)): return session?.canMergeLayers ?? false
+        case #selector(flipLayers(_:)): return session?.canTransform ?? false
         case #selector(selectAll(_:)): return hasDocument
         case #selector(deselect(_:)), #selector(invertSelection(_:)):
             return session.map { $0.selection != nil && $0.canEditSelection } ?? false
@@ -1057,6 +1107,17 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             command.title = activeTab?.session.selection == nil ? "Duplicate Layer" : "Layer via Copy"
         } else if command.action == #selector(invertPixels(_:)) {
             command.title = activeTab?.session.isMaskSelected == true ? "Invert Mask" : "Invert"
+        } else if command.action == #selector(toggleClippingMask(_:)) {
+            command.title = activeTab?.session.activeLayer?.maskSourceID == nil ? "Create Clipping Mask" : "Release Clipping Mask"
+        } else if command.action == #selector(toggleLayerVisibility(_:)) {
+            command.title = activeTab?.session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer"
+        } else if command.action == #selector(mergeLayers(_:)) {
+            command.title = activeTab?.session.mergeTitle ?? "Merge Down"
+        } else if command.action == #selector(deleteLayer(_:)), let session = activeTab?.session {
+            command.title = if let effect = session.selectedEffect { "Delete " + effect.kind.rawValue }
+                else if session.isMaskSelected && session.activeLayer?.mask != nil { "Delete Layer Mask" }
+                else if session.selectedLayerIDs.count > 1 { "Delete Layers" }
+                else { "Delete Layer" }
         }
     }
 

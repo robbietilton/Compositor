@@ -112,7 +112,8 @@ import UIKit
             case .element(let element): [element]
             }
         }.map(\.title) == ["Curves…", "Levels…", "Hue/Saturation…", "Black & White…", "Color Balance…", "Exposure…",
-                           "Gradient Map…", "Grain…", "Invert", "Canvas Size…", "Image Size…", "Trim…"])
+                           "Gradient Map…", "Grain…", "Invert", "Canvas Size…", "Image Size…", "Trim…",
+                           "Flip Canvas Horizontal", "Flip Canvas Vertical"])
         let filter = try #require(bar.menu(titled: "Filter"))
         #expect(filter.commands.map(\.title) == ["Gaussian Blur…", "Motion Blur…", "Add Noise…", "Vignette…", "Bloom / Glow…",
                                                  "Dither…", "Tonal Contrast…", "Lens Correction…", "Camera Raw Filter…",
@@ -138,5 +139,181 @@ import UIKit
         let dimmed = (selectItems + imageItems).filter { ["Color Range…", "Trim…"].contains($0.title) }
         #expect(dimmed.count == 2 && dimmed.allSatisfy { ($0 as? UIAction)?.attributes.contains(.disabled) == true })
     }
-}
 
+    // MARK: Layer
+
+    /// The Layer menu is the Mac's, with its titles and shortcuts, after the adjustment layers it offers.
+    @Test func theLayerMenuIsTheMacs() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let layer = try #require(bar.menu(titled: "Layer"))
+        #expect(layer.submenus.map(\.title) == ["New Adjustment Layer"])
+        let commands = Array(layer.commands.dropFirst(AdjustmentKind.allCases.count))
+        #expect(commands.map(\.title) == ["Edit Adjustment…", "Transform Layer", "Duplicate Layer", "Create Clipping Mask",
+                                          "Group Selected Layers", "Ungroup Layers", "Move Out of Folder", "New Blank Layer",
+                                          "Rename Layer…", "Hide Layer", "Move Layer Up", "Move Layer Down", "Merge Down",
+                                          "Flip Layer Horizontal", "Flip Layer Vertical", "Delete Layer"])
+        #expect(commands.map(shortcut) == ["", "⌘T", "⌘J", "⌥⌘G", "⌘G", "⇧⌘G", "", "⇧⌘N", "", "", "⌘]", "⌘[", "⌘E", "", "", ""])
+    }
+
+    /// The bar's command titled `title` in the menu titled `menu`.
+    private func command(_ title: String, in menu: String, of bar: MenuBarModel) throws -> UICommand {
+        try #require(bar.menu(titled: menu)?.commands.first { $0.title == title }, "\(menu) › \(title)")
+    }
+
+    /// The title `command` shows now, as the window names it for what it will do.
+    private func title(of command: UICommand, in controller: EditorWindowController) throws -> String {
+        let shown = try #require(command.copy() as? UICommand)
+        controller.validate(shown)
+        return shown.title
+    }
+
+    /// Whether the window takes `command` now.
+    private func takes(_ command: UICommand, in controller: EditorWindowController) -> Bool {
+        controller.canPerformAction(command.action, withSender: command)
+    }
+
+    /// Chooses `command`, as the menu bar does once the window takes it.
+    private func choose(_ command: UICommand, in controller: EditorWindowController) {
+        #expect(takes(command, in: controller), "\(command.title)")
+        guard takes(command, in: controller) else { return }
+        controller.perform(command.action, with: command)
+    }
+
+    /// The Layer menu arranges layers as the Mac's does, each command only when it can, and named for what it will do.
+    @Test func theLayerMenuArrangesLayers() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        // The new project's empty layer, and the gray one over it.
+        let gray = try #require(session.document?.layers.first?.id)
+        let top = try #require(session.activeLayerID)
+        try #require(session.document?.layers.map(\.id) == [gray, top])
+
+        let up = try command("Move Layer Up", in: "Layer", of: bar)
+        let down = try command("Move Layer Down", in: "Layer", of: bar)
+        #expect(!takes(up, in: controller))
+        choose(down, in: controller)
+        #expect(session.document?.layers.map(\.id) == [top, gray])
+        #expect(!takes(down, in: controller))
+        choose(up, in: controller)
+        #expect(session.document?.layers.map(\.id) == [gray, top])
+
+        let clip = try command("Create Clipping Mask", in: "Layer", of: bar)
+        #expect(try title(of: clip, in: controller) == "Create Clipping Mask")
+        choose(clip, in: controller)
+        #expect(session.activeLayer?.maskSourceID == gray)
+        #expect(try title(of: clip, in: controller) == "Release Clipping Mask")
+        choose(clip, in: controller)
+        #expect(session.activeLayer?.maskSourceID == nil)
+
+        let hide = try command("Hide Layer", in: "Layer", of: bar)
+        choose(hide, in: controller)
+        #expect(session.activeLayer?.isVisible == false)
+        #expect(try title(of: hide, in: controller) == "Show Layer")
+        choose(hide, in: controller)
+        #expect(session.activeLayer?.isVisible == true)
+
+        let merge = try command("Merge Down", in: "Layer", of: bar)
+        #expect(try title(of: merge, in: controller) == session.mergeTitle)
+        #expect(takes(merge, in: controller) == session.canMergeLayers)
+
+        let blank = try command("New Blank Layer", in: "Layer", of: bar)
+        choose(blank, in: controller)
+        #expect(session.document?.layers.count == 3)
+        #expect(session.activeLayer.map { $0.asset == nil && !$0.isGroup && $0.id != gray && $0.id != top } == true)
+    }
+
+    /// Folders, as the Mac's Layer menu makes and undoes them.
+    @Test func theLayerMenuGroupsLayers() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        let gray = try #require(session.activeLayerID)
+        let layers = session.document?.layers.map(\.id)
+
+        let ungroup = try command("Ungroup Layers", in: "Layer", of: bar)
+        let out = try command("Move Out of Folder", in: "Layer", of: bar)
+        #expect(!takes(ungroup, in: controller) && !takes(out, in: controller))
+        choose(try command("Group Selected Layers", in: "Layer", of: bar), in: controller)
+        let folder = try #require(session.activeLayer)
+        #expect(folder.isGroup && session.document?.layers.first { $0.id == gray }?.parentID == folder.id)
+
+        session.selectLayers([gray], primary: gray)
+        choose(out, in: controller)
+        #expect(session.document?.layers.first { $0.id == gray }?.parentID == nil)
+        session.selectLayers([folder.id], primary: folder.id)
+        choose(ungroup, in: controller)
+        #expect(session.document?.layers.map(\.id) == layers)
+    }
+
+    /// Delete is named as the Mac's is for what it will delete: the layer, the layers selected, or the mask.
+    @Test func deleteIsNamedForWhatItDeletes() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        let delete = try command("Delete Layer", in: "Layer", of: bar)
+        let gray = try #require(session.activeLayerID)
+        #expect(try title(of: delete, in: controller) == "Delete Layer")
+
+        session.addMask(revealing: true)
+        try #require(session.isMaskSelected && session.activeLayer?.mask != nil)
+        #expect(try title(of: delete, in: controller) == "Delete Layer Mask")
+        choose(delete, in: controller)
+        #expect(session.activeLayer?.mask == nil)
+
+        session.selectLayerTarget(gray, mask: false)
+        session.addBlankLayer()
+        session.selectLayers(Set(session.document?.layers.map(\.id) ?? []), primary: session.activeLayerID)
+        #expect(try title(of: delete, in: controller) == "Delete Layers")
+        choose(delete, in: controller)
+        #expect(session.document?.layers.isEmpty == true)
+        #expect(!takes(delete, in: controller))
+    }
+
+    /// Flip Layer turns the layer over about its middle; Image › Flip Canvas turns the whole canvas over, about its
+    /// middle, so a layer off to one side goes to the other.
+    @Test func flipTurnsTheLayerOrTheCanvasOver() throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let session = try #require(controller.activeTab?.session)
+        let index = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        session.document?.layers[index].transform.origin = CGPoint(x: 20, y: 10)
+        choose(try command("Flip Layer Horizontal", in: "Layer", of: bar), in: controller)
+        #expect(session.activeLayer?.transform.flipX == true)
+        choose(try command("Flip Layer Vertical", in: "Layer", of: bar), in: controller)
+        #expect(session.activeLayer?.transform.flipY == true)
+        #expect(session.activeLayer?.transform.origin == CGPoint(x: 20, y: 10))
+        choose(try command("Flip Canvas Horizontal", in: "Image", of: bar), in: controller)
+        #expect(session.activeLayer?.transform.flipX == false)
+        #expect(session.activeLayer?.transform.origin == CGPoint(x: -20, y: 10))
+        choose(try command("Flip Canvas Vertical", in: "Image", of: bar), in: controller)
+        #expect(session.activeLayer?.transform.flipY == false)
+        #expect(session.activeLayer?.transform.origin == CGPoint(x: -20, y: -10))
+    }
+
+    /// Rename Layer… asks for the new name in the Layers panel's Rename alert, as the Mac's opens its name for typing.
+    @Test func renameLayerAsksForTheName() async throws {
+        let bar = MenuBarModel.built(by: AppDelegate())
+        let controller = try window()
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 1194, height: 834)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        controller.updatePropertiesIfNeeded()
+        let session = try #require(controller.activeTab?.session)
+
+        choose(try command("Rename Layer…", in: "Layer", of: bar), in: controller)
+        for _ in 0..<100 where !(controller.presentedViewController is UIAlertController) { try await Task.sleep(for: .milliseconds(20)) }
+        let alert = try #require(controller.presentedViewController as? UIAlertController)
+        #expect(alert.title == "Rename Layer")
+        #expect(alert.textFields?.first?.text == "Gray")
+        #expect(alert.actions.map(\.title) == ["Cancel", "Rename"])
+        // The panel's alert, not the Mac's renaming in place, which would hold the layers.
+        #expect(session.renamingLayerID == nil && session.canEditLayers)
+        // Another can't come over it.
+        #expect(!takes(try command("Rename Layer…", in: "Layer", of: bar), in: controller))
+        alert.dismiss(animated: false)
+    }
+}
