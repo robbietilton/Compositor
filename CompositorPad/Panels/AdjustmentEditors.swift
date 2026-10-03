@@ -1,16 +1,22 @@
 import UIKit
 
-/// The editors for Levels, Curves and Hue/Saturation, as the Mac's panels: for an adjustment layer, or for a layer's
-/// own pixels from the Image menu. Each follows the edit the editor has open, and closes with OK or Cancel.
+/// The editors for Levels, Curves, Hue/Saturation and the filters, as the Mac's panels: for an adjustment layer, or for
+/// a layer's own pixels from the Image and Filter menus. Each follows the edit the editor has open, and closes with OK
+/// or Cancel.
 enum AdjustmentEditors {
     /// The adjustment layers the iPad has an editor for; the rest open on the Mac.
-    static let kinds: Set<AdjustmentKind> = [.hsv, .levels, .curves]
+    static let kinds: Set<AdjustmentKind> = Set(AdjustmentKind.allCases.filter { kind in
+        kind == .hsv || kind == .levels || kind == .curves || kind.filterKind.map(FilterEditorController.kinds.contains) == true
+    })
 
     /// An editor for the edit `session` has open, if the iPad has one.
     static func editor(for session: EditorSession) -> AdjustmentEditorController? {
         if session.levels != nil { return LevelsEditorController(session: session) }
         if session.hueSaturation != nil { return HueSaturationEditorController(session: session) }
         if session.filterEdit?.kind == .curves { return CurvesEditorController(session: session) }
+        if let kind = session.filterEdit?.kind, FilterEditorController.kinds.contains(kind) {
+            return FilterEditorController(session: session, kind: kind)
+        }
         return nil
     }
 }

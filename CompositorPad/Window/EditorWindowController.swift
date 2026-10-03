@@ -946,7 +946,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc func levels(_ sender: Any?) { activeTab?.session.beginLevels() }
     /// The filters and adjustments with an editor on iPad, which the Filter and Image menus offer; the others are listed
     /// there dimmed.
-    static let filterEditors: Set<FilterKind> = []
+    static var filterEditors: Set<FilterKind> { FilterEditorController.kinds }
     /// A filter or adjustment from the Filter, Image or Edit menu, by its kind.
     @objc func applyFilter(_ sender: UICommand) {
         guard let raw = sender.propertyList as? String, let kind = FilterKind(rawValue: raw), Self.filterEditors.contains(kind) else { return }

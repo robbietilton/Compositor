@@ -148,10 +148,12 @@ import UIKit
                                                  "Dither…", "Tonal Contrast…", "Lens Correction…", "Camera Raw Filter…",
                                                  "Remove Background…"])
         let fill = try #require(bar.menu(titled: "Edit")?.commands.last)
+        // Those with an editor open; the rest are dimmed.
         for command in filter.commands + image.commands.filter({ ["Black & White…", "Color Balance…", "Exposure…", "Gradient Map…",
                                                                   "Grain…"].contains($0.title) }) + [fill] {
-            let action = command.action
-            #expect(!controller.canPerformAction(action, withSender: command), "\(command.title)")
+            let kind = try #require((command.propertyList as? String).flatMap(FilterKind.init), "\(command.title)")
+            #expect(controller.canPerformAction(command.action, withSender: command) == FilterEditorController.kinds.contains(kind),
+                    "\(command.title)")
         }
         let select = try #require(bar.menu(titled: "Select"))
         let selectItems = select.children.flatMap { item -> [UIMenuElement] in
