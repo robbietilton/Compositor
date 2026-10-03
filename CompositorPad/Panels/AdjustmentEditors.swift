@@ -755,13 +755,17 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     }
 
     /// The sliders, made again when colorizing changes their ranges: hue −180 to 180, or 0 to 360 colorizing;
-    /// saturation −100 to 100, or 0 to 100.
+    /// saturation −100 to 100, or 0 to 100. Each has the Mac's colored track, and a double tap on its caption or thumb
+    /// puts that one value back.
     private func makeSliders(colorize: Bool) {
         sliders.arrangedSubviews.forEach { $0.removeFromSuperview() }
         func slider(_ caption: String, _ range: ClosedRange<Double>, unit: String? = nil,
                     _ key: WritableKeyPath<HueSaturationSettings, Double>) -> SliderField {
-            let field = SliderField(caption: caption, unit: unit, sliderRange: range, fieldRange: range, sensitivity: 1, sliderWidth: 220)
+            let field = SliderField(caption: caption, unit: unit, sliderRange: range, fieldRange: range, sensitivity: 1, sliderWidth: nil,
+                                    fieldWidth: NumberField.width(toShow: range, decimals: 0))
             field.onChange = { [weak self] value in self?.update { $0[keyPath: key] = value.rounded() } }
+            field.onReset = { [weak self] in self?.update { $0[keyPath: key] = $0.resetValues[keyPath: key] } }
+            field.toolTip = caption + ". Double-tap to reset."
             // Return in a field applies the adjustment, as on the Mac, where Levels' and Curves' fields keep it.
             field.onReturn = { [weak self] in self?.commit() }
             sliders.addArrangedSubview(field)
@@ -770,6 +774,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         hue = slider("Hue", colorize ? 0...360 : -180...180, unit: "°", \.hue)
         saturation = slider("Saturation", colorize ? 0...100 : -100...100, \.saturation)
         lightness = slider("Lightness", -100...100, \.lightness)
+        // The sliders start together, after the captions, as the Mac's do.
+        SliderField.alignCaptions([hue, saturation, lightness].compactMap { $0 })
         slidersColorize = colorize
     }
 
@@ -781,6 +787,9 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         hue?.show(settings.hue)
         saturation?.show(settings.saturation)
         lightness?.show(settings.lightness)
+        hue?.track = settings.hueTrack
+        saturation?.track = settings.saturationTrack
+        lightness?.track = HueSaturationSettings.lightnessTrack
         invert.superview?.isHidden = settings.range == .master || settings.colorize
         invert.isSelected = settings.invertRange
         colorize.isSelected = settings.colorize

@@ -332,8 +332,15 @@ final class NumberField: UIView, UITextFieldDelegate {
 }
 
 /// A caption to scrub, a slider and a field for the same value, as the Mac's brush settings have them.
-final class SliderField: UIView {
+final class SliderField: UIView, UIGestureRecognizerDelegate {
     var onChange: (Double) -> Void = { _ in }
+    /// A double tap on the caption or the thumb, which puts the value back, as a double-click does on the Mac's colored
+    /// sliders; nil for none.
+    var onReset: (() -> Void)?
+    /// The slider's colored track, as the Mac's color sliders draw theirs; plain keeps the system's.
+    var track: CameraRawSliderTrack = .plain {
+        didSet { if track != oldValue { slider.colors = track.colors } }
+    }
     /// A drag on the slider or the caption began, or ended.
     var onStart: () -> Void = {}
     var onFinish: () -> Void = {}
@@ -348,7 +355,7 @@ final class SliderField: UIView {
         set { number.onReturn = newValue }
     }
 
-    private let slider = UISlider()
+    private let slider = GradientSlider()
     private let label: UILabel
     private let number: NumberField
     /// The slider's range in the value's own units; the field and the caption may reach past it (see Radius).
@@ -385,6 +392,12 @@ final class SliderField: UIView {
         super.init(frame: .zero)
         label.isUserInteractionEnabled = true
         label.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(scrubbed(_:))))
+        for view in [label, slider] as [UIView] {
+            let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
+            doubleTap.numberOfTapsRequired = 2
+            doubleTap.delegate = self
+            view.addGestureRecognizer(doubleTap)
+        }
         slider.minimumValue = Float(sliderPosition(sliderRange.lowerBound))
         slider.maximumValue = Float(sliderPosition(sliderRange.upperBound))
         slider.accessibilityLabel = caption
@@ -448,6 +461,26 @@ final class SliderField: UIView {
         set { number.arrowStep = newValue }
     }
 
+    @objc private func doubleTapped(_ gesture: UITapGestureRecognizer) { resets(at: gesture.location(in: self)) }
+
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 2 else { return super.gestureRecognizerShouldBegin(gesture) }
+        return onReset != nil && isEnabled && (gesture.view === label || onThumb(gesture.location(in: self)))
+    }
+
+    /// Puts the value back, as a double tap at `point` on the caption or the thumb does; whether it did.
+    @discardableResult func resets(at point: CGPoint) -> Bool {
+        guard let onReset, isEnabled, label.convert(label.bounds, to: self).contains(point) || onThumb(point) else { return false }
+        onReset()
+        return true
+    }
+
+    /// Whether `point` is on the slider's thumb, or a little way off it, as a finger lands.
+    private func onThumb(_ point: CGPoint) -> Bool {
+        let thumb = slider.thumbRect(forBounds: slider.bounds, trackRect: slider.trackRect(forBounds: slider.bounds), value: slider.value)
+        return slider.convert(thumb, to: self).insetBy(dx: -8, dy: -8).contains(point)
+    }
+
     /// What the row does, shown by the slider when the pointer rests on it, as the Mac's help.
     var toolTip: String? {
         get { slider.toolTip }
@@ -474,6 +507,49 @@ final class SliderField: UIView {
     /// though the slider be logarithmic, as on the Mac.
     func scrubbed(from start: Double, by distance: CGFloat) -> Double {
         min(fieldRange.upperBound, max(fieldRange.lowerBound, start + Double(distance) * sensitivity))
+    }
+}
+
+/// A slider whose track can be a gradient of colors, drawn across the whole track in place of the system's, as the
+/// Mac's colored sliders draw theirs.
+final class GradientSlider: UISlider {
+    /// The track, a view so it changes at once, as the Mac's redraws, where a lone layer would ease to its new colors
+    /// and place behind a drag.
+    private let track = Track()
+    /// The track's colors, left to right; nil for the system's track.
+    var colors: [PaletteColor]? {
+        didSet {
+            let clear = colors == nil ? nil : UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
+            setMinimumTrackImage(clear, for: .normal)
+            setMaximumTrackImage(clear, for: .normal)
+            track.gradient.colors = colors?.map { CGColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) }
+            track.isHidden = colors == nil
+            setNeedsLayout()
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        track.gradient.startPoint = CGPoint(x: 0, y: 0.5)
+        track.gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        track.isHidden = true
+        track.isUserInteractionEnabled = false
+        insertSubview(track, at: 0)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let rect = trackRect(forBounds: bounds)
+        let height = max(rect.height, 6)
+        track.frame = CGRect(x: rect.minX, y: rect.midY - height / 2, width: rect.width, height: height)
+        track.layer.cornerRadius = height / 2
+        sendSubviewToBack(track)
+    }
+
+    private final class Track: UIView {
+        override class var layerClass: AnyClass { CAGradientLayer.self }
+        var gradient: CAGradientLayer { layer as! CAGradientLayer }
     }
 }
 

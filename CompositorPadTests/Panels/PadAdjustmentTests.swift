@@ -457,4 +457,145 @@ import UIKit
         #expect(try keepsItsHeight("Preview", in: editor))
         session.cancelLevels()
     }
+
+    // MARK: Colored sliders
+
+    /// Hue/Saturation's editor, open on the gray layer, laid out.
+    private func hueSaturationEditor(_ session: EditorSession) throws -> (HueSaturationEditorController, [SliderField]) {
+        session.beginHueSaturation()
+        let editor = try #require(AdjustmentEditors.editor(for: session) as? HueSaturationEditorController)
+        editor.loadViewIfNeeded()
+        editor.view.frame = CGRect(x: 0, y: 0, width: 480, height: 600)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        let rows = views(SliderField.self, in: editor.view)
+        try #require(rows.count == 3)
+        return (editor, rows)
+    }
+
+    /// The Hue slider's track is the hue circle, centered on the range's color, as the Mac's: Reds on red, Greens on
+    /// green, and red to red while colorizing.
+    @Test func theHueTrackFollowsTheRange() throws {
+        let session = try session()
+        var (editor, rows) = try hueSaturationEditor(session)
+        #expect(rows[0].track == .spectrum(0))
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.range = .greens
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        #expect(rows[0].track == .spectrum(120))
+        session.updateHueSaturation(.colorizeStart, preview: true)
+        editor.updatePropertiesIfNeeded()
+        rows = views(SliderField.self, in: editor.view)
+        #expect(rows.first?.track == .spectrum(180))
+        session.cancelHueSaturation()
+    }
+
+    /// The Saturation slider runs gray to red on Master, to the range's color on a range, and to the hue being set while
+    /// colorizing; Lightness runs black to white.
+    @Test func theSaturationAndLightnessTracks() throws {
+        let session = try session()
+        var (editor, rows) = try hueSaturationEditor(session)
+        #expect(rows[1].track == .chroma && rows[2].track == .opposing(.black, .white))
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.range = .blues
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        #expect(rows[1].track == .saturation(240))
+        settings = .colorizeStart
+        settings.hue = 30
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        rows = views(SliderField.self, in: editor.view)
+        #expect(rows[1].track == .saturation(30))
+        // Drawn: the system's track gives way to the colors, gray at the left end and orange at the right, past the thumb.
+        let slider = try #require(views(GradientSlider.self, in: rows[1]).first)
+        #expect(slider.colors == CameraRawSliderTrack.saturation(30).colors)
+        editor.view.layoutIfNeeded()
+        let track = slider.trackRect(forBounds: slider.bounds)
+        let image = UIGraphicsImageRenderer(bounds: slider.bounds).image { slider.layer.render(in: $0.cgContext) }
+        let left = try pixel(image, at: CGPoint(x: track.minX + 3, y: track.midY))
+        let right = try pixel(image, at: CGPoint(x: track.maxX - 3, y: track.midY))
+        #expect(abs(left.red - left.blue) < 0.08 && left.red > 0.4, "left \(left)")
+        #expect(right.red > 0.8 && right.blue < 0.25, "right \(right)")
+        session.cancelHueSaturation()
+    }
+
+    /// The three sliders start together after their captions, as the Mac's do, though Hue's has a unit.
+    @Test func theSlidersStartTogether() throws {
+        let session = try session()
+        let (editor, rows) = try hueSaturationEditor(session)
+        let starts = rows.compactMap { views(UISlider.self, in: $0).first }.map { $0.convert($0.bounds, to: editor.view).minX }
+        #expect(starts.count == 3 && Set(starts).count == 1, "\(starts)")
+        session.cancelHueSaturation()
+    }
+
+    /// A colored track changes at once, as the Mac's redraws: one that eased to its new colors or place would trail a
+    /// drag that changes them, as Tint's Hue does Tint's Saturation track.
+    @Test func aColoredTrackChangesAtOnce() throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 100)
+        let slider = GradientSlider()
+        slider.frame = CGRect(x: 20, y: 20, width: 300, height: 34)
+        window.addSubview(slider)
+        window.isHidden = false
+        defer { window.isHidden = true }
+        slider.colors = CameraRawSliderTrack.chroma.colors
+        slider.layoutIfNeeded()
+        CATransaction.flush()
+        func animating() -> [String] {
+            ([slider.layer] + (slider.layer.sublayers ?? []) + slider.subviews.map(\.layer)).filter { $0 is CAGradientLayer }
+                .flatMap { $0.animationKeys() ?? [] }
+        }
+        slider.colors = CameraRawSliderTrack.saturation(200).colors
+        slider.frame.size.width = 200
+        slider.layoutIfNeeded()
+        #expect(animating().isEmpty, "\(animating())")
+    }
+
+    /// A double tap on a slider's caption or thumb puts that one value back, as a double-click does on the Mac: Hue to
+    /// no change, and while colorizing Saturation to Photoshop's colorize start, 25. Elsewhere on the track it doesn't.
+    @Test func aDoubleTapResetsOneValue() throws {
+        let session = try session()
+        var (editor, rows) = try hueSaturationEditor(session)
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.hue = 30
+        settings.lightness = 40
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        let caption = try #require(views(UILabel.self, in: rows[0]).first)
+        #expect(rows[0].resets(at: caption.convert(CGPoint(x: caption.bounds.midX, y: caption.bounds.midY), to: rows[0])))
+        #expect(session.hueSaturation?.settings.hue == 0 && session.hueSaturation?.settings.lightness == 40)
+
+        session.updateHueSaturation(.colorizeStart, preview: true)
+        settings = try #require(session.hueSaturation?.settings)
+        settings.saturation = 80
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        editor.view.layoutIfNeeded()
+        rows = views(SliderField.self, in: editor.view)
+        let slider = try #require(views(UISlider.self, in: rows[1]).first)
+        let thumb = slider.thumbRect(forBounds: slider.bounds, trackRect: slider.trackRect(forBounds: slider.bounds), value: slider.value)
+        let far = CGPoint(x: thumb.midX > slider.bounds.midX ? slider.bounds.minX + 4 : slider.bounds.maxX - 4, y: thumb.midY)
+        #expect(!rows[1].resets(at: slider.convert(far, to: rows[1])))
+        #expect(session.hueSaturation?.settings.saturation == 80)
+        #expect(rows[1].resets(at: slider.convert(CGPoint(x: thumb.midX, y: thumb.midY), to: rows[1])))
+        #expect(session.hueSaturation?.settings.saturation == 25)
+        session.cancelHueSaturation()
+    }
+
+    /// The color at `point` in `image`, in its points.
+    private func pixel(_ image: UIImage, at point: CGPoint) throws -> PaletteColor {
+        let cgImage = try #require(image.cgImage)
+        let context = try #require(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let scale = image.scale
+        context.draw(cgImage, in: CGRect(x: -point.x * scale, y: -(CGFloat(cgImage.height) - point.y * scale), width: CGFloat(cgImage.width),
+                                         height: CGFloat(cgImage.height)))
+        let data = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        return PaletteColor(red: CGFloat(data[0]) / 255, green: CGFloat(data[1]) / 255, blue: CGFloat(data[2]) / 255)
+    }
 }
