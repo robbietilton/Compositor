@@ -354,6 +354,16 @@ extension EditorSession {
         setEffects(effects, on: id, name: (enabled ? "Hide " : "Show ") + kind.rawValue)
     }
 
+    /// Ends the editing of an effect that's gone, undone or with its layer, and its color picker, so no panel stays
+    /// open on nothing.
+    func endEffectsEditingIfGone() {
+        guard let editing = effectsEditing,
+              document?.layers.first(where: { $0.id == editing.layerID })?.effects?.contains(editing.kind) != true else { return }
+        if let picker = colorPicker, case .effect = picker.target { closeColorPicker(commit: false) }
+        effectsEditing = nil
+        effectsEditingOriginal = nil
+    }
+
     func removeSelectedEffect() {
         guard let selectedEffect, canEditLayers,
               var effects = document?.layers.first(where: { $0.id == selectedEffect.layerID })?.effects else { return }
