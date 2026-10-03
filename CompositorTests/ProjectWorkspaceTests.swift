@@ -54,6 +54,52 @@ import Testing
         }
     }
 
+    /// An effect's panel left open used to have its changes saved on Quit though they were never OK'd; quitting
+    /// cancels it as its Cancel button would, so a new Stroke comes off again and a Drop Shadow keeps its distance, even
+    /// with Color Range open beside the panel, which keeps layers from being edited until it's closed.
+    @Test func quittingCancelsAnOpenEffectsPanel() async throws {
+        let workspace = ProjectWorkspace()
+        let session = workspace.current.session
+        session.createDocument(width: 100, height: 20)
+        session.insert(try LiveMaskTests().asset([200, 100, 50, 255]))
+        let id = try #require(session.activeLayerID)
+        func saved() -> LayerEffects? { session.projectSnapshot()?.manifest.layers.first { $0.id == id }?.effects }
+        session.addEffect(.stroke)
+        session.beginColorRange()
+        #expect(saved()?.stroke != nil)
+        #expect(session.colorRange != nil)
+        await session.settlePendingEdits()
+        #expect(session.effectsEditing == nil)
+        #expect(saved() == nil)
+
+        session.addEffect(.shadow)
+        session.finishEffectsEditing(commit: true)
+        session.selectEffect(.shadow, on: id, editing: true)
+        session.changeEffects { $0.shadow?.distance = 60 }
+        await session.settlePendingEdits()
+        #expect(session.effectsEditing == nil)
+        #expect(saved()?.shadow?.distance == 20)
+    }
+
+    /// While the project is busy the panel's Cancel can't go in, so settling leaves the panel open and the layer as it
+    /// is, rather than closing the panel over an effect that was never OK'd; once it can, settling cancels it.
+    @Test func settlingWhileBusyLeavesTheEffectsPanelOpen() async throws {
+        let workspace = ProjectWorkspace()
+        let session = workspace.current.session
+        session.createDocument(width: 100, height: 20)
+        session.insert(try LiveMaskTests().asset([200, 100, 50, 255]))
+        let id = try #require(session.activeLayerID)
+        session.addEffect(.stroke)
+        session.isProjectBusy = true
+        await session.settlePendingEdits()
+        #expect(session.effectsEditing != nil)
+        #expect(session.document?.layers.first { $0.id == id }?.effects?.stroke != nil)
+        session.isProjectBusy = false
+        await session.settlePendingEdits()
+        #expect(session.effectsEditing == nil)
+        #expect(session.document?.layers.first { $0.id == id }?.effects == nil)
+    }
+
     @Test func layerDropProviderCopiesIntoANewProject() async throws {
         let workspace = ProjectWorkspace()
         let source = workspace.current

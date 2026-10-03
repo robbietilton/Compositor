@@ -68,8 +68,10 @@ extension EditorSession {
 
     /// Readies the project for quitting or closing, rather than refusing over what's in progress. Edits on the canvas
     /// (a gradient waiting for Apply, pixels being moved) are applied, as switching tools does; an open dialog (a filter,
-    /// Levels, Hue/Saturation, the color picker…) is cancelled, as its Cancel button would, so nothing is applied that
-    /// wasn't OK'd.
+    /// Levels, Hue/Saturation, a layer effect, the color picker…) is canceled, as its Cancel button would, so nothing is
+    /// applied that wasn't OK'd. A layer effect's panel can stay open beside other dialogs, some of which keep layers
+    /// from being edited, so it's canceled after those, or its Cancel couldn't put the layer back; while the project is
+    /// still busy it can't, so the panel stays open rather than closing over an effect that was never OK'd.
     func settlePendingEdits() async {
         if gradientEdit != nil { await commitGradient() }
         if pixelMove != nil { await finishPixelMove() }
@@ -79,6 +81,7 @@ extension EditorSession {
         finishAdjustmentEditing(commit: false)
         cancelColorRange()
         selectionAmountOperation = nil
+        if canEditBesideCanvasEdits { finishEffectsEditing(commit: false) }
         if colorPicker != nil { closeColorPicker(commit: false) }
     }
 
