@@ -52,7 +52,11 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         /// A tool, or Clone Stamp's source, which `input` follows.
         case tool
         case pan(CGPoint)
+        /// Hue/Saturation's eyedropper or targeted adjustment.
+        case hue
     }
+    /// Where a targeted adjustment's drag began, in the view.
+    private var hueTargetStart: CGPoint?
     private var drag: Drag?
     private var pinchStart: (zoom: CGFloat, anchor: CGPoint)?
     private var panLast: CGPoint?
@@ -366,6 +370,9 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             activeTouch = touch
             drag = .tool
             (touchPointer, touchKeys) = (point, keys)
+        } else if hueSamplingBegan(at: point) {
+            activeTouch = touch
+            drag = .hue
         } else if !paints {
             activeTouch = touch
             drag = .pan(point)
@@ -395,6 +402,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             let point = touch.location(in: self)
             session.viewport.translate(by: CGSize(width: point.x - last.x, height: point.y - last.y))
             self.drag = .pan(point)
+        case .hue:
+            hueTargetMoved(to: touch.location(in: self), keys: event?.modifierFlags ?? [])
         }
         setNeedsRender()
     }
@@ -422,9 +431,39 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // A second finger coming down to zoom takes the canvas back, and what the touch was doing with it.
             if cancelled { input.cancelled() }
             else { input.ended(at: touch.location(in: self), keys: keys, tapCount: touch.tapCount) }
+        case .hue:
+            hueTargetEnded()
         case .pan, nil:
             break
         }
+    }
+
+    // MARK: Hue/Saturation's eyedroppers
+
+    /// Hue/Saturation's eyedroppers and targeted adjustment take a touch on the canvas, as a click on the Mac's does,
+    /// unless Space is held to move the canvas: whether this one, at `point`, was taken.
+    func hueSamplingBegan(at point: CGPoint) -> Bool {
+        guard session.hueSaturation != nil, !spaceHeld, session.hueSampleMode != nil || session.hueTargeting,
+              let document = session.document else { return false }
+        let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+        if session.hueSampleMode != nil {
+            session.sampleHueRange(at: pixel)
+        } else if session.beginHueTargeting(at: pixel) {
+            hueTargetStart = point
+        }
+        return true
+    }
+
+    /// A targeted adjustment's drag: right raises its color's saturation and left lowers it, or its hue with ⌘ held.
+    func hueTargetMoved(to point: CGPoint, keys: UIKeyModifierFlags) {
+        guard let start = hueTargetStart else { return }
+        session.dragHueTargeting(byViewDelta: point.x - start.x, adjustsHue: keys.contains(.command))
+    }
+
+    func hueTargetEnded() {
+        guard hueTargetStart != nil else { return }
+        hueTargetStart = nil
+        session.endHueTargeting()
     }
 
     // MARK: Gestures

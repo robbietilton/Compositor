@@ -828,6 +828,27 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     private let sliders = UIStackView()
     private let invert = OptionControls.checkbox("Apply outside this range instead") { _ in }
     private let spectrum = SpectrumView()
+    /// The eyedroppers, which set the range from the picture, and the targeted adjustment, which drags on it.
+    private lazy var droppers = HueSampleMode.allCases.map { mode in
+        Self.samplingButton(mode.symbol, badge: mode.badge, label: mode.rawValue + " color", help: mode.help) { [weak self] in
+            guard let session = self?.session else { return }
+            session.hueTargeting = false
+            session.hueSampleMode = session.hueSampleMode == mode ? nil : mode
+        }
+    }
+    private let droppersEnd: UIView = {
+        let line = UIView()
+        line.backgroundColor = .separator
+        line.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        return line
+    }()
+    private lazy var targeted = Self.samplingButton("hand.point.up.left", badge: nil, label: "Targeted adjustment",
+                                                    help: "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held") {
+        [weak self] in
+        guard let session = self?.session else { return }
+        session.hueSampleMode = nil
+        session.hueTargeting.toggle()
+    }
     private let colorize = OptionControls.checkbox("Colorize") { _ in }
     /// Whether the sliders were made for colorizing, whose ranges differ.
     private var slidersColorize: Bool?
@@ -871,7 +892,9 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         sliders.axis = .vertical
         sliders.spacing = 12
         spectrum.handles.onDrag = { [weak self] index, degrees in self?.update { $0.band.setHandle(index, to: degrees) } }
-        for view in [OptionControls.row([range, UIView()]), sliders, spectrum, OptionControls.row([invert, UIView()])] as [UIView] {
+        droppersEnd.heightAnchor.constraint(equalToConstant: 16).isActive = true
+        let rangeRow = OptionControls.row([range, UIView()] + droppers + [droppersEnd, targeted], spacing: 6)
+        for view in [rangeRow, sliders, spectrum, OptionControls.row([invert, UIView()])] as [UIView] {
             content.addArrangedSubview(view)
         }
     }
@@ -901,6 +924,36 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         slidersColorize = colorize
     }
 
+    /// An eyedropper or the targeted adjustment, as the Mac draws them: a symbol, with Add's and Remove's small badge.
+    private static func samplingButton(_ symbol: String, badge: String?, label: String, help: String,
+                                       action: @escaping () -> Void) -> UIButton {
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15))
+        configuration.baseForegroundColor = .label
+        configuration.contentInsets = .zero
+        configuration.background.cornerRadius = 6
+        let button = UIButton(configuration: configuration)
+        button.accessibilityLabel = label
+        button.toolTip = help
+        if let badge {
+            let mark = UIImageView(image: UIImage(systemName: badge, withConfiguration: UIImage.SymbolConfiguration(pointSize: 8, weight: .semibold)))
+            mark.tintColor = .label
+            button.addSubview(mark)
+            mark.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([mark.centerXAnchor.constraint(equalTo: button.centerXAnchor, constant: 9),
+                                         mark.centerYAnchor.constraint(equalTo: button.centerYAnchor, constant: 8)])
+        }
+        NSLayoutConstraint.activate([button.widthAnchor.constraint(equalToConstant: 34), button.heightAnchor.constraint(equalToConstant: 32)])
+        button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
+        return button
+    }
+
+    /// Shows the button armed, tinted as the Mac's, or not.
+    private static func arm(_ button: UIButton, _ armed: Bool) {
+        button.configuration?.background.backgroundColor = armed ? UIColor.tintColor.withAlphaComponent(0.25) : .clear
+        button.accessibilityTraits = armed ? [.button, .selected] : .button
+    }
+
     override func refresh() {
         let settings = settings
         if slidersColorize != settings.colorize { makeSliders(colorize: settings.colorize) }
@@ -913,9 +966,16 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         saturation?.track = settings.saturationTrack
         lightness?.track = HueSaturationSettings.lightnessTrack
         invert.superview?.isHidden = settings.range == .master || settings.colorize
-        // The band, for a color range, as the Mac's shows it.
+        // The band, for a color range, as the Mac's shows it, and its eyedroppers, which only then have a range to set.
         spectrum.isHidden = settings.range == .master || settings.colorize
         spectrum.settings = settings
+        for (mode, dropper) in zip(HueSampleMode.allCases, droppers) {
+            dropper.isHidden = spectrum.isHidden
+            Self.arm(dropper, session.hueSampleMode == mode)
+        }
+        droppersEnd.isHidden = spectrum.isHidden
+        targeted.isHidden = settings.colorize
+        Self.arm(targeted, session.hueTargeting)
         invert.isSelected = settings.invertRange
         colorize.isSelected = settings.colorize
     }

@@ -704,6 +704,134 @@ import UIKit
         session.cancelHueSaturation()
     }
 
+    // MARK: Eyedroppers and targeted adjustment
+
+    /// A window with a red layer, and Hue/Saturation open over it.
+    private func redUnderHueSaturation() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession,
+                                                         editor: HueSaturationEditorController, canvas: PadCanvasView) {
+        let (window, controller, session) = try await shownWindow()
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Red"))
+        session.beginHueSaturation()
+        let editor = try await editor(HueSaturationEditorController.self, over: controller)
+        let canvas = try #require(views(PadCanvasView.self, in: controller.view).first)
+        return (window, controller, session, editor, canvas)
+    }
+
+    /// Where the document's middle is on the canvas.
+    private func middle(of session: EditorSession) throws -> CGPoint {
+        let size = try #require(session.document?.size)
+        return session.viewport.viewPoint(from: CGPoint(x: size.width / 2, y: size.height / 2), documentSize: size)
+    }
+
+    /// The editor's button labeled `label`, if it shows.
+    private func shownButton(_ label: String, in editor: UIViewController) -> UIButton? {
+        views(UIButton.self, in: editor.view).first { button in
+            guard button.accessibilityLabel == label else { return false }
+            var view: UIView? = button
+            while let shown = view, shown !== editor.view {
+                if shown.isHidden { return false }
+                view = shown.superview
+            }
+            return true
+        }
+    }
+
+    /// The Range row has the Mac's eyedroppers, for a color range, and its targeted adjustment, unless colorizing; each
+    /// arms on a tap and disarms on another, and arming one disarms the other.
+    @Test func theEyedroppersAndTargetedAdjustmentAreTheMacs() async throws {
+        let (window, controller, session, editor, _) = try await redUnderHueSaturation()
+        defer { window.isHidden = true }
+        let droppers = ["Sample color", "Add color", "Remove color"]
+        #expect(droppers.allSatisfy { shownButton($0, in: editor) == nil })
+        #expect(shownButton("Targeted adjustment", in: editor) != nil)
+        try choose(.greens, in: session, editor: editor)
+        #expect(droppers.allSatisfy { shownButton($0, in: editor) != nil })
+        let sample = try #require(shownButton("Sample color", in: editor))
+        sample.sendActions(for: .primaryActionTriggered)
+        #expect(session.hueSampleMode == .replace)
+        try #require(shownButton("Targeted adjustment", in: editor)).sendActions(for: .primaryActionTriggered)
+        #expect(session.hueTargeting && session.hueSampleMode == nil)
+        sample.sendActions(for: .primaryActionTriggered)
+        #expect(session.hueSampleMode == .replace && !session.hueTargeting)
+        sample.sendActions(for: .primaryActionTriggered)
+        #expect(session.hueSampleMode == nil)
+        session.updateHueSaturation(.colorizeStart, preview: true)
+        editor.updatePropertiesIfNeeded()
+        #expect((droppers + ["Targeted adjustment"]).allSatisfy { shownButton($0, in: editor) == nil })
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// With Sample armed, a touch on the canvas centers the range's band on the color there, as a click does on the Mac.
+    @Test func aTouchSamplesTheBand() async throws {
+        let (window, controller, session, editor, canvas) = try await redUnderHueSaturation()
+        defer { window.isHidden = true }
+        try choose(.greens, in: session, editor: editor)
+        session.hueSampleMode = .replace
+        #expect(canvas.hueSamplingBegan(at: try middle(of: session)))
+        canvas.hueTargetEnded()
+        #expect(session.hueSaturation?.settings.band == ColorRange.greens.defaultBand.centered(on: 0))
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// With the targeted adjustment armed, a drag across a color sets its range's saturation, a unit for every two
+    /// points, as on the Mac; with ⌘ held, its hue.
+    @Test func aDragTargetsTheColor() async throws {
+        let (window, controller, session, _, canvas) = try await redUnderHueSaturation()
+        defer { window.isHidden = true }
+        session.hueTargeting = true
+        let start = try middle(of: session)
+        #expect(canvas.hueSamplingBegan(at: start))
+        #expect(session.hueSaturation?.settings.range == .reds)
+        canvas.hueTargetMoved(to: CGPoint(x: start.x + 40, y: start.y), keys: [])
+        canvas.hueTargetEnded()
+        #expect(session.hueSaturation?.settings.adjustments[.reds]?.saturation == 20)
+        #expect(canvas.hueSamplingBegan(at: start))
+        canvas.hueTargetMoved(to: CGPoint(x: start.x + 40, y: start.y), keys: .command)
+        canvas.hueTargetEnded()
+        #expect(session.hueSaturation?.settings.adjustments[.reds]?.hue == 20)
+        #expect(session.hueSaturation?.settings.adjustments[.reds]?.saturation == 20)
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Space still pans: a touch with it held is the canvas's to move, not the eyedropper's.
+    @Test func spaceStillPansOverTheEyedroppers() async throws {
+        let (window, controller, session, editor, canvas) = try await redUnderHueSaturation()
+        defer { window.isHidden = true }
+        try choose(.greens, in: session, editor: editor)
+        session.hueSampleMode = .replace
+        canvas.spaceHeld = true
+        #expect(!canvas.hueSamplingBegan(at: try middle(of: session)))
+        #expect(session.hueSaturation?.settings.band == ColorRange.greens.defaultBand)
+        canvas.spaceHeld = false
+        session.cancelHueSaturation()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// OK and Cancel both put the eyedroppers and the targeted adjustment away.
+    @Test func okAndCancelPutTheEyedroppersAway() async throws {
+        let (window, controller, session, editor, _) = try await redUnderHueSaturation()
+        defer { window.isHidden = true }
+        try choose(.greens, in: session, editor: editor)
+        try #require(shownButton("Sample color", in: editor)).sendActions(for: .primaryActionTriggered)
+        #expect(press(UIKeyCommand.inputEscape, in: controller))
+        try await eventually { controller.presentedViewController == nil }
+        #expect(session.hueSampleMode == nil)
+        session.beginHueSaturation()
+        let again = try await self.editor(HueSaturationEditorController.self, over: controller)
+        try #require(shownButton("Targeted adjustment", in: again)).sendActions(for: .primaryActionTriggered)
+        #expect(session.hueTargeting)
+        #expect(press("\r", in: controller))
+        try await eventually { controller.presentedViewController == nil }
+        #expect(!session.hueTargeting)
+    }
+
     /// The color at `point` in `image`, in its points.
     private func pixel(_ image: UIImage, at point: CGPoint) throws -> PaletteColor {
         let cgImage = try #require(image.cgImage)
