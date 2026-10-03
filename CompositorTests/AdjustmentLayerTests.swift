@@ -259,6 +259,44 @@ import Testing
         #expect(session.activeLayer?.adjustment == saved)
     }
 
+    /// A value typed into a Black & White or Color Balance field past its slider's end is held to that end, as the
+    /// other filter fields are: the layer gets what the panel shows, rather than the panel showing a value the layer
+    /// never takes.
+    @Test(arguments: [AdjustmentKind.blackWhite, .colorBalance])
+    func typingPastASlidersEndKeepsTheLayerAndThePanelTogether(_ kind: AdjustmentKind) async throws {
+        let fixtures = AdjustmentLayerTests()
+        let session = EditorSession()
+        session.createDocument(width: 2, height: 2)
+        session.insert(try fixtures.image(.white))
+        session.addAdjustment(kind)
+        await session.beginAdjustmentEditing(try #require(session.adjustmentEditingID))
+        // What the panel's fields send: each change is the whole settings, with Preview as it is.
+        func enter(_ change: (inout FilterSettings) -> Void) throws {
+            let edit = try #require(session.filterEdit)
+            var settings = edit.settings
+            change(&settings)
+            session.updateFilter(settings, preview: edit.preview)
+        }
+        if kind == .blackWhite {
+            try enter { $0.blackWhite.reds = 500 }
+            try enter { $0.blackWhite.tint = true }
+            try enter { $0.blackWhite.tintHue = 400 }
+        } else {
+            try enter { $0.colorBalance.midCyanRed = -150 }
+        }
+        let shown = try #require(session.filterEdit).settings
+        if kind == .blackWhite {
+            #expect(shown.blackWhite.reds == BlackWhiteSettings.range.upperBound && shown.blackWhite.tintHue == 360)
+        } else {
+            #expect(shown.colorBalance.midCyanRed == ColorBalanceSettings.range.lowerBound)
+        }
+        let live = try #require(session.activeLayer?.adjustment)
+        #expect(live.blackWhite == shown.blackWhite && live.colorBalance == shown.colorBalance, "the canvas shows what the panel does")
+        await session.commitFilter()
+        let saved = try #require(session.activeLayer?.adjustment)
+        #expect(saved.blackWhite == shown.blackWhite && saved.colorBalance == shown.colorBalance, "OK keeps what the panel showed")
+    }
+
     @Test func legacyHSVStillDecodesAndRenders() throws {
         let data = try JSONEncoder().encode(LayerAdjustment(kind: .hsv, hue: 120))
         let decoded = try JSONDecoder().decode(LayerAdjustment.self, from: data)

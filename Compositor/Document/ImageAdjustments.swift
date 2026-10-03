@@ -130,6 +130,18 @@ nonisolated struct BlackWhiteSettings: Codable, Equatable, Sendable {
             && tintHue.isFinite && (0...360).contains(tintHue)
             && tintSaturation.isFinite && (0...100).contains(tintSaturation)
     }
+    var normalized: Self {
+        var result = self
+        result.reds = ImageAdjustmentPixels.clamp(reds, Self.range, 40)
+        result.yellows = ImageAdjustmentPixels.clamp(yellows, Self.range, 60)
+        result.greens = ImageAdjustmentPixels.clamp(greens, Self.range, 40)
+        result.cyans = ImageAdjustmentPixels.clamp(cyans, Self.range, 60)
+        result.blues = ImageAdjustmentPixels.clamp(blues, Self.range, 20)
+        result.magentas = ImageAdjustmentPixels.clamp(magentas, Self.range, 80)
+        result.tintHue = ImageAdjustmentPixels.clamp(tintHue, 0...360, 40)
+        result.tintSaturation = ImageAdjustmentPixels.clamp(tintSaturation, 0...100, 20)
+        return result
+    }
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
         // The C routine's order: red, yellow, green, cyan, blue, magenta.
@@ -163,6 +175,19 @@ nonisolated struct ColorBalanceSettings: Codable, Equatable, Sendable {
     }
     var isValid: Bool { all.allSatisfy { $0.isFinite && Self.range.contains($0) } }
     var isIdentity: Bool { all.allSatisfy { $0 == 0 } }
+    var normalized: Self {
+        var result = self
+        result.shadowCyanRed = ImageAdjustmentPixels.clamp(shadowCyanRed, Self.range, 0)
+        result.shadowMagentaGreen = ImageAdjustmentPixels.clamp(shadowMagentaGreen, Self.range, 0)
+        result.shadowYellowBlue = ImageAdjustmentPixels.clamp(shadowYellowBlue, Self.range, 0)
+        result.midCyanRed = ImageAdjustmentPixels.clamp(midCyanRed, Self.range, 0)
+        result.midMagentaGreen = ImageAdjustmentPixels.clamp(midMagentaGreen, Self.range, 0)
+        result.midYellowBlue = ImageAdjustmentPixels.clamp(midYellowBlue, Self.range, 0)
+        result.highlightCyanRed = ImageAdjustmentPixels.clamp(highlightCyanRed, Self.range, 0)
+        result.highlightMagentaGreen = ImageAdjustmentPixels.clamp(highlightMagentaGreen, Self.range, 0)
+        result.highlightYellowBlue = ImageAdjustmentPixels.clamp(highlightYellowBlue, Self.range, 0)
+        return result
+    }
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
         guard !isIdentity else { return image }

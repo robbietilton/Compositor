@@ -116,6 +116,8 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.exposure = exposure.normalized
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
+        result.blackWhite = blackWhite.normalized
+        result.colorBalance = colorBalance.normalized
         result.dither = dither.normalized
         result.cameraRaw = cameraRaw.normalized
         return result
