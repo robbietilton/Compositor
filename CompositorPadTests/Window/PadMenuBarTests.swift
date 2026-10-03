@@ -68,4 +68,21 @@ import UIKit
             seen[chord] = key.title
         }
     }
+
+    /// Open Recent ends with Clear Menu, as on the Mac, dimmed when there's nothing to clear.
+    @Test func openRecentEndsWithClearMenu() throws {
+        let none = AppDelegate.recentItems(for: [])
+        #expect(none.count == 1)
+        let clear = try #require(none.last as? UICommand)
+        #expect(clear.title == "Clear Menu" && clear.attributes.contains(.disabled))
+        #expect(clear.action == #selector(EditorWindowController.clearRecentProjects(_:)))
+
+        let project = CompositorDocument.projectsFolder.appending(path: "Harbor.comp")
+        let some = AppDelegate.recentItems(for: [project])
+        let projects = try #require(some.first as? UIMenu)
+        #expect(projects.options.contains(.displayInline))
+        #expect(projects.children.map(\.title) == ["Harbor"])
+        #expect((some.last as? UICommand)?.title == "Clear Menu" && (some.last as? UICommand)?.attributes.contains(.disabled) == false)
+    }
 }
+

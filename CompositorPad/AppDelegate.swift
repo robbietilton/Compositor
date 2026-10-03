@@ -25,14 +25,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         builder.remove(menu: .find)
         typealias Window = EditorWindowController
         let recent = UIMenu(title: "Open Recent", children: [UIDeferredMenuElement.uncached { completion in
-            Task { @MainActor in
-                let urls = PadRecentProjects.shared.urls
-                completion(urls.isEmpty ? [UIAction(title: "No Recent Projects", attributes: .disabled) { _ in }] : urls.compactMap { url in
-                    PadRecentProjects.reference(to: url).map {
-                        UICommand(title: url.deletingPathExtension().lastPathComponent, action: #selector(Window.openRecentProject(_:)), propertyList: $0)
-                    }
-                })
-            }
+            Task { @MainActor in completion(Self.recentItems(for: PadRecentProjects.shared.urls)) }
         }])
         let open = UIMenu(options: .displayInline, children: [
             UIKeyCommand(title: "New Canvas…", action: #selector(Window.newCanvasTab(_:)), input: "n", modifierFlags: .command),
@@ -121,6 +114,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIKeyCommand(title: "Zoom In", action: #selector(Window.zoomIn(_:)), input: "=", modifierFlags: .command),
             UIKeyCommand(title: "Zoom Out", action: #selector(Window.zoomOut(_:)), input: "-", modifierFlags: .command),
         ]), atStartOfMenu: .view)
+    }
+}
+
+extension AppDelegate {
+    /// Open Recent's items for `urls`, as the Mac's: the projects, newest first, then Clear Menu, dimmed when there are
+    /// none.
+    static func recentItems(for urls: [URL]) -> [UIMenuElement] {
+        let projects: [UIMenuElement] = urls.compactMap { url in
+            PadRecentProjects.reference(to: url).map {
+                UICommand(title: url.deletingPathExtension().lastPathComponent,
+                          action: #selector(EditorWindowController.openRecentProject(_:)), propertyList: $0)
+            }
+        }
+        let clear = UICommand(title: "Clear Menu", action: #selector(EditorWindowController.clearRecentProjects(_:)),
+                              attributes: projects.isEmpty ? .disabled : [])
+        return projects.isEmpty ? [clear] : [UIMenu(options: .displayInline, children: projects), clear]
     }
 }
 

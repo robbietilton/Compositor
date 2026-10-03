@@ -661,6 +661,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
     @objc func openProject(_ sender: Any?) { pick(.project) }
     @objc func importImages(_ sender: Any?) { pick(.images) }
+    /// File › Open Recent › Clear Menu, as on the Mac.
+    @objc func clearRecentProjects(_ sender: Any?) {
+        PadRecentProjects.shared.clear()
+        newCanvas.showRecent(PadRecentProjects.shared.urls)
+    }
     @objc func openRecentProject(_ sender: UICommand) {
         if let reference = sender.propertyList as? Data, let url = PadRecentProjects.resolve(reference) { open([url]) }
     }
@@ -968,6 +973,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
              #selector(zoomIn(_:)), #selector(zoomOut(_:)): return hasDocument
         case #selector(newCanvasTab(_:)), #selector(openProject(_:)), #selector(importImages(_:)), #selector(importPhotos(_:)),
              #selector(openRecentProject(_:)), #selector(closeTab(_:)): return true
+        case #selector(clearRecentProjects(_:)): return !PadRecentProjects.shared.urls.isEmpty
         case #selector(cut(_:)): return session.map { $0.selection != nil && $0.canCopyPixels } ?? false
         case #selector(copy(_:)): return session.map { $0.canCopyPixels || $0.canCopyLayer } ?? false
         case #selector(copyMerged(_:)): return session?.canCopyMerged ?? false
