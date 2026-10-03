@@ -353,6 +353,26 @@ import UIKit
         try await closes(controller)
     }
 
+    /// Image › Image Size…, Canvas Size… and the exports, which waited for nothing to be over the window, don't wait
+    /// for an effect's panel: their dialog takes its place, the effect OK'd.
+    @Test func theProjectsCommandsDontWaitForThePanel() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        try row("Size", in: editor).onChange(9)
+        for action in [#selector(EditorWindowController.imageSize(_:)), #selector(EditorWindowController.canvasSize(_:)),
+                       #selector(EditorWindowController.exportPNG(_:))] {
+            #expect(controller.canPerformAction(action, withSender: nil), "\(action)")
+        }
+        controller.perform(#selector(EditorWindowController.imageSize(_:)), with: nil)
+        try await eventually { controller.presentedViewController != nil && !(controller.presentedViewController is EffectEditorController) }
+        #expect(controller.presentedViewController != nil && !(controller.presentedViewController is EffectEditorController))
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects?.stroke?.size == 9)
+        controller.dismiss(animated: false)
+        try await closes(controller)
+    }
+
     /// Up and Down step a field with the keyboard, Shift ten steps, as the Mac's effect fields: a point of Distance, a
     /// percent of Opacity.
     @Test func arrowsStepTheFields() async throws {
@@ -379,5 +399,215 @@ import UIKit
         editor.view.endEditing(true)
         session.finishEffectsEditing(commit: false)
         try await closes(controller)
+    }
+
+    // MARK: Beside the panel
+
+    /// Beside an effect's panel the Layers panel, the tools and their options stay free, as beside the Mac's; beside
+    /// another editor only the canvas does.
+    @Test func onlyAnEffectsPanelLeavesThePanelsFree() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let free = editor.popoverPresentationController?.passthroughViews ?? []
+        for panel in [views(LayersPanelView.self, in: controller.view).first, views(ToolRailView.self, in: controller.view).first,
+                      views(ToolOptionsBar.self, in: controller.view).first] as [UIView?] {
+            let panel = try #require(panel)
+            #expect(free.contains { $0 === panel }, "\(type(of: panel))")
+        }
+        #expect(free.count == 4)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+
+        controller.perform(#selector(EditorWindowController.levels(_:)), with: nil)
+        try await eventually { controller.presentedViewController is AdjustmentEditorController }
+        let levels = try #require(controller.presentedViewController as? AdjustmentEditorController)
+        #expect(levels.popoverPresentationController?.passthroughViews?.count == 1)
+        #expect(levels.popoverPresentationController?.passthroughViews?.contains { $0 is LayersPanelView } == false)
+        session.cancelLevels()
+        try await closes(controller)
+    }
+
+    /// Another edit's editor takes the place of an effect's panel, from wherever it's opened, the effect kept as its
+    /// OK keeps it: the iPad shows one at a time.
+    @Test(arguments: ["Gaussian Blur", "Levels", "Curves", "Hue/Saturation", "Levels layer"])
+    func anotherEditorTakesItsPlace(_ entry: String) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let effect = try await effectEditor(for: .stroke, over: controller)
+        try row("Size", in: effect).onChange(7)
+        switch entry {
+        case "Gaussian Blur":
+            let command = UICommand(title: "Gaussian Blur…", action: #selector(EditorWindowController.applyFilter(_:)),
+                                    propertyList: FilterKind.gaussianBlur.rawValue)
+            try #require(controller.canPerformAction(command.action, withSender: command))
+            controller.perform(command.action, with: command)
+        case "Levels", "Curves", "Hue/Saturation":
+            let action = entry == "Levels" ? #selector(EditorWindowController.levels(_:))
+                : entry == "Curves" ? #selector(EditorWindowController.curves(_:)) : #selector(EditorWindowController.hueSaturation(_:))
+            try #require(controller.canPerformAction(action, withSender: nil))
+            controller.perform(action, with: nil)
+        default:
+            let button = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New adjustment layer" })
+            let levels = try #require(button.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "Levels…" })
+            levels.performWithSender(nil, target: nil)
+        }
+        try await eventually {
+            controller.presentedViewController is AdjustmentEditorController && !(controller.presentedViewController is EffectEditorController)
+        }
+        let editor = try #require(controller.presentedViewController as? AdjustmentEditorController)
+        #expect(!(editor is EffectEditorController))
+        #expect(session.effectsEditing == nil)
+        #expect(session.document?.layers.contains { $0.effects?.stroke?.size == 7 } == true)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+        #expect(session.document?.layers.contains { $0.effects?.stroke?.size == 7 } == true)
+    }
+
+    /// So does anything else the window shows, as the rail's color picker and Layer › Rename's question, which can't
+    /// come over the panel.
+    @Test func whatElseTheWindowShowsTakesItsPlace() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let effect = try await effectEditor(for: .stroke, over: controller)
+        try row("Size", in: effect).onChange(7)
+        let rail = try #require(views(ToolRailView.self, in: controller.view).first)
+        rail.chooseColor(background: false)
+        try await eventually { controller.presentedViewController is UIColorPickerViewController }
+        #expect(controller.presentedViewController is UIColorPickerViewController)
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects?.stroke?.size == 7)
+        controller.dismiss(animated: false)
+        try await closes(controller)
+
+        try add(.shadow, in: controller)
+        _ = try await effectEditor(for: .shadow, over: controller)
+        let rename = #selector(EditorWindowController.renameLayer(_:))
+        try #require(controller.canPerformAction(rename, withSender: nil))
+        controller.perform(rename, with: nil)
+        try await eventually { controller.presentedViewController is UIAlertController }
+        #expect((controller.presentedViewController as? UIAlertController)?.title == "Rename Layer")
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects?.shadow != nil)
+        controller.dismiss(animated: false)
+        try await closes(controller)
+    }
+
+    /// Going to another tab, the panel goes with the tab it edits, OK'd, as when anything else takes its place, rather
+    /// than staying over the new tab, bound to a layer that isn't there.
+    @Test func thePanelGoesWhenAnotherTabComesForward() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        try row("Size", in: editor).onChange(9)
+        controller.newCanvasTab(nil)
+        try await closes(controller)
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects?.stroke?.size == 9)
+        #expect(controller.activeTab?.session !== session)
+    }
+
+    /// Something the editor asks the window to say, as an error, takes the panel's place too, OK'd; while the panel's
+    /// color picker is up, it waits, rather than being lost.
+    @Test func aMessageWaitsForThePickerThenTakesThePanelsPlace() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.shadow, in: controller)
+        let editor = try await effectEditor(for: .shadow, over: controller)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        session.brushError = "The brush ran out of room."
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(session.brushError != nil && editor.presentedViewController is UIColorPickerViewController)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await eventually { controller.presentedViewController is UIAlertController }
+        #expect((controller.presentedViewController as? UIAlertController)?.title == "Couldn’t paint")
+        #expect(session.brushError == nil && session.effectsEditing == nil && session.activeLayer?.effects?.shadow != nil)
+        controller.dismiss(animated: false)
+        try await closes(controller)
+    }
+
+    /// The panel stays with the layer it was opened on, as the Mac's: another layer chosen in the Layers panel, its
+    /// rows still set the first one's effect.
+    @Test func thePanelStaysWithItsLayer() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let gray = try #require(session.activeLayerID)
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let other = try #require(session.document?.layers.first { $0.id != gray }?.id)
+        session.selectLayers([other], primary: other)
+        try #require(session.activeLayerID == other)
+        try row("Size", in: editor).onChange(11)
+        #expect(session.document?.layers.first { $0.id == gray }?.effects?.stroke?.size == 11)
+        #expect(session.document?.layers.first { $0.id == other }?.effects == nil)
+        #expect(controller.presentedViewController === editor)
+        try press("\r", in: controller)
+        try await closes(controller)
+    }
+
+    /// Merging its layer away closes the panel, which has nothing left to edit.
+    @Test func mergingItsLayerAwayClosesThePanel() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        _ = try await effectEditor(for: .stroke, over: controller)
+        let merge = #selector(EditorWindowController.mergeLayers(_:))
+        try #require(controller.canPerformAction(merge, withSender: nil))
+        controller.perform(merge, with: nil)
+        try await closes(controller)
+        #expect(session.effectsEditing == nil)
+    }
+
+    /// Beside an effect's panel, Escape and Return go to an edit of the canvas's own first: a crop, then a transform.
+    /// The panel has them once it's done.
+    @Test func escapeAndReturnGoToTheCanvasFirst() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        session.selectTool(.crop)
+        try #require(session.cropRect != nil)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        #expect(session.cropRect == nil && session.effectsEditing != nil && controller.presentedViewController === editor)
+        session.selectTool(.move)
+        session.transformCommand()
+        try #require(session.transformEdit != nil)
+        try press("\r", in: controller)
+        #expect(session.transformEdit == nil && session.effectsEditing != nil && controller.presentedViewController === editor)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects == nil)
+    }
+
+    /// The panel keeps working while a crop, a transform or text is under way, as the Mac's does: its rows set the
+    /// effect, and its Cancel takes a new one away.
+    @Test func itKeepsWorkingBesideACrop() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        session.selectTool(.crop)
+        try #require(session.cropRect != nil)
+        try row("Size", in: editor).onChange(13)
+        #expect(session.activeLayer?.effects?.stroke?.size == 13)
+        try button("Cancel", in: editor).sendActions(for: .primaryActionTriggered)
+        try await closes(controller)
+        #expect(session.activeLayer?.effects == nil && session.cropRect != nil)
+    }
+
+    /// The panel goes with its tab, and closing the tab cancels it, as closing the Mac's window does.
+    @Test func thePanelGoesWithItsTab() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let tab = try #require(controller.activeTab)
+        try add(.stroke, in: controller)
+        _ = try await effectEditor(for: .stroke, over: controller)
+        controller.close(tab.id)
+        try await closes(controller)
+        try await eventually { session.effectsEditing == nil }
+        #expect(session.effectsEditing == nil && session.document?.layers.contains { $0.effects != nil } != true)
+        if let url = tab.document?.fileURL { try? FileManager.default.removeItem(at: url) }
     }
 }

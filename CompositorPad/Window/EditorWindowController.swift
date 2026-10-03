@@ -222,8 +222,15 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let session = tab.session
         // An effect undone, or gone with its layer, takes its editing with it.
         session.endEffectsEditingIfGone()
+        // Another edit's editor takes the place of an effect's panel, the effect kept as its OK keeps it: the iPad shows
+        // one at a time, where the Mac's panels stay side by side.
+        if session.effectsEditing != nil,
+           session.adjustmentEditingID != nil || session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil {
+            session.finishEffectsEditing(commit: true)
+        }
         let shown = presentedViewController as? AdjustmentEditorController
         if let shown, !shown.isOpen {
+            guard !shown.isBeingDismissed else { return }
             // With whatever is over it, as its color picker; then the next editor, as one effect's follows another's.
             dismiss(animated: true) { [weak self] in self?.followAdjustmentEditing(for: tab) }
             return
@@ -251,7 +258,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             popover.sourceView = layersPanel
             popover.sourceRect = CGRect(x: 0, y: 140, width: 1, height: 1)
             popover.permittedArrowDirections = .right
-            popover.passthroughViews = [canvasHost]
+            // Beside an effect's panel the Layers panel, the tools and their options stay free too, as beside the Mac's;
+            // not the tabs or the toolbar, which would leave it over another tab.
+            popover.passthroughViews = editor is EffectEditorController ? [canvasHost, layersPanel, rail, optionsBar] : [canvasHost]
         }
         present(editor, animated: true)
     }
@@ -259,11 +268,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private func presentEditorRequests(for tab: EditorTab) {
         guard tab.id == activeID else { return }
         let session = tab.session
-        guard presentedViewController == nil else {
+        guard isClear else {
             // A failed save or a change made elsewhere comes whenever it comes: it waits for what's over the window to
-            // go, checked twice a second.
-            if session.saveError != nil || (session.changedOnDisk && presentedViewController !== changeQuestion),
-               !rechecksRequests {
+            // go, checked twice a second; so does anything else beside an effect's panel, for what's over the panel.
+            if session.saveError != nil || (session.changedOnDisk && presentedViewController !== changeQuestion)
+                || presentedViewController is EffectEditorController, !rechecksRequests {
                 rechecksRequests = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     self?.rechecksRequests = false
@@ -278,16 +287,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             presentSheet(RawDevelopController(session: session, url: develop.url, settings: develop.settings))
         } else if let message = session.importError {
             session.importError = nil
-            showMessage("Import couldn’t finish", message)
+            showMessage("Import couldn’t finish", message, overWhatsShown: false)
         } else if let message = session.brushError {
             session.brushError = nil
-            showMessage("Couldn’t paint", message)
+            showMessage("Couldn’t paint", message, overWhatsShown: false)
         } else if let message = session.cropError {
             session.cropError = nil
-            showMessage("Couldn’t crop", message)
+            showMessage("Couldn’t crop", message, overWhatsShown: false)
         } else if let message = session.saveError {
             session.saveError = nil
-            showMessage("Couldn’t save the project", message)
+            showMessage("Couldn’t save the project", message, overWhatsShown: false)
         } else if session.changedOnDisk, let document = tab.document {
             askAboutChange(to: tab, document: document)
         } else if let operation = session.selectionAmountOperation {
@@ -311,6 +320,24 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     /// The question a change made elsewhere asks, while it's shown.
     private weak var changeQuestion: UIAlertController?
+
+    /// Nothing over the window, or only an effect's panel, which leaves the window free as the Mac's does and gives way
+    /// to whatever the window shows next; not while the panel shows something itself, its color picker, or is going.
+    private var isClear: Bool {
+        guard let presented = presentedViewController else { return true }
+        return presented is EffectEditorController && presented.presentedViewController == nil && !presented.isBeingDismissed
+    }
+
+    /// An effect's panel gives way to anything else the window shows, its effect kept as its OK keeps it: the iPad shows
+    /// one at a time, where the Mac's panel stays beside a dialog or another panel.
+    override func present(_ controller: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
+        guard let panel = presentedViewController as? EffectEditorController, controller !== panel else {
+            super.present(controller, animated: animated, completion: completion)
+            return
+        }
+        panel.session.finishEffectsEditing(commit: true)
+        dismiss(animated: false) { super.present(controller, animated: animated, completion: completion) }
+    }
     /// A check for what the editor asks is due, once what's over the window may have gone.
     private var rechecksRequests = false
 
@@ -346,6 +373,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     func select(_ id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        // An effect's panel is bound to its tab's layer: it goes with that tab, OK'd, as when anything else takes its
+        // place; a tab closing cancels its own as it settles.
+        if let panel = presentedViewController as? EffectEditorController, panel.session !== tab.session,
+           tabs.contains(where: { $0.session === panel.session }), !panel.isBeingDismissed {
+            panel.session.finishEffectsEditing(commit: true)
+            dismiss(animated: true)
+        }
         // Keys held go with the canvas that had them: one let up after the switch never reaches this window.
         releaseKeys()
         activeID = id
@@ -657,7 +691,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     /// Not while the project is busy or a dialog is up, as on the Mac.
     private var acceptsDrop: Bool {
-        guard let session = activeTab?.session, presentedViewController == nil else { return false }
+        guard let session = activeTab?.session, isClear else { return false }
         return session.levels == nil && !session.isProjectBusy && !session.showsNewDocument && !session.showsImporter
             && session.renamingLayerID == nil
     }
@@ -720,7 +754,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// progress is set aside and a transform kept. Not while an editor or a dialog is open over the window, which what
     /// the operation shows would have to wait for.
     private func beginProjectOperation(on session: EditorSession) -> Bool {
-        guard presentedViewController == nil, session.canStartProjectOperation else { return false }
+        guard isClear, session.canStartProjectOperation else { return false }
         session.cancelCrop()
         session.commitTransform()
         return true
@@ -812,7 +846,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             do {
                 let raster = try await ImageExporter.shared.render(snapshot)
                 // Another export's share sheet may have opened meanwhile, or the tab closed.
-                guard let self, self.presentedViewController == nil, self.tabs.contains(where: { $0 === tab }),
+                guard let self, self.isClear, self.tabs.contains(where: { $0 === tab }),
                       !self.closing.contains(tab.id), !tab.isClosed else {
                     session.isProjectBusy = false
                     return
@@ -1054,7 +1088,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return hasFile && session?.canStartProjectOperation == true && session?.changedOnDisk == false
         case #selector(renameProject(_:)): return hasFile
         case #selector(exportPNG(_:)), #selector(exportJPEG(_:)), #selector(canvasSize(_:)), #selector(imageSize(_:)):
-            return hasDocument && session?.canStartProjectOperation == true && presentedViewController == nil
+            return hasDocument && session?.canStartProjectOperation == true && isClear
         case #selector(fitCanvas(_:)), #selector(actualPixels(_:)),
              #selector(zoomIn(_:)), #selector(zoomOut(_:)): return hasDocument
         case #selector(newCanvasTab(_:)), #selector(openProject(_:)), #selector(importImages(_:)), #selector(importPhotos(_:)),
@@ -1073,7 +1107,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         case #selector(moveOutOfFolder(_:)): return session.map { $0.canEditLayers && $0.activeLayer?.parentID != nil } ?? false
         case #selector(renameLayer(_:)):
             // It asks in an alert, which can't come over another.
-            return session.map { $0.canEditLayers && $0.activeLayer != nil } == true && presentedViewController == nil
+            return session.map { $0.canEditLayers && $0.activeLayer != nil } == true && isClear
         case #selector(toggleLayerVisibility(_:)), #selector(deleteLayer(_:)):
             return session.map { $0.canEditLayers && $0.activeLayer != nil } ?? false
         case #selector(moveLayer(_:)):
@@ -1119,18 +1153,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return (kind == .vignette ? session.canVignette : session.canAdjustColors) && session.hueSaturation == nil
         case #selector(hueSaturation(_:)): return session?.canAdjustColors ?? false
         case #selector(invertPixels(_:)): return session?.canInvert ?? false
-        case #selector(escapeKey(_:)):
-            guard let session else { return false }
-            // A stroke takes Escape only, unless the project is busy; text and a box for it take it too, as on the Mac.
-            if session.brushStroke != nil || session.warpStroke != nil { return !session.isProjectBusy }
-            return activeTab?.canvas.input.textBox != nil || session.textDraft != nil || session.lassoDraft != nil
-                || session.shapeDraft != nil || session.gradientEdit != nil || (session.tool == .crop && session.cropRect != nil)
-                || session.transformEdit != nil
-        case #selector(returnKey(_:)):
-            return session.map {
-                $0.brushStroke == nil && $0.warpStroke == nil
-                    && ($0.lassoDraft != nil || $0.gradientEdit != nil || ($0.tool == .crop && $0.cropRect != nil) || $0.transformEdit != nil)
-            } ?? false
+        case #selector(escapeKey(_:)), #selector(returnKey(_:)): return canvasTakes(action)
         case #selector(deleteKey(_:)): return hasDocument
         case #selector(levelsPreviewKey(_:)): return session?.levels != nil
         case #selector(toolModeKey(_:)):
@@ -1384,6 +1407,22 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc private func blendModeKey(_ command: UIKeyCommand) {
         activeTab?.session.cycleBlendMode(forward: command.propertyList as? Bool == true)
     }
+    /// Whether the canvas has an edit under way that Escape or Return (`action`) answers. A stroke takes Escape only,
+    /// unless the project is busy; text and a box for it take it too, as on the Mac.
+    private func canvasTakes(_ action: Selector) -> Bool {
+        guard let tab = activeTab else { return false }
+        let session = tab.session
+        if action == #selector(escapeKey(_:)) {
+            if session.brushStroke != nil || session.warpStroke != nil { return !session.isProjectBusy }
+            return tab.canvas.input.textBox != nil || session.textDraft != nil || session.lassoDraft != nil
+                || session.shapeDraft != nil || session.gradientEdit != nil || (session.tool == .crop && session.cropRect != nil)
+                || session.transformEdit != nil
+        }
+        return session.brushStroke == nil && session.warpStroke == nil
+            && (session.lassoDraft != nil || session.gradientEdit != nil || (session.tool == .crop && session.cropRect != nil)
+                || session.transformEdit != nil)
+    }
+
     // Escape, Return, Delete and the arrows on the canvas, in the Mac's order: an outline being drawn first, then a shape
     // or a gradient, a crop, and a transform. The arrows move a step, or ten with Shift: with ⌘ the selected pixels, with a selection tool the
     // outline, and with the Move tool the layer.
@@ -1392,10 +1431,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             // A color being picked first: put back, as the Mac picker's Cancel puts it back.
             if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
                 editor.session.closeColorPicker(commit: false)
-            } else {
-                editor.cancel()
+                return
             }
-            return
+            // Beside an effect's panel, an edit of the canvas's own first, as on the Mac once the canvas is clicked.
+            if !(editor is EffectEditorController && canvasTakes(#selector(escapeKey(_:)))) {
+                editor.cancel()
+                return
+            }
         }
         guard let tab = activeTab else { return }
         let session = tab.session, input = tab.canvas.input
@@ -1418,10 +1460,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             // A color being picked first: kept, as the Mac picker's OK keeps it.
             if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
                 editor.session.closeColorPicker(commit: true)
-            } else {
-                editor.commit()
+                return
             }
-            return
+            if !(editor is EffectEditorController && canvasTakes(#selector(returnKey(_:)))) {
+                editor.commit()
+                return
+            }
         }
         guard let tab = activeTab else { return }
         let session = tab.session
@@ -1560,10 +1604,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     private func showError(_ title: String, _ error: any Error) { showMessage(title, error.localizedDescription) }
 
-    private func showMessage(_ title: String, _ message: String) {
+    /// Says `message` over whatever the window shows, or, `overWhatsShown` false, from the window itself, so an
+    /// effect's panel gives way to it as to anything else.
+    private func showMessage(_ title: String, _ message: String, overWhatsShown: Bool = true) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
-        (presentedViewController ?? self).present(alert, animated: true)
+        (overWhatsShown ? presentedViewController ?? self : self).present(alert, animated: true)
     }
 
     /// A one-point line between regions, as the Mac's dividers are.
