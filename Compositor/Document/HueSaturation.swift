@@ -141,6 +141,83 @@ nonisolated struct HueBand: Equatable, Sendable, Codable {
         guard span > 1, span <= 350, toStart <= toEnd, toEnd <= span else { return }
         self = updated
     }
+
+    /// Degrees from `from` to `to` the short way round, −180…180.
+    static func shortest(_ from: Double, _ to: Double) -> Double {
+        let ahead = forward(from, to)
+        return ahead > 180 ? ahead - 360 : ahead
+    }
+
+    /// The falloff and range handles before the full strength lead; the two after it trail.
+    enum Side: Sendable { case leading, trailing }
+
+    /// What a press on the band takes, as Photoshop's adjustment slider has them.
+    enum Part: Equatable, Sendable {
+        /// One handle, by its index in `handles`: it moves alone.
+        case handle(Int)
+        /// The full-strength fill: all four move.
+        case range
+        /// A falloff fill: that side's falloff and range handles move together.
+        case falloff(Side)
+        /// The lane beyond the band: the nearest handle comes to the press.
+        case outside
+    }
+
+    /// The part of the band at a hue. A handle takes a press on its shape, given for each in degrees either side of
+    /// it, and `reach` beyond; but no more than a third of a fill beside it, so the middle of every fill stays to grab.
+    /// Where two handles reach, the nearer shape wins, which is the one on the press's side when they coincide.
+    /// Inverted, the full strength lies outside the falloff handles and the range between them is a gap.
+    func part(at degrees: Double, reach: Double, shapes: [ClosedRange<Double>], inverted: Bool = false) -> Part {
+        // Round the circle from the falloff start: the leading falloff, the range, the trailing falloff, the rest.
+        let widths = [Self.forward(falloffStart, rangeStart), Self.forward(rangeStart, rangeEnd), Self.forward(rangeEnd, falloffEnd)]
+        let segments = widths + [max(0, 360 - widths.reduce(0, +))]
+        let filled = [true, !inverted, true, inverted]
+        var taken: (index: Int, distance: Double)?
+        for (index, handle) in handles.enumerated() where index < shapes.count {
+            let shape = shapes[index]
+            let before = (index + 3) % 4, after = index
+            let left = min(reach - shape.lowerBound, filled[before] ? segments[before] / 3 : .infinity)
+            let right = min(reach + shape.upperBound, filled[after] ? segments[after] / 3 : .infinity)
+            let offset = Self.shortest(handle, degrees)
+            guard offset >= -left, offset <= right else { continue }
+            let distance = max(0, shape.lowerBound - offset, offset - shape.upperBound)
+            if distance < taken?.distance ?? .infinity { taken = (index, distance) }
+        }
+        if let taken { return .handle(taken.index) }
+        let position = Self.forward(falloffStart, degrees)
+        if position <= segments[0] { return .falloff(.leading) }
+        if position <= segments[0] + segments[1] { return inverted ? .outside : .range }
+        if position <= segments[0] + segments[1] + segments[2] { return .falloff(.trailing) }
+        return inverted ? .range : .outside
+    }
+
+    /// Moves what a press took by `delta` degrees. The whole band moves freely; a pair stops at the other pair and a
+    /// handle at its neighbors, and either keeps the band 2…350° wide. A move `setHandle` would refuse stops short
+    /// instead, so a fast drag still takes a handle as far as it can go.
+    mutating func move(_ part: Part, by delta: Double) {
+        let leading = Self.forward(falloffStart, rangeStart), range = Self.forward(rangeStart, rangeEnd)
+        let trailing = Self.forward(rangeEnd, falloffEnd)
+        let span = leading + range + trailing
+        let widen = max(0, 350 - span), narrow = max(0, span - 2)
+        /// `delta`, going no further back or forward than these.
+        func limited(back: Double, forward: Double) -> Double { min(max(delta, -back), forward) }
+        switch part {
+        case .range: shift([0, 1, 2, 3], by: delta)
+        case .falloff(.leading): shift([0, 1], by: limited(back: widen, forward: min(range, narrow)))
+        case .falloff(.trailing): shift([2, 3], by: limited(back: min(range, narrow), forward: widen))
+        case .handle(0): shift([0], by: limited(back: widen, forward: min(leading, narrow)))
+        case .handle(1): shift([1], by: limited(back: leading, forward: range))
+        case .handle(2): shift([2], by: limited(back: range, forward: trailing))
+        case .handle(3): shift([3], by: limited(back: min(trailing, narrow), forward: widen))
+        case .handle, .outside: break
+        }
+    }
+
+    private mutating func shift(_ indices: [Int], by delta: Double) {
+        var moved = handles
+        for index in indices { moved[index] = Self.forward(0, moved[index] + delta) }
+        self = HueBand(falloffStart: moved[0], rangeStart: moved[1], rangeEnd: moved[2], falloffEnd: moved[3])
+    }
 }
 
 /// Which eyedropper is armed while the Hue/Saturation panel is open.
@@ -350,7 +427,6 @@ nonisolated enum HueSaturationFilter {
         return toRGB(hue: hue, saturation: saturation, lightness: min(1, max(0, lightness)))
     }
 
-    /// The hue a spectrum swatch becomes, for the "after" bar.
     /// Photoshop's Saturation: below 0 it scales toward gray (−100 is gray); above 0 it divides by what's left, so
     /// +50 doubles it and +100 takes any color all the way. Multiplicative both ways, so neutral grays stay neutral.
     static func adjustedSaturation(_ saturation: Double, by amount: Double) -> Double {
@@ -359,6 +435,7 @@ nonisolated enum HueSaturationFilter {
         return amount >= 1 ? (saturation > 0 ? 1 : 0) : min(1, saturation / (1 - amount))
     }
 
+    /// Where the hue shifts alone take a hue, leaving Saturation and Lightness out.
     static func shiftedHue(_ hue: Double, settings: HueSaturationSettings) -> Double {
         var shift = 0.0
         for (colorRange, adjustment) in settings.adjustments where adjustment.hue != 0 {
