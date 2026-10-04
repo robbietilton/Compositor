@@ -94,6 +94,26 @@ import UIKit
         return bytes
     }
 
+    /// A solid red or black image 2400 pixels wide, wider than the canvas makes a layer's effects at.
+    private func solid(red: CGFloat, height: Int) throws -> CGImage {
+        let context = try BrushRaster.context(width: 2400, height: height, mask: false)
+        context.setFillColor(CGColor(srgbRed: red, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 2400, height: height))
+        return try #require(context.makeImage())
+    }
+
+    /// The document as it exports: the green at a point on it.
+    private func exportedGreen(_ session: EditorSession) async throws -> (CGPoint) -> Double {
+        let image = try await ImageExporter.shared.render(try #require(session.projectSnapshot())).image
+        let context = try #require(CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+            bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let bytes = Array(UnsafeBufferPointer(start: try #require(context.data).assumingMemoryBound(to: UInt8.self),
+                                              count: image.width * image.height * 4))
+        return { point in Double(bytes[(Int(point.y) * image.width + Int(point.x)) * 4 + 1]) / 255 }
+    }
+
     /// `richSession()`'s document with more of what a project can hold, drawn from or not, as GPUCanvasTests' opened
     /// project has: a layer masked by a hidden one, itself masked by another hidden one; a mask placed apart from its
     /// layer; a disabled mask, with a masked adjustment clipped to its layer; a hidden folder holding a masked layer; a
@@ -477,50 +497,110 @@ import UIKit
         #expect(after.shadow[1] > 0.8, "\(edit.rawValue): with its shadow \(after.shadow)")
     }
 
+    enum PreviewedEffect: String, CaseIterable { case shadow, outerGlow }
+
     /// A filter previews a large layer from a smaller copy. The effects redone around that copy are made smaller with
-    /// it, so the shadow stays where it is while the editor is open, as on the Mac.
-    @Test func previewOfALargeLayerKeepsItsEffectsInPlace() async throws {
+    /// it, so a shadow stays where it is and a glow reaches no further while the editor is open, as on the Mac.
+    @Test(arguments: PreviewedEffect.allCases)
+    func previewOfALargeLayerKeepsItsEffectsInPlace(effect: PreviewedEffect) async throws {
         let session = EditorSession()
         session.viewport.resize(to: CGSize(width: 640, height: 80), backingScale: 1, documentSize: nil)
         session.createDocument(width: 2400, height: 240)
-        let context = try BrushRaster.context(width: 2400, height: 60, mask: false)
-        context.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 2400, height: 60))
-        let image = try #require(context.makeImage())
-        session.insert(ImportedImage(image: image, thumbnail: image, name: "Wide"))
+        // Over black, which a glow's soft edge reads against.
+        for (image, name) in [(try solid(red: 0, height: 240), "Black"), (try solid(red: 1, height: 60), "Wide")] {
+            session.insert(ImportedImage(image: image, thumbnail: image, name: name))
+        }
         let id = try #require(session.activeLayerID)
         let index = try #require(session.document?.layers.firstIndex { $0.id == id })
         session.document?.layers[index].transform = LayerTransform(origin: CGPoint(x: 0, y: 20), size: CGSize(width: 2400, height: 60))
-        // A hard green drop shadow 100 pixels straight down: from 120 to 180.
-        session.document?.layers[index].effects = LayerEffects(shadow: ShadowEffect(distance: 100, blur: 0, green: 1, opacity: 1))
+        switch effect {
+        case .shadow:
+            // A hard green drop shadow 100 pixels straight down: from 120 to 180.
+            session.document?.layers[index].effects = LayerEffects(shadow: ShadowEffect(distance: 100, blur: 0, green: 1, opacity: 1))
+        case .outerGlow:
+            // A green glow fading out below the layer's bottom edge, at 80.
+            session.document?.layers[index].effects = LayerEffects(outerGlow: OuterGlowEffect(size: 40, red: 0, green: 1, blue: 0, opacity: 1))
+        }
         session.zoom(to: 0.25)
-        // Just inside the shadow's top, and just past its bottom.
-        func shadow() throws -> (top: Double, past: Double) {
+        // Just inside the shadow's top and just past its bottom, or 20 and 40 pixels below the layer, where the glow fades.
+        let points: [CGFloat] = effect == .shadow ? [128, 188] : [100, 120]
+        func green() throws -> [Double] {
             let bytes = try frameBytes(session, size: CGSize(width: 640, height: 80))
-            func green(_ y: CGFloat) -> Double {
+            return points.map { y in
                 let at = session.viewport.viewPoint(from: CGPoint(x: 1200, y: y), documentSize: CGSize(width: 2400, height: 240))
                 return Double(bytes[(Int(at.y) * 640 + Int(at.x)) * 4 + 1]) / 255
             }
-            return (green(128), green(188))
         }
-        _ = try shadow()
+        // The same points in the exported image: in the shadow or past it, and as far into the glow.
+        let exported = try await exportedGreen(session)
+        let expected = points.map { exported(CGPoint(x: 1200, y: $0)) }
+        func asExported(_ drawn: [Double]) -> Bool { zip(drawn, expected).allSatisfy { abs($0 - $1) < 0.05 } }
+        _ = try green()
         for _ in 0..<100 where session.effectsPreviews.rendered(id) == nil { try await Task.sleep(for: .milliseconds(20)) }
-        let before = try shadow()
-        #expect(before.top > 0.8 && before.past < 0.5, "the shadow before \(before)")
+        let before = try green()
+        #expect(asExported(before), "the \(effect.rawValue) before \(before), exported \(expected)")
         session.beginFilter(.gaussianBlur)
         session.updateFilter(FilterSettings(radius: 1), preview: true)
         while let edit = session.filterEdit, edit.previewTask != nil { await edit.previewTask?.value }
         let edit = try #require(session.filterEdit)
         #expect(edit.previewScale < 0.9, "previewed from a smaller copy: \(edit.previewScale)")
         let shown = session.effectsPreviews.rendered(id)?.image
-        _ = try shadow()
+        _ = try green()
         for _ in 0..<100 where session.effectsPreviews.rendered(id).map({ $0.image === shown }) ?? true {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(session.effectsPreviews.rendered(id)?.image !== shown, "the effects redone around the preview")
-        let during = try shadow()
-        #expect(during.top > 0.8 && during.past < 0.5, "the shadow where it was \(during)")
+        let during = try green()
+        #expect(asExported(during), "the \(effect.rawValue) where it was \(during), exported \(expected)")
         session.cancelFilter()
+    }
+
+    enum LargeLayerEffect: String, CaseIterable { case outerGlow, innerGlow, innerShadow }
+
+    /// The canvas makes a large layer's effects from a smaller copy of it, and makes the effects smaller with it, so a
+    /// glow or an inner shadow reaches as far on the canvas as in the exported image, as on the Mac.
+    @Test(arguments: LargeLayerEffect.allCases)
+    func effectsOfALargeLayerReachAsFarAsWhenExported(effect: LargeLayerEffect) async throws {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 640, height: 100), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 2400, height: 400)
+        // A red layer 2400 pixels wide, past the size the canvas makes effects at, over black.
+        for (image, name) in [(try solid(red: 0, height: 400), "Black"), (try solid(red: 1, height: 200), "Wide")] {
+            session.insert(ImportedImage(image: image, thumbnail: image, name: name))
+        }
+        let id = try #require(session.activeLayerID)
+        let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+        session.document?.layers[index].transform = LayerTransform(origin: CGPoint(x: 0, y: 100), size: CGSize(width: 2400, height: 200))
+        // In green, which neither the layer nor the black behind it has.
+        switch effect {
+        case .outerGlow:
+            session.document?.layers[index].effects = LayerEffects(outerGlow: OuterGlowEffect(size: 40, red: 0, green: 1, blue: 0, opacity: 1))
+        case .innerGlow:
+            session.document?.layers[index].effects = LayerEffects(innerGlow: InnerGlowEffect(size: 40, red: 0, green: 1, blue: 0, opacity: 1))
+        case .innerShadow:
+            // 40 pixels down from the layer's top edge, softened.
+            session.document?.layers[index].effects = LayerEffects(innerShadow: InnerShadowEffect(distance: 40, blur: 20, green: 1, opacity: 1))
+        }
+        session.zoom(to: 0.25)
+        // The green the canvas draws at a point on the document, down the middle of the layer.
+        func drawn() throws -> (CGFloat) -> Double {
+            let bytes = try frameBytes(session, size: CGSize(width: 640, height: 100))
+            return { y in
+                let at = session.viewport.viewPoint(from: CGPoint(x: 1200, y: y), documentSize: CGSize(width: 2400, height: 400))
+                return Double(bytes[(Int(at.y) * 640 + Int(at.x)) * 4 + 1]) / 255
+            }
+        }
+        // The effects are made on a worker: wait for them, as the canvas does.
+        _ = try drawn()
+        for _ in 0..<100 where session.effectsPreviews.rendered(id) == nil { try await Task.sleep(for: .milliseconds(20)) }
+        let green = try drawn()
+        let exported = try await exportedGreen(session)
+        // Above and below the layer, where an outer glow fades out, and inside its top and bottom edges, where an inner
+        // glow fades out and the inner shadow ends; away from the edges, where a pixel either way changes little.
+        for y: CGFloat in [60, 75, 125, 155, 245, 260, 275, 325, 340] {
+            let point = CGPoint(x: 1200, y: y)
+            #expect(abs(green(y) - exported(point)) < 0.05, "\(effect.rawValue) at \(y): canvas \(green(y)), exported \(exported(point))")
+        }
     }
 
     /// Text is drawn through UIKit on iPad: upright, like the Mac's — a T's bar is at its top.

@@ -179,6 +179,10 @@ final class EffectsPreviewCache {
         effects.stroke?.size *= factor
         effects.shadow?.distance *= factor
         effects.shadow?.blur *= factor
+        effects.innerShadow?.distance *= factor
+        effects.innerShadow?.blur *= factor
+        effects.outerGlow?.size *= factor
+        effects.innerGlow?.size *= factor
         return effects
     }
 }
