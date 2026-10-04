@@ -365,8 +365,11 @@ import UIKit
                     height: layer.asset?.image.height ?? Int(transform.size.height.rounded()),
                     limit: session.transformEdit != nil ? min(2048, steady) : steady)
             }()
+            // A filter's or an adjustment's preview, shown in place of the layer's pixels.
+            let previewed = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
+                ?? session.hueSaturation?.previewImage(for: layer.id)
             if layer.asset != nil,
-               let effects = session.effectsPreviews.preview(for: layer, mask: mask, transform: transform,
+               let effects = session.effectsPreviews.preview(for: layer, pixels: previewed, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsRedraw()
                     }) {
@@ -377,11 +380,9 @@ import UIKit
             let placed: CIImage?
             if let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
                 placed = placement.place(shaped, transform: transform)
-            } else if let raster = layer.asset?.raster, session.hueSaturation?.previewImage(for: layer.id) == nil,
-                      session.levels?.previewImage(for: layer.id) == nil, session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if let raster = layer.asset?.raster, previewed == nil {
                 placed = placement.place(raster, transform: transform)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
-                        ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
+            } else if let image = previewed ?? layer.asset?.image {
                 placed = placement.place(image, transform: transform)
             } else { return nil }
             guard var image = placed else { unsupported = true; return nil }
