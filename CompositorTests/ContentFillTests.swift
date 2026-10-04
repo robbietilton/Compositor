@@ -186,26 +186,27 @@ import Testing
         #expect(elapsed < .seconds(5), "Took \(elapsed)")
     }
 
-    /// Cancel stops the fill where it is, rather than leaving it to run on to the end unseen: the preview's work sees
-    /// its task cancelled and gives up.
+    /// Cancel stops the fill where it is, rather than leaving it to run on to the end unseen: cancelling the preview
+    /// cancels its work, and the fill, seeing that, gives up.
     @Test func cancelStopsTheFill() async throws {
         let image = try Self.largeLayer()
         let s = session(image, selecting: Self.largeHole.path)
         s.beginFilter(.contentAwareFill)
         let job = try #require(s.filterEdit?.previewJob)
-        let preview = try #require(s.filterEdit?.previewTask)
+        let running = try #require(s.filterEdit?.previewTask)
         s.cancelFilter()
-        await preview.value
+        await running.value
         #expect(s.filterEdit == nil && s.activeLayer?.asset?.image === image)
-        let work = Task.detached(priority: .userInitiated) { () -> (Result<CGImage, any Error>, Duration) in
+        // The preview's work as the preview runs it, from a task cancelled at once.
+        let preview = Task.detached { () -> ((CGImage?, CameraRawScope?, String?), Duration) in
             let start = ContinuousClock.now
-            let result = Result { try PixelFilter.run(job) }
+            let result = await EditorSession.previewWork(job)
             return (result, ContinuousClock.now - start)
         }
-        work.cancel()
-        let (result, elapsed) = await work.value
+        preview.cancel()
+        let ((made, _, error), elapsed) = await preview.value
         report("Cancelled work stopped after \(elapsed)")
-        #expect(throws: CancellationError.self) { try result.get() }
+        #expect(made == nil && error == CancellationError().localizedDescription, "Made \(String(describing: made)), \(error ?? "no error")")
     }
 
     /// Light falling off across the layer: the fill's tone near its edge matches what it hides, all the way round,

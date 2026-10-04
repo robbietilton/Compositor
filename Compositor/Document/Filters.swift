@@ -546,19 +546,7 @@ extension EditorSession {
         edit.preparing = true
         edit.previewError = nil
         edit.previewTask = Task { @MainActor [weak self, weak edit] in
-            let work = Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?) in
-                do {
-                    if job.kind == .cameraRaw {
-                        let made = try CameraRawScope.preview(job)
-                        return (made.image, made.scope, nil)
-                    }
-                    return (try PixelFilter.run(job), nil, nil)
-                } catch {
-                    return (nil, nil, error.localizedDescription)
-                }
-            }
-            // Cancelling the preview reaches the work, so a long Content-Aware Fill stops rather than running on unseen.
-            let result = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            let result = await Self.previewWork(job)
             guard let self, let edit, self.filterEdit === edit, !Task.isCancelled else { return }
             edit.previewTask = nil
             edit.preparing = false
@@ -575,6 +563,22 @@ extension EditorSession {
             }
             self.renderFilterPreview(edit)
         }
+    }
+    /// What a preview shows, made off the main actor: the image, Camera Raw's scope, or why there is none. Cancelling
+    /// the task that waits for it reaches the work, so a long Content-Aware Fill stops rather than running on unseen.
+    nonisolated static func previewWork(_ job: FilterJob) async -> (CGImage?, CameraRawScope?, String?) {
+        let work = Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?) in
+            do {
+                if job.kind == .cameraRaw {
+                    let made = try CameraRawScope.preview(job)
+                    return (made.image, made.scope, nil)
+                }
+                return (try PixelFilter.run(job), nil, nil)
+            } catch {
+                return (nil, nil, error.localizedDescription)
+            }
+        }
+        return await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
     }
 
     func cancelFilter() {
