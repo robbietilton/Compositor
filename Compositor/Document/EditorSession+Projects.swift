@@ -106,7 +106,9 @@ extension EditorSession {
 }
 
 extension CanvasDocument {
-    /// The document a project's snapshot describes, its layers holding the snapshot's own images.
+    /// The document a project's snapshot describes, its layers holding the snapshot's own images, each with its mask,
+    /// effects and live text or shape. Opening a project and the edits that rebuild the document from a snapshot (canvas
+    /// and image size, crop, trim) all build it here, so none of them leaves part of a layer behind.
     init(project snapshot: ProjectSnapshot) {
         let manifest = snapshot.manifest
         self.init(id: manifest.documentID, width: manifest.width, height: manifest.height,

@@ -63,4 +63,32 @@ import UIKit
         #expect(session.transformEdit == nil)
         #expect(session.document?.layers.first { $0.id == id }?.transform.origin == CGPoint(x: start.x + 30, y: start.y))
     }
+
+    /// Transforming a selection's pixels, from the window, keeps the layer's effects once it's applied, as on the Mac.
+    @Test func transformingASelectionKeepsTheLayersEffects() async throws {
+        let window = EditorWindowController()
+        window.loadViewIfNeeded()
+        let session = try #require(window.activeTab?.session)
+        session.createNewProject(width: 100, height: 100)
+        let context = try BrushRaster.context(width: 40, height: 40, mask: false)
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Red"))
+        let id = try #require(session.activeLayerID)
+        let effects = LayerEffects(stroke: StrokeEffect(size: 4), shadow: ShadowEffect(distance: 20, blur: 10))
+        let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+        session.document?.layers[index].effects = effects
+        session.applySelection(CGPath(rect: CGRect(x: 40, y: 40, width: 20, height: 20), transform: nil), mode: .replace, name: "Select")
+
+        window.transformLayer(nil)
+        for _ in 0..<250 where session.transformEdit == nil { try await Task.sleep(for: .milliseconds(20)) }
+        var moved = try #require(session.transformEdit?.draft)
+        moved.origin.x += 10
+        session.previewTransform(moved)
+        session.commitTransform()
+
+        #expect(session.history.undoName == "Transform Selection")
+        #expect(session.document?.layers.first { $0.id == id }?.effects == effects)
+    }
 }

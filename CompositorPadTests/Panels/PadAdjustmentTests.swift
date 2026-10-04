@@ -258,6 +258,45 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    // MARK: Effects
+
+    /// Levels, Hue/Saturation and Invert, applied to a layer's own pixels from the Image menu, keep its effects, as on
+    /// the Mac.
+    @Test func adjustingALayersPixelsKeepsItsEffects() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let effects = LayerEffects(stroke: StrokeEffect(size: 4), shadow: ShadowEffect(distance: 20, blur: 10))
+        let index = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        session.document?.layers[index].effects = effects
+
+        controller.levels(nil)
+        try await eventually { controller.presentedViewController is LevelsEditorController }
+        var levels = try #require(session.levels?.settings)
+        levels.current = LevelsEditorController.range(levels.current, input: 0, at: 40)
+        session.updateLevels(levels, preview: true)
+        #expect(press("\r", in: controller))
+        try await eventually { session.levels == nil }
+        #expect(session.history.undoName == "Levels")
+        #expect(session.activeLayer?.effects == effects)
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.hueSaturation(nil)
+        try await eventually { controller.presentedViewController is HueSaturationEditorController }
+        var hue = try #require(session.hueSaturation?.settings)
+        hue.lightness = 40
+        session.updateHueSaturation(hue, preview: true)
+        #expect(press("\r", in: controller))
+        try await eventually { session.hueSaturation == nil }
+        #expect(session.history.undoName == "Hue/Saturation")
+        #expect(session.activeLayer?.effects == effects)
+        try await eventually { controller.presentedViewController == nil }
+
+        controller.invertPixels(nil)
+        try await eventually { session.history.undoName == "Invert" }
+        #expect(session.history.undoName == "Invert")
+        #expect(session.activeLayer?.effects == effects)
+    }
+
     // MARK: Layout
 
     /// The editor of `type` the window shows, once it shows it.

@@ -213,7 +213,8 @@ extension EditorSession {
             beginEdit("Levels")
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: current.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID)
+                opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID,
+                effects: current.effects)
             endEdit()
         } catch { brushError = error.localizedDescription }
     }

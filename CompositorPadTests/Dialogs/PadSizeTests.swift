@@ -82,6 +82,80 @@ import UIKit
         #expect(session.document?.width == 100 && session.document?.resolution == 200)
     }
 
+    private let effects = LayerEffects(stroke: StrokeEffect(size: 4), shadow: ShadowEffect(distance: 20, blur: 10),
+                                       outerGlow: OuterGlowEffect(size: 8))
+
+    /// A gray layer and a text layer on the project, each carrying `effects`.
+    private func layersWithEffects(in session: EditorSession) throws -> (pixels: UUID, text: UUID) {
+        let context = try BrushRaster.context(width: 40, height: 40, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Gray"))
+        let pixels = try #require(session.activeLayerID)
+        session.selectTool(.type)
+        session.beginText(at: CGPoint(x: 20, y: 60), newLayer: true)
+        session.textDraft?.style.content = "Hello"
+        #expect(session.finishText())
+        let text = try #require(session.activeLayer?.liveText != nil ? session.activeLayerID : nil)
+        for id in [pixels, text] {
+            let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+            session.document?.layers[index].effects = effects
+        }
+        return (pixels, text)
+    }
+
+    /// Canvas Size keeps every layer's effects, and a text layer's live text, as on the Mac.
+    @Test func canvasSizeKeepsEffectsAndText() async throws {
+        let (window, session) = try window()
+        let (pixels, text) = try layersWithEffects(in: session)
+        let style = try #require(session.document?.layers.first { $0.id == text }?.liveText?.style)
+        let dialog = try #require(window.canvasSizeDialog())
+        dialog.loadViewIfNeeded()
+        dialog.setDimension(150, widthAxis: true)
+        dialog.confirm()
+        await window.resizing?.value
+
+        #expect(session.document?.width == 150)
+        for id in [pixels, text] { #expect(session.document?.layers.first { $0.id == id }?.effects == effects) }
+        #expect(session.document?.layers.first { $0.id == text }?.liveText?.style == style)
+    }
+
+    /// Without resampling, Image Size keeps every layer's effects, and a text layer's live text, as on the Mac.
+    @Test func imageSizeWithoutResamplingKeepsEffectsAndText() async throws {
+        let (window, session) = try window()
+        let (pixels, text) = try layersWithEffects(in: session)
+        let style = try #require(session.document?.layers.first { $0.id == text }?.liveText?.style)
+        let dialog = try #require(window.imageSizeDialog())
+        dialog.loadViewIfNeeded()
+        dialog.setResample(false)
+        dialog.setDimension(0.5, widthAxis: true)
+        dialog.confirm()
+        await window.resizing?.value
+
+        #expect(session.document?.resolution == 200)
+        for id in [pixels, text] { #expect(session.document?.layers.first { $0.id == id }?.effects == effects) }
+        #expect(session.document?.layers.first { $0.id == text }?.liveText?.style == style)
+    }
+
+    /// Image Size resamples the layers, so it scales their effects' sizes, distances and blurs with them, as the Mac's
+    /// does.
+    @Test func imageSizeScalesEffectsWithTheImage() async throws {
+        let (window, session) = try window()
+        let (pixels, _) = try layersWithEffects(in: session)
+        let dialog = try #require(window.imageSizeDialog())
+        dialog.loadViewIfNeeded()
+        dialog.chooseUnit(.percent)
+        dialog.setDimension(50, widthAxis: true)
+        dialog.confirm()
+        await window.resizing?.value
+
+        #expect(session.document?.width == 50)
+        let kept = try #require(session.document?.layers.first { $0.id == pixels }?.effects)
+        #expect(kept.stroke?.size == 2 && kept.outerGlow?.size == 4)
+        #expect(kept.shadow?.distance == 10 && kept.shadow?.blur == 5 && kept.shadow?.angle == effects.shadow?.angle)
+    }
+
     /// Sizes show as the Mac's sheets show them: up to three decimals, none on a whole number.
     @Test func sizesShowUpToThreeDecimals() {
         #expect(SizeDialogController.decimals(12.7) == "12.7")

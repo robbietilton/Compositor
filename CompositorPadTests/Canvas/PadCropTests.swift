@@ -45,6 +45,31 @@ import UIKit
         #expect(session.cropRect == nil)
     }
 
+    /// Apply Crop keeps every layer's effects, and a text layer's live text, as on the Mac.
+    @Test func applyCropKeepsEffectsAndText() async throws {
+        let session = try session()
+        let blue = try #require(session.activeLayerID)
+        session.selectTool(.type)
+        session.beginText(at: CGPoint(x: 100, y: 100), newLayer: true)
+        session.textDraft?.style.content = "Hello"
+        #expect(session.finishText())
+        let text = try #require(session.activeLayer?.liveText != nil ? session.activeLayerID : nil)
+        let style = try #require(session.activeLayer?.liveText?.style)
+        let effects = LayerEffects(stroke: StrokeEffect(size: 4), shadow: ShadowEffect(distance: 20, blur: 10))
+        for id in [blue, text] {
+            let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+            session.document?.layers[index].effects = effects
+        }
+        session.selectTool(.crop)
+        let input = PadCanvasInput(session: session)
+        drag(input, through: [point(50, 40, in: session), point(250, 190, in: session)])
+
+        await session.commitCrop()
+        #expect(session.document?.width == 200)
+        for id in [blue, text] { #expect(session.document?.layers.first { $0.id == id }?.effects == effects) }
+        #expect(session.document?.layers.first { $0.id == text }?.liveText?.style == style)
+    }
+
     /// A finger finds an edge of the frame further off than a pointer would, and drags just that edge.
     @Test func aFingerDragsAnEdgeFromFurtherOff() throws {
         let session = try session()
