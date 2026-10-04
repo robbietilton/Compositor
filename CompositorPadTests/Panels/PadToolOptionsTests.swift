@@ -87,4 +87,36 @@ import UIKit
         let apply = try #require(views(UIButton.self, in: bar).first { $0.configuration?.title == "Apply Crop" })
         #expect(abs(gap(after: apply, in: bar) - 18) < 1)
     }
+
+    /// A live field, which applies each keystroke that makes a number, keeps what's being typed when the value it
+    /// applied comes back to it: "1." stays "1.", for the "5" that makes 1.5.
+    @Test func aLiveFieldKeepsWhatsBeingTyped() throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 300, height: 100)
+        let number = NumberField(caption: "Scale", width: 60, range: 0...100, format: NumberField.upTo(2))
+        number.live = true
+        var applied: [Double] = []
+        number.onChange = { value in
+            applied.append(value)
+            number.show(value)
+        }
+        number.show(1)
+        number.frame = CGRect(x: 10, y: 10, width: 200, height: 34)
+        window.addSubview(number)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        try #require(number.field.becomeFirstResponder())
+        for text in ["1", "1.", "1.5"] {
+            number.field.text = text
+            number.field.sendActions(for: .editingChanged)
+            #expect(number.field.text == text)
+        }
+        #expect(applied == [1, 1, 1.5])
+        // A value from elsewhere, as Undo, replaces it.
+        number.show(3)
+        #expect(number.field.text == "3")
+        number.field.resignFirstResponder()
+        #expect(applied == [1, 1, 1.5])
+    }
 }

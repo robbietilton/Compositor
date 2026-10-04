@@ -134,6 +134,7 @@ import UIKit
         let distance = try row("Distance", in: editor)
         let field = try #require(views(NumberField.self, in: distance).first)
         field.field.text = "300"
+        field.field.sendActions(for: .editingChanged)
         field.textFieldDidEndEditing(field.field)
         #expect(session.activeLayer?.effects?.shadow?.distance == 300)
         editor.updatePropertiesIfNeeded()
@@ -371,6 +372,68 @@ import UIKit
         #expect(session.effectsEditing == nil && session.activeLayer?.effects?.stroke?.size == 9)
         controller.dismiss(animated: false)
         try await closes(controller)
+    }
+
+    /// A slider moved while its row's field has the keyboard shows its value in the field, and leaving the field
+    /// keeps it: the field puts in only what was typed there. Here, Size taken to 20 with its field selected at 4, then
+    /// Opacity's field tapped.
+    @Test func aSliderMovedWhileItsFieldIsSelectedKeepsItsValue() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let size = try #require(views(NumberField.self, in: try row("Size", in: editor)).first)
+        let opacity = try #require(views(NumberField.self, in: try row("Opacity", in: editor)).first)
+        try await eventually { size.field.isFirstResponder || size.field.becomeFirstResponder() }
+        try #require(size.field.isFirstResponder && size.field.text == "4")
+        try slide(views(UISlider.self, in: try row("Size", in: editor)).first, to: 20)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.activeLayer?.effects?.stroke?.size == 20)
+        #expect(size.field.text == "20")
+        try await eventually { opacity.field.isFirstResponder || opacity.field.becomeFirstResponder() }
+        try #require(opacity.field.isFirstResponder && !size.field.isFirstResponder)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.activeLayer?.effects?.stroke?.size == 20)
+        #expect(size.field.text == "20")
+        editor.view.endEditing(true)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// What's typed goes in when the field is left; a slider moved after it, last, wins, as the last thing done.
+    @Test func whatsTypedGoesInUnlessTheSliderMovesAfter() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let size = try #require(views(NumberField.self, in: try row("Size", in: editor)).first)
+        func type(_ text: String) {
+            size.field.text = text
+            size.field.sendActions(for: .editingChanged)
+        }
+        try await eventually { size.field.isFirstResponder || size.field.becomeFirstResponder() }
+        type("7")
+        editor.view.endEditing(true)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.activeLayer?.effects?.stroke?.size == 7 && size.field.text == "7")
+
+        try await eventually { size.field.isFirstResponder || size.field.becomeFirstResponder() }
+        type("9")
+        try slide(views(UISlider.self, in: try row("Size", in: editor)).first, to: 15)
+        editor.updatePropertiesIfNeeded()
+        #expect(size.field.text == "15")
+        editor.view.endEditing(true)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.activeLayer?.effects?.stroke?.size == 15 && size.field.text == "15")
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// Moves `slider` to `value`, as a finger does.
+    private func slide(_ slider: UISlider?, to value: Float) throws {
+        let slider = try #require(slider)
+        slider.value = value
+        slider.sendActions(for: .valueChanged)
     }
 
     /// Up and Down step a field with the keyboard, Shift ten steps, as the Mac's effect fields: a point of Distance, a

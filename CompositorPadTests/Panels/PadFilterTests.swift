@@ -534,6 +534,7 @@ import UIKit
         let editor = try await filterEditor(over: controller)
         let field = try #require(views(NumberField.self, in: try row("Reds", in: editor)).first)
         field.field.text = "400"
+        field.field.sendActions(for: .editingChanged)
         field.textFieldDidEndEditing(field.field)
         #expect(session.filterEdit?.settings.blackWhite.reds == 300)
         try await eventually { session.filterEdit?.preparing == false }

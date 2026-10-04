@@ -232,6 +232,7 @@ import UIKit
         // Hue, Saturation, then Lightness.
         let lightness = try await focusedField(2, in: editor)
         lightness.field.text = "40"
+        lightness.field.sendActions(for: .editingChanged)
         _ = lightness.field.delegate?.textFieldShouldReturn?(lightness.field)
         try await eventually { session.hueSaturation == nil }
         #expect(session.hueSaturation == nil)

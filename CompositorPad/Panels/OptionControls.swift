@@ -152,6 +152,9 @@ final class NumberField: UIView, UITextFieldDelegate {
     var sensitivity: Double
     private let format: (Double) -> String
     private var shown: Double = 0
+    /// Whether the text is what's been typed since the field took the keyboard, rather than the value shown: only that
+    /// goes in when the field is left.
+    private var drafted = false
     private var scrubStart: Double?
 
     init(caption: String?, unit: String? = nil, width: CGFloat, range: ClosedRange<Double>, sensitivity: Double = 1,
@@ -209,10 +212,20 @@ final class NumberField: UIView, UITextFieldDelegate {
         return max(50, ceil((widest as NSString).size(withAttributes: [.font: font]).width) + 16 + 1)
     }
 
-    /// Shows `value`, unless it's being typed over.
+    /// Shows `value`. While the field has the keyboard, a value from elsewhere, as the slider beside it or Undo, takes
+    /// the place of what's been typed, selected to be typed over, as when the field was tapped; the value that typing
+    /// itself applied leaves the typing as it is, as "1." on the way to 1.5.
     func show(_ value: Double) {
         shown = value
-        if !field.isEditing { field.text = format(value) }
+        guard field.isEditing else {
+            field.text = format(value)
+            return
+        }
+        if drafted, let typed = parsed, abs(typed - value) <= 1e-9 * max(1, abs(value)) { return }
+        drafted = false
+        guard field.text != format(value) else { return }
+        field.text = format(value)
+        field.selectAll(nil)
     }
 
     var isEnabled: Bool {
@@ -232,6 +245,7 @@ final class NumberField: UIView, UITextFieldDelegate {
     }
 
     private func typed() {
+        drafted = true
         guard live, let value = parsed else { return }
         onChange(value)
     }
@@ -245,6 +259,7 @@ final class NumberField: UIView, UITextFieldDelegate {
     /// A tap selects the whole value, so a new one is typed over it; not once the field is left, which selecting would
     /// take the keyboard back to.
     func textFieldDidBeginEditing(_ textField: UITextField) {
+        drafted = false
         DispatchQueue.main.async { if textField.isFirstResponder { textField.selectAll(nil) } }
     }
 
@@ -280,8 +295,8 @@ final class NumberField: UIView, UITextFieldDelegate {
         let steps = (command.input == UIKeyCommand.inputUpArrow ? 1.0 : -1.0) * (command.modifierFlags.contains(.shift) ? 10 : 1)
         let value = min(range.upperBound, max(range.lowerBound, (parsed ?? shown) + steps * step))
         onChange(value)
+        drafted = false
         show(value)
-        field.text = format(value)
     }
 
     @objc private func escapePressed() {
@@ -290,7 +305,9 @@ final class NumberField: UIView, UITextFieldDelegate {
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
-        if !live, let value = parsed { onChange(value) }
+        // Only what was typed goes in: the text otherwise shows a value, perhaps one since moved by the slider.
+        if drafted, !live, let value = parsed { onChange(value) }
+        drafted = false
         onFinish()
         field.text = format(shown)
     }
