@@ -89,6 +89,39 @@ enum OptionControls {
     }
 }
 
+extension UIView {
+    /// Gives the view `help`, what it does in the Mac's words, as a tooltip, which shows only where the iPad app runs on
+    /// a Mac, never on an iPad; and `hint`, which VoiceOver reads after the view's name, written as Apple asks of a hint:
+    /// what the view does, briefly, as "Opens the color picker.", without its name, its kind or a gesture. A view whose
+    /// name says what it does has no hint, and a segmented control's segments have one each (`setHelp(_:hints:)`). Its
+    /// own selector, as UIKit could have a `setHelp:`; @objc so a view can give its help to the part VoiceOver reads, as
+    /// a slider's row does.
+    @objc(compositorSetHelp:hint:) func setHelp(_ help: String?, hint: String?) {
+        (self as? UIControl)?.toolTip = help
+        accessibilityHint = hint
+    }
+}
+
+extension UISegmentedControl {
+    /// Gives the control `help` as its tooltip, as `setHelp(_:hint:)` does, and each segment, in order, its hint in
+    /// `hints`: what choosing it does. VoiceOver reads a segment on its own, the view around its title, and not the
+    /// control's hint.
+    func setHelp(_ help: String?, hints: [String]) {
+        setHelp(help, hint: nil)
+        func segment(titled title: String, in view: UIView) -> UIView? {
+            for subview in view.subviews {
+                if let label = subview as? UILabel, label.text == title { return view }
+                if let segment = segment(titled: title, in: subview) { return segment }
+            }
+            return nil
+        }
+        for (index, hint) in hints.enumerated() {
+            guard let title = titleForSegment(at: index) else { continue }
+            segment(titled: title, in: self)?.accessibilityHint = hint
+        }
+    }
+}
+
 /// A pop-up button over named choices in groups, with a line between groups, as the Mac's pop-up menus.
 final class PopUpButton: UIButton {
     private var choices: [[String]] = []
@@ -377,8 +410,10 @@ final class NumberField: UIView, UITextFieldDelegate {
 final class SliderField: UIView, UIGestureRecognizerDelegate {
     var onChange: (Double) -> Void = { _ in }
     /// A double tap on the caption or the thumb, which puts the value back, as a double-click does on the Mac's colored
-    /// sliders; nil for none.
-    var onReset: (() -> Void)?
+    /// sliders, and VoiceOver's Reset; nil for none.
+    var onReset: (() -> Void)? {
+        didSet { offerReset() }
+    }
     /// The slider's colored track, as the Mac's color sliders draw theirs; plain keeps the system's.
     var track: CameraRawSliderTrack = .plain {
         didSet { if track != oldValue { slider.colors = track.colors } }
@@ -504,7 +539,7 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
 
     var isEnabled: Bool {
         get { slider.isEnabled }
-        set { slider.isEnabled = newValue; number.isEnabled = newValue }
+        set { slider.isEnabled = newValue; number.isEnabled = newValue; offerReset() }
     }
 
     /// How far Up and Down step the field's value while it has the keyboard, as the Mac's effect fields step.
@@ -522,9 +557,25 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
 
     /// Puts the value back, as a double tap at `point` on the caption or the thumb does; whether it did.
     @discardableResult func resets(at point: CGPoint) -> Bool {
-        guard let onReset, isEnabled, label.convert(label.bounds, to: self).contains(point) || onThumb(point) else { return false }
+        guard label.convert(label.bounds, to: self).contains(point) || onThumb(point) else { return false }
+        return resets()
+    }
+
+    /// Puts the value back, as a double tap on the caption or the thumb does, and VoiceOver's Reset; whether it did.
+    private func resets() -> Bool {
+        guard let onReset, isEnabled else { return false }
         onReset()
         return true
+    }
+
+    /// Reset, among VoiceOver's actions on the slider, which VoiceOver reads, as Apple has an element offer what more it
+    /// does, leaving VoiceOver's own double tap to the slider. Switch Control, Full Keyboard Access and Voice Control list
+    /// it too.
+    private lazy var resetAction = UIAccessibilityCustomAction(name: "Reset") { [weak self] _ in self?.resets() ?? false }
+
+    /// Offers Reset while the row can be put back, as the double tap can.
+    private func offerReset() {
+        slider.accessibilityCustomActions = onReset != nil && isEnabled ? [resetAction] : nil
     }
 
     /// Whether `point` is on the slider's thumb, or a little way off it, as a finger lands.
@@ -533,11 +584,8 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
         return slider.convert(thumb, to: self).insetBy(dx: -8, dy: -8).contains(point)
     }
 
-    /// What the row does, shown by the slider when the pointer rests on it, as the Mac's help.
-    var toolTip: String? {
-        get { slider.toolTip }
-        set { slider.toolTip = newValue }
-    }
+    /// The row's help is its slider's: VoiceOver reads the slider, named for the caption, and a Mac shows its tooltip.
+    override func setHelp(_ help: String?, hint: String?) { slider.setHelp(help, hint: hint) }
 
     @objc private func scrubbed(_ gesture: UIPanGestureRecognizer) {
         switch gesture.state {

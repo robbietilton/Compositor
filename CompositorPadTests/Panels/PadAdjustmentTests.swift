@@ -629,6 +629,39 @@ import UIKit
         session.cancelHueSaturation()
     }
 
+    /// Each row's slider, which VoiceOver reads, offers Reset among VoiceOver's actions, as Apple has an element's other
+    /// actions offered: it puts that one value back, as a double tap on the caption or the thumb does, where VoiceOver's
+    /// own double tap leaves it. A row turned off offers none, and its Reset does nothing. The sliders have no hint, as
+    /// their name and value say it all.
+    @Test func eachRowOffersReset() throws {
+        let session = try session()
+        let (editor, rows) = try hueSaturationEditor(session)
+        let sliders = rows.compactMap { views(UISlider.self, in: $0).first }
+        func offered() -> [[String]] { sliders.map { $0.accessibilityCustomActions?.map(\.name) ?? [] } }
+        #expect(sliders.map(\.accessibilityLabel) == ["Hue", "Saturation", "Lightness"])
+        #expect(sliders.allSatisfy { $0.accessibilityHint == nil })
+        #expect(offered() == Array(repeating: ["Reset"], count: 3))
+        var settings = try #require(session.hueSaturation?.settings)
+        settings.hue = 30
+        settings.lightness = 40
+        session.updateHueSaturation(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        _ = sliders[2].accessibilityActivate()
+        #expect(session.hueSaturation?.settings.lightness == 40)
+        let reset = try #require(sliders[2].accessibilityCustomActions?.first)
+        #expect(reset.actionHandler?(reset) == true)
+        #expect(session.hueSaturation?.settings.lightness == 0 && session.hueSaturation?.settings.hue == 30)
+
+        let hueReset = try #require(sliders[0].accessibilityCustomActions?.first)
+        rows[0].isEnabled = false
+        #expect(offered() == [[], ["Reset"], ["Reset"]])
+        #expect(hueReset.actionHandler?(hueReset) == false)
+        #expect(session.hueSaturation?.settings.hue == 30)
+        rows[0].isEnabled = true
+        #expect(offered() == Array(repeating: ["Reset"], count: 3))
+        session.cancelHueSaturation()
+    }
+
     /// A double tap on an Invert layer's thumbnail renames it, as on the Mac, where only an adjustment with settings
     /// opens an editor.
     @Test func anInvertThumbnailDoubleTapRenames() async throws {
@@ -824,6 +857,23 @@ import UIKit
         session.cancelHueSaturation()
     }
 
+    /// Apply outside this range has no VoiceOver hint while it can be turned on, as its name says what it does; on
+    /// another range than the one that has it, its hint says why it can't be, as the Mac's help says.
+    @Test func applyOutsideSaysWhyItCant() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        let invert = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Apply outside this range instead" })
+        #expect(invert.accessibilityHint == nil)
+        invert.isSelected = true
+        invert.sendActions(for: .primaryActionTriggered)
+        try choose(.greens, in: session, editor: editor)
+        #expect(invert.accessibilityHint == "Reds already applies outside its range, and only one range can at a time.")
+        try choose(.reds, in: session, editor: editor)
+        #expect(invert.accessibilityHint == nil)
+        session.cancelHueSaturation()
+    }
+
     // MARK: Eyedroppers and targeted adjustment
 
     /// A window with a red layer, and Hue/Saturation open over it.
@@ -884,6 +934,22 @@ import UIKit
         #expect((droppers + ["Targeted adjustment"]).allSatisfy { shownButton($0, in: editor) == nil })
         session.cancelHueSaturation()
         try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// The eyedroppers and the targeted adjustment have VoiceOver hints in Apple's words, saying what each does without
+    /// the Mac's click or drag, or the targeted adjustment's name, which the Mac's help starts with.
+    @Test func theEyedroppersAndTargetedAdjustmentSayWhatTheyDo() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.greens, in: session, editor: editor)
+        func hint(_ label: String) throws -> String? {
+            try #require(views(UIButton.self, in: editor.view).first { $0.accessibilityLabel == label }, "\(label)").accessibilityHint
+        }
+        #expect(try hint("Sample color") == "Centers the range on a color you pick in the image.")
+        #expect(try hint("Add color") == "Widens the range to include a color you pick in the image.")
+        #expect(try hint("Remove color") == "Narrows the range to exclude a color you pick in the image.")
+        #expect(try hint("Targeted adjustment") == "Adjusts the saturation, or with Command the hue, of a color you pick in the image.")
+        session.cancelHueSaturation()
     }
 
     /// With Sample armed, a touch on the canvas centers the range's band on the color there, as a click does on the Mac.

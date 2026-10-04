@@ -844,7 +844,7 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     private let spectrum = SpectrumView()
     /// The eyedroppers, which set the range from the picture, and the targeted adjustment, which drags on it.
     private lazy var droppers = HueSampleMode.allCases.map { mode in
-        Self.samplingButton(mode.symbol, badge: mode.badge, label: mode.rawValue + " color", help: mode.help) { [weak self] in
+        Self.samplingButton(mode.symbol, badge: mode.badge, label: mode.rawValue + " color", help: mode.help, hint: mode.hint) { [weak self] in
             guard let session = self?.session else { return }
             session.hueTargeting = false
             session.hueSampleMode = session.hueSampleMode == mode ? nil : mode
@@ -857,7 +857,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         return line
     }()
     private lazy var targeted = Self.samplingButton("hand.point.up.left", badge: nil, label: "Targeted adjustment",
-                                                    help: "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held") {
+                                                    help: "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held",
+                                                    hint: "Adjusts the saturation, or with Command the hue, of a color you pick in the image.") {
         [weak self] in
         guard let session = self?.session else { return }
         session.hueSampleMode = nil
@@ -924,7 +925,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
                                     fieldWidth: NumberField.width(toShow: range, decimals: 0))
             field.onChange = { [weak self] value in self?.update { $0[keyPath: key] = value.rounded() } }
             field.onReset = { [weak self] in self?.update { $0[keyPath: key] = $0.resetValues[keyPath: key] } }
-            field.toolTip = caption + ". Double-tap to reset."
+            // No hint: VoiceOver has Reset among the slider's actions.
+            field.setHelp(caption + ". Double-click to reset.", hint: nil)
             // Return in a field applies the adjustment, as on the Mac, where Levels' and Curves' fields keep it.
             field.onReturn = { [weak self] in self?.commit() }
             sliders.addArrangedSubview(field)
@@ -939,7 +941,7 @@ final class HueSaturationEditorController: AdjustmentEditorController {
     }
 
     /// An eyedropper or the targeted adjustment, as the Mac draws them: a symbol, with Add's and Remove's small badge.
-    private static func samplingButton(_ symbol: String, badge: String?, label: String, help: String,
+    private static func samplingButton(_ symbol: String, badge: String?, label: String, help: String, hint: String,
                                        action: @escaping () -> Void) -> UIButton {
         var configuration = UIButton.Configuration.plain()
         configuration.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15))
@@ -948,7 +950,7 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         configuration.background.cornerRadius = 6
         let button = UIButton(configuration: configuration)
         button.accessibilityLabel = label
-        button.toolTip = help
+        button.setHelp(help, hint: hint)
         if let badge {
             let mark = UIImageView(image: UIImage(systemName: badge, withConfiguration: UIImage.SymbolConfiguration(pointSize: 8, weight: .semibold)))
             mark.tintColor = .label
@@ -996,8 +998,24 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         // One range at a time, as the Mac's: turning it on here would take it off the other.
         let other = settings.invertedRange.flatMap { $0 == settings.range ? nil : $0 }
         invert.isEnabled = other == nil
-        invert.toolTip = other.map { "\($0.rawValue) applies outside its range, and only one range can at a time" }
-            ?? "Adjust every color outside this range instead of the colors in it"
+        if let other {
+            invert.setHelp("\(other.rawValue) applies outside its range, and only one range can at a time",
+                           hint: "\(other.rawValue) already applies outside its range, and only one range can at a time.")
+        } else {
+            // Its name says what it does, so only the dimmed state has a hint: why it can't be turned on.
+            invert.setHelp("Adjust every color outside this range instead of the colors in it", hint: nil)
+        }
         colorize.isSelected = settings.colorize
+    }
+}
+
+private extension HueSampleMode {
+    /// What the eyedropper does, as VoiceOver's hint says it, without the Mac's click its help has.
+    var hint: String {
+        switch self {
+        case .replace: "Centers the range on a color you pick in the image."
+        case .add: "Widens the range to include a color you pick in the image."
+        case .remove: "Narrows the range to exclude a color you pick in the image."
+        }
     }
 }

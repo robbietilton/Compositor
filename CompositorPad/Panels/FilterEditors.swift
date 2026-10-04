@@ -15,6 +15,8 @@ final class FilterEditorController: AdjustmentEditorController {
         let logarithmic: Bool
         /// What the row does, as the Mac's help says it.
         var help: String? = nil
+        /// What the row does, as VoiceOver's hint says it (`setHelp`); none where the caption says it.
+        var hint: String? = nil
         /// When the row shows, as Remove Background's Advanced rows; always if nil.
         var shown: ((FilterSettings) -> Bool)? = nil
         /// The row's colored track, as the Mac's Camera Raw sliders: a double tap on its caption or thumb then puts the
@@ -30,17 +32,21 @@ final class FilterEditorController: AdjustmentEditorController {
     }
 
     /// What the Mac's filter panel puts in a filter's editor, in order. A control with `shown` shows only when it says
-    /// so, as Dither's rows for its style.
+    /// so, as Dither's rows for its style. A control's `help` is the Mac's, and its `hint` VoiceOver's (`setHelp`).
     enum Control {
         case slider(Row)
-        /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it.
-        case choice(caption: String?, titles: [String], help: String?, chosen: (FilterSettings) -> Int, choose: (inout FilterSettings, Int) -> Void)
+        /// A choice among `titles`, as segments, captioned or not; `chosen` reads which, and `choose` sets it. `hints` has
+        /// each segment's, which VoiceOver reads on its own.
+        case choice(caption: String?, titles: [String], help: String?, hints: [String]?, chosen: (FilterSettings) -> Int,
+                    choose: (inout FilterSettings, Int) -> Void)
         /// A choice among `groups` of names, as a pop-up, captioned.
-        case popUp(caption: String, groups: [[String]], help: String? = nil, chosen: (FilterSettings) -> String,
+        case popUp(caption: String, groups: [[String]], help: String? = nil, hint: String? = nil, chosen: (FilterSettings) -> String,
                    choose: (inout FilterSettings, String) -> Void, shown: ((FilterSettings) -> Bool)? = nil)
-        case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil, shown: ((FilterSettings) -> Bool)? = nil)
+        case checkbox(String, WritableKeyPath<FilterSettings, Bool>, help: String? = nil, hint: String? = nil,
+                      shown: ((FilterSettings) -> Bool)? = nil)
         /// Text typed into a field, captioned, as Dither's Characters.
-        case field(caption: String, key: WritableKeyPath<FilterSettings, String>, help: String?, shown: ((FilterSettings) -> Bool)? = nil)
+        case field(caption: String, key: WritableKeyPath<FilterSettings, String>, help: String?, hint: String?,
+                   shown: ((FilterSettings) -> Bool)? = nil)
         /// A section's title, as Color Balance's Shadows, Midtones and Highlights.
         case heading(String)
         /// The gradient the settings make, left to right, as Gradient Map's bar.
@@ -49,7 +55,7 @@ final class FilterEditorController: AdjustmentEditorController {
         /// and Light; a tap opens the color picker on one.
         case swatches([Swatch], titlesFirst: Bool = false, shown: ((FilterSettings) -> Bool)? = nil)
         /// A color, as a swatch that opens the color picker on it.
-        case color(caption: String, help: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
+        case color(caption: String, help: String?, hint: String?, value: (FilterSettings) -> AdjustmentColor, open: (EditorSession) -> Void)
         /// What the filter does, in the panel's words.
         case text(String)
         /// A note on a setting, quieter.
@@ -65,7 +71,7 @@ final class FilterEditorController: AdjustmentEditorController {
         ],
         .addNoise: [
             .slider(Row(caption: "Amount", key: \.amount, range: 0.1...400, unit: "%", decimals: 1, logarithmic: true)),
-            .choice(caption: "Distribution", titles: ["Uniform", "Gaussian"], help: nil, chosen: { $0.gaussian ? 1 : 0 },
+            .choice(caption: "Distribution", titles: ["Uniform", "Gaussian"], help: nil, hints: nil, chosen: { $0.gaussian ? 1 : 0 },
                     choose: { $0.gaussian = $1 == 1 }),
             .checkbox("Monochromatic", \.monochromatic),
         ],
@@ -97,25 +103,31 @@ final class FilterEditorController: AdjustmentEditorController {
             .text("Hide the background behind a layer mask, keeping the foreground subjects. The pixels stay, so the background can be painted back at any time."),
             .choice(caption: nil, titles: BackgroundQuality.allCases.map(\.rawValue),
                     help: "Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur",
+                    hints: BackgroundQuality.allCases.map(\.hint),
                     chosen: { BackgroundQuality.allCases.firstIndex(of: $0.backgroundQuality) ?? 0 },
                     choose: { $0.backgroundQuality = BackgroundQuality.allCases[$1] }),
             .slider(Row(caption: "Refine", key: \.refineEdges, range: 0...40, unit: "px", decimals: 0, logarithmic: false,
-                        help: "Pull the mask onto the image's own edges, which recovers hair and fur", shown: { $0.backgroundQuality == .advanced })),
+                        help: "Pull the mask onto the image's own edges, which recovers hair and fur",
+                        hint: "Pulls the mask onto the image's own edges, recovering hair and fur.", shown: { $0.backgroundQuality == .advanced })),
             .slider(Row(caption: "Contrast", key: \.matteContrast, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
-                        help: "Clear the haze that leaves background showing through thin areas", shown: { $0.backgroundQuality == .advanced })),
+                        help: "Clear the haze that leaves background showing through thin areas",
+                        hint: "Clears the haze that leaves background showing through thin areas.", shown: { $0.backgroundQuality == .advanced })),
             .slider(Row(caption: "Shift Edge", key: \.shiftEdge, range: -10...10, unit: "px", decimals: 0, logarithmic: false,
                         help: "Shrink the mask to drop the rim of background color around the subject, or grow it",
+                        hint: "Shrinks the mask to drop the rim of background color around the subject, or grows it.",
                         shown: { $0.backgroundQuality == .advanced })),
         ],
         .vignette: [
-            .color(caption: "Color", help: "Choose the vignette color", value: \.vignetteColor, open: { $0.openVignetteColorPicker() }),
+            .color(caption: "Color", help: "Choose the vignette color", hint: "Opens the color picker for the vignette.", value: \.vignetteColor,
+                   open: { $0.openVignetteColorPicker() }),
             .slider(Row(caption: "Amount", key: \.vignetteAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
-                        help: "Blend the chosen color into the edges while keeping the center unchanged")),
+                        help: "Blend the chosen color into the edges while keeping the center unchanged",
+                        hint: "Blends the chosen color into the edges, keeping the center unchanged.")),
             .slider(Row(caption: "Midpoint", key: \.vignetteMidpoint, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
             .slider(Row(caption: "Roundness", key: \.vignetteRoundness, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
             .slider(Row(caption: "Feather", key: \.vignetteFeather, range: 0...100, unit: "%", decimals: 0, logarithmic: false)),
             .slider(Row(caption: "Highlights", key: \.vignetteHighlights, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
-                        help: "Protect bright areas near the edge")),
+                        help: "Protect bright areas near the edge", hint: "Protects bright areas near the edge.")),
         ],
         .gradientMap: [
             .gradient { settings in [settings.gradientMap.ends.dark, settings.gradientMap.ends.light] },
@@ -129,31 +141,39 @@ final class FilterEditorController: AdjustmentEditorController {
                    choose: { settings, name in if let style = DitherStyle(rawValue: name) { settings.dither.style = style } }),
             .slider(Row(caption: "Pixel Size", key: \.dither.pixelSize, range: DitherSettings.pixelSizeRange, unit: "px", decimals: 0,
                         logarithmic: false, help: "Make each dithered pixel this many pixels across, for a chunky old-screen look",
+                        hint: "Makes each dithered pixel this many pixels across, for a chunky old-screen look.",
                         shown: { $0.dither.style.usesPixelSize })),
+            // Text Size's and Line Spacing's help say only what their captions do, so they have no hint.
             .slider(Row(caption: "Text Size", key: \.dither.textSize, range: DitherSettings.textSizeRange, unit: "px", decimals: 0,
                         logarithmic: false, help: "The height of each line of characters", shown: { $0.dither.style == .ascii })),
             .slider(Row(caption: "Line Spacing", key: \.dither.lineSpacing, range: DitherSettings.lineSpacingRange, unit: "px", decimals: 0,
                         logarithmic: false, help: "How far apart the screen's lines are", shown: { $0.dither.style == .scanlines })),
             .slider(Row(caption: "Glow", key: \.dither.glow, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
-                        help: "Light blooming around the lines, like a CRT's phosphors", shown: { $0.dither.style == .scanlines })),
+                        help: "Light blooming around the lines, like a CRT's phosphors",
+                        hint: "Blooms light around the lines, like a CRT's phosphors.", shown: { $0.dither.style == .scanlines })),
             .slider(Row(caption: "Dots", key: \.dither.dots, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
-                        help: "Break the lines into glowing beads", shown: { $0.dither.style == .scanlines })),
+                        help: "Break the lines into glowing beads", hint: "Breaks the lines into glowing beads.",
+                        shown: { $0.dither.style == .scanlines })),
             .slider(Row(caption: "Wobble", key: \.dither.wobble, range: DitherSettings.wobbleRange, unit: "px", decimals: 0, logarithmic: false,
-                        help: "Make the lines waver sideways down the screen, like a CRT losing sync", shown: { $0.dither.style == .scanlines })),
+                        help: "Make the lines waver sideways down the screen, like a CRT losing sync",
+                        hint: "Makes the lines waver sideways down the screen, like a CRT losing sync.", shown: { $0.dither.style == .scanlines })),
             .slider(Row(caption: "Cell Size", key: \.dither.cellSize, range: DitherSettings.cellSizeRange, unit: "px", decimals: 0,
                         logarithmic: false, shown: { $0.dither.style.isHalftone })),
             .slider(Row(caption: "Angle", key: \.dither.angle, range: -90...90, unit: "°", decimals: 0, logarithmic: false,
                         shown: { $0.dither.style.isHalftone })),
             .field(caption: "Characters", key: \.dither.characters,
                    help: "The characters to draw with, in any order: each spot gets the one whose ink best matches its tone",
+                   hint: "Draws each spot with the one of these characters whose ink best matches its tone.",
                    shown: { $0.dither.style == .ascii }),
             .slider(Row(caption: "Tones", key: \.dither.levels, range: DitherSettings.levelsRange, unit: nil, decimals: 0, logarithmic: false,
-                        help: "Tones per channel: 2 is pure black and white", shown: { $0.dither.style.hasTones })),
+                        help: "Tones per channel: 2 is pure black and white", hint: "Sets how many levels each channel has; 2 is pure black and white.",
+                        shown: { $0.dither.style.hasTones })),
             .slider(Row(caption: "Diffusion", key: \.dither.diffusion, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
                         help: "How much of each pixel's error spreads to its neighbors. Less gives flatter areas",
+                        hint: "Spreads each pixel's error to its neighbors; less gives flatter areas.",
                         shown: { $0.dither.style.diffuses })),
             .slider(Row(caption: "Density", key: \.dither.density, range: -100...100, unit: nil, decimals: 0, logarithmic: false,
-                        help: "More ink (darker) or less before dithering")),
+                        help: "More ink (darker) or less before dithering", hint: "Darkens with more ink, or lightens with less, before dithering.")),
             .slider(Row(caption: "Contrast", key: \.dither.contrast, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
             .popUp(caption: "Colors", groups: [DitherColors.allCases.map(\.rawValue)], chosen: { $0.dither.colors.rawValue },
                    choose: { settings, name in if let colors = DitherColors(rawValue: name) { settings.dither.colors = colors } }),
@@ -162,18 +182,20 @@ final class FilterEditorController: AdjustmentEditorController {
                       titlesFirst: true, shown: { $0.dither.colors == .twoColors }),
             .popUp(caption: "Pixel Shape", groups: [DitherPixelShape.allCases.map(\.rawValue)],
                    help: "Draw each chunky pixel as a solid square, or as a round dot like a dot-matrix screen",
+                   hint: "Draws each chunky pixel as a solid square, or as a round dot like a dot-matrix screen.",
                    chosen: { $0.dither.pixelShape.rawValue },
                    choose: { settings, name in if let shape = DitherPixelShape(rawValue: name) { settings.dither.pixelShape = shape } },
                    shown: { $0.dither.pixelSize > 1 && $0.dither.style.usesPixelSize }),
             .checkbox("Light on Dark", \.dither.lightOnDark, help: "Draw the marks for the light tones on the dark color, like a glowing screen",
-                      shown: { $0.dither.style.drawsMarks }),
+                      hint: "Draws the marks for the light tones on the dark color, like a glowing screen.", shown: { $0.dither.style.drawsMarks }),
         ],
         // Each slider says how bright that family of colors becomes, as Photoshop's do.
         .blackWhite: [
             family("Reds", \.blackWhite.reds, hue: 0), family("Yellows", \.blackWhite.yellows, hue: 60),
             family("Greens", \.blackWhite.greens, hue: 120), family("Cyans", \.blackWhite.cyans, hue: 180),
             family("Blues", \.blackWhite.blues, hue: 240), family("Magentas", \.blackWhite.magentas, hue: 300),
-            .checkbox("Tint", \.blackWhite.tint, help: "Color the result while keeping its tones, for a sepia or a cyanotype"),
+            .checkbox("Tint", \.blackWhite.tint, help: "Color the result while keeping its tones, for a sepia or a cyanotype",
+                      hint: "Colors the result while keeping its tones, for a sepia or a cyanotype."),
             .slider(Row(caption: "Hue", key: \.blackWhite.tintHue, range: 0...360, unit: "°", decimals: 0, logarithmic: false,
                         shown: { $0.blackWhite.tint }, track: { _ in .plain })),
             .slider(Row(caption: "Saturation", key: \.blackWhite.tintSaturation, range: 0...100, unit: "%", decimals: 0, logarithmic: false,
@@ -193,7 +215,8 @@ final class FilterEditorController: AdjustmentEditorController {
             balance("Magenta / Green", \.colorBalance.highlightMagentaGreen, .magentaGreen),
             balance("Yellow / Blue", \.colorBalance.highlightYellowBlue, .yellowBlue),
             .checkbox("Preserve Luminosity", \.colorBalance.preserveLuminosity,
-                      help: "Put each pixel's brightness back afterwards, so only the color moves"),
+                      help: "Put each pixel's brightness back afterwards, so only the color moves",
+                      hint: "Puts each pixel's brightness back afterward, so only the color moves."),
         ],
         .lensCorrection: [
             .slider(Row(caption: "Remove Distortion", key: \.distortion, range: -100...100, unit: nil, decimals: 0, logarithmic: false)),
@@ -287,32 +310,33 @@ final class FilterEditorController: AdjustmentEditorController {
                                         sensitivity: 1 / step, logarithmic: row.logarithmic, decimals: row.decimals, sliderWidth: nil,
                                         fieldWidth: NumberField.width(toShow: row.range, decimals: row.decimals))
                 field.onChange = { [weak self] value in self?.update { $0[keyPath: row.key] = value } }
-                field.toolTip = row.help
+                field.setHelp(row.help, hint: row.hint)
                 if row.track != nil {
                     field.onReset = { [weak self] in self?.update { $0[keyPath: row.key] = FilterSettings()[keyPath: row.key] } }
-                    field.toolTip = row.help ?? row.caption + ". Double-tap to reset."
+                    // VoiceOver has Reset among the slider's actions, so that's no hint.
+                    field.setHelp(row.help ?? row.caption + ". Double-click to reset.", hint: row.hint)
                 }
                 fields.append((row, field))
                 content.addArrangedSubview(field)
-            case .choice(let caption, let titles, let help, let chosen, let choose):
+            case .choice(let caption, let titles, let help, let hints, let chosen, let choose):
                 let segments = OptionControls.segments(titles) { [weak self] index in self?.update { choose(&$0, index) } }
-                if let help { segments.addInteraction(UIToolTipInteraction(defaultToolTip: help)) }
+                segments.setHelp(help, hints: hints ?? [])
                 refreshers.append { segments.selectedSegmentIndex = chosen($0) }
                 let views = (caption.map { [OptionControls.caption($0, color: .secondaryLabel)] } ?? []) + [segments, UIView()]
                 content.addArrangedSubview(OptionControls.row(views, spacing: 10))
-            case .popUp(let caption, let groups, let help, let chosen, let choose, let shown):
+            case .popUp(let caption, let groups, let help, let hint, let chosen, let choose, let shown):
                 let popUp = PopUpButton()
                 popUp.accessibilityLabel = caption
-                popUp.toolTip = help
+                popUp.setHelp(help, hint: hint)
                 popUp.onChoose = { [weak self] name in self?.update { choose(&$0, name) } }
                 refreshers.append { popUp.show(groups, chosen: chosen($0)) }
                 add(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), popUp, UIView()], spacing: 10), shown: shown)
-            case .checkbox(let title, let key, let help, let shown):
+            case .checkbox(let title, let key, let help, let hint, let shown):
                 let box = OptionControls.checkbox(title) { [weak self] on in self?.update { $0[keyPath: key] = on } }
-                box.toolTip = help
+                box.setHelp(help, hint: hint)
                 refreshers.append { box.isSelected = $0[keyPath: key] }
                 add(OptionControls.row([box, UIView()]), shown: shown)
-            case .field(let caption, let key, let help, let shown):
+            case .field(let caption, let key, let help, let hint, let shown):
                 let field = UITextField()
                 field.borderStyle = .roundedRect
                 field.font = .monospacedSystemFont(ofSize: OptionControls.controlFont.pointSize, weight: .regular)
@@ -320,7 +344,7 @@ final class FilterEditorController: AdjustmentEditorController {
                 field.autocapitalizationType = .none
                 field.spellCheckingType = .no
                 field.accessibilityLabel = caption
-                field.toolTip = help
+                field.setHelp(help, hint: hint)
                 field.addAction(UIAction { [weak self, weak field] _ in
                     guard let text = field?.text else { return }
                     self?.update { $0[keyPath: key] = text }
@@ -329,11 +353,11 @@ final class FilterEditorController: AdjustmentEditorController {
                 field.addAction(UIAction { _ in }, for: .editingDidEndOnExit)
                 refreshers.append { if !field.isEditing { field.text = $0[keyPath: key] } }
                 add(OptionControls.row([OptionControls.caption(caption, color: .secondaryLabel), field], spacing: 10), shown: shown)
-            case .color(let caption, let help, let value, let open):
+            case .color(let caption, let help, let hint, let value, let open):
                 let label = OptionControls.caption(caption, color: .secondaryLabel)
                 let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
                 swatch.accessibilityLabel = caption
-                swatch.toolTip = help
+                swatch.setHelp(help, hint: hint)
                 swatch.addAction(UIAction { [weak self, weak swatch] _ in
                     guard let self else { return }
                     self.pickerSource = swatch
@@ -356,7 +380,7 @@ final class FilterEditorController: AdjustmentEditorController {
                 let pairs = ends.map { end -> UIView in
                     let swatch = SwatchButton(size: CGSize(width: 24, height: 24), cornerRadius: 6)
                     swatch.accessibilityLabel = end.title + " color"
-                    swatch.toolTip = "Choose the \(end.title.lowercased()) color"
+                    swatch.setHelp("Choose the \(end.title.lowercased()) color", hint: "Opens the color picker.")
                     swatch.addAction(UIAction { [weak self, weak swatch] _ in
                         guard let self else { return }
                         self.pickerSource = swatch
@@ -396,5 +420,15 @@ final class FilterEditorController: AdjustmentEditorController {
         for refresh in refreshers { refresh(settings) }
         error.text = edit?.previewError
         error.isHidden = edit?.previewError == nil
+    }
+}
+
+private extension BackgroundQuality {
+    /// What choosing it does, as VoiceOver's hint says it on its segment.
+    var hint: String {
+        switch self {
+        case .basic: "Makes a quick mask."
+        case .advanced: "Refines the mask against the layer's own detail, for hair and fur."
+        }
     }
 }

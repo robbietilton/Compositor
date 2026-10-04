@@ -46,7 +46,7 @@ final class NewCanvasView: UIView, UITextFieldDelegate {
         swapConfiguration.baseForegroundColor = .secondaryLabel
         let swap = UIButton(configuration: swapConfiguration)
         swap.accessibilityLabel = "Swap width and height"
-        swap.toolTip = "Swap width and height"
+        swap.setHelp("Swap width and height", hint: nil)
         swap.addAction(UIAction { [weak self] _ in self?.swapSize() }, for: .primaryActionTriggered)
         swap.translatesAutoresizingMaskIntoConstraints = false
         swap.widthAnchor.constraint(equalToConstant: 44).isActive = true

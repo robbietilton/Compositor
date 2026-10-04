@@ -101,8 +101,21 @@ import UIKit
         #expect(try effectsButton(in: controller).isEnabled == false)
     }
 
+    /// The effects button's help, the Mac's, is VoiceOver's hint too, in Apple's words for a hint, as a tooltip shows
+    /// only where the iPad app runs on a Mac: what it does, without the name the Mac's help starts with. New blank
+    /// layer's help is only its name, so it has no hint.
+    @Test func theEffectsButtonsHelpIsItsHint() async throws {
+        let (window, controller, _) = try await shownWindow()
+        defer { window.isHidden = true }
+        let button = try effectsButton(in: controller)
+        #expect(button.accessibilityHint == "Adds a stroke, drop shadow, color overlay, inner shadow, outer glow or inner glow.")
+        let add = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New blank layer" })
+        #expect(add.accessibilityHint == nil)
+    }
+
     /// Adding an effect puts it on the layer and opens its panel: the effect's name, its color, its rows, and Cancel and
-    /// OK at the foot, with no Preview or Reset, as the Mac's effect panel.
+    /// OK at the foot, with no Preview or Reset, as the Mac's effect panel. The color's VoiceOver hint says it opens the
+    /// color picker.
     @Test func addingOpensItsPanel() async throws {
         let (window, controller, session) = try await shownWindow()
         defer { window.isHidden = true }
@@ -116,6 +129,7 @@ import UIKit
         #expect(captions(of: editor) == ["Opacity", "Angle", "Distance", "Blur"])
         let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
         #expect(swatch.accessibilityLabel == "Drop Shadow color" && swatch.color == .black)
+        #expect(swatch.accessibilityHint == "Opens the color picker.")
         #expect(!views(UIButton.self, in: editor.view).contains { ["Preview", "Reset"].contains($0.configuration?.title) })
         let cancel = try button("Cancel", in: editor), ok = try button("OK", in: editor)
         #expect(cancel.convert(cancel.bounds, to: editor.view).maxX < ok.convert(ok.bounds, to: editor.view).minX)
@@ -775,6 +789,25 @@ import UIKit
         #expect(session.history.undoName == "Remove Stroke")
         let effects = session.document?.layers.first { $0.id == layer }?.effects
         #expect(effects?.stroke == nil && effects?.shadow != nil && session.document?.layers.count == layers)
+    }
+
+    /// The Layers panel's Delete button is named for what it deletes, as the Mac's: the layer, a tapped effect, or the
+    /// mask. Its help, the same, is no hint, which would only say the name again.
+    @Test func deleteIsNamedForWhatItDeletes() async throws {
+        let (window, _, session, panel, cell, _) = try await rowWithTwoEffects()
+        defer { window.isHidden = true }
+        func delete() throws -> UIButton {
+            panel.updatePropertiesIfNeeded()
+            return try #require(views(UIButton.self, in: panel).first { $0.accessibilityLabel?.hasPrefix("Delete ") == true })
+        }
+        #expect(try delete().accessibilityLabel == "Delete selected layer" && delete().accessibilityHint == nil)
+        cell.tap(at: effectPoint(0, in: cell))
+        try #require(session.selectedEffect != nil)
+        #expect(try delete().accessibilityLabel == "Delete selected effect" && delete().accessibilityHint == nil)
+        session.effectSelection = nil
+        session.addMask()
+        try #require(session.isMaskSelected)
+        #expect(try delete().accessibilityLabel == "Delete layer mask" && delete().accessibilityHint == nil)
     }
 
     /// A double tap on an effect's row opens its panel rather than renaming the layer; one on another effect gives way

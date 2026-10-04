@@ -76,6 +76,26 @@ import UIKit
         #expect(sliders[0].frame.width == sliders[1].frame.width)
     }
 
+    /// A row's slider offers Reset among VoiceOver's actions only while the row can be put back: while it has a value
+    /// to go back to, and is on. A Reset kept from before does nothing then.
+    @Test func resetIsOfferedOnlyWhileARowCanBePutBack() throws {
+        let row = SliderField(caption: "Amount", sliderRange: 0...100, fieldRange: 0...100, sensitivity: 1)
+        let slider = try #require(views(UISlider.self, in: row).first)
+        func offered() -> [String] { slider.accessibilityCustomActions?.map(\.name) ?? [] }
+        #expect(offered() == [])
+        var resets = 0
+        row.onReset = { resets += 1 }
+        #expect(offered() == ["Reset"])
+        row.isEnabled = false
+        #expect(offered() == [])
+        row.isEnabled = true
+        let reset = try #require(slider.accessibilityCustomActions?.first)
+        #expect(reset.actionHandler?(reset) == true && resets == 1)
+        row.onReset = nil
+        #expect(offered() == [])
+        #expect(reset.actionHandler?(reset) == false && resets == 1)
+    }
+
     // MARK: The filter editor
 
     /// A window on the app's screen with a 200 × 100 project of one gray layer, once it has appeared.
@@ -565,6 +585,28 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// Black & White's Tint has its help as VoiceOver's hint, in Apple's words for a hint. A family's row has none, as
+    /// its help only says a double tap puts the value back: Reset is among VoiceOver's actions on its slider instead,
+    /// and puts Reds back to 40.
+    @Test func blackWhitesHints() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.blackWhite), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let tint = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Tint" })
+        #expect(tint.accessibilityHint == "Colors the result while keeping its tones, for a sepia or a cyanotype.")
+        var settings = try #require(session.filterEdit?.settings)
+        settings.blackWhite.reds = 150
+        session.updateFilter(settings, preview: true)
+        editor.updatePropertiesIfNeeded()
+        let reds = try #require(views(UISlider.self, in: try row("Reds", in: editor)).first)
+        #expect(reds.accessibilityHint == nil)
+        let reset = try #require(reds.accessibilityCustomActions?.first { $0.name == "Reset" })
+        #expect(reset.actionHandler?(reset) == true && session.filterEdit?.settings.blackWhite.reds == 40)
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     /// A value typed past a slider's end is held to it, as on the Mac now: Reds at 400 is 300, and the preview works.
     @Test func aValueTypedPastTheEndIsHeldToIt() async throws {
         let (window, controller, session) = try await shownWindow()
@@ -611,7 +653,7 @@ import UIKit
     }
 
     /// Image › Gradient Map… starts from the foreground and background colors, as in Photoshop, shown in its swatches and
-    /// its bar, dark to light.
+    /// its bar, dark to light. A swatch's VoiceOver hint says it opens the color picker.
     @Test func gradientMapStartsFromTheForegroundAndBackground() async throws {
         let (window, controller, session) = try await shownWindow()
         defer { window.isHidden = true }
@@ -622,6 +664,7 @@ import UIKit
         let red = PaletteColor(red: 1, green: 0, blue: 0), blue = PaletteColor(red: 0, green: 0, blue: 1)
         let swatches = views(SwatchButton.self, in: editor.view)
         #expect(swatches.map(\.accessibilityLabel) == ["Shadows color", "Highlights color"])
+        #expect(swatches.map(\.accessibilityHint) == Array(repeating: "Opens the color picker.", count: 2))
         #expect(swatches.map(\.color) == [red, blue])
         #expect(views(UILabel.self, in: editor.view).compactMap(\.text).contains("Highlights"))
         #expect(try gradientBar(in: editor).colors == [red, blue])
@@ -774,6 +817,32 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// Dither's help is VoiceOver's hints too, in Apple's words for a hint: Characters' on its field, Pixel Shape's on
+    /// its pop-up, Light on Dark's on its checkbox and Diffusion's on its slider; Dark's and Light's swatches say they
+    /// open the color picker. Line Spacing's help only says what its name does, so it has no hint, nor has Style, which
+    /// has no help.
+    @Test func dithersHelpIsItsHints() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let editor = try await dither(.atkinson, over: controller)
+        let characters = try #require(views(UITextField.self, in: editor.view).first { $0.accessibilityLabel == "Characters" })
+        #expect(characters.accessibilityHint == "Draws each spot with the one of these characters whose ink best matches its tone.")
+        #expect(try popUp("Pixel Shape", in: editor).accessibilityHint
+            == "Draws each chunky pixel as a solid square, or as a round dot like a dot-matrix screen.")
+        #expect(try popUp("Style", in: editor).accessibilityHint == nil)
+        let lightOnDark = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Light on Dark" })
+        #expect(lightOnDark.accessibilityHint == "Draws the marks for the light tones on the dark color, like a glowing screen.")
+        let diffusion = try #require(views(UISlider.self, in: try row("Diffusion", in: editor)).first)
+        #expect(diffusion.accessibilityHint == "Spreads each pixel's error to its neighbors; less gives flatter areas.")
+        let lineSpacing = try #require(views(UISlider.self, in: try row("Line Spacing", in: editor)).first)
+        #expect(lineSpacing.accessibilityHint == nil)
+        let swatches = views(SwatchButton.self, in: editor.view)
+        #expect(swatches.map(\.accessibilityLabel) == ["Dark color", "Light color"])
+        #expect(swatches.map(\.accessibilityHint) == Array(repeating: "Opens the color picker.", count: 2))
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     // MARK: Content-Aware Fill
 
     /// Selects `rect`, in document pixels, as a marquee does.
@@ -900,8 +969,12 @@ import UIKit
         #expect(views(UILabel.self, in: editor.view).contains { $0.text?.hasPrefix("Hide the background behind a layer mask") == true })
         let quality = try #require(views(UISegmentedControl.self, in: editor.view).first)
         #expect((0..<quality.numberOfSegments).map { quality.titleForSegment(at: $0) } == ["Basic", "Advanced"])
-        let help = quality.interactions.compactMap { $0 as? UIToolTipInteraction }.first?.defaultToolTip
-        #expect(help?.hasPrefix("Basic is quick") == true)
+        // Each segment has its own VoiceOver hint, as VoiceOver reads it on its own: the view around its title.
+        for (title, hint) in [("Basic", "Makes a quick mask."),
+                              ("Advanced", "Refines the mask against the layer's own detail, for hair and fur.")] {
+            let segment = views(UILabel.self, in: quality).first { $0.text == title }?.superview
+            #expect(segment?.accessibilityHint == hint, "\(title)")
+        }
         #expect(shownCaptions(of: editor) == [])
         let short = editor.preferredContentSize.height
         quality.selectedSegmentIndex = 1
@@ -999,6 +1072,25 @@ import UIKit
         try press("\r", in: controller)
         try await eventually { session.filterEdit == nil }
         #expect(session.activeLayer?.asset != nil && session.activeLayer?.transform.size == CGSize(width: 200, height: 100))
+        try await eventually { controller.presentedViewController == nil }
+    }
+
+    /// Vignette's help is VoiceOver's hints too, in Apple's words for a hint, as a tooltip shows only where the iPad app
+    /// runs on a Mac, on what VoiceOver reads: Amount's on its slider, rather than the row around it, and Color's on its
+    /// swatch. A row without help has no hint, and a row with no value to go back to no Reset.
+    @Test func vignettesHelpIsItsHints() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.vignette), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let amount = try #require(views(UISlider.self, in: try row("Amount", in: editor)).first)
+        #expect(amount.accessibilityLabel == "Amount")
+        #expect(amount.accessibilityHint == "Blends the chosen color into the edges, keeping the center unchanged.")
+        let midpoint = try #require(views(UISlider.self, in: try row("Midpoint", in: editor)).first)
+        #expect(midpoint.accessibilityHint == nil && midpoint.accessibilityCustomActions?.isEmpty != false)
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        #expect(swatch.accessibilityLabel == "Color" && swatch.accessibilityHint == "Opens the color picker for the vignette.")
+        session.cancelFilter()
         try await eventually { controller.presentedViewController == nil }
     }
 

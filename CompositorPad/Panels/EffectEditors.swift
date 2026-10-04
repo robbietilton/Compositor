@@ -69,7 +69,7 @@ final class EffectEditorController: AdjustmentEditorController {
 
     override func viewDidLoad() {
         swatch.accessibilityLabel = kind.rawValue + " color"
-        swatch.toolTip = kind.rawValue + " color"
+        swatch.setHelp(kind.rawValue + " color", hint: "Opens the color picker.")
         swatch.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             self.pickerSource = self.swatch

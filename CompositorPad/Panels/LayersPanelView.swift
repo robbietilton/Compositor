@@ -124,14 +124,14 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
         let footerRow = UIStackView()
         footerRow.alignment = .center
-        func footerButton(_ symbol: String, _ label: String, help: String? = nil, enabled: @escaping (EditorSession) -> Bool,
+        func footerButton(_ symbol: String, _ label: String, help: String? = nil, hint: String? = nil, enabled: @escaping (EditorSession) -> Bool,
                           action: ((EditorSession) -> Void)?) -> UIButton {
             var configuration = UIButton.Configuration.plain()
             configuration.image = UIImage(systemName: symbol)
             configuration.baseForegroundColor = .secondaryLabel
             let button = UIButton(configuration: configuration)
             button.accessibilityLabel = label
-            button.toolTip = help ?? label
+            button.setHelp(help ?? label, hint: hint)
             button.widthAnchor.constraint(equalToConstant: 40).isActive = true
             button.heightAnchor.constraint(equalToConstant: 44).isActive = true
             if let action {
@@ -146,6 +146,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
                                 enabled: { $0.canEditMask && $0.activeLayer?.mask == nil }) { $0.addMask(revealing: true) }
         // The Mac's effects, each opening its panel; its help, as the Mac's has it.
         let effects = footerButton("sparkles", "Layer effects", help: "Layer effects: stroke, drop shadow, color overlay, inner shadow, outer glow and inner glow",
+                                   hint: "Adds a stroke, drop shadow, color overlay, inner shadow, outer glow or inner glow.",
                                    enabled: { $0.canEditEffects }, action: nil)
         effects.menu = UIMenu(children: LayerEffectKind.allCases.map { kind in
             UIAction(title: kind.rawValue + "…") { [weak self] _ in self?.session?.addEffect(kind) }
@@ -209,7 +210,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         let deleteTitle = session.selectedEffect != nil ? "Delete selected effect" : session.isMaskSelected ? "Delete layer mask"
             : session.selectedLayerIDs.count > 1 ? "Delete selected layers" : "Delete selected layer"
         footer.last?.button.accessibilityLabel = deleteTitle
-        footer.last?.button.toolTip = deleteTitle
+        footer.last?.button.setHelp(deleteTitle, hint: nil)
 
         empty.isHidden = !layers.isEmpty || session.document == nil && isOpening
         emptyDetail.text = session.document == nil ? "Create a canvas or import an image." : "Import an image or add a blank layer."

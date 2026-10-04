@@ -33,7 +33,7 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
             configuration.contentInsets = .zero
             let button = UIButton(configuration: configuration)
             button.accessibilityLabel = tool.label
-            button.toolTip = tool.label
+            button.setHelp(tool.label, hint: nil)
             button.layer.cornerRadius = 9
             button.layer.cornerCurve = .continuous
             button.addAction(UIAction { [weak self] _ in self?.session?.selectTool(tool) }, for: .primaryActionTriggered)

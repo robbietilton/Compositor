@@ -29,6 +29,20 @@ import UIKit
         #expect(icons[.brush]?.isSymbolImage == true)
     }
 
+    /// Each tool's button is named for its tool, as the Mac's help names it, with no hint, which would only say the name
+    /// again: its help, which only an iPad app running on a Mac shows as a tooltip, is the name.
+    @Test func eachToolIsNamedWithoutAHint() {
+        let rail = ToolRailView()
+        func buttons(in view: UIView) -> [UIButton] {
+            view.subviews.flatMap { subview in ((subview as? UIButton).map { [$0] } ?? []) + buttons(in: subview) }
+        }
+        let shown = buttons(in: rail)
+        for tool in NavigationTool.allCases where tool != .idle {
+            let button = shown.first { $0.accessibilityLabel == tool.label }
+            #expect(button != nil && button?.accessibilityHint == nil, "\(tool)")
+        }
+    }
+
     /// The stamp is the Mac's: a round handle over a wide pad, with nothing beside the handle.
     @Test func theStampIsTheMacs() throws {
         let image = try #require(ToolRailView.image(for: .cloneStamp, in: EditorSession()))
