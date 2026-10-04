@@ -1045,13 +1045,17 @@ final class CanvasView: NSView {
                     height: owner.asset?.image.height ?? Int(base.size.height.rounded()),
                     limit: session.transformEdit != nil ? min(2048, steady) : steady)
             }()
+            // A filter's or an adjustment's preview, shown in place of the layer's pixels.
+            let previewed = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
+                ?? session.hueSaturation?.previewImage(for: layer.id)
             // A stroke or drop shadow is drawn around the layer's pixels, on a canvas grown to hold it.
             if stroke == nil, layer.asset != nil,
-               let effects = session.effectsPreviews.preview(for: layer, mask: mask, transform: transform,
+               let effects = session.effectsPreviews.preview(for: layer, pixels: previewed, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsDisplay = true
                     }) {
-                // A seeded preview carries the place it belongs; everything else is the layer's box plus its margin.
+                // A seeded preview, or one standing in for the next, carries the place it belongs; everything else is
+                // the layer's box plus its margin.
                 let grown = effects.placement ?? LayerEffectsRenderer.placed(transform, image: effects.image, inset: effects.inset)
                 LayerRenderer.draw(effects.image, transform: grown, center: center(grown.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), mask: nil, in: context)
@@ -1122,11 +1126,11 @@ final class CanvasView: NSView {
                     image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
                     transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), in: context)
-            } else if let asset = layer.asset, let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if let asset = layer.asset, let raster = asset.raster, previewed == nil {
                 TiledLayerRenderer.drawRaster(raster, transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer),
                     mask: mask, in: context)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
+            } else if let image = previewed ?? layer.asset?.image {
                 // LayerRenderer picks a sharp reduction for the image and its mask itself.
                 LayerRenderer.draw(image, transform: transform,
                     center: center(transform.center), scale: scale,
@@ -2743,8 +2747,10 @@ extension CanvasView {
                     height: layer.asset?.image.height ?? Int(transform.size.height.rounded()),
                     limit: session.transformEdit != nil ? min(2048, steady) : steady)
             }()
+            let previewed = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
+                ?? session.hueSaturation?.previewImage(for: layer.id)
             if layer.asset != nil,
-               let effects = session.effectsPreviews.preview(for: layer, mask: mask, transform: transform,
+               let effects = session.effectsPreviews.preview(for: layer, pixels: previewed, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsDisplay = true
                     }) {
@@ -2755,11 +2761,9 @@ extension CanvasView {
             let placed: CIImage?
             if let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
                 placed = placement.place(shaped, transform: transform)
-            } else if let raster = layer.asset?.raster, session.hueSaturation?.previewImage(for: layer.id) == nil,
-                      session.levels?.previewImage(for: layer.id) == nil, session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if let raster = layer.asset?.raster, previewed == nil {
                 placed = placement.place(raster, transform: transform)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
-                        ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
+            } else if let image = previewed ?? layer.asset?.image {
                 placed = placement.place(image, transform: transform)
             } else { return nil }
             guard var image = placed else { unsupported = true; return nil }

@@ -36,8 +36,8 @@ final class EffectsPreviewCache {
     nonisolated private struct Result: @unchecked Sendable {
         let image: CGImage
         let inset: CGFloat
-        /// Set only on a seeded result: where that image belongs on the document, which an inset can't express
-        /// when the layer's own box was cropped as well as warped.
+        /// Set only on a seeded result, or one standing in for a preview's: where that image belongs on the
+        /// document, which an inset can't express when the layer's own box was cropped as well as warped.
         var placement: LayerTransform? = nil
     }
     private struct Entry {
@@ -79,11 +79,17 @@ final class EffectsPreviewCache {
         sideLimit = min(1536, max(32, Int(sqrt(Double(16_777_216) / Double(max(1, ids.count))))))
     }
 
-    func preview(for layer: ImageLayer, mask: CGImage?, transform: LayerTransform, maskPlacement: LayerTransform?,
+    /// `pixels`: what shows in place of the layer's own while a filter or an adjustment previews them, at `transform`.
+    func preview(for layer: ImageLayer, pixels: CGImage? = nil, mask: CGImage?, transform: LayerTransform, maskPlacement: LayerTransform?,
                  completion: @escaping @MainActor @Sendable () -> Void) -> (image: CGImage, inset: CGFloat, placement: LayerTransform?)? {
-        guard let image = layer.asset?.image, let effects = layer.effects?.visible, !effects.isEmpty, effects.isValid else {
+        guard let image = pixels ?? layer.asset?.image, var effects = layer.effects?.visible, !effects.isEmpty, effects.isValid else {
             entries.removeValue(forKey: layer.id)?.request.cancel()
             return nil
+        }
+        // A large layer is previewed from a smaller copy, and its effects are made smaller with it.
+        if let pixels, let own = layer.asset?.image {
+            effects = Self.scaled(effects, by: CGFloat(pixels.width) / transform.size.width
+                                  * layer.transform.size.width / CGFloat(own.width))
         }
         let request = Request(image: image, mask: mask, maskSource: layer.mask?.enabledImage,
                               placement: maskPlacement, transform: transform, effects: effects, sideLimit: sideLimit)
@@ -104,11 +110,18 @@ final class EffectsPreviewCache {
         // shouldn't blink off while the rest of them are rebuilt — so the last preview stands
         // in for those few frames, one effect too many rather than none at all. The same goes for a mask added,
         // removed or replaced on the same pixels: the effects as they were stand in until the new ones are ready.
+        // A preview's pixels change with every setting; the effects around the last ones stand in so they don't blink
+        // off as a slider moves. Those around a preview stand in where they were made, and the layer's own where the
+        // layer is now: their entry keeps the transform it was first made at while the layer is moved.
         let previous = old.flatMap { entry in
-            entry.request.image === image ? entry.result : nil
+            entry.request.image === image ? entry.result : pixels == nil ? nil : entry.result.map {
+                let at = entry.request.image === layer.asset?.image ? layer.transform : entry.request.transform
+                return Result(image: $0.image, inset: $0.inset,
+                              placement: $0.placement ?? LayerEffectsRenderer.placed(at, image: $0.image, inset: $0.inset))
+            }
         } ?? seeds[layer.id]
         entries[layer.id] = Entry(request: request, result: previous)
-        let layerID = layer.id
+        let layerID = layer.id, previewing = pixels != nil
         Self.worker.asyncAfter(deadline: .now() + 0.06) { [weak self] in
             guard !request.isCancelled else { return }
             let result = autoreleasepool { try? Self.render(request) }
@@ -119,7 +132,8 @@ final class EffectsPreviewCache {
                 if let result {
                     self.seeds.removeValue(forKey: layerID)
                     var kept = (self.recent[layerID] ?? []).filter { !$0.request.matches(request) }
-                    kept.append(Entry(request: request, result: result))
+                    // A preview's pixels never come back; kept, they would push out the layer's own, which Cancel puts back.
+                    if !previewing { kept.append(Entry(request: request, result: result)) }
                     self.recent[layerID] = Array(kept.suffix(Self.recentPerLayer))
                 }
                 completion()
@@ -155,11 +169,16 @@ final class EffectsPreviewCache {
         }
         let pixels = factor == 1 ? image : try resized(image, mask: false)
         let mask = try request.mask.map { factor == 1 ? $0 : try resized($0, mask: true) }
-        var effects = request.effects
+        let rendered = try LayerEffectsRenderer.render(pixels, mask: mask, effects: scaled(request.effects, by: factor))
+        return Result(image: rendered.image, inset: rendered.inset)
+    }
+
+    /// Effects for the layer's pixels drawn `factor` times their size.
+    nonisolated private static func scaled(_ effects: LayerEffects, by factor: CGFloat) -> LayerEffects {
+        var effects = effects
         effects.stroke?.size *= factor
         effects.shadow?.distance *= factor
         effects.shadow?.blur *= factor
-        let rendered = try LayerEffectsRenderer.render(pixels, mask: mask, effects: effects)
-        return Result(image: rendered.image, inset: rendered.inset)
+        return effects
     }
 }
