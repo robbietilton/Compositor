@@ -100,6 +100,23 @@ import Testing
         return try Raster(try #require(s.activeLayer?.asset?.image))
     }
 
+    /// The fill as the menu item runs it, then the preview's work again, timed where the preview runs it: off the main
+    /// actor, which other tests running at the same time can hold for many seconds.
+    func timedFill(_ s: EditorSession) async throws -> Duration {
+        let original = s.activeLayer?.asset?.image
+        s.beginFilter(.contentAwareFill)
+        let job = try #require(s.filterEdit?.previewJob)
+        await s.filterEdit?.previewTask?.value
+        #expect(s.filterEdit?.previewError == nil)
+        await s.commitFilter()
+        #expect(s.activeLayer?.asset?.image !== original)
+        return try await Task.detached(priority: .userInitiated) {
+            let start = ContinuousClock.now
+            _ = try PixelFilter.run(job)
+            return ContinuousClock.now - start
+        }.value
+    }
+
     /// How far each pixel of the hole lies from the nearest pixel outside it: a chamfer, a pass down and a pass up.
     static func depth(of hole: [Bool], width: Int, height: Int) -> [Double] {
         var d = hole.map { $0 ? Double.infinity : 0 }
@@ -148,22 +165,24 @@ import Testing
     /// about 0.5 s as tests run. The bound leaves room for a CI machine with three cores and other tests running
     /// beside, and is still a fraction of the old fill's time on any machine.
     @Test func fillsTwelveMegapixelsQuickly() async throws {
-        let image = try Self.largeLayer()
-        let s = session(image, selecting: Self.largeHole.path)
-        s.beginFilter(.contentAwareFill)
-        let job = try #require(s.filterEdit?.previewJob)
-        await s.filterEdit?.previewTask?.value
-        #expect(s.filterEdit?.previewError == nil)
-        await s.commitFilter()
-        #expect(s.activeLayer?.asset?.image !== image)
-        // The preview's work again, timed where the preview runs it: off the main actor, which other tests running
-        // at the same time can hold for many seconds.
-        let elapsed = try await Task.detached(priority: .userInitiated) {
-            let start = ContinuousClock.now
-            _ = try PixelFilter.run(job)
-            return ContinuousClock.now - start
-        }.value
+        let elapsed = try await timedFill(session(try Self.largeLayer(), selecting: Self.largeHole.path))
         report("12 MP layer, 1.2 MP hole: \(elapsed)")
+        #expect(elapsed < .seconds(5), "Took \(elapsed)")
+    }
+
+    /// Selections that leave the fill little to search: all but a few rows at the foot of a layer, where a random
+    /// source used to be found by walking the layer to the next one, once for every patch; and most of a long, thin
+    /// layer, which can't be halved, where the first search looked as far around its best guess as it stepped. On an
+    /// M1 Max these took 15 s and 10 s, where the old fill took a quarter of a second; now about half a second.
+    @Test(arguments: [(500, 400, CGRect(x: 0, y: 0, width: 500, height: 390)),
+                      (6000, 54, CGRect(x: 500, y: 12, width: 5000, height: 30))])
+    func fillsSparseSourcesQuickly(width: Int, height: Int, selection: CGRect) async throws {
+        let layer = Raster(width: width, height: height) { x, y in
+            let v = 128 + 40 * Self.grain(x, y, 13)
+            return (v, v, v)
+        }
+        let elapsed = try await timedFill(session(try layer.image(), selecting: CGPath(rect: selection, transform: nil)))
+        report("\(width) × \(height) layer, \(Int(selection.width)) × \(Int(selection.height)) selected: \(elapsed)")
         #expect(elapsed < .seconds(5), "Took \(elapsed)")
     }
 
@@ -257,31 +276,90 @@ import Testing
         #expect(whole >= 0.85 && core >= 0.85, "Correlation \(whole), \(core) deep inside, against the layer's own \(own)")
     }
 
-    /// Gray grain, with an orange disc a few pixels beside the hole and an orange band along the layer's foot, as a
-    /// dog lies elsewhere in a photo: none of either comes into the fill, nor does the disc tint the gray next to it.
-    @Test func fillTakesNothingFromObjectsAround() async throws {
-        let width = 640, height = 480, gap = 6.0, radius = 70.0
+    /// Gray grain, with an orange disc beside the hole and an orange band along the layer's foot, as a dog lies
+    /// elsewhere in a photo. A few pixels off, none of either comes into the fill, nor does the disc tint the gray next
+    /// to it. Touching the hole, the disc may carry on a little way into it, as it would, but no farther: the light at
+    /// the hole's edge is read past it, and the gray beside it stays gray.
+    @Test(arguments: [6.0, 0.0])
+    func fillTakesNothingFromObjectsAround(gap: Double) async throws {
+        let width = 640, height = 480, radius = 70.0
         let hole = Ellipse(cx: 300, cy: 240, a: 150, b: 100, degrees: 0)
         let ox = hole.cx + hole.a + gap + radius, oy = hole.cy
-        func isOrange(_ x: Int, _ y: Int) -> Bool {
+        func fromDisc(_ x: Int, _ y: Int) -> Double {
             let dx = Double(x) + 0.5 - ox, dy = Double(y) + 0.5 - oy
-            return dx * dx + dy * dy <= radius * radius || y >= height - 60
+            return (dx * dx + dy * dy).squareRoot() - radius
         }
         let truth = Raster(width: width, height: height) { x, y in
             let g = Self.grain(x, y, 5)
-            if isOrange(x, y) { return (225 + 20 * g, 120 + 20 * g, 45 + 15 * g) }
+            if fromDisc(x, y) <= 0 || y >= height - 60 { return (225 + 20 * g, 120 + 20 * g, 45 + 15 * g) }
             return (128 + 40 * g, 128 + 40 * g, 128 + 40 * g)
         }
         let result = try await fill(session(try truth.image(), selecting: hole.path))
-        var orange = 0, warmth = 0.0, near = 0
+        var orange = 0, farthest = 0.0, warmth = 0.0, near = 0
         for y in 0..<height { for x in 0..<width where hole.contains(x, y) {
             let p = result.pixel(x, y)
-            if p.r - p.b > 40 { orange += 1 }
-            let dx = Double(x) + 0.5 - ox, dy = Double(y) + 0.5 - oy
-            if (dx * dx + dy * dy).squareRoot() <= radius + 40 { warmth += p.r - p.b; near += 1 }
+            if p.r - p.b > 40 { orange += 1; farthest = max(farthest, fromDisc(x, y)) }
+            if fromDisc(x, y) <= 40 { warmth += p.r - p.b; near += 1 }
         } }
-        report("\(orange) orange pixels; red less blue near the disc \(warmth / Double(near))")
-        #expect(orange == 0, "\(orange) orange pixels in the fill")
-        #expect(abs(warmth / Double(near)) <= 3, "Red less blue \(warmth / Double(near)) near the disc, where the layer is gray")
+        let tint = warmth / Double(near)
+        report("\(orange) orange pixels, the farthest \(farthest) px from the disc; red less blue near the disc \(tint)")
+        if gap > 0 {
+            #expect(orange == 0, "\(orange) orange pixels in the fill")
+            #expect(abs(tint) <= 3, "Red less blue \(tint) near the disc, where the layer is gray")
+        } else {
+            #expect(farthest <= 16, "Orange \(farthest) px from the disc")
+            #expect(abs(tint) <= 12, "Red less blue \(tint) near the disc, where the layer is gray")
+        }
+    }
+
+    /// A selection past the layer's edge with clear canvas between: the layer grows to cover it, and the fill reaches
+    /// across the clear pixels to the layer's own light, rather than starting from black, which left it 30 levels
+    /// or more too dark. The clear pixels between stay clear.
+    @Test func fillReachesAcrossClearPixels() async throws {
+        let layer = Raster(width: 800, height: 600) { x, y in
+            let v = 128 + 40 * Self.grain(x, y, 17)
+            return (v, v, v)
+        }
+        let s = EditorSession()
+        s.createDocument(width: 1000, height: 800)
+        let image = try layer.image()
+        s.insert(ImportedImage(image: image, thumbnail: image, name: "Layer"))
+        // The layer lies centered, from 100 to 900 across: the selection starts 24 px past its right edge.
+        s.applySelection(CGPath(rect: CGRect(x: 924, y: 100, width: 76, height: 600), transform: nil), mode: .replace, name: "Select")
+        let result = try await fill(s)
+        #expect(result.width == 900 && result.height == 600)
+        guard result.width == 900 else { return }
+        var fill = 0.0, own = 0.0, opaque = 0, clear = 0
+        for y in 0..<600 {
+            for x in 0..<800 { own += layer.luma(x, y) }
+            for x in 824..<900 { fill += result.luma(x, y); opaque += result.bytes[(y * 900 + x) * 4 + 3] == 255 ? 1 : 0 }
+            for x in 800..<824 { clear += result.bytes[(y * 900 + x) * 4 + 3] == 0 ? 1 : 0 }
+        }
+        fill /= 76 * 600; own /= 800 * 600
+        report(String(format: "Fill %.1f, the layer %.1f", fill, own))
+        #expect(abs(fill - own) <= 4, "Fill \(fill) against the layer's \(own)")
+        #expect(opaque == 76 * 600 && clear == 24 * 600, "\(opaque) of the fill opaque, \(clear) of the gap clear")
+    }
+
+    /// Layers too thin, or borders too narrow, for a whole patch to fit: a strip 6 px tall, a 5 px frame round a
+    /// selection, a 4 px square. The fill goes pixel by pixel there, as it used to, rather than refusing with advice
+    /// to make the selection smaller, which can't help. What it puts there comes from the layer: red is gone.
+    @Test(arguments: [(300, 6, CGRect(x: 100, y: 2, width: 100, height: 2)),
+                      (200, 150, CGRect(x: 5, y: 5, width: 190, height: 140)),
+                      (4, 4, CGRect(x: 1, y: 1, width: 1, height: 1))])
+    func fillsThinLayers(width: Int, height: Int, selection: CGRect) async throws {
+        let layer = Raster(width: width, height: height) { x, y in
+            if selection.contains(CGPoint(x: Double(x) + 0.5, y: Double(y) + 0.5)) { return (255, 0, 0) }
+            let g = Self.grain(x, y, 19)
+            return (90 + 30 * g, 140 + 20 * g, 200 + 10 * g)
+        }
+        let result = try await fill(session(try layer.image(), selecting: CGPath(rect: selection, transform: nil)))
+        var outside = 0
+        for y in 0..<height { for x in 0..<width where selection.contains(CGPoint(x: Double(x) + 0.5, y: Double(y) + 0.5)) {
+            let p = result.pixel(x, y)
+            if !(p.r <= 121 && p.g >= 119 && p.b >= 189) || result.bytes[(y * width + x) * 4 + 3] != 255 { outside += 1 }
+        } }
+        report("\(outside) pixels unlike the layer")
+        #expect(outside == 0, "\(outside) pixels unlike the layer")
     }
 }
