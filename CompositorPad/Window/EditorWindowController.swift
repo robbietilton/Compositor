@@ -1429,7 +1429,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc private func escapeKey(_ command: UIKeyCommand) {
         if let editor = presentedViewController as? AdjustmentEditorController {
             // A color being picked first: put back, as the Mac picker's Cancel puts it back.
-            if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
+            if editor.isPicking {
                 editor.session.closeColorPicker(commit: false)
                 return
             }
@@ -1458,7 +1458,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc private func returnKey(_ sender: Any?) {
         if let editor = presentedViewController as? AdjustmentEditorController {
             // A color being picked first: kept, as the Mac picker's OK keeps it.
-            if editor.session.colorPicker.map({ AdjustmentEditorController.picks($0.target) }) == true {
+            if editor.isPicking {
                 editor.session.closeColorPicker(commit: true)
                 return
             }

@@ -1201,4 +1201,84 @@ import UIKit
         #expect(controller.presentedViewController == nil && session.colorPicker == nil)
         if let url { try? FileManager.default.removeItem(at: url) }
     }
+
+    /// Picks `color` in the picker `editor` shows, as a finger does.
+    private func pick(_ color: UIColor, over editor: UIViewController) throws {
+        let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        picker.delegate?.colorPickerViewController?(picker, didSelect: color, continuously: false)
+    }
+
+    /// Puts away the popover `controller` shows as a tap off it does: UIKit asks the popover's delegate whether it may,
+    /// takes it away and tells the delegate once it's gone; what it shows, as the picker, hears nothing of it. Nothing
+    /// keeps it after, as nothing does after a finger.
+    private func tapOff(over controller: UIViewController) async throws {
+        weak var shown: UIViewController?
+        func putAway() async throws {
+            let presented = try #require(controller.presentedViewController)
+            shown = presented
+            let popover = try #require(presented.presentationController)
+            let delegate = popover.delegate
+            guard !presented.isModalInPresentation, delegate?.presentationControllerShouldDismiss?(popover) != false else {
+                delegate?.presentationControllerDidAttemptToDismiss?(popover)
+                return
+            }
+            delegate?.presentationControllerWillDismiss?(popover)
+            await withCheckedContinuation { done in presented.dismiss(animated: false) { done.resume() } }
+            delegate?.presentationControllerDidDismiss?(popover)
+        }
+        try await putAway()
+        try await eventually { shown == nil }
+        #expect(shown == nil)
+    }
+
+    /// A tap off the picker puts it away as its OK, the color kept, as the system's picker has no OK button; a setting
+    /// changed after, as a slider dragged, doesn't bring it back, and the swatch opens it again on the color kept.
+    /// Vignette's swatch, Gradient Map's and Dither's alike.
+    @Test func aTapOffThePickerKeepsItsColorAndItStaysAway() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let red = AdjustmentColor(PaletteColor(red: 1, green: 0, blue: 0))
+        let swatches: [(kind: FilterKind, label: String, color: (FilterSettings) -> AdjustmentColor)] = [
+            (.vignette, "Color", \.vignetteColor), (.gradientMap, "Highlights color", \.gradientMap.highlights),
+            (.dither, "Light color", \.dither.light),
+        ]
+        for (kind, label, color) in swatches {
+            #expect(choose(filterCommand(kind), in: controller))
+            let editor = try await filterEditor(over: controller)
+            if kind == .dither {
+                try popUp("Colors", in: editor).onChoose(DitherColors.twoColors.rawValue)
+                editor.updatePropertiesIfNeeded()
+            }
+            let swatch = try #require(views(SwatchButton.self, in: editor.view).first { $0.accessibilityLabel == label })
+            swatch.sendActions(for: .primaryActionTriggered)
+            try await eventually { editor.presentedViewController is UIColorPickerViewController }
+            try pick(.red, over: editor)
+            try await tapOff(over: editor)
+            #expect(session.colorPicker == nil, "\(kind)")
+            #expect(session.filterEdit.map { color($0.settings) } == red, "\(kind)")
+
+            if kind == .gradientMap {
+                let reverse = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Reverse" })
+                reverse.isSelected = true
+                reverse.sendActions(for: .primaryActionTriggered)
+                #expect(session.filterEdit?.settings.gradientMap.reversed == true)
+            } else {
+                try slide(0, to: 3, in: editor, logarithmic: false)
+            }
+            editor.updatePropertiesIfNeeded()
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(editor.presentedViewController == nil, "\(kind)")
+            #expect(session.colorPicker == nil && session.filterEdit.map { color($0.settings) } == red, "\(kind)")
+
+            swatch.sendActions(for: .primaryActionTriggered)
+            try await eventually { editor.presentedViewController is UIColorPickerViewController }
+            let again = try #require(editor.presentedViewController as? UIColorPickerViewController, "\(kind)")
+            #expect(SwatchButton.paletteColor(again.selectedColor).map { AdjustmentColor($0) } == red, "\(kind)")
+            try press(UIKeyCommand.inputEscape, in: controller)
+            try await eventually { editor.presentedViewController == nil }
+            #expect(session.filterEdit.map { color($0.settings) } == red, "\(kind)")
+            session.cancelFilter()
+            try await eventually { controller.presentedViewController == nil }
+        }
+    }
 }

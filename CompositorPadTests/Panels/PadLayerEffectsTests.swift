@@ -260,6 +260,101 @@ import UIKit
         try await closes(controller)
     }
 
+    /// Picks `color` in the picker `editor` shows, as a finger does.
+    private func pick(_ color: UIColor, over editor: UIViewController) throws {
+        let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        picker.delegate?.colorPickerViewController?(picker, didSelect: color, continuously: false)
+    }
+
+    /// Puts away the popover `controller` shows as a tap off it does: UIKit asks the popover's delegate whether it may,
+    /// takes it away and tells the delegate once it's gone; what it shows, as the picker, hears nothing of it. Nothing
+    /// keeps it after, as nothing does after a finger.
+    private func tapOff(over controller: UIViewController) async throws {
+        weak var shown: UIViewController?
+        func putAway() async throws {
+            let presented = try #require(controller.presentedViewController)
+            shown = presented
+            let popover = try #require(presented.presentationController)
+            let delegate = popover.delegate
+            guard !presented.isModalInPresentation, delegate?.presentationControllerShouldDismiss?(popover) != false else {
+                delegate?.presentationControllerDidAttemptToDismiss?(popover)
+                return
+            }
+            delegate?.presentationControllerWillDismiss?(popover)
+            await withCheckedContinuation { done in presented.dismiss(animated: false) { done.resume() } }
+            delegate?.presentationControllerDidDismiss?(popover)
+        }
+        try await putAway()
+        try await eventually { shown == nil }
+        #expect(shown == nil)
+    }
+
+    /// A tap off the picker puts it away as its OK, the color kept, as the system's picker has no OK button; a slider
+    /// dragged after doesn't bring it back, and the swatch opens it again on the color kept. On a text layer's Outer
+    /// Glow, and on an image layer's Stroke.
+    @Test(arguments: [LayerEffectKind.outerGlow, .stroke])
+    func aTapOffThePickerKeepsItsColorAndItStaysAway(_ kind: LayerEffectKind) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        if kind == .outerGlow {
+            session.selectTool(.type)
+            session.beginText(at: CGPoint(x: 20, y: 20), newLayer: true)
+            session.textDraft?.style.content = "Glow"
+            #expect(session.finishText())
+            try #require(session.activeLayer?.liveText != nil)
+            session.selectTool(.move)
+        }
+        let id = try #require(session.activeLayerID)
+        try add(kind, in: controller)
+        let editor = try await effectEditor(for: kind, over: controller)
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        swatch.sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        try await tapOff(over: editor)
+        let red = PaletteColor(red: 1, green: 0, blue: 0)
+        func color() -> PaletteColor? { session.document?.layers.first { $0.id == id }?.effects?.color(kind) }
+        #expect(session.colorPicker == nil && color() == red)
+
+        try slide(views(UISlider.self, in: try row("Size", in: editor)).first, to: 9)
+        editor.updatePropertiesIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(editor.presentedViewController == nil)
+        #expect(session.colorPicker == nil && color() == red && swatch.color == red)
+
+        swatch.sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        let again = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        #expect(SwatchButton.paletteColor(again.selectedColor) == red)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(color() == red)
+        try press("\r", in: controller)
+        try await closes(controller)
+        #expect(color() == red && session.effectsEditing == nil)
+    }
+
+    /// Something else the window shows while the panel's picker is up (the rail's color picker stands in for it here, as
+    /// a project opened from Files would) takes the place of both, the picking OK'd with the panel: the color kept, and
+    /// no picking left behind.
+    @Test func whatElseTheWindowShowsOKsThePicking() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        let rail = try #require(views(ToolRailView.self, in: controller.view).first)
+        rail.chooseColor(background: false)
+        try await eventually { controller.presentedViewController is UIColorPickerViewController }
+        #expect(controller.presentedViewController is UIColorPickerViewController)
+        #expect(session.colorPicker == nil && session.effectsEditing == nil)
+        #expect(session.activeLayer?.effects?.stroke?.color == PaletteColor(red: 1, green: 0, blue: 0))
+        controller.dismiss(animated: false)
+        try await closes(controller)
+    }
+
     // MARK: Ending
 
     /// Escape cancels the panel, taking a new effect away again; Return keeps what's set, as the Mac's Cancel and OK.

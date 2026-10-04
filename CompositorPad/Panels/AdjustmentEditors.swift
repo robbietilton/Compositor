@@ -26,7 +26,7 @@ enum AdjustmentEditors {
 /// under it, and Cancel and OK apart along the foot, under a line. The controls scroll when the editor is given less room
 /// than they need, as the keyboard or a short window gives it. Editors stay open until OK or Cancel; the canvas behind
 /// them can still be moved and zoomed.
-class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerDelegate {
+class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
     let session: EditorSession
     let content = UIStackView()
     /// Notes under the row with Preview, as each Mac panel has its own.
@@ -99,11 +99,14 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
         }
     }
 
+    /// Whether one of the editor's colors is being picked.
+    var isPicking: Bool { session.colorPicker.map { Self.picks($0.target) } == true }
+
     /// Shows the system's color picker over the editor while one of its colors is being picked, as the Mac's opens on a
-    /// swatch, and takes it away when the picking ends: by Escape or Return, or the edit's ending, which ends it too.
+    /// swatch, and takes it away when the picking ends: by Escape or Return, or the edit's ending, which ends it too. A
+    /// tap off the picker ends it, as its OK.
     private func followColorPicker() {
-        let picking = session.colorPicker.map { Self.picks($0.target) } == true
-        if picking, shownPicker == nil, presentedViewController == nil, let colorPicker = session.colorPicker {
+        if isPicking, shownPicker == nil, presentedViewController == nil, let colorPicker = session.colorPicker {
             let picker = UIColorPickerViewController()
             picker.supportsAlpha = false
             let color = colorPicker.original
@@ -111,9 +114,10 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
             picker.delegate = self
             picker.modalPresentationStyle = .popover
             picker.popoverPresentationController?.sourceView = pickerSource ?? view
+            picker.presentationController?.delegate = self
             present(picker, animated: true)
             shownPicker = picker
-        } else if !picking, let picker = shownPicker {
+        } else if !isPicking, let picker = shownPicker {
             shownPicker = nil
             picker.dismiss(animated: true)
         }
@@ -129,10 +133,16 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
         session.previewEffectColor()
     }
 
-    /// The picker put away with a tap off it, which is how the system's says OK: the color stays.
+    /// The picker put away with a tap off it, which is how the system's says OK, having no OK button: the color stays.
+    /// UIKit tells the popover's delegate of that, not the picker's.
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        if isPicking { session.closeColorPicker(commit: true) }
+    }
+
+    /// The picker put away with its own close button, as it has where it's shown as a sheet: the color stays, as with a
+    /// tap off it.
     func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
-        guard session.colorPicker.map({ Self.picks($0.target) }) == true else { return }
-        session.closeColorPicker(commit: true)
+        if isPicking { session.closeColorPicker(commit: true) }
     }
 
     /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
