@@ -944,6 +944,47 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// With Preview off, a changed setting is still worked out and OK waits for it, as on the Mac: it used to stop the
+    /// mask being worked out, so OK stayed enabled but did nothing. Turning Preview off leaves a mask that's ready, and a
+    /// slider sending its value again leaves the one to work out next.
+    @Test func aChangeWithPreviewOffIsStillWorkedOut() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.removeBackground), in: controller)
+        let editor = try await filterEditor(over: controller)
+        func says(_ text: String) -> Bool { views(UILabel.self, in: editor.view).contains { $0.text == text && !$0.isHidden } }
+        let edit = try #require(session.filterEdit)
+        // The simulator has no Vision to find a subject with, so a mask stands in for the one it would find.
+        try await eventually { !edit.preparing }
+        let found = try #require(session.activeLayer?.asset?.image)
+        edit.previewError = nil
+        edit.preparedPreview = found
+        edit.preparedSettings = edit.settings
+        let preview = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Preview" })
+        preview.sendActions(for: .primaryActionTriggered)
+        #expect(!edit.preview)
+        #expect(edit.preparedPreview === found && !edit.preparing)
+        editor.updatePropertiesIfNeeded()
+        #expect(try okEnabled(editor))
+
+        // Advanced, as the segments choose it.
+        let quality = try #require(views(UISegmentedControl.self, in: editor.view).first)
+        quality.selectedSegmentIndex = 1
+        quality.sendActions(for: .valueChanged)
+        #expect(edit.settings.backgroundQuality == .advanced && !edit.preview)
+        #expect(edit.preparing)
+        editor.updatePropertiesIfNeeded()
+        #expect(says("Working…"))
+        #expect(try !okEnabled(editor))
+        // Refine moves while that's worked out, and its slider sends the value again: it's worked out next.
+        try slide(0, to: 4, in: editor, logarithmic: false)
+        try slide(0, to: 4, in: editor, logarithmic: false)
+        #expect(edit.settings.refineEdges == 4 && edit.pending?.settings.refineEdges == 4)
+        try await eventually { !edit.preparing }
+        session.cancelFilter()
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     // MARK: Vignette and colors
 
     /// Filter › Vignette… frames an empty layer too, as on the Mac, filling the canvas.

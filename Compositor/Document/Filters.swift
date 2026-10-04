@@ -518,6 +518,7 @@ extension EditorSession {
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
         guard let edit = filterEdit, !edit.committing else { return }
+        let changed = settings.normalized != edit.settings
         edit.settings = settings.normalized
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
@@ -527,8 +528,11 @@ extension EditorSession {
         }
         if previewAdjustmentEditing(preview: preview) { return }
         if edit.kind.isAutomatic, edit.preparedPreview != nil, edit.preparedSettings == edit.settings { brushRevision += 1; return }
-        guard preview else {
-            edit.pending = nil; edit.preparedPreview = nil; brushRevision += 1
+        // OK waits for an automatic filter's preparation, so with Preview off a changed setting is still prepared, and
+        // an unchanged one leaves what is prepared or being prepared; the canvas just doesn't show it.
+        guard preview || (edit.kind.isAutomatic && changed) else {
+            if !edit.kind.isAutomatic { edit.pending = nil; edit.preparedPreview = nil }
+            brushRevision += 1
             return
         }
         edit.pending = edit.previewJob
