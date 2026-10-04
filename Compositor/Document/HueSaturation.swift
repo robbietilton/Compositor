@@ -260,8 +260,9 @@ nonisolated struct HueSaturationSettings: Equatable, Sendable, Codable {
     /// Which range the sliders and spectrum edit.
     var range: ColorRange = .master
     var colorize = false
-    /// Applies the selected range to everything *outside* its band instead.
-    var invertRange = false
+    /// The color range applied to everything *outside* its band instead, if any; never Master, which has no outside.
+    /// It stays with that range while others are chosen to edit.
+    var invertedRange: ColorRange?
     var adjustments: [ColorRange: RangeAdjustment] = [:]
     var bands: [ColorRange: HueBand] = Dictionary(uniqueKeysWithValues: ColorRange.allCases.map { ($0, $0.defaultBand) })
 
@@ -289,6 +290,36 @@ nonisolated struct HueSaturationSettings: Equatable, Sendable, Codable {
         get { bands[range] ?? range.defaultBand }
         set { bands[range] = newValue }
     }
+    /// "Apply outside this range instead", for the selected range.
+    var invertRange: Bool {
+        get { invertedRange == range }
+        set {
+            if newValue && range != .master { invertedRange = range }
+            else if !newValue && invertedRange == range { invertedRange = nil }
+        }
+    }
+
+    // Saved as before: one `invertRange` switch, for the saved `range`. So the file has room for one inverted range,
+    // saved as `range`, which is also where the panel opens again.
+    private enum CodingKeys: String, CodingKey { case range, colorize, invertRange, adjustments, bands }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        range = try container.decode(ColorRange.self, forKey: .range)
+        colorize = try container.decode(Bool.self, forKey: .colorize)
+        invertedRange = try container.decode(Bool.self, forKey: .invertRange) && range != .master ? range : nil
+        adjustments = try container.decode([ColorRange: RangeAdjustment].self, forKey: .adjustments)
+        bands = try container.decode([ColorRange: HueBand].self, forKey: .bands)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(invertedRange ?? range, forKey: .range)
+        try container.encode(colorize, forKey: .colorize)
+        try container.encode(invertedRange != nil, forKey: .invertRange)
+        try container.encode(adjustments, forKey: .adjustments)
+        try container.encode(bands, forKey: .bands)
+    }
 
     /// Photoshop's starting point when Colorize is switched on.
     static let colorizeStart = HueSaturationSettings(hue: 0, saturation: 25, lightness: 0, colorize: true)
@@ -298,7 +329,7 @@ nonisolated struct HueSaturationSettings: Equatable, Sendable, Codable {
     func weight(of colorRange: ColorRange, hue: Double) -> Double {
         guard colorRange != .master else { return 1 }
         let weight = (bands[colorRange] ?? colorRange.defaultBand).weight(of: hue)
-        return invertRange && colorRange == range ? 1 - weight : weight
+        return colorRange == invertedRange ? 1 - weight : weight
     }
 }
 

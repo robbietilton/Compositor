@@ -10,6 +10,8 @@ struct HueSaturationSheet: View {
     private var hueRange: ClosedRange<Double> { current.colorize ? 0...360 : -180...180 }
     private var saturationRange: ClosedRange<Double> { current.colorize ? 0...100 : -100...100 }
     private var showsSpectrum: Bool { current.range != .master && !current.colorize }
+    /// A range other than the selected one that applies outside its band.
+    private var otherInvertedRange: ColorRange? { current.invertedRange.flatMap { $0 == current.range ? nil : $0 } }
 
     private var settings: Binding<HueSaturationSettings> {
         Binding(get: { current },
@@ -37,7 +39,11 @@ struct HueSaturationSheet: View {
                    track: HueSaturationSettings.lightnessTrack, reset: current.resetValues.lightness)
             if showsSpectrum {
                 SpectrumEditor(settings: settings)
+                // One range at a time: turning it on here would take it off the other.
                 Toggle("Apply outside this range instead", isOn: settings.invertRange)
+                    .disabled(otherInvertedRange != nil)
+                    .help(otherInvertedRange.map { "\($0.rawValue) applies outside its range, and only one range can at a time" }
+                          ?? "Adjust every color outside this range instead of the colors in it")
             }
             HStack(spacing: 18) {
                 Toggle("Colorize", isOn: Binding(get: { current.colorize }, set: { colorize in

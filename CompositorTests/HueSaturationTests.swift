@@ -208,6 +208,69 @@ struct HueSaturationTests {
         #expect(near(try await pixel(session, x: 30, y: 5), [0, 0, 0, 255]))  // Everything else → black.
     }
 
+    /// Waits out the preview render and any request queued behind it.
+    private func settle(_ session: EditorSession) async {
+        while let task = session.hueSaturationTask { await task.value }
+    }
+
+    /// "Apply outside this range instead" belongs to the range it was turned on for: choosing another range in the
+    /// menu to edit next, or Master, changes nothing on the canvas, in the result or in the saved settings.
+    @Test func invertStaysWithItsRangeWhenAnotherIsChosen() async throws {
+        let session = try redAndBlue()
+        session.beginHueSaturation()
+        let edit = try #require(session.hueSaturation)
+        // As the panel's controls do: choose Reds, take its lightness to −100, apply it outside its range.
+        var settings = edit.settings
+        settings.range = .reds
+        session.updateHueSaturation(settings, preview: true)
+        settings.lightness = -100
+        session.updateHueSaturation(settings, preview: true)
+        settings.invertRange = true
+        session.updateHueSaturation(settings, preview: true)
+        await settle(session)
+        #expect(near(try previewPixel(edit, x: 5, y: 5), [255, 0, 0, 255])) // Red, inside Reds: untouched.
+        #expect(near(try previewPixel(edit, x: 30, y: 5), [0, 0, 0, 255]))  // Blue, outside Reds: black.
+
+        for range in [ColorRange.greens, .master] {
+            settings = edit.settings
+            settings.range = range
+            session.updateHueSaturation(settings, preview: true)
+            await settle(session)
+            #expect(near(try previewPixel(edit, x: 5, y: 5), [255, 0, 0, 255]), "after choosing \(range.rawValue)")
+            #expect(near(try previewPixel(edit, x: 30, y: 5), [0, 0, 0, 255]), "after choosing \(range.rawValue)")
+        }
+        // Greens' toggle is off, and Reds' is still on when Reds is chosen again.
+        settings = edit.settings
+        settings.range = .greens
+        #expect(!settings.invertRange)
+        settings.range = .reds
+        #expect(settings.invertRange)
+
+        // A Hue/Saturation layer keeps it through the project file, in the keys and meaning older builds already read:
+        // the switch inverts the saved range.
+        settings.range = .master
+        let data = try JSONEncoder().encode(settings)
+        let keys = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(keys.keys) == ["range", "colorize", "invertRange", "adjustments", "bands"])
+        #expect(keys["range"] as? String == "Reds" && keys["invertRange"] as? Bool == true)
+        let reopened = try JSONDecoder().decode(HueSaturationSettings.self, from: data)
+        #expect(reopened.weight(of: .reds, hue: 240) == 1 && reopened.weight(of: .reds, hue: 0) == 0)
+        // A file saved on Master with the switch on inverted nothing, and still doesn't once a range is chosen.
+        var onMaster = keys
+        onMaster["range"] = "Master"
+        var master = try JSONDecoder().decode(HueSaturationSettings.self,
+                                              from: try JSONSerialization.data(withJSONObject: onMaster))
+        #expect(master.invertedRange == nil)
+        master.range = .reds
+        #expect(!master.invertRange && master.weight(of: .reds, hue: 240) == 0)
+
+        // OK with Master still chosen renders Reds still applied outside its range.
+        #expect(edit.settings.range == .master)
+        await session.commitHueSaturation()
+        #expect(near(try await pixel(session, x: 5, y: 5), [255, 0, 0, 255]))
+        #expect(near(try await pixel(session, x: 30, y: 5), [0, 0, 0, 255]))
+    }
+
     @Test func slidersEditTheSelectedRangeAndTheAfterBarFollowsHueShifts() {
         var settings = HueSaturationSettings()
         settings.hue = 30                       // Master.
