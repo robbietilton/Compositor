@@ -90,6 +90,8 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     /// The swatch the color picker points at.
     weak var pickerSource: UIView?
     private weak var shownPicker: UIColorPickerViewController?
+    /// The picking the picker was last shown for, which it's shown for once.
+    private weak var shownPicking: ColorPickerState?
 
     /// Whether the editor picks colors for `target`: a filter's, an adjustment's or an effect's.
     static func picks(_ target: ColorPickerTarget) -> Bool {
@@ -107,6 +109,15 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     /// tap off the picker ends it, as its OK.
     private func followColorPicker() {
         if isPicking, shownPicker == nil, presentedViewController == nil, let colorPicker = session.colorPicker {
+            // Once for each picking: a picker gone without a word to the editor, however it went, said OK as a tap off it
+            // does, rather than coming back. Ended once the update is over.
+            guard shownPicking !== colorPicker else {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.session.colorPicker === colorPicker, self.shownPicker == nil else { return }
+                    self.session.closeColorPicker(commit: true)
+                }
+                return
+            }
             let picker = UIColorPickerViewController()
             picker.supportsAlpha = false
             let color = colorPicker.original
@@ -117,6 +128,7 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
             picker.presentationController?.delegate = self
             present(picker, animated: true)
             shownPicker = picker
+            shownPicking = colorPicker
         } else if !isPicking, let picker = shownPicker {
             shownPicker = nil
             picker.dismiss(animated: true)

@@ -334,6 +334,40 @@ import UIKit
         #expect(color() == red && session.effectsEditing == nil)
     }
 
+    /// A picker gone without a word to the editor, however it went, doesn't come back either: the next change ends the
+    /// picking as a tap off it does, the color kept, and the swatch opens it again on that color.
+    @Test func aPickerGoneWithoutAWordStaysAway() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let swatch = try #require(views(SwatchButton.self, in: editor.view).first)
+        swatch.sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        weak let shown = editor.presentedViewController
+        await withCheckedContinuation { done in editor.dismiss(animated: false) { done.resume() } }
+        try await eventually { shown == nil }
+        try #require(shown == nil)
+
+        try slide(views(UISlider.self, in: try row("Size", in: editor)).first, to: 9)
+        editor.updatePropertiesIfNeeded()
+        try await eventually { session.colorPicker == nil }
+        try await Task.sleep(for: .milliseconds(300))
+        let red = PaletteColor(red: 1, green: 0, blue: 0)
+        #expect(editor.presentedViewController == nil)
+        #expect(session.colorPicker == nil && session.activeLayer?.effects?.stroke?.color == red)
+
+        swatch.sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        let again = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        #expect(SwatchButton.paletteColor(again.selectedColor) == red)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await eventually { editor.presentedViewController == nil }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
     /// Something else the window shows while the panel's picker is up (the rail's color picker stands in for it here, as
     /// a project opened from Files would) takes the place of both, the picking OK'd with the panel: the color kept, and
     /// no picking left behind.
