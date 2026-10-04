@@ -167,6 +167,28 @@ import Testing
         #expect(elapsed < .seconds(5), "Took \(elapsed)")
     }
 
+    /// Cancel stops the fill where it is, rather than leaving it to run on to the end unseen: the preview's work sees
+    /// its task cancelled and gives up.
+    @Test func cancelStopsTheFill() async throws {
+        let image = try Self.largeLayer()
+        let s = session(image, selecting: Self.largeHole.path)
+        s.beginFilter(.contentAwareFill)
+        let job = try #require(s.filterEdit?.previewJob)
+        let preview = try #require(s.filterEdit?.previewTask)
+        s.cancelFilter()
+        await preview.value
+        #expect(s.filterEdit == nil && s.activeLayer?.asset?.image === image)
+        let work = Task.detached(priority: .userInitiated) { () -> (Result<CGImage, any Error>, Duration) in
+            let start = ContinuousClock.now
+            let result = Result { try PixelFilter.run(job) }
+            return (result, ContinuousClock.now - start)
+        }
+        work.cancel()
+        let (result, elapsed) = await work.value
+        report("Cancelled work stopped after \(elapsed)")
+        #expect(throws: CancellationError.self) { try result.get() }
+    }
+
     /// Light falling off across the layer: the fill's tone near its edge matches what it hides, all the way round,
     /// and keeps changing across the hole as the light does, to within a few levels where the light spans 150.
     @Test func fillKeepsTheLightAcrossTheHole() async throws {

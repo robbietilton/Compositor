@@ -576,7 +576,8 @@ static void vote(Level *l) {
     measure_targets(l);
 }
 
-int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms, int w, int h) {
+int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms, int w, int h, int (^cancelled)(void)) {
+    #define STOP_IF_CANCELLED() do { if (cancelled && cancelled()) { result = -2; goto done; } } while (0)
     int x0 = w, y0 = h, x1 = -1, y1 = -1;
     for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) if (mask[y * ms + x]) {
         if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
@@ -604,6 +605,7 @@ int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms,
             l->state[y * l->w + x] = state;
             holes += state == HOLE;
         }
+        STOP_IF_CANCELLED();
         if (!prepare_level(l) || !measure_texture(l)) goto done;
         int everything = rx0 == 0 && ry0 == 0 && rx1 == w - 1 && ry1 == h - 1;
         if ((size_t)l->sourceCount >= (holes < 4096 ? 4096 : holes) || everything) break;
@@ -619,6 +621,7 @@ int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms,
     }
     uint32_t seed = 0x6d2b79f5;
     for (int k = count - 1; k >= 0; --k) {
+        STOP_IF_CANCELLED();
         Level *l = &levels[k];
         size_t cells = (size_t)l->bw * l->bh;
         int coarsest = k == count - 1;
@@ -656,6 +659,7 @@ int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms,
             else if (!search(l, it % 2 ? -1 : 1, radius, seed + (uint32_t)(k * 131 + it) * 7919u)) goto done;
             weigh(l, 0);
             vote(l);
+            STOP_IF_CANCELLED();
         }
     }
     for (int y = 0; y < levels[0].h; ++y) for (int x = 0; x < levels[0].w; ++x) {
@@ -666,6 +670,7 @@ int content_fill(uint8_t *pixels, size_t stride, const uint8_t *mask, size_t ms,
     }
     result = 1;
 done:
+    #undef STOP_IF_CANCELLED
     for (int i = 0; i < MAX_LEVELS; ++i) free_level(&levels[i]);
     return result;
 }

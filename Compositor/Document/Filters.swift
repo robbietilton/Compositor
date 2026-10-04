@@ -546,7 +546,7 @@ extension EditorSession {
         edit.preparing = true
         edit.previewError = nil
         edit.previewTask = Task { @MainActor [weak self, weak edit] in
-            let result = await Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?) in
+            let work = Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?) in
                 do {
                     if job.kind == .cameraRaw {
                         let made = try CameraRawScope.preview(job)
@@ -556,7 +556,9 @@ extension EditorSession {
                 } catch {
                     return (nil, nil, error.localizedDescription)
                 }
-            }.value
+            }
+            // Cancelling the preview reaches the work, so a long Content-Aware Fill stops rather than running on unseen.
+            let result = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
             guard let self, let edit, self.filterEdit === edit, !Task.isCancelled else { return }
             edit.previewTask = nil
             edit.preparing = false
