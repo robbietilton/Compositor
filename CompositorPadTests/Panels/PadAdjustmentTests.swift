@@ -766,6 +766,25 @@ import UIKit
         session.cancelHueSaturation()
     }
 
+    /// Apply outside this range belongs to the range it was turned on for, and only one range can have it, as on the
+    /// Mac: on another range the switch is off and can't be turned on, which would take it off the first.
+    @Test func applyOutsideStaysWithItsRange() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        let invert = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Apply outside this range instead" })
+        invert.isSelected = true
+        invert.sendActions(for: .primaryActionTriggered)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.hueSaturation?.settings.invertedRange == .reds && invert.isSelected && invert.isEnabled)
+        try choose(.greens, in: session, editor: editor)
+        #expect(!invert.isSelected && !invert.isEnabled)
+        #expect(session.hueSaturation?.settings.invertedRange == .reds)
+        try choose(.reds, in: session, editor: editor)
+        #expect(invert.isSelected && invert.isEnabled)
+        session.cancelHueSaturation()
+    }
+
     // MARK: Eyedroppers and targeted adjustment
 
     /// A window with a red layer, and Hue/Saturation open over it.

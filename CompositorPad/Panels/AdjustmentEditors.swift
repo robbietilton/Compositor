@@ -993,6 +993,11 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         targeted.isHidden = settings.colorize
         Self.arm(targeted, session.hueTargeting)
         invert.isSelected = settings.invertRange
+        // One range at a time, as the Mac's: turning it on here would take it off the other.
+        let other = settings.invertedRange.flatMap { $0 == settings.range ? nil : $0 }
+        invert.isEnabled = other == nil
+        invert.toolTip = other.map { "\($0.rawValue) applies outside its range, and only one range can at a time" }
+            ?? "Adjust every color outside this range instead of the colors in it"
         colorize.isSelected = settings.colorize
     }
 }
