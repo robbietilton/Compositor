@@ -242,6 +242,39 @@ import Testing
         #expect(across.allSatisfy { abs($0) <= 4 }, "Columns across the hole off by \(format(across))")
     }
 
+    /// A sky brightening toward the top, the hole cut off by the layer's top edge: the fill carries the light on up to
+    /// that edge as it rises below, rather than leveling off where nothing lies beyond, which left the top of the fill
+    /// 20 levels too dark. The hole is painted red on the layer, so what is measured is what the fill put there.
+    @Test func fillKeepsTheLightUpToTheLayersEdge() async throws {
+        let width = 640, height = 480
+        let hole = Ellipse(cx: 320, cy: 50, a: 170, b: 130, degrees: 0), painted = Ellipse(cx: 320, cy: 50, a: 167, b: 127, degrees: 0)
+        func sky(_ x: Int, _ y: Int) -> (Double, Double, Double) {
+            let light = 70 + 140 * (1 - Double(y) / Double(height - 1)) + 30 * Double(x) / Double(width - 1)
+            let v = light * (1 + 0.08 * Self.grain(x, y, 23))
+            return (v * 0.75, v * 0.85, v)
+        }
+        let truth = Raster(width: width, height: height, color: sky)
+        let layer = Raster(width: width, height: height) { x, y in painted.contains(x, y) ? (255, 0, 0) : sky(x, y) }
+        let result = try await fill(session(try layer.image(), selecting: hole.path))
+        // Along the top edge, 24 rows deep, in columns 40 px wide; and in the band 24 px inside the hole's own edge.
+        var top = [(fill: Double, truth: Double, count: Double)](repeating: (0, 0, 0), count: width / 40)
+        var band = top
+        let inside = (0..<width * height).map { painted.contains($0 % width, $0 / width) }
+        let depth = Self.depth(of: inside, width: width, height: height)
+        for y in 0..<height { for x in 0..<width where inside[y * width + x] {
+            if y < 24 { top[x / 40].fill += result.luma(x, y); top[x / 40].truth += truth.luma(x, y); top[x / 40].count += 1 }
+            else if depth[y * width + x] <= 24 {
+                band[x / 40].fill += result.luma(x, y); band[x / 40].truth += truth.luma(x, y); band[x / 40].count += 1
+            }
+        } }
+        let along = top.filter { $0.count >= 200 }.map { ($0.fill - $0.truth) / $0.count }
+        let edge = band.filter { $0.count >= 200 }.map { ($0.fill - $0.truth) / $0.count }
+        let format = { (values: [Double]) in values.map { String(format: "%+.1f", $0) }.joined(separator: " ") }
+        report("Fill less hidden truth: along the top \(format(along)); along the hole's edge \(format(edge))")
+        #expect(along.allSatisfy { abs($0) <= 4 }, "Along the top off by \(format(along))")
+        #expect(edge.allSatisfy { abs($0) <= 2.5 }, "Along the hole's edge off by \(format(edge))")
+    }
+
     /// Noisy stripes 40 px apart at 30°, the hole across many of them: the fill carries them on where they were, so
     /// it correlates with the hidden stripes as the layer itself does, deep inside the hole as well as at its edge.
     @Test func fillContinuesStripes() async throws {

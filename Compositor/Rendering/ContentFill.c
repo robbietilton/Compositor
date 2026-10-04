@@ -47,6 +47,8 @@ typedef struct {
     int *cost;
     float *weight;
     uint8_t *target;    // per box cell, 3 bytes: the mean color of the patch there as it stands
+    uint8_t *covered;   // per box cell: how many of its patch's pixels it is compared on, all but those off the level
+                        // or transparent
     int8_t *shift;      // per box cell, 3 bytes: what its match is lifted or lowered by in the vote
 } Level;
 
@@ -69,7 +71,7 @@ static int stopped(int (^cancelled)(void)) { return cancelled && cancelled(); }
 
 static void free_level(Level *l) {
     free(l->rgb); free(l->state); free(l->valid); free(l->mean); free(l->sources);
-    free(l->nnf); free(l->cost); free(l->weight); free(l->target); free(l->shift);
+    free(l->nnf); free(l->cost); free(l->weight); free(l->target); free(l->covered); free(l->shift);
     memset(l, 0, sizeof *l);
 }
 
@@ -81,9 +83,24 @@ static int random_source(const Level *l, uint32_t *seed) {
 // What the source centered at s is moved by to stand in for the patch in `cell`: the difference of their mean
 // brightness, up to a limit, and on each channel a little more toward its own mean. Light that changes across the
 // image then doesn't decide which source fits, while a source of another color still won't fit. Rounded to the
-// nearest level: always rounding toward zero, a fill would grow darker with every pass that lifts its sources.
+// nearest level: always rounding toward zero, a fill would grow darker with every pass that lifts its sources. A
+// patch cut short by the level's edge or by clear pixels is compared on part of the source only, so the source's
+// mean is taken over that part: over all of it, the light changing across the source would offset the lift.
 UNCOUNTED static inline void bias_for(const Level *l, size_t cell, int s, int bias[3]) {
     const uint8_t *t = l->target + cell * 3, *m = l->mean + (size_t)s * 3;
+    uint8_t part[3];
+    if (l->covered[cell] < (2 * RADIUS + 1) * (2 * RADIUS + 1)) {
+        int w = l->w, px = l->bx + (int)(cell % l->bw), py = l->by + (int)(cell / l->bw), sum[3] = {0, 0, 0};
+        for (int dy = -RADIUS; dy <= RADIUS; ++dy) for (int dx = -RADIUS; dx <= RADIUS; ++dx) {
+            int tx = px + dx, ty = py + dy;
+            if (tx < 0 || ty < 0 || tx >= w || ty >= l->h || !l->state[ty * w + tx]) continue;
+            const uint8_t *p = l->rgb + ((size_t)s + (size_t)(dy * w + dx)) * 4;
+            sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2];
+        }
+        int count = l->covered[cell];
+        for (int k = 0; k < 3; ++k) part[k] = (uint8_t)(count ? (sum[k] + count / 2) / count : m[k]);
+        m = part;
+    }
     int difference = t[0] + t[1] + t[2] - m[0] - m[1] - m[2], lift = (difference + (difference < 0 ? -1 : 1)) / 3;
     lift = lift > liftLimit ? liftLimit : lift < -liftLimit ? -liftLimit : lift;
     for (int k = 0; k < 3; ++k) {
@@ -254,8 +271,9 @@ static int prepare_level(Level *l) {
     size_t cells = (size_t)l->bw * l->bh;
     l->nnf = malloc(cells * sizeof(int)); l->cost = malloc(cells * sizeof(int));
     l->weight = malloc(cells * sizeof(float)); l->target = malloc(cells * 3); l->shift = malloc(cells * 3);
+    l->covered = calloc(cells, 1);
     uint8_t *near = calloc(cells, 1);
-    if (!l->nnf || !l->cost || !l->weight || !l->target || !l->shift || !near) { free(near); return 0; }
+    if (!l->nnf || !l->cost || !l->weight || !l->target || !l->covered || !l->shift || !near) { free(near); return 0; }
     // A box cell holds a patch when it isn't transparent and a hole pixel lies within its square: rows, then columns.
     for (int y = 0; y < l->bh; ++y) for (int x = -RADIUS, last = INT_MIN / 2; x < l->bw + RADIUS; ++x) {
         int gx = l->bx + x;
@@ -274,7 +292,8 @@ static int prepare_level(Level *l) {
     return 1;
 }
 
-// The mean color of each patch touching the hole, over the pixels it is compared on, as the hole now stands.
+// The mean color of each patch touching the hole, over the pixels it is compared on, as the hole now stands; and how
+// many those are.
 UNCOUNTED static void target_rows(Level *l, size_t start, size_t end) {
     int w = l->w, h = l->h, bw = l->bw;
     for (size_t y = start; y < end; ++y) for (int x = 0; x < bw; ++x) {
@@ -292,6 +311,7 @@ UNCOUNTED static void target_rows(Level *l, size_t start, size_t end) {
             }
         }
         for (int k = 0; k < 3; ++k) l->target[cell * 3 + k] = (uint8_t)(count ? (sum[k] + count / 2) / count : 0);
+        l->covered[cell] = (uint8_t)count;
     }
 }
 static void measure_targets(Level *l) {
@@ -374,7 +394,10 @@ static int fill_smoothly(Level *l) {
 // Smooths the coarsest estimate into a membrane: each hole pixel the mean of its four neighbors, settled by
 // over-relaxed passes, held at the edge to what lies around the hole there. That edge is read robustly: each pixel
 // along it from those along it within `reach`, leaving out any far from their median (an object beside the hole),
-// with a plane fitted through the rest, so light changing along the edge reads true where the edge turns.
+// with a plane fitted through the rest, so light changing along the edge reads true where the edge turns. Where the
+// hole meets the level's edge or clear pixels, with nothing beyond to hold it, the membrane carries on the slope of a
+// plane through the whole edge as read, as light rising toward the top of a sky goes on rising, rather than leveling
+// off.
 static int smooth_membrane(Level *l, int reach) {
     int w = l->w, h = l->h, rimCount = 0, holeCount = 0, side = 2 * reach + 1;
     size_t n = (size_t)w * h;
@@ -435,6 +458,34 @@ static int smooth_membrane(Level *l, int reach) {
             value[(size_t)rim[r] * 4 + k] = (float)(a < 0 ? 0 : a > 255 ? 255 : a);
         }
     }
+    // The plane's slope across and down, by least squares about the edge's mean; a trace of weight toward level keeps
+    // it steady where the edge is a straight line, as where a layer is extended past its side.
+    float slope[4][4] = {{0}};
+    if (rimCount) {
+        double mx = 0, my = 0, mv[4] = {0, 0, 0, 0};
+        for (int r = 0; r < rimCount; ++r) {
+            mx += rim[r] % w; my += rim[r] / w;
+            for (int k = 0; k < 4; ++k) mv[k] += value[(size_t)rim[r] * 4 + k];
+        }
+        mx /= rimCount; my /= rimCount;
+        for (int k = 0; k < 4; ++k) mv[k] /= rimCount;
+        double sxx = 0.01 * rimCount, syy = 0.01 * rimCount, sxy = 0, svx[4] = {0, 0, 0, 0}, svy[4] = {0, 0, 0, 0};
+        for (int r = 0; r < rimCount; ++r) {
+            double dx = rim[r] % w - mx, dy = rim[r] / w - my;
+            sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+            for (int k = 0; k < 4; ++k) {
+                double d = value[(size_t)rim[r] * 4 + k] - mv[k];
+                svx[k] += d * dx; svy[k] += d * dy;
+            }
+        }
+        double det = sxx * syy - sxy * sxy;
+        // What the plane rises by to each neighbor in turn: left, right, up, down.
+        for (int k = 0; k < 4; ++k) {
+            float across = (float)((svx[k] * syy - svy[k] * sxy) / det);
+            float down = (float)((svy[k] * sxx - svx[k] * sxy) / det);
+            slope[0][k] = -across; slope[1][k] = across; slope[2][k] = -down; slope[3][k] = down;
+        }
+    }
     for (int pass = 0; pass < 400; ++pass) {
         float change = 0;
         for (int q = 0; q < holeCount; ++q) {
@@ -442,7 +493,11 @@ static int smooth_membrane(Level *l, int reach) {
             int around[4] = { x > 0 ? i - 1 : -1, x + 1 < w ? i + 1 : -1, y > 0 ? i - w : -1, y + 1 < h ? i + w : -1 };
             float sum[4] = {0, 0, 0, 0};
             for (int a = 0; a < 4; ++a) {
-                if (around[a] < 0 || l->state[around[a]] == OUT) continue;
+                // With no neighbor there, the pixel stands in for it, raised as the plane rises.
+                if (around[a] < 0 || l->state[around[a]] == OUT) {
+                    for (int k = 0; k < 4; ++k) sum[k] += slope[a][k];
+                    continue;
+                }
                 for (int k = 0; k < 4; ++k) sum[k] += value[(size_t)around[a] * 4 + k];
                 ++count;
             }
