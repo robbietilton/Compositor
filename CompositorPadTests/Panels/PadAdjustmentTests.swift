@@ -426,7 +426,7 @@ import UIKit
         let scroll = try #require(views(UIScrollView.self, in: editor.view).first)
         #expect(!scroll.delaysContentTouches)
         #expect(!scroll.touchesShouldCancel(in: try #require(views(CurveView.self, in: editor.view).first)))
-        #expect(!scroll.touchesShouldCancel(in: LevelsHandlesView(count: 3)) && !scroll.touchesShouldCancel(in: BandHandlesView()))
+        #expect(!scroll.touchesShouldCancel(in: LevelsHandlesView(count: 3)) && !scroll.touchesShouldCancel(in: BandView()))
         #expect(scroll.touchesShouldCancel(in: UIView()))
         session.cancelFilter()
     }
@@ -620,7 +620,7 @@ import UIKit
 
     // MARK: The band editor
 
-    /// The band editor, showing only while a color range is chosen and Colorize is off, as on the Mac.
+    /// The color range control under the sliders, as the Mac's and Photoshop's.
     private func spectrum(in editor: UIViewController) throws -> SpectrumView {
         try #require(views(SpectrumView.self, in: editor.view).first)
     }
@@ -633,78 +633,136 @@ import UIKit
         editor.view.layoutIfNeeded()
     }
 
-    /// The band shows for a color range, not for Master or while colorizing, above Apply outside this range.
-    @Test func theBandShowsOnlyForAColorRange() throws {
+    /// Where `degrees` falls along the band, red in the middle, as the shared control places it.
+    private func x(_ degrees: Double, on band: BandView) -> CGFloat {
+        HueBandControl(width: band.bounds.width, metrics: .pad).mapping.x(of: degrees)
+    }
+
+    /// The control shows in Master too, its strips with an empty lane and no readouts, so the editor keeps its height
+    /// between Master and a color, as Photoshop's; a color range adds the band and its readouts, above Apply outside
+    /// this range. Colorize hides it.
+    @Test func theBandShowsItsStripsInMasterAndTheBandForARange() throws {
         let session = try session()
         let (editor, _) = try hueSaturationEditor(session)
-        let band = try spectrum(in: editor)
-        #expect(band.isHidden)
+        let spectrum = try spectrum(in: editor)
+        let readouts = views(UILabel.self, in: spectrum)
+        #expect(!spectrum.isHidden && readouts.count == 2 && readouts.allSatisfy { $0.alpha == 0 })
+        let height = spectrum.bounds.height
         try choose(.reds, in: session, editor: editor)
-        #expect(!band.isHidden)
+        #expect(!spectrum.isHidden && readouts.allSatisfy { $0.alpha == 1 } && spectrum.bounds.height == height)
         let invert = try #require(views(UIButton.self, in: editor.view).first { $0.configuration?.title == "Apply outside this range instead" })
-        #expect(band.convert(band.bounds, to: editor.view).maxY <= invert.convert(invert.bounds, to: editor.view).minY)
+        #expect(spectrum.convert(spectrum.bounds, to: editor.view).maxY <= invert.convert(invert.bounds, to: editor.view).minY)
         session.updateHueSaturation(.colorizeStart, preview: true)
         editor.updatePropertiesIfNeeded()
-        #expect(band.isHidden)
+        #expect(spectrum.isHidden)
         session.cancelHueSaturation()
     }
 
-    /// Under the band, its four handles in degrees, as the Mac reads them: Reds' are 315°, 345°, 15° and 45°.
+    /// Above the band, its handles in degrees, as Photoshop reads them: the rising ramp on the left, the falling one on
+    /// the right; Reds' are 315° / 345° and 15° \ 45°.
     @Test func theBandReadsItsHandles() throws {
         let session = try session()
         let (editor, _) = try hueSaturationEditor(session)
         try choose(.reds, in: session, editor: editor)
-        let readout = views(UILabel.self, in: try spectrum(in: editor)).compactMap(\.text)
-        #expect(readout == ["315°   345°   15°   45°"])
+        let readouts = views(UILabel.self, in: try spectrum(in: editor)).compactMap(\.text)
+        #expect(readouts == ["315° / 345°", "15° \\ 45°"])
         session.cancelHueSaturation()
     }
 
-    /// A press on the handles takes the nearest one however far it is, as the Mac's does, and a drag moves it to where
-    /// the finger is on the hue circle; a move that would put the handles out of order is refused.
-    @Test func aPressTakesTheNearestHandleAnywhere() throws {
+    /// Red sits in the middle, so Reds is one band there rather than split at both ends.
+    @Test func redIsInTheMiddle() throws {
         let session = try session()
         let (editor, _) = try hueSaturationEditor(session)
         try choose(.reds, in: session, editor: editor)
-        let handles = try spectrum(in: editor).handles
-        let width = handles.bounds.width
-        try #require(width > 0)
-        func x(_ degrees: Double) -> CGFloat { CGFloat(degrees / 360) * width }
-        handles.press(at: x(350))
-        #expect(session.hueSaturation?.settings.band.rangeStart == 350)
-        handles.drag(to: x(355))
-        #expect(session.hueSaturation?.settings.band.rangeStart == 355)
-        handles.release()
-        // Far from every handle, the nearest still moves: 100° is nearest the far shoulder, at 45°.
-        handles.press(at: x(100))
-        handles.release()
-        #expect(session.hueSaturation?.settings.band.falloffEnd == 100)
-        // The range's start past its end is refused.
-        handles.press(at: x(355))
-        handles.drag(to: x(30))
-        handles.release()
-        #expect(session.hueSaturation?.settings.band.rangeStart == 355)
+        let band = try spectrum(in: editor).band
+        #expect(abs(x(0, on: band) - band.bounds.width / 2) < 0.5)
+        #expect(x(315, on: band) < x(345, on: band) && x(345, on: band) < x(15, on: band) && x(15, on: band) < x(45, on: band))
         session.cancelHueSaturation()
     }
 
-    /// The band under the handles shows each hue as the adjustment turns it: Reds shifted by 60 shows red as yellow.
-    @Test func theAfterBandShowsTheShift() throws {
+    /// A handle keeps where it was taken, as a slider's knob does, and a drag moves it by the distance dragged; the
+    /// range between the handles moves all four; beyond the band the nearest handle comes to the press; a handle stops
+    /// at its neighbor rather than being refused.
+    @Test func theBandsPartsDragAsPhotoshops() throws {
         let session = try session()
         let (editor, _) = try hueSaturationEditor(session)
         try choose(.reds, in: session, editor: editor)
+        let band = try spectrum(in: editor).band
+        func current() throws -> HueBand { try #require(session.hueSaturation?.settings.band) }
+        /// Lets go, and the editor shows the band as it's now, as it does before the next touch.
+        func release() {
+            band.release()
+            editor.updatePropertiesIfNeeded()
+        }
+        // Range start: taken a little off it, it doesn't jump; dragged 5°, it moves 5°.
+        band.press(at: x(346, on: band))
+        #expect(try current().rangeStart == 345)
+        band.drag(to: x(351, on: band))
+        release()
+        #expect(try current().rangeStart == 350)
+        // The full strength between the capsules moves the whole band.
+        band.press(at: x(2, on: band))
+        band.drag(to: x(22, on: band))
+        release()
+        let moved = try current()
+        #expect(moved == HueBand(falloffStart: 335, rangeStart: 10, rangeEnd: 35, falloffEnd: 65), "\(moved)")
+        // Beyond the band, the nearest handle comes to the press.
+        band.press(at: x(100, on: band))
+        release()
+        #expect(try current().falloffEnd == 100)
+        // Range end dragged far past range start stops there.
+        band.press(at: x(35, on: band))
+        band.drag(to: x(300, on: band))
+        release()
+        let stopped = try current()
+        #expect(stopped.rangeEnd == stopped.rangeStart)
+        session.cancelHueSaturation()
+    }
+
+    /// With ⌘ held, a drag scrolls the strips, as Photoshop's Command-drag does, and leaves the band where it is.
+    @Test func commandDragScrollsTheStrips() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.cyans, in: session, editor: editor)
+        let band = try spectrum(in: editor).band
+        let before = try #require(session.hueSaturation?.settings.band)
+        let start = x(180, on: band)
+        band.press(at: start, scrolls: true)
+        band.drag(to: start - band.bounds.width / 2)
+        band.release()
+        #expect(session.hueSaturation?.settings.band == before)
+        // Cyan has come to the middle.
+        #expect(abs(HueBandControl(width: band.bounds.width, offset: band.offset, metrics: .pad).mapping.x(of: 180) - band.bounds.width / 2) < 1)
+        session.cancelHueSaturation()
+    }
+
+    /// The strip under the lane shows each hue as the whole adjustment leaves it: Reds shifted by 60 shows red as
+    /// yellow, and Saturation −100 shows it gray.
+    @Test func theAfterStripShowsTheAdjustment() throws {
+        let session = try session()
+        let (editor, _) = try hueSaturationEditor(session)
+        try choose(.reds, in: session, editor: editor)
+        let band = try spectrum(in: editor).band
+        func colors() throws -> (before: PaletteColor, after: PaletteColor) {
+            editor.updatePropertiesIfNeeded()
+            editor.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(bounds: band.bounds).image { band.layer.render(in: $0.cgContext) }
+            let control = HueBandControl(width: band.bounds.width, metrics: .pad)
+            let top = band.drawingOrigin.y
+            return (try pixel(image, at: CGPoint(x: x(0, on: band), y: top + control.beforeStrip.midY)),
+                    try pixel(image, at: CGPoint(x: x(0, on: band), y: top + control.afterStrip.midY)))
+        }
         var settings = try #require(session.hueSaturation?.settings)
         settings.hue = 60
         session.updateHueSaturation(settings, preview: true)
-        editor.updatePropertiesIfNeeded()
-        editor.view.layoutIfNeeded()
-        let strips = views(HueStrip.self, in: try spectrum(in: editor))
-        try #require(strips.count == 2)
-        func first(_ strip: HueStrip) throws -> PaletteColor {
-            let image = UIGraphicsImageRenderer(bounds: strip.bounds).image { strip.layer.render(in: $0.cgContext) }
-            return try pixel(image, at: CGPoint(x: 2, y: strip.bounds.midY))
-        }
-        let before = try first(strips[0]), after = try first(strips[1])
-        #expect(before.red > 0.9 && before.green < 0.2, "before \(before)")
-        #expect(after.red > 0.9 && after.green > 0.9 && after.blue < 0.2, "after \(after)")
+        var shown = try colors()
+        #expect(shown.before.red > 0.9 && shown.before.green < 0.1, "before \(shown.before)")
+        #expect(shown.after.red > 0.9 && shown.after.green > 0.9 && shown.after.blue < 0.1, "after \(shown.after)")
+        settings.hue = 0
+        settings.saturation = -100
+        session.updateHueSaturation(settings, preview: true)
+        shown = try colors()
+        #expect(abs(shown.after.red - shown.after.green) < 0.05 && abs(shown.after.green - shown.after.blue) < 0.05, "after \(shown.after)")
         session.cancelHueSaturation()
     }
 
