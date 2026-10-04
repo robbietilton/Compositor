@@ -522,12 +522,15 @@ import UIKit
         session.cancelHueSaturation()
     }
 
-    /// The three sliders start together after their captions, as the Mac's do, though Hue's has a unit.
+    /// The three rows line up in columns, though Hue's has a unit: the sliders start and end together, so their thumbs
+    /// stand one above another at no change, and the fields line up.
     @Test func theSlidersStartTogether() throws {
         let session = try session()
         let (editor, rows) = try hueSaturationEditor(session)
-        let starts = rows.compactMap { views(UISlider.self, in: $0).first }.map { $0.convert($0.bounds, to: editor.view).minX }
-        #expect(starts.count == 3 && Set(starts).count == 1, "\(starts)")
+        let sliders = rows.compactMap { views(UISlider.self, in: $0).first }.map { $0.convert($0.bounds, to: editor.view) }
+        let fields = rows.compactMap { views(UITextField.self, in: $0).first }.map { $0.convert($0.bounds, to: editor.view) }
+        #expect(sliders.count == 3 && Set(sliders.map(\.minX)).count == 1 && Set(sliders.map(\.maxX)).count == 1, "\(sliders)")
+        #expect(fields.count == 3 && Set(fields.map(\.minX)).count == 1 && Set(fields.map(\.width)).count == 1, "\(fields)")
         session.cancelHueSaturation()
     }
 

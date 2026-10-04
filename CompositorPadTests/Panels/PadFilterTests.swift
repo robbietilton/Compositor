@@ -242,6 +242,45 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// Where each column of the editor's showing rows is: the sliders' starts and ends, and the fields' starts and widths.
+    private func columns(of editor: UIViewController) -> [String: Set<CGFloat>] {
+        var columns: [String: Set<CGFloat>] = [:]
+        for row in views(SliderField.self, in: editor.view) where !row.isHidden {
+            guard let slider = views(UISlider.self, in: row).first, let field = views(UITextField.self, in: row).first else { continue }
+            let sliderFrame = slider.convert(slider.bounds, to: editor.view), fieldFrame = field.convert(field.bounds, to: editor.view)
+            columns["slider starts", default: []].insert(sliderFrame.minX.rounded())
+            columns["slider ends", default: []].insert(sliderFrame.maxX.rounded())
+            columns["field starts", default: []].insert(fieldFrame.minX.rounded())
+            columns["field widths", default: []].insert(fieldFrame.width.rounded())
+        }
+        return columns
+    }
+
+    /// Every editor's rows line up in columns, as a form does: captions, sliders, fields and units, though rows have
+    /// different units or none, as Vignette's Roundness, and need fields of different widths, as Exposure's Offset.
+    @Test func everyEditorsRowsLineUpInColumns() throws {
+        let session = EditorSession()
+        session.createDocument(width: 200, height: 100)
+        let context = try BrushRaster.context(width: 200, height: 100, mask: false)
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Gray"))
+        for kind in FilterEditorController.rows.keys where (FilterEditorController.rows[kind]?.count ?? 0) > 1 {
+            session.beginFilter(kind)
+            guard session.filterEdit?.kind == kind else { continue }
+            let editor = FilterEditorController(session: session, kind: kind)
+            editor.loadViewIfNeeded()
+            editor.view.frame = CGRect(x: 0, y: 0, width: 480, height: 1400)
+            editor.updatePropertiesIfNeeded()
+            editor.view.layoutIfNeeded()
+            for (column, places) in columns(of: editor) {
+                #expect(places.count == 1, "\(kind) \(column): \(places.sorted())")
+            }
+            session.cancelFilter()
+        }
+    }
+
     /// Filter › Gaussian Blur… opens its editor, with the Mac's Radius row.
     @Test func gaussianBlurOpensFromTheFilterMenu() async throws {
         let (window, controller, session) = try await shownWindow()

@@ -146,6 +146,9 @@ final class NumberField: UIView, UITextFieldDelegate {
 
     let field = UITextField()
     private let caption: UILabel?
+    private var unitLabel: UILabel?
+    private let row: UIStackView
+    private var fieldWidth: NSLayoutConstraint!
     /// What typing or scrubbing can set, and how much a point of scrubbing changes it; a dialog whose units change moves
     /// them.
     var range: ClosedRange<Double>
@@ -163,6 +166,8 @@ final class NumberField: UIView, UITextFieldDelegate {
         self.range = range
         self.sensitivity = sensitivity
         self.format = format
+        unitLabel = unit.map { OptionControls.caption($0, color: .secondaryLabel) }
+        row = OptionControls.row([], spacing: 4)
         super.init(frame: .zero)
         field.font = Self.font
         field.textAlignment = .right
@@ -181,15 +186,16 @@ final class NumberField: UIView, UITextFieldDelegate {
         field.delegate = self
         field.accessibilityLabel = caption ?? unit
         field.addAction(UIAction { [weak self] _ in self?.typed() }, for: .editingChanged)
-        field.widthAnchor.constraint(equalToConstant: width).isActive = true
+        fieldWidth = field.widthAnchor.constraint(equalToConstant: width)
+        fieldWidth.isActive = true
         var views: [UIView] = [field]
         if let caption = self.caption {
             caption.isUserInteractionEnabled = true
             caption.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(scrubbed(_:))))
             views.insert(caption, at: 0)
         }
-        if let unit { views.append(OptionControls.caption(unit, color: .secondaryLabel)) }
-        let row = OptionControls.row(views, spacing: 4)
+        if let unitLabel { views.append(unitLabel) }
+        views.forEach(row.addArrangedSubview)
         if let caption = self.caption { row.setCustomSpacing(6, after: caption) }
         addSubview(row)
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -235,6 +241,25 @@ final class NumberField: UIView, UITextFieldDelegate {
             caption?.isUserInteractionEnabled = newValue
             caption?.textColor = newValue ? .secondaryLabel : .tertiaryLabel
         }
+    }
+
+    /// The field's width and its unit's, as a form's columns line them up.
+    var widths: (field: CGFloat, unit: CGFloat) {
+        (fieldWidth.constant, unitLabel.map { ceil($0.intrinsicContentSize.width) } ?? 0)
+    }
+
+    /// Gives the field `field` points and its unit `unit`, an empty one where it has none, so the fields and units of
+    /// a form line up under one another.
+    func alignColumns(field width: CGFloat, unit: CGFloat) {
+        fieldWidth.constant = width
+        guard unit > 0 else { return }
+        let label = unitLabel ?? {
+            let empty = OptionControls.caption("", color: .secondaryLabel)
+            row.addArrangedSubview(empty)
+            unitLabel = empty
+            return empty
+        }()
+        label.widthAnchor.constraint(equalToConstant: unit).isActive = true
     }
 
     /// Gives the caption `width`, so the fields of a form line up under one another.
@@ -454,6 +479,16 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
         guard let decimals else { return value }
         let step = pow(10, Double(decimals))
         return (value * step).rounded() / step
+    }
+
+    /// Lines `rows` up in columns, as a form: their captions, and `labels` beside them, take the widest caption's
+    /// width, their fields the widest field's and their units the widest unit's, rows without one keeping its room, so
+    /// every slider starts and ends in the same place, and the fields stand one under another.
+    static func alignColumns(_ rows: [SliderField], with labels: [UILabel] = []) {
+        alignCaptions(rows, with: labels)
+        let widths = rows.map(\.number.widths)
+        let field = widths.map(\.field).max() ?? 0, unit = widths.map(\.unit).max() ?? 0
+        for row in rows { row.number.alignColumns(field: field, unit: unit) }
     }
 
     /// Gives every row's caption, and `labels` beside them, the widest one's width, so their sliders start and end in

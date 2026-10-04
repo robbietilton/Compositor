@@ -98,7 +98,7 @@ final class EffectEditorController: AdjustmentEditorController {
             fields.append((row, field))
             content.addArrangedSubview(field)
         }
-        SliderField.alignCaptions(fields.map(\.field), with: captions)
+        SliderField.alignColumns(fields.map(\.field), with: captions)
     }
 
     override func refresh() {

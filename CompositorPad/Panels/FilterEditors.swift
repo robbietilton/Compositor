@@ -381,7 +381,7 @@ final class FilterEditorController: AdjustmentEditorController {
                 content.addArrangedSubview(note)
             }
         }
-        SliderField.alignCaptions(fields.map(\.field), with: captions)
+        SliderField.alignColumns(fields.map(\.field), with: captions)
         error.numberOfLines = 0
         notes.insertArrangedSubview(error, at: 0)
     }

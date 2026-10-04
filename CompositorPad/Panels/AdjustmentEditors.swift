@@ -919,8 +919,8 @@ final class HueSaturationEditorController: AdjustmentEditorController {
         hue = slider("Hue", colorize ? 0...360 : -180...180, unit: "°", \.hue)
         saturation = slider("Saturation", colorize ? 0...100 : -100...100, \.saturation)
         lightness = slider("Lightness", -100...100, \.lightness)
-        // The sliders start together, after the captions, as the Mac's do.
-        SliderField.alignCaptions([hue, saturation, lightness].compactMap { $0 })
+        // The rows line up in columns, so the thumbs stand one above another at no change.
+        SliderField.alignColumns([hue, saturation, lightness].compactMap { $0 })
         slidersColorize = colorize
     }
 

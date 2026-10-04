@@ -354,6 +354,26 @@ import UIKit
         try await closes(controller)
     }
 
+    /// Each effect's rows line up in columns, though their units differ: px, %, °.
+    @Test func eachEffectsRowsLineUpInColumns() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        for kind in LayerEffectKind.allCases {
+            session.addEffect(kind)
+            let editor = try await effectEditor(for: kind, over: controller)
+            var places: [String: Set<CGFloat>] = [:]
+            for row in views(SliderField.self, in: editor.view) {
+                let slider = try #require(views(UISlider.self, in: row).first), field = try #require(views(UITextField.self, in: row).first)
+                places["slider ends", default: []].insert(slider.convert(slider.bounds, to: editor.view).maxX.rounded())
+                places["field starts", default: []].insert(field.convert(field.bounds, to: editor.view).minX.rounded())
+                places["field widths", default: []].insert(field.bounds.width.rounded())
+            }
+            for (column, at) in places { #expect(at.count == 1, "\(kind) \(column): \(at.sorted())") }
+        }
+        session.finishEffectsEditing(commit: false)
+        try await closes(controller)
+    }
+
     /// Image › Image Size…, Canvas Size… and the exports, which waited for nothing to be over the window, don't wait
     /// for an effect's panel: their dialog takes its place, the effect OK'd.
     @Test func theProjectsCommandsDontWaitForThePanel() async throws {
