@@ -1124,7 +1124,7 @@ import UIKit
     }
 
     /// A finger can take a swatch from a little way off, above or below it too, though its row is only as tall as the
-    /// swatch: 44 points a side, as decision 10 asked.
+    /// swatch: 44 points a side, the least a finger needs, as Apple's guidelines have it.
     @Test func aSwatchTakesATouchFromALittleWayOff() async throws {
         let (window, controller, session) = try await shownWindow()
         defer { window.isHidden = true }
