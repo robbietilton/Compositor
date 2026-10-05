@@ -1182,6 +1182,48 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
+    /// Presses `input` as the keyboard does while `first` has it: the nearest responder up from it with the key takes
+    /// it. Which one did.
+    @discardableResult
+    private func press(_ input: String, from first: UIResponder) throws -> UIResponder {
+        let taker = try #require(sequence(first: first, next: \.next).first { responder in
+            responder.keyCommands?.contains { $0.input == input && $0.modifierFlags.isEmpty } == true
+        })
+        let command = try #require(taker.keyCommands?.first { $0.input == input && $0.modifierFlags.isEmpty })
+        let action = try #require(command.action)
+        try #require(taker.canPerformAction(action, withSender: command))
+        taker.perform(action, with: command)
+        return taker
+    }
+
+    /// Escape while one of the editor's fields has the keyboard puts the color being picked back too, rather than
+    /// cancelling the filter. Once nothing is being picked, it cancels the filter, as before.
+    @Test func escapeInAFieldPutsBackTheColorBeingPicked() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        choose(filterCommand(.vignette), in: controller)
+        let editor = try await filterEditor(over: controller)
+        let original = try #require(session.filterEdit?.settings.vignetteColor)
+        let field = try #require(views(NumberField.self, in: editor.view).first)
+        try await eventually { field.field.isFirstResponder || field.field.becomeFirstResponder() }
+        try #require(field.field.isFirstResponder)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        try #require(field.field.isFirstResponder && session.filterEdit?.settings.vignetteColor != original)
+
+        #expect(try press(UIKeyCommand.inputEscape, from: field.field) === editor)
+        #expect(session.colorPicker == nil && session.filterEdit?.settings.vignetteColor == original)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        #expect(controller.presentedViewController === editor && session.filterEdit != nil)
+
+        try #require(field.field.isFirstResponder)
+        try press(UIKeyCommand.inputEscape, from: field.field)
+        #expect(session.filterEdit == nil)
+        try await eventually { controller.presentedViewController == nil }
+    }
+
     /// Cancel with the picker up closes both, picker and editor.
     @Test func cancelWithThePickerUpClosesBoth() async throws {
         let (window, controller, session, _, _) = try await pickingVignetteColor()

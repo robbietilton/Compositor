@@ -260,6 +260,49 @@ import UIKit
         try await closes(controller)
     }
 
+    /// Presses `input` as the keyboard does while `first` has it: the nearest responder up from it with the key takes
+    /// it. Which one did.
+    @discardableResult
+    private func press(_ input: String, from first: UIResponder) throws -> UIResponder {
+        let taker = try #require(sequence(first: first, next: \.next).first { responder in
+            responder.keyCommands?.contains { $0.input == input && $0.modifierFlags.isEmpty } == true
+        })
+        let command = try #require(taker.keyCommands?.first { $0.input == input && $0.modifierFlags.isEmpty })
+        let action = try #require(command.action)
+        try #require(taker.canPerformAction(action, withSender: command))
+        taker.perform(action, with: command)
+        return taker
+    }
+
+    /// Escape while one of the panel's fields has the keyboard puts a color being picked back, as the window's Escape
+    /// does, rather than cancelling the panel; the picker doesn't take the keyboard from the field. Once nothing is being
+    /// picked, it cancels the panel, as before.
+    @Test func escapeInAFieldPutsBackTheColorBeingPicked() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let original = try #require(session.activeLayer?.effects?.stroke?.color)
+        let size = try #require(views(NumberField.self, in: try row("Size", in: editor)).first)
+        try await eventually { size.field.isFirstResponder || size.field.becomeFirstResponder() }
+        try #require(size.field.isFirstResponder)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        try #require(size.field.isFirstResponder && session.activeLayer?.effects?.stroke?.color != original)
+
+        #expect(try press(UIKeyCommand.inputEscape, from: size.field) === editor)
+        #expect(session.colorPicker == nil && session.activeLayer?.effects?.stroke?.color == original)
+        try await eventually { editor.presentedViewController == nil }
+        #expect(editor.presentedViewController == nil)
+        #expect(controller.presentedViewController === editor && session.effectsEditing != nil)
+
+        try #require(size.field.isFirstResponder)
+        try press(UIKeyCommand.inputEscape, from: size.field)
+        try await closes(controller)
+        #expect(session.activeLayer?.effects == nil && session.effectsEditing == nil)
+    }
+
     /// Picks `color` in the picker `editor` shows, as a finger does.
     private func pick(_ color: UIColor, over editor: UIViewController) throws {
         let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)

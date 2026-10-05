@@ -158,11 +158,19 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     }
 
     /// Escape cancels, as the Mac's Cancel button takes it, for when the editor's own fields have the keyboard; the
-    /// window passes it on otherwise. Return there is the field's, which Hue/Saturation's take as OK, as on the Mac.
+    /// window passes it on otherwise. A color being picked is put back first, as the window's Escape and the Mac picker's
+    /// Cancel put it back, since the picker leaves the keyboard with the field. Return there is the field's, which
+    /// Hue/Saturation's take as OK, as on the Mac.
     override var keyCommands: [UIKeyCommand]? {
         [UIKeyCommand(title: "Cancel", action: #selector(cancelKey(_:)), input: UIKeyCommand.inputEscape)]
     }
-    @objc private func cancelKey(_ command: UIKeyCommand) { cancel() }
+    @objc private func cancelKey(_ command: UIKeyCommand) {
+        if isPicking {
+            session.closeColorPicker(commit: false)
+            return
+        }
+        cancel()
+    }
 
     override func loadView() { view = EditorView() }
 
