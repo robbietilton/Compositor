@@ -98,6 +98,9 @@ final class EffectEditorController: AdjustmentEditorController {
             // A drag, of the slider or the caption, is one undo step, as Layer Opacity's is.
             field.onStart = { [weak self] in self?.session.beginEffectsChange() }
             field.onFinish = { [weak self] in self?.session.finishEffectsChange() }
+            // Return gives the keyboard back to the canvas, as in the tools' bar, so ⌘Z and the canvas's keys work
+            // straight away; Escape stays the panel's Cancel.
+            field.onReturn = { [weak self] in self?.session.canvasFocusRequest += 1 }
             fields.append((row, field))
             content.addArrangedSubview(field)
         }

@@ -1097,6 +1097,40 @@ import UIKit
         try await closes(controller)
     }
 
+    /// While one of the panel's fields has the keyboard, ⌘Z is the field's, taking back what was typed, and ⇧⌘Z puts it
+    /// back, the project's history left alone; Return gives the keyboard back to the canvas, as the tools' bar and the
+    /// Layers panel's fields do, so ⌘Z takes back the change straight away.
+    @Test func returnInAFieldGivesTheCanvasTheKeyboard() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let canvas = try #require(controller.activeTab?.canvas)
+        let size = try #require(views(NumberField.self, in: try row("Size", in: editor)).first)
+        try await eventually { size.field.isFirstResponder || size.field.becomeFirstResponder() }
+        try #require(size.field.isFirstResponder)
+        // Typed over the value, which the field selects once it has the keyboard, as UIKit types.
+        try await eventually { size.field.selectedTextRange.flatMap(size.field.text(in:)) == "4" }
+        size.field.insertText("9")
+        try #require(size.field.text == "9")
+        let count = session.history.undoCount
+        #expect(pressUndo())
+        #expect(size.field.text == "4" && size.field.isFirstResponder && session.history.undoCount == count)
+        #expect(pressUndo(redo: true))
+        #expect(size.field.text == "9" && session.history.undoCount == count)
+
+        _ = size.field.delegate?.textFieldShouldReturn?(size.field)
+        #expect(session.activeLayer?.effects?.stroke?.size == 9 && session.history.undoName == "Edit Stroke")
+        controller.updatePropertiesIfNeeded()
+        try await eventually { canvas.isFirstResponder }
+        #expect(canvas.isFirstResponder)
+        #expect(pressUndo())
+        #expect(session.activeLayer?.effects?.stroke?.size == 4 && session.history.undoName == "Add Stroke")
+        #expect(controller.presentedViewController === editor)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
     // MARK: Selecting
 
     /// The gray layer's row in the Layers panel, laid out, with a Stroke and a Drop Shadow under it and neither selected.
