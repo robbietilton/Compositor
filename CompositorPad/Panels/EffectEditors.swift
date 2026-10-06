@@ -95,6 +95,9 @@ final class EffectEditorController: AdjustmentEditorController {
                                     fieldWidth: NumberField.width(toShow: row.field.lowerBound * row.scale...row.field.upperBound * row.scale, decimals: 0))
             field.arrowStep = 1
             field.onChange = { [weak self] value in self?.session.changeEffects { row.set(&$0, value) } }
+            // A drag, of the slider or the caption, is one undo step, as Layer Opacity's is.
+            field.onStart = { [weak self] in self?.session.beginEffectsChange() }
+            field.onFinish = { [weak self] in self?.session.finishEffectsChange() }
             fields.append((row, field))
             content.addArrangedSubview(field)
         }

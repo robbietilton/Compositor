@@ -893,6 +893,99 @@ import UIKit
         UIApplication.shared.sendAction(NSSelectorFromString(redo ? "redo:" : "undo:"), to: nil, from: nil, for: nil)
     }
 
+    /// The toolbar's item labeled `label`, as the window shows it.
+    private func toolbarItem(_ label: String, in controller: EditorWindowController) throws -> UIBarButtonItem {
+        controller.updatePropertiesIfNeeded()
+        let items = (controller.navigationItem.leadingItemGroups + controller.navigationItem.trailingItemGroups).flatMap(\.barButtonItems)
+        return try #require(items.first { $0.accessibilityLabel == label }, "\(label)")
+    }
+
+    /// A finger on `slider`: down on it, through `values`, and up again unless it `holds`.
+    private func drag(_ slider: UISlider?, through values: [Float], holds: Bool = false) throws {
+        let slider = try #require(slider)
+        slider.sendActions(for: .touchDown)
+        for value in values {
+            slider.value = value
+            slider.sendActions(for: .valueChanged)
+        }
+        if !holds { slider.sendActions(for: .touchUpInside) }
+    }
+
+    /// A drag of a row's slider, which sets the effect many times a second, is one step, as Layer Opacity's is: one ⌘Z
+    /// puts back the size from before it, the panel showing it. While the slider is held, Undo waits, the toolbar's
+    /// dimmed.
+    @Test func aSliderDragUndoesInOneStep() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.innerGlow, in: controller)
+        let editor = try await effectEditor(for: .innerGlow, over: controller)
+        let id = try #require(session.activeLayerID)
+        func size() -> CGFloat? { session.document?.layers.first { $0.id == id }?.effects?.innerGlow?.size }
+        let count = session.history.undoCount
+        let slider = views(UISlider.self, in: try row("Size", in: editor)).first
+        try drag(slider, through: (11...70).map(Float.init), holds: true)
+        #expect(size() == 70)
+        #expect(try !toolbarItem("Undo", in: controller).isEnabled)
+        slider?.sendActions(for: .touchUpInside)
+        #expect(session.history.undoCount == count + 1)
+        #expect(session.history.undoName == "Edit Inner Glow")
+        #expect(try toolbarItem("Undo", in: controller).isEnabled)
+
+        try await eventually { controller.isFirstResponder || controller.activeTab?.canvas.isFirstResponder == true }
+        #expect(pressUndo())
+        editor.updatePropertiesIfNeeded()
+        #expect(size() == 10 && session.history.undoName == "Add Inner Glow")
+        #expect(controller.presentedViewController === editor)
+        #expect(try views(NumberField.self, in: row("Size", in: editor)).first?.field.text == "10")
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// The Layers panel stays free beside the panel, and an effect edited there while a slider is held, hidden with its
+    /// eye or dropped onto another layer, ends the drag first, as a Pencil stroke does, so it keeps a step of its own
+    /// rather than going into the drag's.
+    @Test(arguments: ["Hide Stroke", "Copy Stroke"])
+    func anEffectEditedInTheLayersPanelWhileASliderIsHeldKeepsItsOwnStep(_ edit: String) async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        let id = try #require(session.activeLayerID)
+        // A second layer, to drop the Stroke on.
+        session.duplicateActiveLayer()
+        let other = try #require(session.activeLayerID)
+        try #require(other != id)
+        session.selectLayers([id], primary: id)
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        func size() -> CGFloat? { session.document?.layers.first { $0.id == id }?.effects?.stroke?.size }
+        let count = session.history.undoCount
+        let slider = try #require(views(UISlider.self, in: try row("Size", in: editor)).first)
+        try drag(slider, through: [12], holds: true)
+        let panel = try #require(views(LayersPanelView.self, in: controller.view).first)
+        if edit == "Hide Stroke" {
+            let eye = try #require(views(UIButton.self, in: try cell(for: id, in: panel)).first { $0.accessibilityLabel == edit })
+            #expect(eye.isEnabled)
+            eye.sendActions(for: .primaryActionTriggered)
+        } else {
+            let list = try #require(views(UICollectionView.self, in: panel).first)
+            let item = UIDragItem(itemProvider: NSItemProvider())
+            item.localObject = LayersPanelView.EffectDrag(layerID: id, kind: .stroke)
+            let drop = FakeDropSession(items: [item], at: try point(on: other, in: panel, list: list), in: list)
+            panel.collectionView(list, performDropWith: FakeDropCoordinator(session: drop))
+        }
+        slider.value = 13
+        slider.sendActions(for: .valueChanged)
+        slider.sendActions(for: .touchUpInside)
+        #expect(size() == 13 && controller.presentedViewController === editor)
+        #expect(session.history.undoCount == count + 3)
+        for (name, value) in [("Edit Stroke", 12.0), (edit, 12), ("Edit Stroke", 4)] {
+            #expect(session.history.undoName == name)
+            session.undo()
+            #expect(size() == CGFloat(value))
+        }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
     /// Picking the effect's color, the layer following each color the picker passes through and the picker put away with
     /// a tap off it, as UIKit does, is one step: one ⌘Z puts back the color from before it.
     @Test func aColorPickingUndoesInOneStep() async throws {
