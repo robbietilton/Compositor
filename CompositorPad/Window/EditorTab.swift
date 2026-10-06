@@ -142,8 +142,10 @@ final class SessionUndoManager: UndoManager {
 
     override var canUndo: Bool { session.canUndo }
     override var canRedo: Bool { session.canRedo }
-    override var undoActionName: String { session.history.undoName }
-    override var redoActionName: String { session.history.redoName }
+    // While the history can't undo or redo, as while a slider is held, the menu says a plain Undo or Redo, as the Mac's
+    // does, rather than naming a step it won't take back yet.
+    override var undoActionName: String { session.history.canUndo ? session.history.undoName : "" }
+    override var redoActionName: String { session.history.canRedo ? session.history.redoName : "" }
     override func undo() { session.undo() }
     override func redo() { session.redo() }
 }

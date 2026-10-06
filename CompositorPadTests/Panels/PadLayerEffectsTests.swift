@@ -1131,6 +1131,28 @@ import UIKit
         try await closes(controller)
     }
 
+    /// While the history can't undo, as while Layer Opacity's slider is held, the Edit menu says a plain Undo, as the
+    /// Mac's does, rather than naming a step it won't take back yet. Redo too.
+    @Test func anUndoWaitingForASliderIsAPlainUndo() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        let undo = try #require(controller.undoManager)
+        let panel = try #require(views(LayersPanelView.self, in: controller.view).first)
+        panel.updatePropertiesIfNeeded()
+        let opacity = try #require(views(SliderField.self, in: panel).first { caption(of: $0) == "Opacity" })
+        let slider = views(UISlider.self, in: opacity).first
+        try drag(slider, through: [0.5])
+        #expect(undo.undoMenuItemTitle == "Undo Layer Opacity")
+        session.undo()
+        #expect(undo.redoMenuItemTitle == "Redo Layer Opacity")
+        try drag(slider, through: [], holds: true)
+        #expect(!undo.canUndo && !undo.canRedo)
+        #expect(undo.undoActionName == "" && undo.undoMenuItemTitle == "Undo")
+        #expect(undo.redoActionName == "" && undo.redoMenuItemTitle == "Redo")
+        slider?.sendActions(for: .touchUpInside)
+        #expect(undo.undoMenuItemTitle == "Undo Import Image" && undo.redoMenuItemTitle == "Redo Layer Opacity")
+    }
+
     // MARK: Selecting
 
     /// The gray layer's row in the Layers panel, laid out, with a Stroke and a Drop Shadow under it and neither selected.
