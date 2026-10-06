@@ -236,6 +236,8 @@ extension EditorSession {
     func commitCrop() async {
         guard canStartProjectOperation, let rect = cropRect, CropGeometry.valid(rect),
               let snapshot = projectSnapshot() else { return }
+        // A drag held in an effect's panel, which works beside the crop, keeps a step of its own.
+        finishHeldDrags()
         isProjectBusy = true
         defer { isProjectBusy = false }
         do {

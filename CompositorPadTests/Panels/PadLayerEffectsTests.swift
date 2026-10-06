@@ -10,13 +10,16 @@ import UIKit
         view.subviews.flatMap { subview -> [T] in ((subview as? T).map { [$0] } ?? []) + views(type, in: subview) }
     }
 
-    /// A window on the app's screen with a 200 × 100 project of one gray layer, once it has appeared.
-    private func shownWindow() async throws -> (window: UIWindow, controller: EditorWindowController, session: EditorSession) {
+    /// A window on the app's screen with a 200 × 100 project of one gray layer, once it has appeared. `withToolbar` puts
+    /// the editor in a navigation controller, whose bar is its toolbar, as the app does.
+    private func shownWindow(withToolbar: Bool = false) async throws -> (window: UIWindow, controller: EditorWindowController,
+                                                                        session: EditorSession) {
         let scene = try #require(UIApplication.shared.connectedScenes.lazy.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 1194, height: 834)
         let controller = EditorWindowController()
-        window.rootViewController = controller
+        window.rootViewController = withToolbar ? UINavigationController(rootViewController: controller) : controller
+        window.overrideUserInterfaceStyle = withToolbar ? .dark : .unspecified
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
         try await Task.sleep(for: .milliseconds(300))
@@ -303,9 +306,10 @@ import UIKit
         #expect(session.activeLayer?.effects == nil && session.effectsEditing == nil)
     }
 
-    /// Picks `color` in the picker `editor` shows, as a finger does.
+    /// Picks `color` in the picker `editor` shows, as a finger does: the picker shows it, and tells its delegate.
     private func pick(_ color: UIColor, over editor: UIViewController) throws {
         let picker = try #require(editor.presentedViewController as? UIColorPickerViewController)
+        picker.selectedColor = color
         picker.delegate?.colorPickerViewController?(picker, didSelect: color, continuously: false)
     }
 
@@ -878,6 +882,126 @@ import UIKit
         try await eventually { session.effectsEditing == nil }
         #expect(session.effectsEditing == nil && session.document?.layers.contains { $0.effects != nil } != true)
         if let url = tab.document?.fileURL { try? FileManager.default.removeItem(at: url) }
+    }
+
+    // MARK: Undo
+
+    /// ⌘Z, or ⇧⌘Z for `redo`, as the menu bar sends it: to whatever has the keyboard, and up from there. Whether anything
+    /// took it.
+    @discardableResult
+    private func pressUndo(redo: Bool = false) -> Bool {
+        UIApplication.shared.sendAction(NSSelectorFromString(redo ? "redo:" : "undo:"), to: nil, from: nil, for: nil)
+    }
+
+    /// Picking the effect's color, the layer following each color the picker passes through and the picker put away with
+    /// a tap off it, as UIKit does, is one step: one ⌘Z puts back the color from before it.
+    @Test func aColorPickingUndoesInOneStep() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let original = try #require(session.activeLayer?.effects?.stroke?.color)
+        let count = session.history.undoCount
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        for step in 1...30 { try pick(UIColor(red: 0, green: 0, blue: CGFloat(step) / 30, alpha: 1), over: editor) }
+        try await tapOff(over: editor)
+        let blue = PaletteColor(red: 0, green: 0, blue: 1)
+        #expect(session.colorPicker == nil && session.activeLayer?.effects?.stroke?.color == blue)
+        #expect(session.history.undoCount == count + 1)
+        #expect(session.history.undoName == "Edit Stroke")
+
+        try await eventually { controller.isFirstResponder || controller.activeTab?.canvas.isFirstResponder == true }
+        #expect(pressUndo())
+        #expect(session.activeLayer?.effects?.stroke?.color == original)
+        #expect(session.history.undoName == "Add Stroke" && session.history.redoName == "Edit Stroke")
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// An Undo while picking takes back the picking so far, the picker showing the color undone to, as the Mac's does;
+    /// and the picker put away after it with a tap off it, its OK, doesn't put it back nor clear Redo.
+    @Test func anUndoWhilePickingOutlastsTheTapOff() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let original = try #require(session.activeLayer?.effects?.stroke?.color)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        try pick(.blue, over: editor)
+        let blue = PaletteColor(red: 0, green: 0, blue: 1)
+        #expect(pressUndo())
+        #expect(session.activeLayer?.effects?.stroke?.color == original)
+        #expect(session.colorPicker?.color == original)
+        editor.updatePropertiesIfNeeded()
+        let shown = (editor.presentedViewController as? UIColorPickerViewController)?.selectedColor
+        #expect(shown.flatMap(SwatchButton.paletteColor) == original)
+        try await tapOff(over: editor)
+        #expect(session.colorPicker == nil && session.activeLayer?.effects?.stroke?.color == original)
+        #expect(session.history.undoName == "Add Stroke" && session.history.redoName == "Edit Stroke")
+        try await eventually { controller.isFirstResponder || controller.activeTab?.canvas.isFirstResponder == true }
+        #expect(pressUndo(redo: true))
+        #expect(session.activeLayer?.effects?.stroke?.color == blue)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// An Undo of the picking while the picker is up, and a Redo of it, the picker showing the color each gives the
+    /// layer, leave Escape, the picker's Cancel, putting back the color from before the picking, as the Mac's Cancel
+    /// does, and no step.
+    @Test(arguments: [false, true]) func escapeAfterAnUndoOrRedoWhilePickingPutsBackTheColorFromBefore(redo: Bool) async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        let original = try #require(session.activeLayer?.effects?.stroke?.color)
+        let count = session.history.undoCount
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(.red, over: editor)
+        try pick(.blue, over: editor)
+        let blue = PaletteColor(red: 0, green: 0, blue: 1)
+        /// The color the picker shows, once the editor has followed the picking.
+        func shown() -> PaletteColor? {
+            editor.updatePropertiesIfNeeded()
+            return (editor.presentedViewController as? UIColorPickerViewController).flatMap { SwatchButton.paletteColor($0.selectedColor) }
+        }
+        #expect(pressUndo())
+        #expect(session.activeLayer?.effects?.stroke?.color == original && shown() == original)
+        if redo {
+            #expect(pressUndo(redo: true))
+            #expect(session.activeLayer?.effects?.stroke?.color == blue && shown() == blue)
+        }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        #expect(session.colorPicker == nil && session.activeLayer?.effects?.stroke?.color == original)
+        #expect(session.history.undoCount == count && session.history.undoName == "Add Stroke")
+        // What's left to redo is what the Undo, or the Redo after it, left.
+        #expect(session.canRedo == !redo)
+        try await eventually { editor.presentedViewController == nil }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
+    }
+
+    /// A color picked stays in the picker as it was picked, finer than the 8 bits the layer takes: the editor puts a
+    /// color in the picker only when an Undo or Redo moves the picking, never over a finger dragging in it.
+    @Test func aPickedColorStaysInThePickerAsPicked() async throws {
+        let (window, controller, session) = try await shownWindow()
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
+        try await eventually { editor.presentedViewController is UIColorPickerViewController }
+        try pick(UIColor(red: 0, green: 0, blue: 0.5, alpha: 1), over: editor)
+        editor.updatePropertiesIfNeeded()
+        #expect(session.activeLayer?.effects?.stroke?.color == PaletteColor(red: 0, green: 0, blue: 128.0 / 255))
+        let shown = (editor.presentedViewController as? UIColorPickerViewController)?.selectedColor
+        #expect(shown.flatMap(SwatchButton.paletteColor).map { abs($0.blue - 0.5) < 0.0005 } == true)
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await eventually { editor.presentedViewController == nil }
+        try press(UIKeyCommand.inputEscape, in: controller)
+        try await closes(controller)
     }
 
     // MARK: Selecting

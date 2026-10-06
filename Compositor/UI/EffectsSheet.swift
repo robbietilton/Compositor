@@ -26,6 +26,7 @@ struct EffectsSheet: View {
         .padding(20).frame(width: 340).fixedSize()
         // The picker previews its working color on the layer while it is open.
         .onChange(of: session.colorPicker?.color) { _, _ in session.previewEffectColor() }
+        .onDisappear { session.finishEffectsChange() }
     }
 
     @ViewBuilder private var stroke: some View {
@@ -175,12 +176,17 @@ struct EffectsSheet: View {
             value.wrappedValue = min(limits.upperBound, max(limits.lowerBound, CGFloat(amount)))
         }
         return HStack(spacing: 10) {
+            // A drag, of the caption or the slider, is one undo step.
             Text(title).frame(width: 64, alignment: .leading)
-                .scrubbable(sensitivity: 1, value: value, range: limits)
+                .scrubbable(sensitivity: 1, value: value, range: limits,
+                            onStart: { session.beginEffectsChange() },
+                            onEnd: { session.finishEffectsChange() })
             // A manually entered larger value stays intact; only the thumb is pinned
             // to the end of the slider until the user drags it again.
             Slider(value: Binding(get: { min(range.upperBound, max(range.lowerBound, value.wrappedValue)) },
-                                  set: { value.wrappedValue = $0 }), in: range).frame(width: 130)
+                                  set: { value.wrappedValue = $0 }), in: range,
+                   onEditingChanged: { if $0 { session.beginEffectsChange() } else { session.finishEffectsChange() } })
+                .frame(width: 130)
             TextField(title, value: Binding(get: { Double(value.wrappedValue) },
                                             set: setAmount),
                       format: .number.precision(.fractionLength(0)))

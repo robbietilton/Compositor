@@ -249,7 +249,7 @@ extension EditorSession {
         layer.text = text
         let place = newLayerPlace(in: document)
         layer.parentID = place.parentID
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(editName)
         self.document?.layers.insert(layer, at: place.index)
         if dropsSelection { self.document?.selection = nil }

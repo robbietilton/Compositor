@@ -288,7 +288,7 @@ extension EditorSession {
                 succeeded = true
                 return true
             }
-            finishOpacityEdit()
+            finishHeldDrags()
             beginEdit(applied.name)
             document = applied.document
             if activeLayerID != applied.activeLayerID { activeLayerID = applied.activeLayerID }
@@ -376,7 +376,7 @@ extension EditorSession {
         guard style.red != color.red || style.green != color.green || style.blue != color.blue || style.colorRuns != nil else { return true }
         style.setColor(color, in: NSRange(location: 0, length: 0))
         guard style.isValid, let image = try? Self.textImage(style), let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Fill Text")
         document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
         document?.layers[index].text = LayerText(style: style, image: image)

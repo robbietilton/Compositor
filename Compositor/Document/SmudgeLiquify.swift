@@ -203,7 +203,7 @@ extension EditorSession {
             brushError = isMaskSelected ? "Smudge and Liquify work on a layer's pixels, not its mask." : paintRefusal
             return
         }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             let stroke = try WarpStroke(layer: layer, image: image, transform: displayedTransform(for: layer),
                                         canvas: document.size, mode: blurMode, settings: brushSettings)

@@ -61,7 +61,7 @@ extension EditorSession {
             }
             sourceOffset = offset
         }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             var settings = brushSettings
             settings.healing = tool == .spotHealing

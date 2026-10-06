@@ -14,6 +14,8 @@ final class DocumentHistory {
         let name: String
         let before: Snapshot
         let after: Snapshot
+        /// What the edit carried on, such as a color picker: its next edit joins this entry (see `end`).
+        weak var group: AnyObject?
     }
     private var past: [Entry] = []
     private var future: [Entry] = []
@@ -35,6 +37,9 @@ final class DocumentHistory {
     var canRedo: Bool { depth == 0 && !future.isEmpty }
     var undoName: String { past.last?.name ?? "" }
     var redoName: String { future.last?.name ?? "" }
+    /// What the edit Undo would take back, or Redo make again, carried on (see `end`).
+    var undoGroup: AnyObject? { past.last?.group }
+    var redoGroup: AnyObject? { future.last?.group }
     var isModified: Bool { revision != savedRevision }
     var undoCount: Int { past.count }
     func markSaved() { savedRevision = revision }
@@ -61,17 +66,32 @@ final class DocumentHistory {
         depth += 1
     }
 
-    func end(document: CanvasDocument?, selection: UUID?) {
+    /// `coalescing`: what the edit carries on, such as the color picker it came from. When the last entry carries on the
+    /// same and the history hasn't moved since (the document's revision is still that entry's), this edit joins it
+    /// rather than adding another, so a picking undoes in one step without holding one open. An edit made in between
+    /// that still stands, or the picking's own entry undone, starts a new entry; once the edit in between is undone, or
+    /// the picking's entry redone, the picking's next edit joins its entry again. An entry joined back to where it began
+    /// goes, as an edit that changes nothing adds none.
+    func end(document: CanvasDocument?, selection: UUID?, coalescing group: AnyObject? = nil) {
         guard depth > 0 else { return }
         depth -= 1
         guard depth == 0, let before = pending else { return }
         pending = nil
         // Selecting, navigating, and no-op edits must preserve redo history.
         guard before.document != document else { return }
-        revision = UUID()
-        past.append(Entry(name: pendingName, before: before,
-            after: Snapshot(document: document, activeLayerID: selection, revision: revision)))
+        var start = (name: pendingName, before: before)
+        if let group, let last = past.last, last.group === group, last.after.revision == before.revision {
+            past.removeLast()
+            start = (last.name, last.before)
+        }
         future.removeAll()
+        if start.before.document == document {
+            revision = start.before.revision
+        } else {
+            revision = UUID()
+            past.append(Entry(name: start.name, before: start.before,
+                after: Snapshot(document: document, activeLayerID: selection, revision: revision), group: group))
+        }
         trim(current: document)
     }
 

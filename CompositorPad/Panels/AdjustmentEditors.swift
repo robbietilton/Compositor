@@ -92,6 +92,8 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     private weak var shownPicker: UIColorPickerViewController?
     /// The picking the picker was last shown for, which it's shown for once.
     private weak var shownPicking: ColorPickerState?
+    /// The picking's color as the picker last showed it, put there or picked in it.
+    private var shownColor: PaletteColor?
 
     /// Whether the editor picks colors for `target`: a filter's, an adjustment's or an effect's.
     static func picks(_ target: ColorPickerTarget) -> Bool {
@@ -106,7 +108,8 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
 
     /// Shows the system's color picker over the editor while one of its colors is being picked, as the Mac's opens on a
     /// swatch, and takes it away when the picking ends: by Escape or Return, or the edit's ending, which ends it too. A
-    /// tap off the picker ends it, as its OK.
+    /// tap off the picker ends it, as its OK. The picker shows the color an Undo or Redo gives an effect being picked, as
+    /// the Mac's does, so its OK keeps what it shows.
     private func followColorPicker() {
         if isPicking, shownPicker == nil, presentedViewController == nil, let colorPicker = session.colorPicker {
             // Once for each picking: a picker gone without a word to the editor, however it went, said OK as a tap off it
@@ -129,9 +132,14 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
             present(picker, animated: true)
             shownPicker = picker
             shownPicking = colorPicker
+            shownColor = colorPicker.color
         } else if !isPicking, let picker = shownPicker {
             shownPicker = nil
             picker.dismiss(animated: true)
+        } else if let picker = shownPicker, let color = session.colorPicker?.color, color != shownColor {
+            // Only when the color moves without the picker, so a finger dragging in it isn't fought.
+            picker.selectedColor = UIColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1)
+            shownColor = color
         }
     }
 
@@ -139,6 +147,7 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     func colorPickerViewController(_ viewController: UIColorPickerViewController, didSelect color: UIColor, continuously: Bool) {
         guard let colorPicker = session.colorPicker, let picked = SwatchButton.paletteColor(color) else { return }
         colorPicker.hsb.setRGB(picked)
+        shownColor = colorPicker.color
         session.previewVignetteColor()
         session.previewGradientMapColor()
         session.previewDitherColor()

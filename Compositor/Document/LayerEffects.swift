@@ -294,6 +294,8 @@ extension EditorSession {
     /// For a newly added effect the original value is absent, so Cancel removes it again.
     func finishEffectsEditing(commit: Bool) {
         guard let editing = effectsEditing else { return }
+        // A drag still held is a step of its own, before Cancel's.
+        finishEffectsChange()
         if let picker = colorPicker, case .effect = picker.target { closeColorPicker(commit: commit) }
         if !commit, let original = effectsEditingOriginal,
            var effects = document?.layers.first(where: { $0.id == editing.layerID })?.effects {
@@ -313,26 +315,51 @@ extension EditorSession {
     }
 
     /// `fromPanel`: the open panel's own edits and its Cancel, which text, a transform, a crop or a gradient waiting for
-    /// Apply, started since, don't stop.
-    func setEffects(_ effects: LayerEffects, on id: UUID? = nil, name: String = "Layer Effects", fromPanel: Bool = false) {
+    /// Apply, started since, don't stop. An edit in the panel goes into the step of a drag held there; any other, the
+    /// effect hidden or copied beside the panel say, ends the drag first, so it keeps a step of its own.
+    /// `coalescing`: what the edit carries on, such as the color picker it came from, whose edits make one step (see
+    /// `DocumentHistory.end`).
+    func setEffects(_ effects: LayerEffects, on id: UUID? = nil, name: String = "Layer Effects", fromPanel: Bool = false,
+                    coalescing group: AnyObject? = nil) {
         guard fromPanel ? canEditBesideCanvasEdits : canEditLayers, effects.isValid,
               let index = document?.layers.firstIndex(where: { $0.id == (id ?? activeLayerID) }),
               document?.layers[index].isGroup == false, document?.layers[index].asset != nil,
               document?.layers[index].effects != (effects.isEmpty ? nil : effects) else { return }
-        finishOpacityEdit()
+        if fromPanel { finishOpacityEdit() } else { finishHeldDrags() }
         beginEdit(name)
         document?.layers[index].effects = effects.isEmpty ? nil : effects
-        endEdit()
+        endEdit(coalescing: group)
     }
 
     /// Panel edits stay bound to the layer that opened the panel, even if selection changes.
-    func changeEffects(_ change: (inout LayerEffects) -> Void) {
+    func changeEffects(coalescing group: AnyObject? = nil, _ change: (inout LayerEffects) -> Void) {
         guard let editing = effectsEditing,
               let layer = document?.layers.first(where: { $0.id == editing.layerID }),
               layer.effects?.contains(editing.kind) == true else { return }
         var effects = layer.effects ?? LayerEffects()
         change(&effects)
-        setEffects(effects, on: layer.id, name: "Edit " + editing.kind.rawValue, fromPanel: true)
+        setEffects(effects, on: layer.id, name: "Edit " + editing.kind.rawValue, fromPanel: true, coalescing: group)
+    }
+
+    /// A drag of a slider, or of its caption, in the effect's panel is one undo step, as Layer Opacity's is: what it
+    /// sets goes into the step begun here, until it's let go. Like the panel's other edits, it goes through text, a
+    /// transform, a crop or a gradient waiting for Apply, whose own steps end it first when they're applied.
+    func beginEffectsChange() {
+        guard canEditBesideCanvasEdits, !isChangingEffects, let editing = effectsEditing else { return }
+        finishOpacityEdit()
+        beginEdit("Edit " + editing.kind.rawValue)
+        isChangingEffects = true
+    }
+    func finishEffectsChange() {
+        guard isChangingEffects else { return }
+        isChangingEffects = false
+        endEdit()
+    }
+    /// Ends a drag still held, of Layer Opacity or in an effect's panel, so the edit about to be made, beside them or
+    /// from the keyboard, is a step of its own rather than going into the drag's.
+    func finishHeldDrags() {
+        finishOpacityEdit()
+        finishEffectsChange()
     }
 
     func canCopyEffect(_ kind: LayerEffectKind, from source: UUID, to target: UUID) -> Bool {
@@ -375,6 +402,7 @@ extension EditorSession {
     func endEffectsEditingIfGone() {
         guard let editing = effectsEditing,
               document?.layers.first(where: { $0.id == editing.layerID })?.effects?.contains(editing.kind) != true else { return }
+        finishEffectsChange()
         if let picker = colorPicker, case .effect = picker.target { closeColorPicker(commit: false) }
         effectsEditing = nil
         effectsEditingOriginal = nil
@@ -383,6 +411,7 @@ extension EditorSession {
     func removeSelectedEffect() {
         guard let selectedEffect, canEditLayers,
               var effects = document?.layers.first(where: { $0.id == selectedEffect.layerID })?.effects else { return }
+        finishEffectsChange()
         if effectsEditing == selectedEffect {
             if let picker = colorPicker, case .effect = picker.target { closeColorPicker(commit: false) }
             effectsEditing = nil

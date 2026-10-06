@@ -62,7 +62,7 @@ extension EditorSession {
             return
         }
         guard canPaint else { brushError = paintRefusal; return }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             gradientEdit = GradientEdit(raster: try makeRasterEdit(for: layer, growsMask: true), start: point)
             brushRevision += 1
@@ -112,6 +112,8 @@ extension EditorSession {
     func commitGradient() async {
         guard let edit = gradientEdit, !isProjectBusy else { return }
         guard edit.hasLine else { cancelGradient(); return }
+        // A drag held in an effect's panel, which works beside the gradient waiting for Apply, keeps a step of its own.
+        finishHeldDrags()
         do {
             try edit.applyFill()
             try await commitRasterEdit(edit.raster, name: edit.raster.isMask ? "Gradient Mask" : "Gradient")

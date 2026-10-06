@@ -126,6 +126,8 @@ final class EditorSession {
     /// The layer whose effects panel is open.
     var effectsEditing: LayerEffectSelection?
     var effectsEditingOriginal: LayerEffects?
+    /// A slider in the effect's panel is held: what it sets goes into one undo step, finished when it's let go.
+    var isChangingEffects = false
     var effectSelection: LayerEffectSelection?
     @ObservationIgnored var effectsPreviews = EffectsPreviewCache()
     var projectURL: URL?
@@ -564,7 +566,7 @@ final class EditorSession {
     func commitTransform() {
         snapGuides = ([], [])
         blendPreview = nil
-        finishOpacityEdit()
+        finishHeldDrags()
         guard let edit = transformEdit else { return }
         defer {
             if transformDuplicate != nil { transformDuplicate = nil; endEdit() }
@@ -730,24 +732,37 @@ final class EditorSession {
     func undo() {
         // Like Photoshop, the first Undo discards a pending gradient.
         if gradientEdit != nil { cancelGradient(); return }
+        let group = history.undoGroup
         guard canUndo, let snapshot = history.undo() else { return }
-        restore(snapshot)
+        restore(snapshot, group: group)
     }
 
     func redo() {
+        let group = history.redoGroup
         guard canRedo, let snapshot = history.redo() else { return }
-        restore(snapshot)
+        restore(snapshot, group: group)
     }
 
-    private func restore(_ snapshot: DocumentHistory.Snapshot) {
+    /// `group`: what the edit undone or redone carried on (see `DocumentHistory.end`).
+    private func restore(_ snapshot: DocumentHistory.Snapshot, group: AnyObject?) {
         cancelCrop()
         cancelGradient()
         let changedCanvas = document?.id != snapshot.document?.id
         let keepMaskTarget = isMaskSelected && activeLayerID == snapshot.activeLayerID
+        var picking: (picker: ColorPickerState, kind: LayerEffectKind, color: PaletteColor?)?
+        if let colorPicker, case .effect(let kind) = colorPicker.target { picking = (colorPicker, kind, editingEffects.color(kind)) }
         document = snapshot.document
         activeLayerID = snapshot.activeLayerID
         isMaskSelected = keepMaskTarget && activeLayer?.mask != nil
         if changedCanvas, let document { viewport.fit(documentSize: document.size) }
+        // The picker open on an effect's color follows the color Undo or Redo gave the effect. Another edit undone or
+        // redone starts the picking over from there, so neither its OK nor its Cancel puts back a color that edit took
+        // away. An Undo or Redo of the picking's own step leaves Cancel putting back the color from before the picking,
+        // with no step left unless an edit made beside the picker had split the picking in two.
+        if let picking, let color = editingEffects.color(picking.kind), color != picking.color {
+            if group !== picking.picker { picking.picker.original = color }
+            picking.picker.hsb.setRGB(color)
+        }
     }
 
     /// Nestable transaction boundary; future tools can group a complete gesture.
@@ -755,7 +770,10 @@ final class EditorSession {
         history.begin(name, document: document, selection: activeLayerID)
     }
 
-    func endEdit() { history.end(document: document, selection: activeLayerID) }
+    /// `coalescing`: what the edit carries on, such as the color picker it came from (see `DocumentHistory.end`).
+    func endEdit(coalescing group: AnyObject? = nil) {
+        history.end(document: document, selection: activeLayerID, coalescing: group)
+    }
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
     var canEditLayers: Bool {
         textDraft == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && canEditBesideCanvasEdits

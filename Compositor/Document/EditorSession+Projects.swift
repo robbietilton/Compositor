@@ -73,6 +73,7 @@ extension EditorSession {
     /// from being edited, so it's canceled after those, or its Cancel couldn't put the layer back; while the project is
     /// still busy it can't, so the panel stays open rather than closing over an effect that was never OK'd.
     func settlePendingEdits() async {
+        finishEffectsChange()
         if gradientEdit != nil { await commitGradient() }
         if pixelMove != nil { await finishPixelMove() }
         cancelFilter()

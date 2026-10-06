@@ -230,7 +230,7 @@ extension EditorSession {
         }
         Self.releaseDetachedClipping(in: &layers)
         guard (try? LayerHierarchy.validate(layers.map(\.hierarchyRecord))) != nil else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Ungroup Layers")
         self.document?.layers = layers
         selectLayers(childIDs, primary: children.first?.id)

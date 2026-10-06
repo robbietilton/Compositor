@@ -38,7 +38,7 @@ extension EditorSession {
         }
         let ids = Set(members.map(\.id))
         guard !ids.isEmpty else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(horizontally ? "Flip Horizontal" : "Flip Vertical")
         for index in document.layers.indices where ids.contains(document.layers[index].id) {
             let layer = document.layers[index]
@@ -58,7 +58,7 @@ extension EditorSession {
         cancelCrop()
         guard canEditLayers, let document else { return }
         let axis = horizontally ? document.size.width / 2 : document.size.height / 2
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(horizontally ? "Flip Canvas Horizontal" : "Flip Canvas Vertical")
         for index in document.layers.indices {
             let layer = document.layers[index]

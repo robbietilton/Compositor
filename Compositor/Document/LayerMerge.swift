@@ -64,7 +64,7 @@ extension EditorSession {
         let insertion = slot - layers[..<slot].filter { plan.removed.contains($0.id) }.count
         next.insert(merged, at: min(max(0, insertion), next.count))
         guard (try? LayerHierarchy.validate(next.map(\.hierarchyRecord))) != nil else { Platform.beep(); return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(plan.action)
         self.document?.layers = next
         activeLayerID = merged.id
