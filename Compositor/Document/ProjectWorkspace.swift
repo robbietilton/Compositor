@@ -30,7 +30,7 @@ final class ProjectWorkspace {
             && s.gradientEdit == nil && s.pixelMove == nil && s.colorPicker == nil
     }
     init() {
-        let first = ProjectTab(name: "Untitled")
+        let first = ProjectTab(name: String(localized: "Untitled"))
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
         first.controller.workspace = self

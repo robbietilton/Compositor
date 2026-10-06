@@ -49,8 +49,8 @@ final class ProjectController {
         panel.allowedContentTypes = [.png]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export PNG"
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".png"
+        panel.title = String(localized: "Export PNG")
+        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Untitled")) + ".png"
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
         else { response = await panel.begin() }
@@ -67,7 +67,7 @@ final class ProjectController {
         let options: CanvasSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Canvas Size"
+            sheet.title = String(localized: "Canvas Size")
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, session: session) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -79,7 +79,7 @@ final class ProjectController {
         guard let options, let snapshot = session.projectSnapshot() else { return }
         do {
             let resized = try await CanvasResizer.shared.resize(snapshot, to: options)
-            session.applyDocumentSize(resized, actionName: "Canvas Size")
+            session.applyDocumentSize(resized, actionName: String(localized: "Canvas Size"))
         } catch { await showError("Couldn’t change canvas size", error: error) }
     }
 
@@ -89,7 +89,7 @@ final class ProjectController {
         let options: ImageSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Image Size"
+            sheet.title = String(localized: "Image Size")
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -166,7 +166,7 @@ final class ProjectController {
             let data: Data? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export JPEG"
+                sheet.title = String(localized: "Export JPEG")
                 sheet.contentViewController = NSHostingController(rootView: JPEGExportSheet(raster: raster, session: session) { data in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
@@ -181,8 +181,8 @@ final class ProjectController {
             panel.allowedContentTypes = [.jpeg]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.title = "Export JPEG"
-            panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled") + ".jpg"
+            panel.title = String(localized: "Export JPEG")
+            panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? String(localized: "Untitled")) + ".jpg"
             guard await panel.beginSheetModal(for: window) == .OK, let url = panel.url else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -259,7 +259,7 @@ final class ProjectController {
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
+            panel.title = String(localized: "Open Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -329,7 +329,7 @@ final class ProjectController {
         await finishWriting()
         guard session.isModified, session.document != nil else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? "Untitled")?"
+        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? String(localized: "Untitled"))?"
         alert.informativeText = "Your changes will be lost if you don’t save them."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")

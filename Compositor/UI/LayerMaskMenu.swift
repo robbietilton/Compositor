@@ -48,7 +48,7 @@ final class MaskAloneBadgeView: NSView {
                               target: nil, action: nil)
         button.isBordered = false
         button.symbolConfiguration = .init(pointSize: 9, weight: .bold)
-        button.toolTip = "Show the image again (or Option-click the mask thumbnail)"
+        button.toolTip = String(localized: "Show the image again (or Option-click the mask thumbnail)")
         stack = NSStackView(views: [icon, title, name, button])
         stack.spacing = 7
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 11, bottom: 0, right: 8)

@@ -37,7 +37,7 @@ struct TransformInspector: View {
                 Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text(String(localized: String.LocalizationValue($0.rawValue))).tag($0) }
                 }.frame(width: 170)
                 Button("Flip H") { change { $0.flipX.toggle() } }
                 Button("Flip V") { change { $0.flipY.toggle() } }
@@ -113,12 +113,12 @@ private struct TransformValueField: View {
     @FocusState private var focused: Bool
     var body: some View {
         HStack(spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(LocalizedStringKey(label)).font(.caption).foregroundStyle(.secondary)
                 .scrubbable(sensitivity: 1, value: Binding(get: { value }, set: { newValue in
                     change(newValue)
                     text = Self.formatted(Double(newValue))
                 }), range: range, step: 1, onEnd: finish)
-            TextField(label, text: $text)
+            TextField(LocalizedStringKey(label), text: $text)
                 .textFieldStyle(.roundedBorder).focused($focused)
                 .accessibilityIdentifier("transform\(label)")
                 .onAppear { sync() }
