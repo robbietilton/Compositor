@@ -1,0 +1,35 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "98BB3BAD-A448-40A0-9EDE-619A54461B76",
+  "width": 64,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "EFD30356-7380-4F79-8D52-4DCBA71E50EF",
+  "layers": [
+    {
+      "id": "EFD30356-7380-4F79-8D52-4DCBA71E50EF",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "EFD30356-7380-4F79-8D52-4DCBA71E50EF.png"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "activeLayerID": "59BD8849-E641-483C-A019-F3D9FDC28860",
+  "colorSpace": "sRGB",
+  "documentID": "5A7D89B4-ED25-4DE4-8231-F3C62B528215",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "7BFD680D-AB03-4D74-AEB6-D474D6DAD2B0",
+      "imageFile": "7BFD680D-AB03-4D74-AEB6-D474D6DAD2B0.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "FC6BAB3D-8914-4A29-9C51-2AA983C864F8",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Invert",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "59BD8849-E641-483C-A019-F3D9FDC28860",
+      "isGroup": true,
+      "isVisible": true,
+      "name": "Group",
+      "opacity": 0.5,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 7,
+  "width": 64
+}

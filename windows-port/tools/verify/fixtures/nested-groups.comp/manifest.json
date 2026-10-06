@@ -1,0 +1,104 @@
+{
+  "activeLayerID": "143E9584-20FD-436B-AAB3-5AC381BC792C",
+  "colorSpace": "sRGB",
+  "documentID": "B07DD6EA-F943-490A-A538-F77161726DA5",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "63A13095-ADDE-44E7-BCBD-80EE88FE67B7",
+      "imageFile": "63A13095-ADDE-44E7-BCBD-80EE88FE67B7.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "0F945727-6B11-4485-9509-52B3C601E374",
+      "isGroup": true,
+      "isVisible": true,
+      "name": "Outer",
+      "opacity": 0.5,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "Nearest",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "54683177-D202-43E7-B714-F08F8635FE07",
+      "isGroup": true,
+      "isVisible": true,
+      "name": "Inner",
+      "opacity": 0.5,
+      "parentID": "0F945727-6B11-4485-9509-52B3C601E374",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "Nearest",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "143E9584-20FD-436B-AAB3-5AC381BC792C",
+      "imageFile": "143E9584-20FD-436B-AAB3-5AC381BC792C.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Leaf",
+      "opacity": 0.5,
+      "parentID": "54683177-D202-43E7-B714-F08F8635FE07",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

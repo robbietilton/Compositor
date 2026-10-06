@@ -1,0 +1,142 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "9FEC945D-48CB-40CC-9C99-8C09518447D7",
+  "width": 64,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "1DE304EC-2E48-407B-842A-F04E58F010C8",
+  "layers": [
+    {
+      "id": "1DE304EC-2E48-407B-842A-F04E58F010C8",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "1DE304EC-2E48-407B-842A-F04E58F010C8.png"
+    },
+    {
+      "id": "D7515EA1-E84B-4513-AD80-D209751B34E2",
+      "name": "Invert",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "adjustment": {
+        "kind": "Invert",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

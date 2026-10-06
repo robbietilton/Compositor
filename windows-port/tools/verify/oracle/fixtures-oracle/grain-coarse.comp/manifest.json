@@ -1,0 +1,148 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "3500E81E-E328-4C32-BD86-C337C65920FC",
+  "width": 64,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "90DEF2E3-EF82-4286-97C9-59520E5652ED",
+  "layers": [
+    {
+      "id": "90DEF2E3-EF82-4286-97C9-59520E5652ED",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "90DEF2E3-EF82-4286-97C9-59520E5652ED.png"
+    },
+    {
+      "id": "6D157F28-F98A-4EC6-960F-AFAB72BEFB99",
+      "name": "Grain",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "adjustment": {
+        "kind": "Grain",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "grainSettings": {
+          "amount": 70.0,
+          "size": 6.0,
+          "roughness": 0.0,
+          "seed": 777
+        }
+      }
+    }
+  ]
+}

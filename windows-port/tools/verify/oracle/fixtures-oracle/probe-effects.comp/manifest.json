@@ -1,0 +1,190 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "FBCD0E91-7DE3-4556-909C-431B02521B4A",
+  "width": 128,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "34034DC6-7FF4-4E0B-BDE5-6CF4598942BA",
+  "layers": [
+    {
+      "id": "34034DC6-7FF4-4E0B-BDE5-6CF4598942BA",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          128.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "34034DC6-7FF4-4E0B-BDE5-6CF4598942BA.png"
+    },
+    {
+      "id": "C5DD3F2E-722C-4EDB-BD2A-46CC676F69B1",
+      "name": "Box0",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          14.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "C5DD3F2E-722C-4EDB-BD2A-46CC676F69B1.png"
+    },
+    {
+      "id": "14E11AE6-CA6F-441F-9859-71C43E0EECA9",
+      "name": "Box1",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          38.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "14E11AE6-CA6F-441F-9859-71C43E0EECA9.png",
+      "effects": {
+        "colorOverlay": {
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 1.0,
+          "opacity": 1.0
+        }
+      }
+    },
+    {
+      "id": "F3E95A3A-4CC6-4B61-BCE2-61FDFFADC877",
+      "name": "Box2",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          62.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "F3E95A3A-4CC6-4B61-BCE2-61FDFFADC877.png",
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 3.0,
+          "blur": 0.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 1.0,
+          "opacity": 1.0
+        }
+      }
+    },
+    {
+      "id": "346F6B23-1792-4ECA-996F-68BABD9B51D5",
+      "name": "Box3",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          86.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "346F6B23-1792-4ECA-996F-68BABD9B51D5.png",
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 10.0,
+          "blur": 0.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 1.0,
+          "opacity": 1.0
+        }
+      }
+    },
+    {
+      "id": "E805AC4C-B913-4F48-A19C-61CC76803244",
+      "name": "Box4",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          110.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "E805AC4C-B913-4F48-A19C-61CC76803244.png",
+      "effects": {
+        "stroke": {
+          "size": 4.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 1.0,
+          "opacity": 1.0,
+          "inside": false
+        }
+      }
+    }
+  ]
+}

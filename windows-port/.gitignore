@@ -1,0 +1,12 @@
+# Build outputs
+target*/
+dist/*.zip
+dist/*.msix
+dist/msix-layout/
+dist/msix-unpacked/
+# Verification scratch
+tools/verify/oracle/fixtures-oracle/actual/
+tools/verify/oracle/__pycache__/
+tools/verify/__pycache__/
+tools/verify/oracle/_scratch/
+*.pyc

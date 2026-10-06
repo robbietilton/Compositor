@@ -1,0 +1,69 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "1EC2A93A-A8FD-4EB9-95B0-6C50E926048C",
+  "width": 64,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "1219C3E2-266B-486F-8798-6CE78D599020",
+  "layers": [
+    {
+      "id": "1219C3E2-266B-486F-8798-6CE78D599020",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "1219C3E2-266B-486F-8798-6CE78D599020.png"
+    },
+    {
+      "id": "29A27FB0-E688-408F-AFFD-0B1D8742E9A2",
+      "name": "Shape",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          24.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "29A27FB0-E688-408F-AFFD-0B1D8742E9A2.png",
+      "effects": {
+        "innerShadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 4.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.7
+        }
+      }
+    }
+  ]
+}

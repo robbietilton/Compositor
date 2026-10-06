@@ -1,0 +1,127 @@
+{
+  "assets": [
+    {
+      "file": "golden_group.comp\\00000000-0000-0000-C0FF-EE0000020001.mask.gray",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000020001",
+      "kind": "mask",
+      "width": 48
+    },
+    {
+      "file": "golden_group.comp\\00000000-0000-0000-C0FF-EE0000020002.rgba",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000020002",
+      "kind": "image",
+      "width": 48
+    },
+    {
+      "file": "golden_group.comp\\00000000-0000-0000-C0FF-EE0000020003.rgba",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000020003",
+      "kind": "image",
+      "width": 48
+    },
+    {
+      "file": "golden_group.comp\\00000000-0000-0000-C0FF-EE0000020004.rgba",
+      "height": 20,
+      "id": "00000000-0000-0000-C0FF-EE0000020004",
+      "kind": "image",
+      "width": 40
+    },
+    {
+      "file": "golden_group.comp\\00000000-0000-0000-C0FF-EE0000020005.rgba",
+      "height": 12,
+      "id": "00000000-0000-0000-C0FF-EE0000020005",
+      "kind": "image",
+      "width": 36
+    }
+  ],
+  "height": 48,
+  "layerCount": 5,
+  "layers": [
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": false,
+      "hasMask": true,
+      "id": "00000000-0000-0000-C0FF-EE0000020001",
+      "kind": "group",
+      "maskEnabled": true,
+      "maskLinked": null,
+      "name": "Folder",
+      "opacity": 0.6,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000020002",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Base",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000020003",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Clipped",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 1,
+      "fontRuns": 1,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000020004",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Caption",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000020005",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Arrow",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": "Line"
+    }
+  ],
+  "package": "golden_group.comp",
+  "resolution": 72,
+  "version": 11,
+  "width": 48
+}

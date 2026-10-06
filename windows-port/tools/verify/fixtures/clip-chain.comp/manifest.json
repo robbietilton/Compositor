@@ -1,0 +1,106 @@
+{
+  "activeLayerID": "9CAFE0CC-A903-4A97-82F2-380384BEBEA3",
+  "colorSpace": "sRGB",
+  "documentID": "0197E91F-8E86-4159-85DA-8D087B1B3E4F",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "BEE7308E-5F2E-4B39-B991-E204AE040E08",
+      "imageFile": "BEE7308E-5F2E-4B39-B991-E204AE040E08.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "1077A1BC-69A4-4976-8086-619289F45295",
+      "imageFile": "1077A1BC-69A4-4976-8086-619289F45295.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Base",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "84C98E18-740E-4811-B40A-4DB758888E3D",
+      "imageFile": "84C98E18-740E-4811-B40A-4DB758888E3D.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskSourceID": "1077A1BC-69A4-4976-8086-619289F45295",
+      "name": "Middle",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "9CAFE0CC-A903-4A97-82F2-380384BEBEA3",
+      "imageFile": "9CAFE0CC-A903-4A97-82F2-380384BEBEA3.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskSourceID": "84C98E18-740E-4811-B40A-4DB758888E3D",
+      "name": "Top",
+      "opacity": 0.75,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

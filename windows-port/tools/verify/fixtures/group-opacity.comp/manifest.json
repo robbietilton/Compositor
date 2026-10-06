@@ -1,0 +1,105 @@
+{
+  "activeLayerID": "5D902890-32BC-4741-9625-B3F15B360DD6",
+  "colorSpace": "sRGB",
+  "documentID": "6E999494-2CFD-46D3-A709-7B3CB53D6D90",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "94D295AE-BD19-4347-BDBE-A694B2D2A5E0",
+      "imageFile": "94D295AE-BD19-4347-BDBE-A694B2D2A5E0.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "98FE8AB6-99DB-44A2-AB6C-483F686BEA2D",
+      "isGroup": true,
+      "isVisible": true,
+      "name": "Folder",
+      "opacity": 0.5,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "A5DD91BA-F4B1-4684-912B-E9ECF0EADBD1",
+      "imageFile": "A5DD91BA-F4B1-4684-912B-E9ECF0EADBD1.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Warm",
+      "opacity": 1.0,
+      "parentID": "98FE8AB6-99DB-44A2-AB6C-483F686BEA2D",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "5D902890-32BC-4741-9625-B3F15B360DD6",
+      "imageFile": "5D902890-32BC-4741-9625-B3F15B360DD6.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Cool",
+      "opacity": 1.0,
+      "parentID": "98FE8AB6-99DB-44A2-AB6C-483F686BEA2D",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

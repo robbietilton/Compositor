@@ -1,0 +1,118 @@
+{
+  "assets": [
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010001.rgba",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000010001",
+      "kind": "image",
+      "width": 64
+    },
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010002.rgba",
+      "height": 16,
+      "id": "00000000-0000-0000-C0FF-EE0000010002",
+      "kind": "image",
+      "width": 24
+    },
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010003.rgba",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000010003",
+      "kind": "image",
+      "width": 64
+    },
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010003.mask.gray",
+      "height": 48,
+      "id": "00000000-0000-0000-C0FF-EE0000010003",
+      "kind": "mask",
+      "width": 64
+    },
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010004.rgba",
+      "height": 16,
+      "id": "00000000-0000-0000-C0FF-EE0000010004",
+      "kind": "image",
+      "width": 16
+    },
+    {
+      "file": "golden_layers.comp\\00000000-0000-0000-C0FF-EE0000010004.mask.gray",
+      "height": 1,
+      "id": "00000000-0000-0000-C0FF-EE0000010004",
+      "kind": "mask",
+      "width": 1
+    }
+  ],
+  "height": 48,
+  "layerCount": 4,
+  "layers": [
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000010001",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Gradient",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Multiply",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000010002",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Cutout",
+      "opacity": 0.75,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": true,
+      "id": "00000000-0000-0000-C0FF-EE0000010003",
+      "kind": "raster",
+      "maskEnabled": true,
+      "maskLinked": null,
+      "name": "Masked",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": true,
+      "id": "00000000-0000-0000-C0FF-EE0000010004",
+      "kind": "raster",
+      "maskEnabled": true,
+      "maskLinked": null,
+      "name": "Tiny Mask",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    }
+  ],
+  "package": "golden_layers.comp",
+  "resolution": 144,
+  "version": 11,
+  "width": 64
+}

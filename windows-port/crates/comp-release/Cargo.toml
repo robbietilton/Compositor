@@ -1,0 +1,13 @@
+[package]
+name = "comp-release"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Update manifests, integrity checks and staged replacement for Compositor for Windows"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+semver = { workspace = true }

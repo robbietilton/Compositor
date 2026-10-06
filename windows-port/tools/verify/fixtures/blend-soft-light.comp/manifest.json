@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "E20BF193-0F50-4686-9DE4-61E6EDFF0B81",
+  "colorSpace": "sRGB",
+  "documentID": "345CDB90-72D8-4539-BDAB-9022F78397E5",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "62978199-B2D7-4370-B48A-FE62F4A3D9F9",
+      "imageFile": "62978199-B2D7-4370-B48A-FE62F4A3D9F9.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Soft Light",
+      "id": "E20BF193-0F50-4686-9DE4-61E6EDFF0B81",
+      "imageFile": "E20BF193-0F50-4686-9DE4-61E6EDFF0B81.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Soft Light",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

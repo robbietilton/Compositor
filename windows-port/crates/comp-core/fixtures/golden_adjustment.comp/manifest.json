@@ -1,0 +1,286 @@
+{
+  "activeLayerID": "00000000-0000-0000-C0FF-EE0000030001",
+  "colorSpace": "sRGB",
+  "documentID": "00000000-0000-0000-C0FF-EE0000090001",
+  "format": "com.compositor.project",
+  "height": 32,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000030001",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000030001.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Base",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          32,
+          32
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "colorize": false,
+        "curves": {
+          "channel": "Red",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 128,
+                "y": 140
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 120,
+                "y": 147
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 10
+              },
+              {
+                "x": 255,
+                "y": 245
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 8
+              },
+              {
+                "x": 255,
+                "y": 238
+              }
+            ]
+          ]
+        },
+        "hue": 0,
+        "kind": "Curves",
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            }
+          ]
+        },
+        "lightness": 0,
+        "saturation": 0
+      },
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000030002",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Warm Grade",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          32,
+          32
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "blurRadius": 6.5,
+        "kind": "Gaussian Blur",
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "outputBlack": 0,
+              "outputWhite": 255,
+              "white": 255
+            }
+          ]
+        }
+      },
+      "blendMode": "Screen",
+      "id": "00000000-0000-0000-C0FF-EE0000030003",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Soft Focus",
+      "opacity": 0.8,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          32,
+          32
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "colorBalanceSettings": {
+          "highlightCyanRed": -4,
+          "highlightMagentaGreen": 6,
+          "highlightYellowBlue": 10,
+          "midCyanRed": 12,
+          "midMagentaGreen": 0,
+          "midYellowBlue": -8,
+          "preserveLuminosity": true,
+          "shadowCyanRed": 5,
+          "shadowMagentaGreen": -3,
+          "shadowYellowBlue": 2
+        },
+        "kind": "Color Balance"
+      },
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000030004",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Balance",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          32,
+          32
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000030005",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000030005.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "00000000-0000-0000-C0FF-EE0000030005.mask.png",
+      "maskLinked": false,
+      "maskPlacement": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          10.5,
+          4.25
+        ],
+        "rotation": 15.0,
+        "sampling": "High quality",
+        "size": [
+          16,
+          16
+        ]
+      },
+      "name": "Loose Mask",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          8,
+          8
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          16,
+          16
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 32
+}

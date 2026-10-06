@@ -1,0 +1,162 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "764EC098-8294-43DC-A7E1-495C8669F9D2",
+  "width": 64,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "89543797-8BE7-4D1A-AD42-94B553B6BFD7",
+  "layers": [
+    {
+      "id": "89543797-8BE7-4D1A-AD42-94B553B6BFD7",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "89543797-8BE7-4D1A-AD42-94B553B6BFD7.png"
+    },
+    {
+      "id": "4A984077-6486-4F95-9BD9-1673756B573F",
+      "name": "Hue/Saturation",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          64.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "hsvSettings": {
+          "range": "Reds",
+          "colorize": false,
+          "invertRange": false,
+          "adjustments": {
+            "Reds": {
+              "hue": 60.0,
+              "saturation": -40.0,
+              "lightness": 20.0
+            }
+          },
+          "bands": {
+            "Reds": {
+              "falloffStart": 315.0,
+              "rangeStart": 345.0,
+              "rangeEnd": 15.0,
+              "falloffEnd": 45.0
+            }
+          }
+        }
+      }
+    }
+  ]
+}

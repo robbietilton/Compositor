@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "CFC5F3D1-06D0-42B0-93A6-D12A2AAE34D7",
+  "colorSpace": "sRGB",
+  "documentID": "FD1DBDEC-92DB-4B7A-81CD-C06F04F2DD39",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "139DA894-71ED-4474-940F-F6956818E1BA",
+      "imageFile": "139DA894-71ED-4474-940F-F6956818E1BA.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "CFC5F3D1-06D0-42B0-93A6-D12A2AAE34D7",
+      "imageFile": "CFC5F3D1-06D0-42B0-93A6-D12A2AAE34D7.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Mirrored",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": true,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "Nearest",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

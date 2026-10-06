@@ -1,0 +1,30 @@
+acceptance run against revision: 48a304c with uncommitted changes
+cargo test -p comp-core        PASS  181 tests passed, 0 suites failed
+cargo test -p comp-render      PASS  229 tests passed, 0 suites failed
+cargo test -p comp-io          PASS  156 tests passed, 0 suites failed
+cargo test -p comp-brush       PASS  124 tests passed, 0 suites failed
+cargo test -p comp-cli         PASS  7 tests passed, 0 suites failed
+cargo test -p comp-text        PASS  334 tests passed, 0 suites failed
+cargo test -p comp-raw         PASS  164 tests passed, 0 suites failed
+cargo test -p comp-release     PASS  14 tests passed, 0 suites failed
+cargo test -p comp-gui         PASS  396 tests passed, 0 suites failed
+build compc                    PASS  E:\Compositor-main\compositor_win\target-lead\debug\\compc.exe
+manifest fidelity              PASS  40/40 manifests reproduced field for field
+release tooling                PASS  10 checks passed
+interaction budget             PASS  best of 3: 6.61 ms per sample to pixels (budget 16 ms, gate 25 ms)
+region rendering               PASS  PASS 132 region renders equal the cropped full render exactly
+random differential            PASS  PASS 40 random documents agreed with the reference (seed 20250101)
+checks catch sabotage          PASS  2 checks exercised, 0 not doing their job
+png/jpeg codecs                PASS  24 codec comparisons, 0 wrong
+psd import                     PASS  PASS 7 PSD files imported and compared, 0 refused, 0 wrong
+damaged packages               PASS  80 damaged packages fed to validate+render: 71 refused cleanly, 9 accepted, 0 crashed or hung
+format versions 1-11           PASS  PASS 11 format versions read and rendered, 10 too-early packages refused by both readers
+editor vs cli                  PASS  PASS the editor and the cli agree exactly on 40 fixtures
+gpu compositing                PASS  compared 40 fixtures, 40 composited on the gpu, tolerance 1 PASS gpu compositing matches the cpu on 40 fixtures (40 of them on the gpu)
+filter kernels                 PASS  9 checks passed
+cli subcommands                PASS  PASS 110 subcommand checks against E:\Compositor-main\compositor_win\target-lead\debug\\compc.exe
+brush vs oracle                PASS  PASS brush model verified against the NumPy oracle: 19 cases within 1 level(s)
+macOS interop                  PASS  41/41 packages would load in the macOS app
+pixel acceptance               PASS  40/40 fixtures matched within 1 level(s)
+
+acceptance: 27 of 27 checks passed

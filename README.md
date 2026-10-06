@@ -99,3 +99,10 @@ It needs, all kept outside this repository:
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Windows port (experimental)
+
+An experimental Rust rewrite for Windows is available in [`windows-port/`](windows-port/README.md).
+It targets compatibility with the macOS 1.4.5 project format and is not yet a supported or
+maintainer-approved release. See its README for build instructions, current feature gaps, and
+third-party notices.

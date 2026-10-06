@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "3988F543-9FFC-4092-8979-E97C6D0D5DFA",
+  "colorSpace": "sRGB",
+  "documentID": "5B19E3F7-D841-435E-87CD-DEC3E5AE3A08",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "62211B0B-335D-41B4-B8AF-50D6F904C868",
+      "imageFile": "62211B0B-335D-41B4-B8AF-50D6F904C868.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Divide",
+      "id": "3988F543-9FFC-4092-8979-E97C6D0D5DFA",
+      "imageFile": "3988F543-9FFC-4092-8979-E97C6D0D5DFA.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Divide",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

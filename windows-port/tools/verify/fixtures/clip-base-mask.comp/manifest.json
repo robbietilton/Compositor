@@ -1,0 +1,84 @@
+{
+  "activeLayerID": "16F9CFEC-6785-4709-844D-C60AE00AFF50",
+  "colorSpace": "sRGB",
+  "documentID": "65E3D157-13BB-4EF4-86CE-A9C781F8A2BE",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "A2A2E13A-30CB-425E-B767-0934201CF13F",
+      "imageFile": "A2A2E13A-30CB-425E-B767-0934201CF13F.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "34FE5E6A-4EF7-4DF4-A939-2DAA291097AA",
+      "imageFile": "34FE5E6A-4EF7-4DF4-A939-2DAA291097AA.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "34FE5E6A-4EF7-4DF4-A939-2DAA291097AA.mask.png",
+      "name": "Masked Base",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "16F9CFEC-6785-4709-844D-C60AE00AFF50",
+      "imageFile": "16F9CFEC-6785-4709-844D-C60AE00AFF50.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskSourceID": "34FE5E6A-4EF7-4DF4-A939-2DAA291097AA",
+      "name": "Clipped",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

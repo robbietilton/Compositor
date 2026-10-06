@@ -1,0 +1,60 @@
+{
+  "activeLayerID": "6D9D0138-2105-421C-BB3D-1A6BB9363EF3",
+  "colorSpace": "sRGB",
+  "documentID": "6BDE2ECA-37D2-4AFE-95B5-C19112B7AD74",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "BEB2417C-BA9E-4F0E-8296-8FC46AEB7FDD",
+      "imageFile": "BEB2417C-BA9E-4F0E-8296-8FC46AEB7FDD.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "6D9D0138-2105-421C-BB3D-1A6BB9363EF3",
+      "imageFile": "6D9D0138-2105-421C-BB3D-1A6BB9363EF3.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "6D9D0138-2105-421C-BB3D-1A6BB9363EF3.mask.png",
+      "name": "Overlay",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 3,
+  "width": 64
+}

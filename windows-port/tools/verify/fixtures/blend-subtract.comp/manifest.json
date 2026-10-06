@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "A1CB1C6B-7EA9-4286-AA10-A1DF3FDA9434",
+  "colorSpace": "sRGB",
+  "documentID": "5930430B-1288-4150-97B0-F4634E3B4C34",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "F0EF2EC9-DA30-4519-B494-025929EF41E6",
+      "imageFile": "F0EF2EC9-DA30-4519-B494-025929EF41E6.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Subtract",
+      "id": "A1CB1C6B-7EA9-4286-AA10-A1DF3FDA9434",
+      "imageFile": "A1CB1C6B-7EA9-4286-AA10-A1DF3FDA9434.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Subtract",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

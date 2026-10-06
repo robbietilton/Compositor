@@ -1,0 +1,143 @@
+{
+  "activeLayerID": "8D1EAF8E-F237-4B13-B01A-20ABAA2BCA0C",
+  "colorSpace": "sRGB",
+  "documentID": "5DCD5399-D963-4EB1-BBA4-77485FD0AE6A",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "BF0306B5-F545-4BC1-A076-4A44B9A1B7D5",
+      "imageFile": "BF0306B5-F545-4BC1-A076-4A44B9A1B7D5.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "blurRadius": 4.0,
+        "colorize": false,
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ]
+          ]
+        },
+        "hue": 0.0,
+        "kind": "Gaussian Blur",
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            }
+          ]
+        },
+        "lightness": 0.0,
+        "saturation": 0.0
+      },
+      "blendMode": "Normal",
+      "id": "8D1EAF8E-F237-4B13-B01A-20ABAA2BCA0C",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Blur",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 8,
+  "width": 64
+}

@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "877B3577-FEF4-4DC1-8F92-0A8BE42EA1AC",
+  "colorSpace": "sRGB",
+  "documentID": "B2AFE3B5-397D-4045-88A5-4593734489CF",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "A89E046F-151A-4C46-A0A0-CCE8E14E6501",
+      "imageFile": "A89E046F-151A-4C46-A0A0-CCE8E14E6501.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Difference",
+      "id": "877B3577-FEF4-4DC1-8F92-0A8BE42EA1AC",
+      "imageFile": "877B3577-FEF4-4DC1-8F92-0A8BE42EA1AC.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Difference",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

@@ -1,0 +1,364 @@
+{
+  "fixtures": [
+    {
+      "name": "blend-normal",
+      "package": "fixtures/blend-normal.comp",
+      "expected": "fixtures/expected/blend-normal.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "7ABE0C5B-4585-4919-B4B4-EE609B5FE02D",
+      "notes": "blend mode Normal: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-darken",
+      "package": "fixtures/blend-darken.comp",
+      "expected": "fixtures/expected/blend-darken.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "02A890BE-2D5C-49B4-9D24-F6AA1E48E7AB",
+      "notes": "blend mode Darken: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-multiply",
+      "package": "fixtures/blend-multiply.comp",
+      "expected": "fixtures/expected/blend-multiply.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "CCCD5B92-1DB6-4E92-BEF8-D1DED1FDF46E",
+      "notes": "blend mode Multiply: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-color-burn",
+      "package": "fixtures/blend-color-burn.comp",
+      "expected": "fixtures/expected/blend-color-burn.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "A5EB8984-F224-4C59-8080-B10889C0D407",
+      "notes": "blend mode Color Burn: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-linear-burn",
+      "package": "fixtures/blend-linear-burn.comp",
+      "expected": "fixtures/expected/blend-linear-burn.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "61DFC01F-2168-4EBC-818F-88D986974E68",
+      "notes": "blend mode Linear Burn: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-lighten",
+      "package": "fixtures/blend-lighten.comp",
+      "expected": "fixtures/expected/blend-lighten.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "82E592F5-6F71-4420-921E-3FD15EF4074E",
+      "notes": "blend mode Lighten: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-screen",
+      "package": "fixtures/blend-screen.comp",
+      "expected": "fixtures/expected/blend-screen.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "62A8CDAA-20AE-433E-B102-E35E9028C4F8",
+      "notes": "blend mode Screen: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-color-dodge",
+      "package": "fixtures/blend-color-dodge.comp",
+      "expected": "fixtures/expected/blend-color-dodge.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "C4273014-075D-4E89-8C6E-79DB1D6321A3",
+      "notes": "blend mode Color Dodge: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-linear-dodge-add",
+      "package": "fixtures/blend-linear-dodge-add.comp",
+      "expected": "fixtures/expected/blend-linear-dodge-add.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "9AE8FC65-D8D8-4DF0-B8A7-B21825881826",
+      "notes": "blend mode Linear Dodge (Add): opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-overlay",
+      "package": "fixtures/blend-overlay.comp",
+      "expected": "fixtures/expected/blend-overlay.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "0F6272E2-A19A-4D08-A343-774E5BE033F3",
+      "notes": "blend mode Overlay: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-soft-light",
+      "package": "fixtures/blend-soft-light.comp",
+      "expected": "fixtures/expected/blend-soft-light.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "345CDB90-72D8-4539-BDAB-9022F78397E5",
+      "notes": "blend mode Soft Light: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-hard-light",
+      "package": "fixtures/blend-hard-light.comp",
+      "expected": "fixtures/expected/blend-hard-light.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "7248BB25-B8E1-484E-B2BA-BAD2FB26C11F",
+      "notes": "blend mode Hard Light: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-vivid-light",
+      "package": "fixtures/blend-vivid-light.comp",
+      "expected": "fixtures/expected/blend-vivid-light.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "475A5909-7FE2-4EFD-87E8-81C63963D191",
+      "notes": "blend mode Vivid Light: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-linear-light",
+      "package": "fixtures/blend-linear-light.comp",
+      "expected": "fixtures/expected/blend-linear-light.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "6C3D9181-F255-4F5F-ACB1-E358C19ADB81",
+      "notes": "blend mode Linear Light: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-pin-light",
+      "package": "fixtures/blend-pin-light.comp",
+      "expected": "fixtures/expected/blend-pin-light.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "0F4910DA-CE98-4294-92C2-5EBCC96594FC",
+      "notes": "blend mode Pin Light: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-hard-mix",
+      "package": "fixtures/blend-hard-mix.comp",
+      "expected": "fixtures/expected/blend-hard-mix.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "CDCDA8BA-16FD-462E-B84E-E02662D2AD8F",
+      "notes": "blend mode Hard Mix: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-difference",
+      "package": "fixtures/blend-difference.comp",
+      "expected": "fixtures/expected/blend-difference.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "B2AFE3B5-397D-4045-88A5-4593734489CF",
+      "notes": "blend mode Difference: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-exclusion",
+      "package": "fixtures/blend-exclusion.comp",
+      "expected": "fixtures/expected/blend-exclusion.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "20B51479-6FAB-423D-A0A0-7B4407E740D8",
+      "notes": "blend mode Exclusion: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-subtract",
+      "package": "fixtures/blend-subtract.comp",
+      "expected": "fixtures/expected/blend-subtract.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "5930430B-1288-4150-97B0-F4634E3B4C34",
+      "notes": "blend mode Subtract: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-divide",
+      "package": "fixtures/blend-divide.comp",
+      "expected": "fixtures/expected/blend-divide.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "5B19E3F7-D841-435E-87CD-DEC3E5AE3A08",
+      "notes": "blend mode Divide: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-hue",
+      "package": "fixtures/blend-hue.comp",
+      "expected": "fixtures/expected/blend-hue.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "15D32865-F5A5-45DF-90B8-EAD7C2C079F0",
+      "notes": "blend mode Hue: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-saturation",
+      "package": "fixtures/blend-saturation.comp",
+      "expected": "fixtures/expected/blend-saturation.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "862B816F-87C2-479D-A90B-261C0DA16E9F",
+      "notes": "blend mode Saturation: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-color",
+      "package": "fixtures/blend-color.comp",
+      "expected": "fixtures/expected/blend-color.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "2250C0CC-B5FF-4F44-B83B-3197D80F155D",
+      "notes": "blend mode Color: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "blend-luminosity",
+      "package": "fixtures/blend-luminosity.comp",
+      "expected": "fixtures/expected/blend-luminosity.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "73451B46-6462-455C-8641-65F09122C7E5",
+      "notes": "blend mode Luminosity: opaque probe over an opaque ramp"
+    },
+    {
+      "name": "alpha-ramp",
+      "package": "fixtures/alpha-ramp.comp",
+      "expected": "fixtures/expected/alpha-ramp.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "8AFB7FFD-F567-4A25-8186-C67BC10BC548",
+      "notes": "source alpha ramp with layer opacity 0.75"
+    },
+    {
+      "name": "layer-mask",
+      "package": "fixtures/layer-mask.comp",
+      "expected": "fixtures/expected/layer-mask.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "F95CF2FA-93CA-4A7E-82E7-E8DA212D6693",
+      "notes": "layer mask ramp multiplies the layer alpha"
+    },
+    {
+      "name": "group-opacity",
+      "package": "fixtures/group-opacity.comp",
+      "expected": "fixtures/expected/group-opacity.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "6E999494-2CFD-46D3-A709-7B3CB53D6D90",
+      "notes": "folder opacity 0.5 multiplies into both children"
+    },
+    {
+      "name": "adjustment-invert",
+      "package": "fixtures/adjustment-invert.comp",
+      "expected": "fixtures/expected/adjustment-invert.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "99A0C11C-F751-4247-8CB2-AA4A8D37F5C2",
+      "notes": "Invert adjustment layer affects everything below it"
+    },
+    {
+      "name": "placement-offset",
+      "package": "fixtures/placement-offset.comp",
+      "expected": "fixtures/expected/placement-offset.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "3064F07B-FCBF-4F74-907A-D5E4E96F0453",
+      "notes": "a 16x12 layer placed at 9,6 on a bigger canvas: origin and size, nearest sampling"
+    },
+    {
+      "name": "placement-scaled",
+      "package": "fixtures/placement-scaled.comp",
+      "expected": "fixtures/expected/placement-scaled.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "DBC7E38A-3309-4FF9-B8F7-E5B2FF4B7F4C",
+      "notes": "the same layer stretched to 32x24: the image is scaled to the transform size"
+    },
+    {
+      "name": "placement-rotated",
+      "package": "fixtures/placement-rotated.comp",
+      "expected": "fixtures/expected/placement-rotated.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "F79C0618-60F2-4E92-9C64-D1AD6A00828D",
+      "notes": "a 16x16 layer rotated 90 degrees clockwise about its center"
+    },
+    {
+      "name": "demo",
+      "package": "fixtures/demo.comp",
+      "expected": "fixtures/expected/demo.png",
+      "width": 480,
+      "height": 320,
+      "documentID": "00557FC5-48F6-44E2-A477-2BFA2AA252C4",
+      "notes": "editor demo document: sky, a screen-blended sun at 0.9 opacity, hills with alpha"
+    },
+    {
+      "name": "clip-mask",
+      "package": "fixtures/clip-mask.comp",
+      "expected": "fixtures/expected/clip-mask.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "79B318BD-EC47-416D-9760-973BC81C1429",
+      "notes": "a layer clipped to the disc below it: the base's coverage limits the stripes"
+    },
+    {
+      "name": "clip-base-opacity",
+      "package": "fixtures/clip-base-opacity.comp",
+      "expected": "fixtures/expected/clip-base-opacity.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "2DA3AED7-AD78-4EA6-B441-466CD8A6644B",
+      "notes": "a clipped layer inherits the base's opacity, not only its pixels"
+    },
+    {
+      "name": "clip-base-mask",
+      "package": "fixtures/clip-base-mask.comp",
+      "expected": "fixtures/expected/clip-base-mask.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "65E3D157-13BB-4EF4-86CE-A9C781F8A2BE",
+      "notes": "a clipped layer inherits the base's raster mask as well"
+    },
+    {
+      "name": "clip-chain",
+      "package": "fixtures/clip-chain.comp",
+      "expected": "fixtures/expected/clip-chain.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "0197E91F-8E86-4159-85DA-8D087B1B3E4F",
+      "notes": "a clipping chain of three layers: each coverage multiplies into the layer above"
+    },
+    {
+      "name": "group-mask",
+      "package": "fixtures/group-mask.comp",
+      "expected": "fixtures/expected/group-mask.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "52677AD2-8466-4804-A208-6A68296EF6C9",
+      "notes": "a folder mask multiplies the coverage of every layer inside it"
+    },
+    {
+      "name": "flip-horizontal",
+      "package": "fixtures/flip-horizontal.comp",
+      "expected": "fixtures/expected/flip-horizontal.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "FD1DBDEC-92DB-4B7A-81CD-C06F04F2DD39",
+      "notes": "an upright layer drawn with flipX mirrors inside its box"
+    },
+    {
+      "name": "hidden-layer",
+      "package": "fixtures/hidden-layer.comp",
+      "expected": "fixtures/expected/hidden-layer.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "8BB1C3BE-129B-47B9-BE25-77166E66A5D7",
+      "notes": "a hidden layer contributes nothing, the layers around it still composite"
+    },
+    {
+      "name": "nested-groups",
+      "package": "fixtures/nested-groups.comp",
+      "expected": "fixtures/expected/nested-groups.png",
+      "width": 64,
+      "height": 64,
+      "documentID": "B07DD6EA-F943-490A-A538-F77161726DA5",
+      "notes": "nested folders at 50% each put the leaf at 12.5%"
+    }
+  ]
+}

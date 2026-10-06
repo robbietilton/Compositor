@@ -1,0 +1,4 @@
+# The subject model is downloaded, never committed: it is somebody else's weights (Apache-2.0,
+# see ../NOTES.md for the source), 4 MB of binary in a source tree, and optional anyway - the
+# extractor falls back to the classical algorithm when this file is not here.
+*.onnx

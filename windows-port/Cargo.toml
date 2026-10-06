@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/comp-core",
+    "crates/comp-render",
+    "crates/comp-raw",
+    "crates/comp-io",
+    "crates/comp-brush",
+    "crates/comp-text",
+    "crates/comp-release",
+    "crates/comp-cli",
+    "crates/comp-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+comp-core = { path = "crates/comp-core" }
+comp-render = { path = "crates/comp-render" }
+comp-io = { path = "crates/comp-io" }
+comp-brush = { path = "crates/comp-brush" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+png = "0.17"
+rayon = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff", "bmp", "webp"] }
+jpeg-encoder = "0.6"
+fontdue = "0.9"
+semver = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,105 @@
+{
+  "activeLayerID": "03CF7694-F6A0-4B60-BEB0-5C86C7B261AC",
+  "colorSpace": "sRGB",
+  "documentID": "D1A7C497-8A55-4EC5-9AEB-417ABEF03396",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "F37DFCA3-805D-4947-A04A-8A5EDFE2FF06",
+      "imageFile": "F37DFCA3-805D-4947-A04A-8A5EDFE2FF06.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "31ADB7C0-D350-41F1-98CD-24FC7261D49E",
+      "imageFile": "31ADB7C0-D350-41F1-98CD-24FC7261D49E.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Overlay",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "07C2A42E-6D51-425E-B95E-9FB3480F8D22",
+      "imageFile": "07C2A42E-6D51-425E-B95E-9FB3480F8D22.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Clipped",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "03CF7694-F6A0-4B60-BEB0-5C86C7B261AC",
+      "isGroup": true,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "03CF7694-F6A0-4B60-BEB0-5C86C7B261AC.mask.png",
+      "name": "Group",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 5,
+  "width": 64
+}

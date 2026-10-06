@@ -1,0 +1,21 @@
+[package]
+name = "comp-brush"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+comp-core = { workspace = true }
+rayon = { workspace = true }
+# Pure Rust ONNX inference for the subject model: no C toolchain, no bundled runtime. MIT OR
+# Apache-2.0, the same terms as this crate. The model file itself is not a dependency: it is found
+# at run time and the classical extractor is used when it is not there.
+tract-onnx = "0.23"
+# tract's threaded matmul. The feature lives on tract-linalg and is off by default there; asking for
+# it here turns it on for the whole graph, which is what makes a 320x320 inference fast enough to run
+# while somebody drags a slider. Enabling a feature does not by itself use more than one thread:
+# subject_model.rs installs an executor with as many as the machine has.
+tract-linalg = { version = "0.23", features = ["multithread-mm"] }
+
+[dev-dependencies]
+uuid = { workspace = true }

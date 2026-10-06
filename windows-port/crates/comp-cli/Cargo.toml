@@ -1,0 +1,28 @@
+[package]
+name = "comp-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "compc"
+path = "src/main.rs"
+
+[features]
+# Builds the CLI with the supplementary LibRaw decoder (CR3, DNG lossy JPEG, camera bodies rawloader
+# does not know). It links a C++ library, so a default build stays pure Rust. Build LibRaw first with
+# tools/libraw/fetch-libraw.ps1 and tools/libraw/build-libraw.ps1.
+libraw = ["comp-raw/libraw"]
+
+[dependencies]
+comp-core = { workspace = true }
+comp-render = { workspace = true }
+comp-raw = { path = "../comp-raw" }
+comp-text = { path = "../comp-text" }
+comp-release = { path = "../comp-release" }
+serde_json = { workspace = true }
+comp-io = { workspace = true }
+comp-brush = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+uuid = { workspace = true }

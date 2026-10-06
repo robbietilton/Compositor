@@ -1,0 +1,68 @@
+{
+  "format": "com.compositor.project",
+  "version": 11,
+  "colorSpace": "sRGB",
+  "documentID": "408BFB1B-7E1A-43E2-8F47-F3C1B88E5B1B",
+  "width": 128,
+  "height": 48,
+  "resolution": 72,
+  "activeLayerID": "19BA74AC-070D-4F66-9A91-E463B1284B12",
+  "layers": [
+    {
+      "id": "19BA74AC-070D-4F66-9A91-E463B1284B12",
+      "name": "Chart",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "size": [
+          128.0,
+          48.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "19BA74AC-070D-4F66-9A91-E463B1284B12.png"
+    },
+    {
+      "id": "C9223164-5609-413F-8A8C-FBE2A9E75F3D",
+      "name": "Box",
+      "isVisible": true,
+      "isGroup": false,
+      "opacity": 1.0,
+      "blendMode": "Normal",
+      "transform": {
+        "origin": [
+          62.0,
+          18.0
+        ],
+        "size": [
+          16.0,
+          12.0
+        ],
+        "rotation": 0.0,
+        "flipX": false,
+        "flipY": false,
+        "sampling": "Nearest"
+      },
+      "imageFile": "C9223164-5609-413F-8A8C-FBE2A9E75F3D.png",
+      "effects": {
+        "stroke": {
+          "size": 4.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 1.0,
+          "opacity": 1.0,
+          "inside": false
+        }
+      }
+    }
+  ]
+}

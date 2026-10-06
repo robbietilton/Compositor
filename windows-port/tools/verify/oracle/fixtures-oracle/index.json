@@ -1,0 +1,3424 @@
+{
+  "canvas": [
+    64,
+    48
+  ],
+  "fixtures": [
+    {
+      "name": "hsv-identity",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "identity: no range adjustment, so the layer must not change a pixel",
+      "package": "hsv-identity.comp",
+      "expected": "expected/hsv-identity.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hsv-master",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [
+        "hsv-direct"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "master range: +40 degrees, +60 saturation, -10 lightness",
+      "package": "hsv-master.comp",
+      "expected": "expected/hsv-master.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 40.0,
+        "saturation": 60.0,
+        "lightness": -10.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hsv-reds",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [
+        "hsv-direct"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "targeted Reds range through hsvSettings; schema probe for the optional settings block",
+      "package": "hsv-reds.comp",
+      "expected": "expected/hsv-reds.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "hsvSettings": {
+          "range": "Reds",
+          "colorize": false,
+          "invertRange": false,
+          "adjustments": {
+            "Reds": {
+              "hue": 60.0,
+              "saturation": -40.0,
+              "lightness": 20.0
+            }
+          },
+          "bands": {
+            "Reds": {
+              "falloffStart": 315.0,
+              "rangeStart": 345.0,
+              "rangeEnd": 15.0,
+              "falloffEnd": 45.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "levels-identity",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "identity ranges: the macOS filter returns the image untouched",
+      "package": "levels-identity.comp",
+      "expected": "expected/levels-identity.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "levels-work",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [
+        "levels-gpu1024"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "composite range 20/1.4/230 with per-channel ranges on top",
+      "package": "levels-work.comp",
+      "expected": "expected/levels-work.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 20,
+              "gamma": 1.4,
+              "white": 230,
+              "outputBlack": 10,
+              "outputWhite": 245
+            },
+            {
+              "black": 5,
+              "gamma": 0.8,
+              "white": 250,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.15,
+              "white": 240,
+              "outputBlack": 0,
+              "outputWhite": 250
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "levels-clip",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "output ranges only: compresses the tonal range without moving the black point",
+      "package": "levels-clip.comp",
+      "expected": "expected/levels-clip.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 200,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 100,
+              "outputWhite": 200
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "curves-identity",
+      "group": "adjustment",
+      "kind": "Curves",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "two-point curves are the identity",
+      "package": "curves-identity.comp",
+      "expected": "expected/curves-identity.png",
+      "adjustment": {
+        "kind": "Curves",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "curves-s",
+      "group": "adjustment",
+      "kind": "Curves",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "contrast S-curve on RGB plus separate red and green curves",
+      "package": "curves-s.comp",
+      "expected": "expected/curves-s.png",
+      "adjustment": {
+        "kind": "Curves",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 64,
+                "y": 84
+              },
+              {
+                "x": 160,
+                "y": 188
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 12
+              },
+              {
+                "x": 128,
+                "y": 140
+              },
+              {
+                "x": 255,
+                "y": 248
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 78
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "exposure-identity",
+      "group": "adjustment",
+      "kind": "Exposure",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "zero stops, no offset, gamma 1: the table is the identity",
+      "package": "exposure-identity.comp",
+      "expected": "expected/exposure-identity.png",
+      "adjustment": {
+        "kind": "Exposure",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "exposureSettings": {
+          "exposure": 0.0,
+          "offset": 0.0,
+          "gamma": 1.0
+        }
+      }
+    },
+    {
+      "name": "exposure-up",
+      "group": "adjustment",
+      "kind": "Exposure",
+      "base": "chart",
+      "variants": [
+        "exposure-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "0.8 stops of linear light, +0.05 offset, gamma 1.2",
+      "package": "exposure-up.comp",
+      "expected": "expected/exposure-up.png",
+      "adjustment": {
+        "kind": "Exposure",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "exposureSettings": {
+          "exposure": 0.8,
+          "offset": 0.05,
+          "gamma": 1.2
+        }
+      }
+    },
+    {
+      "name": "gradientmap-default",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "default black-to-white ramp: luminance picks the gray",
+      "package": "gradientmap-default.comp",
+      "expected": "expected/gradientmap-default.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 1.0,
+            "blue": 1.0
+          },
+          "reversed": false
+        }
+      }
+    },
+    {
+      "name": "gradientmap-duotone",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "duotone with reversed ends",
+      "package": "gradientmap-duotone.comp",
+      "expected": "expected/gradientmap-duotone.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.12,
+            "green": 0.04,
+            "blue": 0.35
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 0.82,
+            "blue": 0.35
+          },
+          "reversed": true
+        }
+      }
+    },
+    {
+      "name": "gradientmap-reversed-bw",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "the same black-to-white ramp with reversed ends: probes whether the flag is read",
+      "package": "gradientmap-reversed-bw.comp",
+      "expected": "expected/gradientmap-reversed-bw.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 1.0,
+            "blue": 1.0
+          },
+          "reversed": true
+        }
+      }
+    },
+    {
+      "name": "gradientmap-warm-end",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "black to orange: probes whether the highlight color is read at all",
+      "package": "gradientmap-warm-end.comp",
+      "expected": "expected/gradientmap-warm-end.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 0.5,
+            "blue": 0.0
+          },
+          "reversed": false
+        }
+      }
+    },
+    {
+      "name": "grain-default",
+      "group": "adjustment",
+      "kind": "Grain",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "default grain at seed 12345",
+      "package": "grain-default.comp",
+      "expected": "expected/grain-default.png",
+      "adjustment": {
+        "kind": "Grain",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "grainSettings": {
+          "amount": 25.0,
+          "size": 1.5,
+          "roughness": 50.0,
+          "seed": 12345
+        }
+      }
+    },
+    {
+      "name": "grain-coarse",
+      "group": "adjustment",
+      "kind": "Grain",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "strong, coarse, smooth grain: roughness 0 leaves the broad lattice alone",
+      "package": "grain-coarse.comp",
+      "expected": "expected/grain-coarse.png",
+      "adjustment": {
+        "kind": "Grain",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "grainSettings": {
+          "amount": 70.0,
+          "size": 6.0,
+          "roughness": 0.0,
+          "seed": 777
+        }
+      }
+    },
+    {
+      "name": "addnoise-uniform",
+      "group": "adjustment",
+      "kind": "Add Noise",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "uniform independent noise on each channel",
+      "package": "addnoise-uniform.comp",
+      "expected": "expected/addnoise-uniform.png",
+      "adjustment": {
+        "kind": "Add Noise",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "noiseAmount": 30.0,
+        "noiseGaussian": false,
+        "noiseMonochromatic": false,
+        "noiseSeed": 4242
+      }
+    },
+    {
+      "name": "addnoise-gaussian-mono",
+      "group": "adjustment",
+      "kind": "Add Noise",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "Gaussian noise, one value for all three channels",
+      "package": "addnoise-gaussian-mono.comp",
+      "expected": "expected/addnoise-gaussian-mono.png",
+      "adjustment": {
+        "kind": "Add Noise",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "noiseAmount": 20.0,
+        "noiseGaussian": true,
+        "noiseMonochromatic": true,
+        "noiseSeed": 99
+      }
+    },
+    {
+      "name": "gaussianblur-min",
+      "group": "adjustment",
+      "kind": "Gaussian Blur",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 1,
+      "note": "minimum radius: sigma 0.1, effectively the identity",
+      "package": "gaussianblur-min.comp",
+      "expected": "expected/gaussianblur-min.png",
+      "adjustment": {
+        "kind": "Gaussian Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blurRadius": 0.1
+      }
+    },
+    {
+      "name": "gaussianblur-medium",
+      "group": "adjustment",
+      "kind": "Gaussian Blur",
+      "base": "chart",
+      "variants": [
+        "gaussian-clamped"
+      ],
+      "class": "kernel",
+      "tolerance": 6,
+      "note": "sigma 4 at 1:1; Core Image blurs past the edges into transparent black",
+      "package": "gaussianblur-medium.comp",
+      "expected": "expected/gaussianblur-medium.png",
+      "adjustment": {
+        "kind": "Gaussian Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blurRadius": 4.0
+      }
+    },
+    {
+      "name": "motionblur-min",
+      "group": "adjustment",
+      "kind": "Motion Blur",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 1,
+      "note": "one pixel of streak: effectively the identity",
+      "package": "motionblur-min.comp",
+      "expected": "expected/motionblur-min.png",
+      "adjustment": {
+        "kind": "Motion Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "motionAngle": 0.0,
+        "motionDistance": 1.0
+      }
+    },
+    {
+      "name": "motionblur-30deg",
+      "group": "adjustment",
+      "kind": "Motion Blur",
+      "base": "chart",
+      "variants": [
+        "motion-plus30",
+        "motion-minus30"
+      ],
+      "class": "kernel",
+      "tolerance": 32,
+      "note": "9-pixel streak at +30 degrees; the sign of the angle is checked against both",
+      "package": "motionblur-30deg.comp",
+      "expected": "expected/motionblur-30deg.png",
+      "adjustment": {
+        "kind": "Motion Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "motionAngle": 30.0,
+        "motionDistance": 9.0
+      }
+    },
+    {
+      "name": "invert-chart",
+      "group": "adjustment",
+      "kind": "Invert",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "every color becomes alpha minus color, alpha 255 everywhere",
+      "package": "invert-chart.comp",
+      "expected": "expected/invert-chart.png",
+      "adjustment": {
+        "kind": "Invert",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "invert-alpha",
+      "group": "adjustment",
+      "kind": "Invert",
+      "base": "alpha",
+      "variants": [],
+      "class": "alpha",
+      "tolerance": 2,
+      "note": "invert on a canvas with partial alpha: the premultiplied path",
+      "package": "invert-alpha.comp",
+      "expected": "expected/invert-alpha.png",
+      "adjustment": {
+        "kind": "Invert",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "blackwhite-default",
+      "group": "adjustment",
+      "kind": "Black & White",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "Photoshop's default family weights",
+      "package": "blackwhite-default.comp",
+      "expected": "expected/blackwhite-default.png",
+      "adjustment": {
+        "kind": "Black & White",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blackWhiteSettings": {
+          "reds": 40.0,
+          "yellows": 60.0,
+          "greens": 40.0,
+          "cyans": 60.0,
+          "blues": 20.0,
+          "magentas": 80.0,
+          "tint": false,
+          "tintHue": 40.0,
+          "tintSaturation": 20.0
+        }
+      }
+    },
+    {
+      "name": "blackwhite-tinted",
+      "group": "adjustment",
+      "kind": "Black & White",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "sepia tint at hue 40, saturation 60, with strong reds and greens",
+      "package": "blackwhite-tinted.comp",
+      "expected": "expected/blackwhite-tinted.png",
+      "adjustment": {
+        "kind": "Black & White",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blackWhiteSettings": {
+          "reds": 80.0,
+          "yellows": 10.0,
+          "greens": 90.0,
+          "cyans": 20.0,
+          "blues": 0.0,
+          "magentas": 60.0,
+          "tint": true,
+          "tintHue": 40.0,
+          "tintSaturation": 60.0
+        }
+      }
+    },
+    {
+      "name": "colorbalance-identity",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "all three wheels at zero: the macOS filter returns the image",
+      "package": "colorbalance-identity.comp",
+      "expected": "expected/colorbalance-identity.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 0.0,
+          "shadowMagentaGreen": 0.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 0.0,
+          "midMagentaGreen": 0.0,
+          "midYellowBlue": 0.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 0.0,
+          "preserveLuminosity": true
+        }
+      }
+    },
+    {
+      "name": "colorbalance-warm",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "warm shadows and midtones, cooler highlights, luminosity preserved",
+      "package": "colorbalance-warm.comp",
+      "expected": "expected/colorbalance-warm.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 25.0,
+          "shadowMagentaGreen": -15.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 10.0,
+          "midMagentaGreen": 8.0,
+          "midYellowBlue": -20.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 30.0,
+          "preserveLuminosity": true
+        }
+      }
+    },
+    {
+      "name": "colorbalance-noluminosity",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "the same shift without preserve luminosity, so brightness moves too",
+      "package": "colorbalance-noluminosity.comp",
+      "expected": "expected/colorbalance-noluminosity.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 25.0,
+          "shadowMagentaGreen": -15.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 10.0,
+          "midMagentaGreen": 8.0,
+          "midYellowBlue": -20.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 30.0,
+          "preserveLuminosity": false
+        }
+      }
+    },
+    {
+      "name": "control-base",
+      "group": "control",
+      "kind": "none",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 0,
+      "note": "the chart with no adjustment layer: proves the base renders exactly",
+      "package": "control-base.comp",
+      "expected": "expected/control-base.png"
+    },
+    {
+      "name": "control-identity-normal",
+      "group": "control",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 0,
+      "note": "an identity adjustment layer above the chart must leave it alone",
+      "package": "control-identity-normal.comp",
+      "expected": "expected/control-identity-normal.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "effect-coloroverlay",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "flat color through the shape at 60%: no blur anywhere, so formula-exact",
+      "package": "effect-coloroverlay.comp",
+      "expected": "expected/effect-coloroverlay.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "colorOverlay": {
+          "red": 0.9,
+          "green": 0.2,
+          "blue": 0.1,
+          "opacity": 0.6
+        }
+      }
+    },
+    {
+      "name": "effect-stroke-outside",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "outside stroke, 3 pixels of square dilation: formula-exact",
+      "package": "effect-stroke-outside.comp",
+      "expected": "expected/effect-stroke-outside.png",
+      "inset": 5,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "stroke": {
+          "size": 3.0,
+          "red": 0.0,
+          "green": 0.35,
+          "blue": 0.9,
+          "opacity": 0.8,
+          "inside": false
+        }
+      }
+    },
+    {
+      "name": "effect-stroke-inside",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "inside stroke, 3 pixels of square erosion: formula-exact",
+      "package": "effect-stroke-inside.comp",
+      "expected": "expected/effect-stroke-inside.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "stroke": {
+          "size": 3.0,
+          "red": 1.0,
+          "green": 0.6,
+          "blue": 0.0,
+          "opacity": 1.0,
+          "inside": true
+        }
+      }
+    },
+    {
+      "name": "effect-shadow-hard",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "drop shadow straight down 6 pixels with no blur: only the offset and the fill",
+      "package": "effect-shadow-hard.comp",
+      "expected": "expected/effect-shadow-hard.png",
+      "inset": 8,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 6.0,
+          "blur": 0.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.7
+        }
+      }
+    },
+    {
+      "name": "effect-shadow-ang180",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "shadow at 180 degrees moves right with no blur: the horizontal offset and its sign",
+      "package": "effect-shadow-ang180.comp",
+      "expected": "expected/effect-shadow-ang180.png",
+      "inset": 7,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 180.0,
+          "distance": 5.0,
+          "blur": 0.0,
+          "red": 0.2,
+          "green": 0.1,
+          "blue": 0.0,
+          "opacity": 0.5
+        }
+      }
+    },
+    {
+      "name": "effect-shadow-blur",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "blurred drop shadow: sigma 3, so a different kernel shows as a soft difference",
+      "package": "effect-shadow-blur.comp",
+      "expected": "expected/effect-shadow-blur.png",
+      "inset": 24,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 6.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.6
+        }
+      }
+    },
+    {
+      "name": "effect-outerglow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "outer glow, sigma 3 all round minus the shape",
+      "package": "effect-outerglow.comp",
+      "expected": "expected/effect-outerglow.png",
+      "inset": 20,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "outerGlow": {
+          "size": 6.0,
+          "red": 1.0,
+          "green": 0.9,
+          "blue": 0.2,
+          "opacity": 0.8
+        }
+      }
+    },
+    {
+      "name": "effect-innerglow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "inner glow: the shape less its own softening, all inside the shape",
+      "package": "effect-innerglow.comp",
+      "expected": "expected/effect-innerglow.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "innerGlow": {
+          "size": 5.0,
+          "red": 0.2,
+          "green": 0.8,
+          "blue": 1.0,
+          "opacity": 0.9
+        }
+      }
+    },
+    {
+      "name": "effect-innershadow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "inner shadow in from the top edge, sigma 2",
+      "package": "effect-innershadow.comp",
+      "expected": "expected/effect-innershadow.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "innerShadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 4.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.7
+        }
+      }
+    },
+    {
+      "name": "effect-stack",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "shadow, overlay and outside stroke together: checks the stacking order",
+      "package": "effect-stack.comp",
+      "expected": "expected/effect-stack.png",
+      "inset": 18,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 4.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.6
+        },
+        "colorOverlay": {
+          "red": 0.1,
+          "green": 0.1,
+          "blue": 0.6,
+          "opacity": 0.5
+        },
+        "stroke": {
+          "size": 2.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 0.0,
+          "opacity": 1.0,
+          "inside": false
+        }
+      }
+    }
+  ]
+}

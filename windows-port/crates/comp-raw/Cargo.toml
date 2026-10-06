@@ -1,0 +1,25 @@
+[package]
+name = "comp-raw"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Camera Raw: parameter model, adjustment pipeline and raw/DNG decode entry points"
+build = "build.rs"
+
+[dependencies]
+comp-core = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true }
+# Pure-Rust camera raw extraction (CFA mosaic plus camera metadata). Version-pinned directly rather
+# than through the workspace table because this crate is its only consumer.
+rawloader = "0.37"
+
+[features]
+# Supplementary decoding through LibRaw: CR3, DNG lossy JPEG and the camera bodies rawloader's
+# database does not know. Off by default so the normal build stays pure Rust and needs no C/C++
+# toolchain; see crates/comp-raw/NOTES.md for what it costs in binary size and licensing.
+libraw = []
+
+[dev-dependencies]
+serde_json = { workspace = true }

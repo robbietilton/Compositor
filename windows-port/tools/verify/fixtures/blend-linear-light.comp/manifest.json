@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "BA750D3B-5829-4160-82FA-D6100F331EA7",
+  "colorSpace": "sRGB",
+  "documentID": "6C3D9181-F255-4F5F-ACB1-E358C19ADB81",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "FDFFBB24-A465-4523-9E58-E7541CFEB14C",
+      "imageFile": "FDFFBB24-A465-4523-9E58-E7541CFEB14C.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Linear Light",
+      "id": "BA750D3B-5829-4160-82FA-D6100F331EA7",
+      "imageFile": "BA750D3B-5829-4160-82FA-D6100F331EA7.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Linear Light",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "402E3E49-6002-4761-9659-969888855F4D",
+  "colorSpace": "sRGB",
+  "documentID": "82E592F5-6F71-4420-921E-3FD15EF4074E",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "3AEED4F7-59F6-4AA9-8C3F-A90DD58D17F9",
+      "imageFile": "3AEED4F7-59F6-4AA9-8C3F-A90DD58D17F9.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Lighten",
+      "id": "402E3E49-6002-4761-9659-969888855F4D",
+      "imageFile": "402E3E49-6002-4761-9659-969888855F4D.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Lighten",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

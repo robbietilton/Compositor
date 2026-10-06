@@ -1,0 +1,82 @@
+{
+  "activeLayerID": "93117362-BF0A-4175-BD32-E713BBDD0E05",
+  "colorSpace": "sRGB",
+  "documentID": "2DA3AED7-AD78-4EA6-B441-466CD8A6644B",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "0513824F-6C33-4A67-B127-7C599CB8D359",
+      "imageFile": "0513824F-6C33-4A67-B127-7C599CB8D359.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "6EAD8647-4E9E-4BB4-ABB9-A4496F045F40",
+      "imageFile": "6EAD8647-4E9E-4BB4-ABB9-A4496F045F40.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Half Base",
+      "opacity": 0.5,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "93117362-BF0A-4175-BD32-E713BBDD0E05",
+      "imageFile": "93117362-BF0A-4175-BD32-E713BBDD0E05.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskSourceID": "6EAD8647-4E9E-4BB4-ABB9-A4496F045F40",
+      "name": "Clipped",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

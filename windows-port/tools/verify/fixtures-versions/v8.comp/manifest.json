@@ -1,0 +1,81 @@
+{
+  "activeLayerID": "897F3330-95FB-48D6-831B-BDAFEAA72C85",
+  "colorSpace": "sRGB",
+  "documentID": "6E290671-D340-47C3-809E-73BC737082E8",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "3653F60C-341E-468D-AF58-8D39CA1E3184",
+      "imageFile": "3653F60C-341E-468D-AF58-8D39CA1E3184.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "31ADB7C0-D350-41F1-98CD-24FC7261D49E",
+      "isGroup": true,
+      "isVisible": true,
+      "name": "Group",
+      "opacity": 0.5,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "897F3330-95FB-48D6-831B-BDAFEAA72C85",
+      "imageFile": "897F3330-95FB-48D6-831B-BDAFEAA72C85.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Inside",
+      "opacity": 1.0,
+      "parentID": "31ADB7C0-D350-41F1-98CD-24FC7261D49E",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 8,
+  "width": 64
+}

@@ -1,0 +1,113 @@
+{
+  "assets": [
+    {
+      "file": "golden_adjustment.comp\\00000000-0000-0000-C0FF-EE0000030001.rgba",
+      "height": 32,
+      "id": "00000000-0000-0000-C0FF-EE0000030001",
+      "kind": "image",
+      "width": 32
+    },
+    {
+      "file": "golden_adjustment.comp\\00000000-0000-0000-C0FF-EE0000030005.rgba",
+      "height": 16,
+      "id": "00000000-0000-0000-C0FF-EE0000030005",
+      "kind": "image",
+      "width": 16
+    },
+    {
+      "file": "golden_adjustment.comp\\00000000-0000-0000-C0FF-EE0000030005.mask.gray",
+      "height": 16,
+      "id": "00000000-0000-0000-C0FF-EE0000030005",
+      "kind": "mask",
+      "width": 16
+    }
+  ],
+  "height": 32,
+  "layerCount": 5,
+  "layers": [
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000030001",
+      "kind": "raster",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Base",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": "Curves",
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": false,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000030002",
+      "kind": "adjustment",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Warm Grade",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": "Gaussian Blur",
+      "blendMode": "Screen",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": false,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000030003",
+      "kind": "adjustment",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Soft Focus",
+      "opacity": 0.8,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": "Color Balance",
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": false,
+      "hasMask": false,
+      "id": "00000000-0000-0000-C0FF-EE0000030004",
+      "kind": "adjustment",
+      "maskEnabled": null,
+      "maskLinked": null,
+      "name": "Balance",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    },
+    {
+      "adjustmentKind": null,
+      "blendMode": "Normal",
+      "colorRuns": 0,
+      "fontRuns": 0,
+      "hasImage": true,
+      "hasMask": true,
+      "id": "00000000-0000-0000-C0FF-EE0000030005",
+      "kind": "raster",
+      "maskEnabled": true,
+      "maskLinked": false,
+      "name": "Loose Mask",
+      "opacity": 1,
+      "parentID": null,
+      "shapeKind": null
+    }
+  ],
+  "package": "golden_adjustment.comp",
+  "resolution": 72,
+  "version": 11,
+  "width": 32
+}

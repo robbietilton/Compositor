@@ -1,0 +1,126 @@
+==> building release binaries
+   Compiling comp-text v0.1.0 (E:\Compositor-main\compositor_win\crates\comp-text)
+   Compiling comp-render v0.1.0 (E:\Compositor-main\compositor_win\crates\comp-render)
+   Compiling comp-gui v0.1.0 (E:\Compositor-main\compositor_win\crates\comp-gui)
+   Compiling comp-cli v0.1.0 (E:\Compositor-main\compositor_win\crates\comp-cli)
+    Finished `release` profile [optimized] target(s) in 40.72s
+==> assets
+==> manifest
+==> packing
+Microsoft (R) MakeAppx Tool
+
+Copyright (C) 2013 Microsoft.  All rights reserved.
+
+
+
+The path (/p) parameter is: "\\?\E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix"
+
+The content directory (/d) parameter is: "\\?\E:\Compositor-main\compositor_win\dist\msix-layout"
+
+Enumerating files from directory "\\?\E:\Compositor-main\compositor_win\dist\msix-layout"
+
+Packing 9 file(s) in "\\?\E:\Compositor-main\compositor_win\dist\msix-layout" (content directory) to "\\?\E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix" (output file name).
+
+Memory limit defaulting to 17104418816 bytes.
+
+Using "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\AppxManifest.xml" as the manifest for the package.
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\LICENSE" as a payload file.  Its path in the package will be "LICENSE".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\README.md" as a payload file.  Its path in the package will be "README.md".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\compc.exe" as a payload file.  Its path in the package will be "compc.exe".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\comp-gui.exe" as a payload file.  Its path in the package will be "comp-gui.exe".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\Assets\Square44x44Logo.png" as a payload file.  Its path in the package will be "Assets\Square44x44Logo.png".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\Assets\Square150x150Logo.png" as a payload file.  Its path in the package will be "Assets\Square150x150Logo.png".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\Assets\Wide310x150Logo.png" as a payload file.  Its path in the package will be "Assets\Wide310x150Logo.png".
+
+Processing "\\?\E:\Compositor-main\compositor_win\dist\msix-layout\Assets\StoreLogo.png" as a payload file.  Its path in the package will be "Assets\StoreLogo.png".
+
+Package creation succeeded.
+
+packaged E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix (10.9 MB)
+==> self-signed certificate for CN=Compositor Dev
+exported E:\Compositor-main\compositor_win\dist\compositor-selfsigned.cer (trust it to install this package)
+
+The following certificates were considered:
+    Issued to: Compositor Dev
+
+    Issued by: Compositor Dev
+
+    Expires:   Mon Oct 04 21:03:12 2027
+
+    SHA1 hash: 5AA19C40416D11964BA93CBD5ED443CE88940585
+
+
+    Issued to: localhost
+
+    Issued by: localhost
+
+    Expires:   Tue Sep 07 15:55:36 2027
+
+    SHA1 hash: 437CF64C12F66FDFFD5AC90FEABCC4CB0F626985
+
+
+After EKU filter, 1 certs were left.
+After expiry filter, 1 certs were left.
+After Hash filter, 1 certs were left.
+After Private Key filter, 1 certs were left.
+The following certificate was selected:
+    Issued to: Compositor Dev
+
+    Issued by: Compositor Dev
+
+    Expires:   Mon Oct 04 21:03:12 2027
+
+    SHA1 hash: 5AA19C40416D11964BA93CBD5ED443CE88940585
+
+
+Done Adding Additional Store
+Successfully signed: E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix
+
+
+Number of files successfully Signed: 1
+
+Number of warnings: 0
+
+Number of errors: 0
+
+==> verifying the signature
+
+
+Verifying: E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix
+
+
+Signature Index: 0 (Primary Signature)
+Hash of file (sha256): 41505058415850431A1B78EB36752AA4FE8E78993B553E4C7C4F7A58F5DE1CB7D64A1A696B1BD44341584344CF0BA2426E8539C78A5F2358736FCF54DD0AF810F2E967242882302B24F543F741584354A58C51F8E0A3CBC62087141F84DA90921DD166368D3CDF4422B8896B80A4010A4158424DC7831FCC447B2EDBCD404CD25383487EFB155C3EFD6D0B813FA97C32D072D145415843495D4900B2AC4FA5AFBA1478A5A233B6938BAE43B007D39124AE8F8FD47B463BE9
+
+Signing Certificate Chain:
+    Issued to: Compositor Dev
+
+    Issued by: Compositor Dev
+
+    Expires:   Mon Oct 04 21:03:12 2027
+
+    SHA1 hash: 5AA19C40416D11964BA93CBD5ED443CE88940585
+
+
+File is not timestamped.
+
+
+Number of files successfully Verified: 0
+
+Number of warnings: 0
+
+Number of errors: 1
+
+SignTool Error: A certificate chain processed, but terminated in a root
+	certificate which is not trusted by the trust provider.
+the signature is present but the chain is not trusted on this machine; trust the exported .cer to install
+
+package: E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix
+install with: Add-AppxPackage "E:\Compositor-main\compositor_win\dist\compositor-0.1.0-win-x64.msix"

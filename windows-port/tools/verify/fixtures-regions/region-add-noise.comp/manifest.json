@@ -1,0 +1,146 @@
+{
+  "activeLayerID": "CCA7F4BA-D5A9-48AD-97E6-8956EE4E3568",
+  "colorSpace": "sRGB",
+  "documentID": "CE631C7D-098A-4395-8868-36A0BE0AAABB",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "C65B2364-10FA-4B83-BDEC-37F34A97B4B9",
+      "imageFile": "C65B2364-10FA-4B83-BDEC-37F34A97B4B9.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          96.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "colorize": false,
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ]
+          ]
+        },
+        "hue": 0.0,
+        "kind": "Add Noise",
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            }
+          ]
+        },
+        "lightness": 0.0,
+        "noiseAmount": 60.0,
+        "noiseGaussian": true,
+        "noiseMonochromatic": false,
+        "noiseSeed": 12345,
+        "saturation": 0.0
+      },
+      "blendMode": "Normal",
+      "id": "CCA7F4BA-D5A9-48AD-97E6-8956EE4E3568",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Noise",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "Nearest",
+        "size": [
+          96.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 96
+}

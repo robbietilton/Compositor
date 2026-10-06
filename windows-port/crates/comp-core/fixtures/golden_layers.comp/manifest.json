@@ -1,0 +1,108 @@
+{
+  "activeLayerID": "00000000-0000-0000-C0FF-EE0000010001",
+  "colorSpace": "sRGB",
+  "documentID": "00000000-0000-0000-C0FF-EE0000090001",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000010001",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000010001.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Gradient",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64,
+          48
+        ]
+      }
+    },
+    {
+      "blendMode": "Multiply",
+      "id": "00000000-0000-0000-C0FF-EE0000010002",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000010002.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Cutout",
+      "opacity": 0.75,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          30,
+          8
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          24,
+          16
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000010003",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000010003.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "00000000-0000-0000-C0FF-EE0000010003.mask.png",
+      "name": "Masked",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64,
+          48
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000010004",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000010004.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "00000000-0000-0000-C0FF-EE0000010004.mask.png",
+      "name": "Tiny Mask",
+      "opacity": 1,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          2,
+          2
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          16,
+          16
+        ]
+      }
+    }
+  ],
+  "resolution": 144,
+  "version": 11,
+  "width": 64
+}

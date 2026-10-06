@@ -1,0 +1,76 @@
+{
+  "activeLayerID": "EA8075C6-89BD-48D6-AA70-56B9756A77A2",
+  "colorSpace": "sRGB",
+  "documentID": "873EF374-998E-4E9D-9DB8-B408B77A8E9B",
+  "format": "com.compositor.project",
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "EA37061D-8E63-42FB-8AC0-657BD0D478DF",
+      "imageFile": "EA37061D-8E63-42FB-8AC0-657BD0D478DF.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "EA8075C6-89BD-48D6-AA70-56B9756A77A2",
+      "imageFile": "EA8075C6-89BD-48D6-AA70-56B9756A77A2.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Title",
+      "opacity": 1.0,
+      "text": {
+        "alignment": "Left",
+        "blue": 1.0,
+        "content": "Hi",
+        "fontName": "Arial",
+        "fontRuns": [
+          {
+            "fontName": "Arial",
+            "length": 1,
+            "location": 0
+          }
+        ],
+        "fontSize": 18.0,
+        "green": 1.0,
+        "leading": 1.2,
+        "red": 1.0,
+        "tracking": 0.0
+      },
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          48.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 10,
+  "width": 64
+}

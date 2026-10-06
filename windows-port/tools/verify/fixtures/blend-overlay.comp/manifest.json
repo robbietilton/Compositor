@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "C3D9ADF7-E296-4488-AF82-7DFD3B0B6A0B",
+  "colorSpace": "sRGB",
+  "documentID": "0F6272E2-A19A-4D08-A343-774E5BE033F3",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "002251EF-90D1-4ED1-A579-705A32D56112",
+      "imageFile": "002251EF-90D1-4ED1-A579-705A32D56112.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Overlay",
+      "id": "C3D9ADF7-E296-4488-AF82-7DFD3B0B6A0B",
+      "imageFile": "C3D9ADF7-E296-4488-AF82-7DFD3B0B6A0B.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Overlay",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

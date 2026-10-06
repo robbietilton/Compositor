@@ -1,0 +1,17 @@
+[package]
+name = "comp-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+comp-core = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+# The GPU backend is optional at run time: without an adapter every entry point reports None and the CPU
+# compositor does the work. These are pinned here rather than in the workspace because only this crate
+# needs them (wgpu 30 is already in the lock file through eframe).
+wgpu = "30"
+pollster = "0.4"

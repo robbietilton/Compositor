@@ -1,0 +1,18 @@
+[package]
+name = "comp-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Text layout, font rasterization and shape drawing for Compositor layers"
+
+[dependencies]
+comp-core = { workspace = true }
+fontdue = { workspace = true }
+rustybuzz = "0.20"
+thiserror = { workspace = true }
+unicode-bidi = "0.3"
+unicode-bidi-mirroring = "0.4"
+unicode-linebreak = "0.1"
+unicode-script = "0.5"
+unicode-segmentation = "1"
+uuid = { workspace = true }

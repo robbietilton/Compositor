@@ -1,0 +1,107 @@
+{
+  "activeLayerID": "8E483CC2-B146-4971-82C9-E352AC346171",
+  "colorSpace": "sRGB",
+  "documentID": "52677AD2-8466-4804-A208-6A68296EF6C9",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "6FFF005B-418B-4383-9279-DAB166A55BA3",
+      "imageFile": "6FFF005B-418B-4383-9279-DAB166A55BA3.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "50098829-DA5A-401F-ADB9-534A3AC53018",
+      "isGroup": true,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "50098829-DA5A-401F-ADB9-534A3AC53018.mask.png",
+      "name": "Masked Folder",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "Nearest",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "301E77E3-7D72-4B31-B5E2-42ADF92DF29C",
+      "imageFile": "301E77E3-7D72-4B31-B5E2-42ADF92DF29C.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Inside A",
+      "opacity": 1.0,
+      "parentID": "50098829-DA5A-401F-ADB9-534A3AC53018",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "8E483CC2-B146-4971-82C9-E352AC346171",
+      "imageFile": "8E483CC2-B146-4971-82C9-E352AC346171.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Inside B",
+      "opacity": 1.0,
+      "parentID": "50098829-DA5A-401F-ADB9-534A3AC53018",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

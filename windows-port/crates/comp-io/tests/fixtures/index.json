@@ -1,0 +1,175 @@
+{
+  "cases": [
+    {
+      "expected": "png_gray16.rgba",
+      "file": "png_gray16.png",
+      "height": 18,
+      "name": "png-gray16",
+      "note": "16-bit grayscale scaled with round(v * 255 / 65535)",
+      "tolerance": 0,
+      "width": 24
+    },
+    {
+      "expected": "png_rgb8.rgba",
+      "file": "png_rgb8.png",
+      "height": 18,
+      "name": "png-rgb8",
+      "note": "8-bit PNG, the path the package codec already owns",
+      "tolerance": 0,
+      "width": 24
+    },
+    {
+      "expected": "png_gray8.rgba",
+      "file": "png_gray8.png",
+      "height": 18,
+      "name": "png-gray8",
+      "note": "8-bit PNG, the path the package codec already owns",
+      "tolerance": 0,
+      "width": 24
+    },
+    {
+      "expected": "jpeg_444.rgba",
+      "file": "jpeg_444.jpg",
+      "height": 18,
+      "name": "jpeg-444",
+      "note": "Pillow encoded, Pillow decoded",
+      "tolerance": 3,
+      "width": 24
+    },
+    {
+      "expected": "jpeg_422.rgba",
+      "file": "jpeg_422.jpg",
+      "height": 18,
+      "name": "jpeg-422",
+      "note": "Pillow encoded, Pillow decoded",
+      "tolerance": 3,
+      "width": 24
+    },
+    {
+      "expected": "jpeg_420.rgba",
+      "file": "jpeg_420.jpg",
+      "height": 18,
+      "name": "jpeg-420",
+      "note": "Pillow encoded, Pillow decoded",
+      "tolerance": 4,
+      "width": 24
+    },
+    {
+      "expected": "jpeg_gray.rgba",
+      "file": "jpeg_gray.jpg",
+      "height": 18,
+      "name": "jpeg-gray",
+      "note": "Pillow encoded, Pillow decoded",
+      "tolerance": 3,
+      "width": 24
+    },
+    {
+      "expected": "heic_gray.rgba",
+      "file": "heic_gray.heic",
+      "height": 18,
+      "name": "heic-gray",
+      "note": "libheif wrote and decoded the file",
+      "tolerance": 0,
+      "width": 24
+    },
+    {
+      "expected": "heic_soft.rgba",
+      "file": "heic_soft.heic",
+      "height": 18,
+      "name": "heic-soft",
+      "note": "libheif wrote and decoded the file",
+      "tolerance": 4,
+      "width": 24
+    },
+    {
+      "expected": "heic_odd.rgba",
+      "file": "heic_odd.heic",
+      "height": 17,
+      "name": "heic-odd",
+      "note": "libheif wrote and decoded the file",
+      "tolerance": 12,
+      "width": 23
+    },
+    {
+      "expected": "avif_gray.rgba",
+      "file": "avif_gray.avif",
+      "height": 18,
+      "name": "avif-gray",
+      "note": "libheif wrote and decoded the file",
+      "tolerance": 0,
+      "width": 24
+    },
+    {
+      "expected": "avif_soft.rgba",
+      "file": "avif_soft.avif",
+      "height": 18,
+      "name": "avif-soft",
+      "note": "libheif wrote and decoded the file",
+      "tolerance": 12,
+      "width": 24
+    },
+    {
+      "expected": "avif_orientation_2.rgba",
+      "file": "avif_orientation_2.avif",
+      "height": 8,
+      "name": "avif-orientation-2",
+      "note": "EXIF orientation 2 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 12
+    },
+    {
+      "expected": "avif_orientation_3.rgba",
+      "file": "avif_orientation_3.avif",
+      "height": 8,
+      "name": "avif-orientation-3",
+      "note": "EXIF orientation 3 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 12
+    },
+    {
+      "expected": "avif_orientation_4.rgba",
+      "file": "avif_orientation_4.avif",
+      "height": 8,
+      "name": "avif-orientation-4",
+      "note": "EXIF orientation 4 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 12
+    },
+    {
+      "expected": "avif_orientation_5.rgba",
+      "file": "avif_orientation_5.avif",
+      "height": 12,
+      "name": "avif-orientation-5",
+      "note": "EXIF orientation 5 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 8
+    },
+    {
+      "expected": "avif_orientation_6.rgba",
+      "file": "avif_orientation_6.avif",
+      "height": 12,
+      "name": "avif-orientation-6",
+      "note": "EXIF orientation 6 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 8
+    },
+    {
+      "expected": "avif_orientation_7.rgba",
+      "file": "avif_orientation_7.avif",
+      "height": 12,
+      "name": "avif-orientation-7",
+      "note": "EXIF orientation 7 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 8
+    },
+    {
+      "expected": "avif_orientation_8.rgba",
+      "file": "avif_orientation_8.avif",
+      "height": 12,
+      "name": "avif-orientation-8",
+      "note": "EXIF orientation 8 applied, Pillow's transpose is the expectation",
+      "tolerance": 12,
+      "width": 8
+    }
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "activeLayerID": "00000000-0000-0000-C0FF-EE0000020001",
+  "colorSpace": "sRGB",
+  "documentID": "00000000-0000-0000-C0FF-EE0000090001",
+  "format": "com.compositor.project",
+  "guides": [
+    {
+      "axis": "horizontal",
+      "id": "00000000-0000-0000-C0FF-EE0000020008",
+      "position": 12.0
+    },
+    {
+      "axis": "vertical",
+      "id": "00000000-0000-0000-C0FF-EE0000020009",
+      "position": 30.5
+    }
+  ],
+  "height": 48,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000020001",
+      "isGroup": true,
+      "isVisible": true,
+      "maskEnabled": true,
+      "maskFile": "00000000-0000-0000-C0FF-EE0000020001.mask.png",
+      "name": "Folder",
+      "opacity": 0.6,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          48,
+          48
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "effects": {
+        "colorOverlay": {
+          "blue": 0.6,
+          "enabled": false,
+          "green": 0.4,
+          "opacity": 0.9,
+          "red": 0.2
+        },
+        "innerShadow": {
+          "angle": 45,
+          "blue": 0,
+          "blur": 3,
+          "distance": 2,
+          "green": 0,
+          "opacity": 0.35,
+          "red": 0
+        },
+        "outerGlow": {
+          "blue": 0,
+          "green": 0.5,
+          "opacity": 0.7,
+          "red": 1,
+          "size": 12
+        },
+        "stroke": {
+          "blue": 1,
+          "green": 1,
+          "inside": true,
+          "opacity": 0.8,
+          "red": 1,
+          "size": 3
+        }
+      },
+      "id": "00000000-0000-0000-C0FF-EE0000020002",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000020002.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Base",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          48,
+          48
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000020003",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000020003.png",
+      "isGroup": false,
+      "isVisible": true,
+      "maskSourceID": "00000000-0000-0000-C0FF-EE0000020002",
+      "name": "Clipped",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0,
+          0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          48,
+          48
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000020004",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000020004.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Caption",
+      "opacity": 1,
+      "parentID": "00000000-0000-0000-C0FF-EE0000020001",
+      "text": {
+        "alignment": "Center",
+        "blue": 1,
+        "boxSize": {
+          "height": 20,
+          "width": 40
+        },
+        "colorRuns": [
+          {
+            "blue": 0.2,
+            "green": 0.8,
+            "length": 3,
+            "location": 0,
+            "red": 1
+          }
+        ],
+        "content": "Golden",
+        "fontName": "Helvetica",
+        "fontRuns": [
+          {
+            "fontName": "Georgia-Bold",
+            "length": 3,
+            "location": 3
+          }
+        ],
+        "fontSize": 16,
+        "green": 1,
+        "leading": 19,
+        "red": 1,
+        "tracking": 0.5
+      },
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          4,
+          4
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          40,
+          20
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "00000000-0000-0000-C0FF-EE0000020005",
+      "imageFile": "00000000-0000-0000-C0FF-EE0000020005.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Arrow",
+      "opacity": 1,
+      "shape": {
+        "blue": 0.2,
+        "cornerRadius": 0,
+        "end": [
+          1,
+          1
+        ],
+        "green": 0.2,
+        "kind": "Line",
+        "lineWidth": 3,
+        "red": 1,
+        "start": [
+          0,
+          0
+        ]
+      },
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          6,
+          30
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          36,
+          12
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 48
+}

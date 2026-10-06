@@ -1,0 +1,142 @@
+{
+  "activeLayerID": "F7928D25-FDFB-49A6-837A-A3D6CF4FEE54",
+  "colorSpace": "sRGB",
+  "documentID": "99A0C11C-F751-4247-8CB2-AA4A8D37F5C2",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "DC85765B-2A16-418B-8ADC-32512F30EB3D",
+      "imageFile": "DC85765B-2A16-418B-8ADC-32512F30EB3D.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "adjustment": {
+        "colorize": false,
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ],
+            [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 255.0,
+                "y": 255.0
+              }
+            ]
+          ]
+        },
+        "hue": 0.0,
+        "kind": "Invert",
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            },
+            {
+              "black": 0.0,
+              "gamma": 1.0,
+              "outputBlack": 0.0,
+              "outputWhite": 255.0,
+              "white": 255.0
+            }
+          ]
+        },
+        "lightness": 0.0,
+        "saturation": 0.0
+      },
+      "blendMode": "Normal",
+      "id": "F7928D25-FDFB-49A6-837A-A3D6CF4FEE54",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Invert",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

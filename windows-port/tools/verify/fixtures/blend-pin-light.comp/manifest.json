@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "CBD8F083-E7B0-47AC-8CF4-9F29B3254099",
+  "colorSpace": "sRGB",
+  "documentID": "0F4910DA-CE98-4294-92C2-5EBCC96594FC",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "44C48999-30E4-408F-9E5E-09817A691E61",
+      "imageFile": "44C48999-30E4-408F-9E5E-09817A691E61.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Pin Light",
+      "id": "CBD8F083-E7B0-47AC-8CF4-9F29B3254099",
+      "imageFile": "CBD8F083-E7B0-47AC-8CF4-9F29B3254099.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Pin Light",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

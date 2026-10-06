@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "4FC7B746-F6F2-440B-9008-E8A377309058",
+  "colorSpace": "sRGB",
+  "documentID": "CCCD5B92-1DB6-4E92-BEF8-D1DED1FDF46E",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "4D293C4B-2A5F-4A07-BE2C-530AA095618B",
+      "imageFile": "4D293C4B-2A5F-4A07-BE2C-530AA095618B.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Multiply",
+      "id": "4FC7B746-F6F2-440B-9008-E8A377309058",
+      "imageFile": "4FC7B746-F6F2-440B-9008-E8A377309058.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Multiply",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

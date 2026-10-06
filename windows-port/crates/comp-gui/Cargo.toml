@@ -1,0 +1,27 @@
+[package]
+name = "comp-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+comp-core = { workspace = true }
+comp-render = { workspace = true }
+comp-io = { workspace = true }
+comp-brush = { workspace = true }
+comp-text = { path = "../comp-text" }
+comp-raw = { path = "../comp-raw" }
+serde_json = { workspace = true }
+# The Windows clipboard: arboard is already in the dependency tree through egui.
+arboard = "3.6"
+# Persistence remembers the open tabs and the view settings between runs; it pulls in ron.
+eframe = { version = "0.36", features = ["persistence"] }
+serde = { workspace = true, features = ["derive"] }
+egui = "0.36"
+rfd = "0.15"
+uuid = { workspace = true }
+
+[dev-dependencies]
+# The journey test drives the editor without a window; it names egui's point and vector types because
+# that is what the session API takes.
+egui = "0.36"

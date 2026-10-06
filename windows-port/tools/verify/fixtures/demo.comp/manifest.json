@@ -1,0 +1,81 @@
+{
+  "activeLayerID": "EE71936B-EAA5-4FF8-B302-61E8EDF9299F",
+  "colorSpace": "sRGB",
+  "documentID": "00557FC5-48F6-44E2-A477-2BFA2AA252C4",
+  "format": "com.compositor.project",
+  "height": 320,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "E9BCC016-7254-451A-BCD2-21DB56D235C1",
+      "imageFile": "E9BCC016-7254-451A-BCD2-21DB56D235C1.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Sky",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          480.0,
+          320.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Screen",
+      "id": "75CD352F-0194-479A-A1D6-1DC3D9713DFC",
+      "imageFile": "75CD352F-0194-479A-A1D6-1DC3D9713DFC.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Sun",
+      "opacity": 0.9,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          480.0,
+          320.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Normal",
+      "id": "EE71936B-EAA5-4FF8-B302-61E8EDF9299F",
+      "imageFile": "EE71936B-EAA5-4FF8-B302-61E8EDF9299F.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Hills",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          480.0,
+          320.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 480
+}

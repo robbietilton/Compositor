@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "594A68C4-A1A6-44A0-A0DE-9A9672C7D41C",
+  "colorSpace": "sRGB",
+  "documentID": "A5EB8984-F224-4C59-8080-B10889C0D407",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "D4AF11E9-39EA-42A7-8C54-E59D8A0C0D08",
+      "imageFile": "D4AF11E9-39EA-42A7-8C54-E59D8A0C0D08.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Color Burn",
+      "id": "594A68C4-A1A6-44A0-A0DE-9A9672C7D41C",
+      "imageFile": "594A68C4-A1A6-44A0-A0DE-9A9672C7D41C.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Color Burn",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}

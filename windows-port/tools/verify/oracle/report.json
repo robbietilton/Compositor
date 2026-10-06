@@ -1,0 +1,7642 @@
+{
+  "compc": "E:\\Compositor-main\\compositor_win\\target-render-engine\\debug\\compc.exe",
+  "compcBytes": 32571904,
+  "compcModified": 1791130594,
+  "fixtures": [
+    {
+      "name": "hsv-identity",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "identity: no range adjustment, so the layer must not change a pixel",
+      "package": "hsv-identity.comp",
+      "expected": "expected/hsv-identity.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "hsv-master",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [
+        "hsv-direct"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "master range: +40 degrees, +60 saturation, -10 lightness",
+      "package": "hsv-master.comp",
+      "expected": "expected/hsv-master.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 40.0,
+        "saturation": 60.0,
+        "lightness": -10.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 12,
+        "mean": 0.2775607638888889,
+        "worst_alpha": 0,
+        "mismatched": 293,
+        "worst_pixels": [
+          {
+            "x": 59,
+            "y": 42,
+            "expected": [
+              250,
+              158,
+              161,
+              255
+            ],
+            "actual": [
+              255,
+              146,
+              149,
+              255
+            ],
+            "difference": [
+              5,
+              12,
+              12,
+              0
+            ]
+          },
+          {
+            "x": 43,
+            "y": 44,
+            "expected": [
+              102,
+              245,
+              245,
+              255
+            ],
+            "actual": [
+              98,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              4,
+              10,
+              10,
+              0
+            ]
+          },
+          {
+            "x": 57,
+            "y": 44,
+            "expected": [
+              246,
+              164,
+              246,
+              255
+            ],
+            "actual": [
+              255,
+              163,
+              255,
+              255
+            ],
+            "difference": [
+              9,
+              1,
+              9,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": false,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "hsv-direct": {
+          "worst": 1,
+          "mean": 0.013454861111111112,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 44,
+              "y": 45,
+              "expected": [
+                106,
+                219,
+                255,
+                255
+              ],
+              "actual": [
+                106,
+                220,
+                255,
+                255
+              ],
+              "difference": [
+                0,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 54,
+              "y": 24,
+              "expected": [
+                255,
+                76,
+                180,
+                255
+              ],
+              "actual": [
+                255,
+                76,
+                181,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 15,
+              "y": 45,
+              "expected": [
+                1,
+                255,
+                214,
+                255
+              ],
+              "actual": [
+                2,
+                255,
+                214,
+                255
+              ],
+              "difference": [
+                1,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "hsv-reds",
+      "group": "adjustment",
+      "kind": "Hue/Saturation",
+      "base": "chart",
+      "variants": [
+        "hsv-direct"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "targeted Reds range through hsvSettings; schema probe for the optional settings block",
+      "package": "hsv-reds.comp",
+      "expected": "expected/hsv-reds.png",
+      "adjustment": {
+        "kind": "Hue/Saturation",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "hsvSettings": {
+          "range": "Reds",
+          "colorize": false,
+          "invertRange": false,
+          "adjustments": {
+            "Reds": {
+              "hue": 60.0,
+              "saturation": -40.0,
+              "lightness": 20.0
+            }
+          },
+          "bands": {
+            "Reds": {
+              "falloffStart": 315.0,
+              "rangeStart": 345.0,
+              "rangeEnd": 15.0,
+              "falloffEnd": 45.0
+            }
+          }
+        }
+      },
+      "stats": {
+        "worst": 14,
+        "mean": 0.1965060763888889,
+        "worst_alpha": 0,
+        "mismatched": 231,
+        "worst_pixels": [
+          {
+            "x": 26,
+            "y": 21,
+            "expected": [
+              118,
+              119,
+              114,
+              255
+            ],
+            "actual": [
+              104,
+              105,
+              100,
+              255
+            ],
+            "difference": [
+              14,
+              14,
+              14,
+              0
+            ]
+          },
+          {
+            "x": 26,
+            "y": 20,
+            "expected": [
+              111,
+              111,
+              96,
+              255
+            ],
+            "actual": [
+              104,
+              100,
+              88,
+              255
+            ],
+            "difference": [
+              7,
+              11,
+              8,
+              0
+            ]
+          },
+          {
+            "x": 28,
+            "y": 20,
+            "expected": [
+              133,
+              132,
+              120,
+              255
+            ],
+            "actual": [
+              137,
+              140,
+              129,
+              255
+            ],
+            "difference": [
+              4,
+              8,
+              9,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": false,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "hsv-direct": {
+          "worst": 1,
+          "mean": 0.00010850694444444444,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 56,
+              "y": 31,
+              "expected": [
+                214,
+                214,
+                114,
+                255
+              ],
+              "actual": [
+                214,
+                215,
+                114,
+                255
+              ],
+              "difference": [
+                0,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 31,
+              "y": 0,
+              "expected": [
+                153,
+                153,
+                153,
+                255
+              ],
+              "actual": [
+                153,
+                153,
+                153,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 30,
+              "y": 0,
+              "expected": [
+                153,
+                153,
+                153,
+                255
+              ],
+              "actual": [
+                153,
+                153,
+                153,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "levels-identity",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "identity ranges: the macOS filter returns the image untouched",
+      "package": "levels-identity.comp",
+      "expected": "expected/levels-identity.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "levels-work",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [
+        "levels-gpu1024"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "composite range 20/1.4/230 with per-channel ranges on top",
+      "package": "levels-work.comp",
+      "expected": "expected/levels-work.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 20,
+              "gamma": 1.4,
+              "white": 230,
+              "outputBlack": 10,
+              "outputWhite": 245
+            },
+            {
+              "black": 5,
+              "gamma": 0.8,
+              "white": 250,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.15,
+              "white": 240,
+              "outputBlack": 0,
+              "outputWhite": 250
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              245,
+              245,
+              245,
+              255
+            ],
+            "actual": [
+              245,
+              245,
+              245,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              245,
+              245,
+              78,
+              255
+            ],
+            "actual": [
+              245,
+              245,
+              78,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              245,
+              245,
+              72,
+              255
+            ],
+            "actual": [
+              245,
+              245,
+              72,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "levels-gpu1024": {
+          "worst": 0,
+          "mean": 0.0,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 63,
+              "y": 47,
+              "expected": [
+                245,
+                245,
+                245,
+                255
+              ],
+              "actual": [
+                245,
+                245,
+                245,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 62,
+              "y": 47,
+              "expected": [
+                245,
+                245,
+                78,
+                255
+              ],
+              "actual": [
+                245,
+                245,
+                78,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 61,
+              "y": 47,
+              "expected": [
+                245,
+                245,
+                72,
+                255
+              ],
+              "actual": [
+                245,
+                245,
+                72,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "levels-clip",
+      "group": "adjustment",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "output ranges only: compresses the tonal range without moving the black point",
+      "package": "levels-clip.comp",
+      "expected": "expected/levels-clip.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 200,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 100,
+              "outputWhite": 200
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1.0,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              243,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              243,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              243,
+              251,
+              209,
+              255
+            ],
+            "actual": [
+              243,
+              251,
+              209,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              242,
+              251,
+              209,
+              255
+            ],
+            "actual": [
+              242,
+              251,
+              209,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "curves-identity",
+      "group": "adjustment",
+      "kind": "Curves",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "two-point curves are the identity",
+      "package": "curves-identity.comp",
+      "expected": "expected/curves-identity.png",
+      "adjustment": {
+        "kind": "Curves",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "curves-s",
+      "group": "adjustment",
+      "kind": "Curves",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "contrast S-curve on RGB plus separate red and green curves",
+      "package": "curves-s.comp",
+      "expected": "expected/curves-s.png",
+      "adjustment": {
+        "kind": "Curves",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 64,
+                "y": 84
+              },
+              {
+                "x": 160,
+                "y": 188
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 12
+              },
+              {
+                "x": 128,
+                "y": 140
+              },
+              {
+                "x": 255,
+                "y": 248
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 78
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              250,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              250,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              246,
+              239,
+              59,
+              255
+            ],
+            "actual": [
+              246,
+              239,
+              59,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              239,
+              54,
+              255
+            ],
+            "actual": [
+              244,
+              239,
+              54,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "exposure-identity",
+      "group": "adjustment",
+      "kind": "Exposure",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "zero stops, no offset, gamma 1: the table is the identity",
+      "package": "exposure-identity.comp",
+      "expected": "expected/exposure-identity.png",
+      "adjustment": {
+        "kind": "Exposure",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "exposureSettings": {
+          "exposure": 0.0,
+          "offset": 0.0,
+          "gamma": 1.0
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "exposure-up",
+      "group": "adjustment",
+      "kind": "Exposure",
+      "base": "chart",
+      "variants": [
+        "exposure-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "0.8 stops of linear light, +0.05 offset, gamma 1.2",
+      "package": "exposure-up.comp",
+      "expected": "expected/exposure-up.png",
+      "adjustment": {
+        "kind": "Exposure",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "exposureSettings": {
+          "exposure": 0.8,
+          "offset": 0.05,
+          "gamma": 1.2
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              104,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              104,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              101,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              101,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "exposure-cube33": {
+          "worst": 2,
+          "mean": 0.1159939236111111,
+          "worst_alpha": 0,
+          "mismatched": 155,
+          "worst_pixels": [
+            {
+              "x": 49,
+              "y": 7,
+              "expected": [
+                253,
+                97,
+                91,
+                255
+              ],
+              "actual": [
+                255,
+                98,
+                91,
+                255
+              ],
+              "difference": [
+                2,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 49,
+              "y": 8,
+              "expected": [
+                253,
+                101,
+                98,
+                255
+              ],
+              "actual": [
+                255,
+                101,
+                98,
+                255
+              ],
+              "difference": [
+                2,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 49,
+              "y": 4,
+              "expected": [
+                253,
+                89,
+                255,
+                255
+              ],
+              "actual": [
+                255,
+                89,
+                255,
+                255
+              ],
+              "difference": [
+                2,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "gradientmap-default",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "default black-to-white ramp: luminance picks the gray",
+      "package": "gradientmap-default.comp",
+      "expected": "expected/gradientmap-default.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 1.0,
+            "blue": 1.0
+          },
+          "reversed": false
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              224,
+              224,
+              224,
+              255
+            ],
+            "actual": [
+              224,
+              224,
+              224,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              223,
+              223,
+              223,
+              255
+            ],
+            "actual": [
+              223,
+              223,
+              223,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "gradientmap-cube33": {
+          "worst": 1,
+          "mean": 0.20768229166666666,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 60,
+              "y": 30,
+              "expected": [
+                164,
+                164,
+                164,
+                255
+              ],
+              "actual": [
+                165,
+                165,
+                165,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 46,
+              "y": 37,
+              "expected": [
+                179,
+                179,
+                179,
+                255
+              ],
+              "actual": [
+                180,
+                180,
+                180,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 45,
+              "y": 37,
+              "expected": [
+                178,
+                178,
+                178,
+                255
+              ],
+              "actual": [
+                179,
+                179,
+                179,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "gradientmap-duotone",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "duotone with reversed ends",
+      "package": "gradientmap-duotone.comp",
+      "expected": "expected/gradientmap-duotone.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.12,
+            "green": 0.04,
+            "blue": 0.35
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 0.82,
+            "blue": 0.35
+          },
+          "reversed": true
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              31,
+              10,
+              89,
+              255
+            ],
+            "actual": [
+              31,
+              10,
+              89,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              58,
+              34,
+              89,
+              255
+            ],
+            "actual": [
+              58,
+              34,
+              89,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              59,
+              35,
+              89,
+              255
+            ],
+            "actual": [
+              59,
+              35,
+              89,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "gradientmap-cube33": {
+          "worst": 2,
+          "mean": 0.1654730902777778,
+          "worst_alpha": 0,
+          "mismatched": 2,
+          "worst_pixels": [
+            {
+              "x": 44,
+              "y": 28,
+              "expected": [
+                135,
+                103,
+                89,
+                255
+              ],
+              "actual": [
+                134,
+                101,
+                89,
+                255
+              ],
+              "difference": [
+                1,
+                2,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 34,
+              "y": 28,
+              "expected": [
+                129,
+                97,
+                89,
+                255
+              ],
+              "actual": [
+                127,
+                96,
+                89,
+                255
+              ],
+              "difference": [
+                2,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 54,
+              "y": 0,
+              "expected": [
+                201,
+                162,
+                89,
+                255
+              ],
+              "actual": [
+                200,
+                161,
+                89,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "gradientmap-reversed-bw",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "the same black-to-white ramp with reversed ends: probes whether the flag is read",
+      "package": "gradientmap-reversed-bw.comp",
+      "expected": "expected/gradientmap-reversed-bw.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 1.0,
+            "blue": 1.0
+          },
+          "reversed": true
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              0,
+              0,
+              0,
+              255
+            ],
+            "actual": [
+              0,
+              0,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              31,
+              31,
+              31,
+              255
+            ],
+            "actual": [
+              31,
+              31,
+              31,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              32,
+              32,
+              32,
+              255
+            ],
+            "actual": [
+              32,
+              32,
+              32,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "gradientmap-cube33": {
+          "worst": 1,
+          "mean": 0.20768229166666666,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 60,
+              "y": 30,
+              "expected": [
+                91,
+                91,
+                91,
+                255
+              ],
+              "actual": [
+                90,
+                90,
+                90,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 46,
+              "y": 37,
+              "expected": [
+                76,
+                76,
+                76,
+                255
+              ],
+              "actual": [
+                75,
+                75,
+                75,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 45,
+              "y": 37,
+              "expected": [
+                77,
+                77,
+                77,
+                255
+              ],
+              "actual": [
+                76,
+                76,
+                76,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "gradientmap-warm-end",
+      "group": "adjustment",
+      "kind": "Gradient Map",
+      "base": "chart",
+      "variants": [
+        "gradientmap-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "black to orange: probes whether the highlight color is read at all",
+      "package": "gradientmap-warm-end.comp",
+      "expected": "expected/gradientmap-warm-end.png",
+      "adjustment": {
+        "kind": "Gradient Map",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "gradientMapSettings": {
+          "shadows": {
+            "red": 0.0,
+            "green": 0.0,
+            "blue": 0.0
+          },
+          "highlights": {
+            "red": 1.0,
+            "green": 0.5,
+            "blue": 0.0
+          },
+          "reversed": false
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              128,
+              0,
+              255
+            ],
+            "actual": [
+              255,
+              128,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              224,
+              112,
+              0,
+              255
+            ],
+            "actual": [
+              224,
+              112,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              223,
+              112,
+              0,
+              255
+            ],
+            "actual": [
+              223,
+              112,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "gradientmap-cube33": {
+          "worst": 1,
+          "mean": 0.12239583333333333,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 33,
+              "y": 0,
+              "expected": [
+                37,
+                19,
+                0,
+                255
+              ],
+              "actual": [
+                38,
+                19,
+                0,
+                255
+              ],
+              "difference": [
+                1,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 34,
+              "y": 0,
+              "expected": [
+                38,
+                19,
+                0,
+                255
+              ],
+              "actual": [
+                39,
+                20,
+                0,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 39,
+              "y": 0,
+              "expected": [
+                44,
+                23,
+                0,
+                255
+              ],
+              "actual": [
+                44,
+                22,
+                0,
+                255
+              ],
+              "difference": [
+                0,
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "grain-default",
+      "group": "adjustment",
+      "kind": "Grain",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "default grain at seed 12345",
+      "package": "grain-default.comp",
+      "expected": "expected/grain-default.png",
+      "adjustment": {
+        "kind": "Grain",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "grainSettings": {
+          "amount": 25.0,
+          "size": 1.5,
+          "roughness": 50.0,
+          "seed": 12345
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              249,
+              240,
+              45,
+              255
+            ],
+            "actual": [
+              249,
+              240,
+              45,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "grain-coarse",
+      "group": "adjustment",
+      "kind": "Grain",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "strong, coarse, smooth grain: roughness 0 leaves the broad lattice alone",
+      "package": "grain-coarse.comp",
+      "expected": "expected/grain-coarse.png",
+      "adjustment": {
+        "kind": "Grain",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "grainSettings": {
+          "amount": 70.0,
+          "size": 6.0,
+          "roughness": 0.0,
+          "seed": 777
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              251,
+              251,
+              251,
+              255
+            ],
+            "actual": [
+              251,
+              251,
+              251,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              237,
+              224,
+              33,
+              255
+            ],
+            "actual": [
+              237,
+              224,
+              33,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              228,
+              219,
+              24,
+              255
+            ],
+            "actual": [
+              228,
+              219,
+              24,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "addnoise-uniform",
+      "group": "adjustment",
+      "kind": "Add Noise",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "uniform independent noise on each channel",
+      "package": "addnoise-uniform.comp",
+      "expected": "expected/addnoise-uniform.png",
+      "adjustment": {
+        "kind": "Add Noise",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "noiseAmount": 30.0,
+        "noiseGaussian": false,
+        "noiseMonochromatic": false,
+        "noiseSeed": 4242
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              246,
+              249,
+              255,
+              255
+            ],
+            "actual": [
+              246,
+              249,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              244,
+              251,
+              42,
+              255
+            ],
+            "actual": [
+              244,
+              251,
+              42,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              255,
+              203,
+              68,
+              255
+            ],
+            "actual": [
+              255,
+              203,
+              68,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "addnoise-gaussian-mono",
+      "group": "adjustment",
+      "kind": "Add Noise",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "Gaussian noise, one value for all three channels",
+      "package": "addnoise-gaussian-mono.comp",
+      "expected": "expected/addnoise-gaussian-mono.png",
+      "adjustment": {
+        "kind": "Add Noise",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "noiseAmount": 20.0,
+        "noiseGaussian": true,
+        "noiseMonochromatic": true,
+        "noiseSeed": 99
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              75,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              75,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              198,
+              189,
+              0,
+              255
+            ],
+            "actual": [
+              198,
+              189,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "gaussianblur-min",
+      "group": "adjustment",
+      "kind": "Gaussian Blur",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 1,
+      "note": "minimum radius: sigma 0.1, effectively the identity",
+      "package": "gaussianblur-min.comp",
+      "expected": "expected/gaussianblur-min.png",
+      "adjustment": {
+        "kind": "Gaussian Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blurRadius": 0.1
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": true
+    },
+    {
+      "name": "gaussianblur-medium",
+      "group": "adjustment",
+      "kind": "Gaussian Blur",
+      "base": "chart",
+      "variants": [
+        "gaussian-clamped"
+      ],
+      "class": "kernel",
+      "tolerance": 6,
+      "note": "sigma 4 at 1:1; Core Image blurs past the edges into transparent black",
+      "package": "gaussianblur-medium.comp",
+      "expected": "expected/gaussianblur-medium.png",
+      "adjustment": {
+        "kind": "Gaussian Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blurRadius": 4.0
+      },
+      "stats": {
+        "worst": 4,
+        "mean": 0.17686631944444445,
+        "worst_alpha": 1,
+        "mismatched": 158,
+        "worst_pixels": [
+          {
+            "x": 58,
+            "y": 0,
+            "expected": [
+              231,
+              16,
+              120,
+              128
+            ],
+            "actual": [
+              227,
+              16,
+              119,
+              129
+            ],
+            "difference": [
+              4,
+              0,
+              1,
+              1
+            ]
+          },
+          {
+            "x": 58,
+            "y": 47,
+            "expected": [
+              231,
+              221,
+              129,
+              128
+            ],
+            "actual": [
+              227,
+              219,
+              128,
+              129
+            ],
+            "difference": [
+              4,
+              2,
+              1,
+              1
+            ]
+          },
+          {
+            "x": 5,
+            "y": 47,
+            "expected": [
+              22,
+              219,
+              70,
+              128
+            ],
+            "actual": [
+              24,
+              217,
+              67,
+              129
+            ],
+            "difference": [
+              2,
+              2,
+              3,
+              1
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "gaussian-clamped": {
+          "worst": 63,
+          "mean": 1.9543185763888888,
+          "worst_alpha": 178,
+          "mismatched": 1844,
+          "worst_pixels": [
+            {
+              "x": 0,
+              "y": 47,
+              "expected": [
+                6,
+                156,
+                51,
+                255
+              ],
+              "actual": [
+                10,
+                212,
+                70,
+                77
+              ],
+              "difference": [
+                4,
+                56,
+                19,
+                178
+              ]
+            },
+            {
+              "x": 63,
+              "y": 0,
+              "expected": [
+                247,
+                85,
+                159,
+                255
+              ],
+              "actual": [
+                242,
+                23,
+                96,
+                77
+              ],
+              "difference": [
+                5,
+                62,
+                63,
+                178
+              ]
+            },
+            {
+              "x": 63,
+              "y": 47,
+              "expected": [
+                247,
+                233,
+                131,
+                255
+              ],
+              "actual": [
+                242,
+                222,
+                109,
+                77
+              ],
+              "difference": [
+                5,
+                11,
+                22,
+                178
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "motionblur-min",
+      "group": "adjustment",
+      "kind": "Motion Blur",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 1,
+      "note": "one pixel of streak: effectively the identity",
+      "package": "motionblur-min.comp",
+      "expected": "expected/motionblur-min.png",
+      "adjustment": {
+        "kind": "Motion Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "motionAngle": 0.0,
+        "motionDistance": 1.0
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": true
+    },
+    {
+      "name": "motionblur-30deg",
+      "group": "adjustment",
+      "kind": "Motion Blur",
+      "base": "chart",
+      "variants": [
+        "motion-plus30",
+        "motion-minus30"
+      ],
+      "class": "kernel",
+      "tolerance": 32,
+      "note": "9-pixel streak at +30 degrees; the sign of the angle is checked against both",
+      "package": "motionblur-30deg.comp",
+      "expected": "expected/motionblur-30deg.png",
+      "adjustment": {
+        "kind": "Motion Blur",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "motionAngle": 30.0,
+        "motionDistance": 9.0
+      },
+      "stats": {
+        "worst": 73,
+        "mean": 1.9754774305555556,
+        "worst_alpha": 28,
+        "mismatched": 1119,
+        "worst_pixels": [
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              251,
+              242,
+              148,
+              57
+            ],
+            "actual": [
+              252,
+              239,
+              75,
+              78
+            ],
+            "difference": [
+              1,
+              3,
+              73,
+              21
+            ]
+          },
+          {
+            "x": 51,
+            "y": 47,
+            "expected": [
+              210,
+              230,
+              101,
+              142
+            ],
+            "actual": [
+              209,
+              230,
+              163,
+              156
+            ],
+            "difference": [
+              1,
+              0,
+              62,
+              14
+            ]
+          },
+          {
+            "x": 1,
+            "y": 21,
+            "expected": [
+              9,
+              102,
+              84,
+              170
+            ],
+            "actual": [
+              9,
+              102,
+              145,
+              178
+            ],
+            "difference": [
+              0,
+              0,
+              61,
+              8
+            ]
+          }
+        ]
+      },
+      "pass": false,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "motion-plus30": {
+          "worst": 73,
+          "mean": 1.9754774305555556,
+          "worst_alpha": 28,
+          "mismatched": 1119,
+          "worst_pixels": [
+            {
+              "x": 62,
+              "y": 47,
+              "expected": [
+                251,
+                242,
+                148,
+                57
+              ],
+              "actual": [
+                252,
+                239,
+                75,
+                78
+              ],
+              "difference": [
+                1,
+                3,
+                73,
+                21
+              ]
+            },
+            {
+              "x": 51,
+              "y": 47,
+              "expected": [
+                210,
+                230,
+                101,
+                142
+              ],
+              "actual": [
+                209,
+                230,
+                163,
+                156
+              ],
+              "difference": [
+                1,
+                0,
+                62,
+                14
+              ]
+            },
+            {
+              "x": 1,
+              "y": 21,
+              "expected": [
+                9,
+                102,
+                84,
+                170
+              ],
+              "actual": [
+                9,
+                102,
+                145,
+                178
+              ],
+              "difference": [
+                0,
+                0,
+                61,
+                8
+              ]
+            }
+          ]
+        },
+        "motion-minus30": {
+          "worst": 196,
+          "mean": 8.350260416666666,
+          "worst_alpha": 116,
+          "mismatched": 1536,
+          "worst_pixels": [
+            {
+              "x": 0,
+              "y": 7,
+              "expected": [
+                57,
+                32,
+                86,
+                142
+              ],
+              "actual": [
+                253,
+                23,
+                2,
+                145
+              ],
+              "difference": [
+                196,
+                9,
+                84,
+                3
+              ]
+            },
+            {
+              "x": 0,
+              "y": 20,
+              "expected": [
+                7,
+                104,
+                54,
+                142
+              ],
+              "actual": [
+                7,
+                95,
+                236,
+                145
+              ],
+              "difference": [
+                0,
+                9,
+                182,
+                3
+              ]
+            },
+            {
+              "x": 0,
+              "y": 42,
+              "expected": [
+                7,
+                214,
+                63,
+                142
+              ],
+              "actual": [
+                7,
+                206,
+                241,
+                145
+              ],
+              "difference": [
+                0,
+                8,
+                178,
+                3
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "invert-chart",
+      "group": "adjustment",
+      "kind": "Invert",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "every color becomes alpha minus color, alpha 255 everywhere",
+      "package": "invert-chart.comp",
+      "expected": "expected/invert-chart.png",
+      "adjustment": {
+        "kind": "Invert",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              0,
+              0,
+              0,
+              255
+            ],
+            "actual": [
+              0,
+              0,
+              0,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              7,
+              20,
+              211,
+              255
+            ],
+            "actual": [
+              7,
+              20,
+              211,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              11,
+              20,
+              215,
+              255
+            ],
+            "actual": [
+              11,
+              20,
+              215,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "invert-alpha",
+      "group": "adjustment",
+      "kind": "Invert",
+      "base": "alpha",
+      "variants": [],
+      "class": "alpha",
+      "tolerance": 2,
+      "note": "invert on a canvas with partial alpha: the premultiplied path",
+      "package": "invert-alpha.comp",
+      "expected": "expected/invert-alpha.png",
+      "adjustment": {
+        "kind": "Invert",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.0013020833333333333,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 52,
+            "y": 39,
+            "expected": [
+              47,
+              59,
+              91,
+              210
+            ],
+            "actual": [
+              47,
+              60,
+              91,
+              210
+            ],
+            "difference": [
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 52,
+            "y": 26,
+            "expected": [
+              47,
+              125,
+              246,
+              210
+            ],
+            "actual": [
+              47,
+              125,
+              247,
+              210
+            ],
+            "difference": [
+              0,
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 46,
+            "y": 38,
+            "expected": [
+              71,
+              64,
+              127,
+              186
+            ],
+            "actual": [
+              71,
+              64,
+              128,
+              186
+            ],
+            "difference": [
+              0,
+              0,
+              1,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "blackwhite-default",
+      "group": "adjustment",
+      "kind": "Black & White",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "Photoshop's default family weights",
+      "package": "blackwhite-default.comp",
+      "expected": "expected/blackwhite-default.png",
+      "adjustment": {
+        "kind": "Black & White",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blackWhiteSettings": {
+          "reds": 40.0,
+          "yellows": 60.0,
+          "greens": 40.0,
+          "cyans": 60.0,
+          "blues": 20.0,
+          "magentas": 80.0,
+          "tint": false,
+          "tintHue": 40.0,
+          "tintSaturation": 20.0
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              164,
+              164,
+              164,
+              255
+            ],
+            "actual": [
+              164,
+              164,
+              164,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              161,
+              161,
+              161,
+              255
+            ],
+            "actual": [
+              161,
+              161,
+              161,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "blackwhite-cube33": {
+          "worst": 1,
+          "mean": 0.16015625,
+          "worst_alpha": 0,
+          "mismatched": 0,
+          "worst_pixels": [
+            {
+              "x": 32,
+              "y": 32,
+              "expected": [
+                89,
+                89,
+                89,
+                255
+              ],
+              "actual": [
+                90,
+                90,
+                90,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 62,
+              "y": 35,
+              "expected": [
+                196,
+                196,
+                196,
+                255
+              ],
+              "actual": [
+                197,
+                197,
+                197,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            },
+            {
+              "x": 63,
+              "y": 27,
+              "expected": [
+                154,
+                154,
+                154,
+                255
+              ],
+              "actual": [
+                153,
+                153,
+                153,
+                255
+              ],
+              "difference": [
+                1,
+                1,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "blackwhite-tinted",
+      "group": "adjustment",
+      "kind": "Black & White",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "sepia tint at hue 40, saturation 60, with strong reds and greens",
+      "package": "blackwhite-tinted.comp",
+      "expected": "expected/blackwhite-tinted.png",
+      "adjustment": {
+        "kind": "Black & White",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "blackWhiteSettings": {
+          "reds": 80.0,
+          "yellows": 10.0,
+          "greens": 90.0,
+          "cyans": 20.0,
+          "blues": 0.0,
+          "magentas": 60.0,
+          "tint": true,
+          "tintHue": 40.0,
+          "tintSaturation": 60.0
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              118,
+              88,
+              29,
+              255
+            ],
+            "actual": [
+              118,
+              88,
+              29,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              107,
+              80,
+              27,
+              255
+            ],
+            "actual": [
+              107,
+              80,
+              27,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "blackwhite-cube33": {
+          "worst": 6,
+          "mean": 0.2897135416666667,
+          "worst_alpha": 0,
+          "mismatched": 92,
+          "worst_pixels": [
+            {
+              "x": 25,
+              "y": 20,
+              "expected": [
+                143,
+                107,
+                36,
+                255
+              ],
+              "actual": [
+                137,
+                103,
+                34,
+                255
+              ],
+              "difference": [
+                6,
+                4,
+                2,
+                0
+              ]
+            },
+            {
+              "x": 45,
+              "y": 36,
+              "expected": [
+                178,
+                134,
+                45,
+                255
+              ],
+              "actual": [
+                173,
+                130,
+                43,
+                255
+              ],
+              "difference": [
+                5,
+                4,
+                2,
+                0
+              ]
+            },
+            {
+              "x": 43,
+              "y": 12,
+              "expected": [
+                212,
+                169,
+                82,
+                255
+              ],
+              "actual": [
+                213,
+                171,
+                86,
+                255
+              ],
+              "difference": [
+                1,
+                2,
+                4,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "colorbalance-identity",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "all three wheels at zero: the macOS filter returns the image",
+      "package": "colorbalance-identity.comp",
+      "expected": "expected/colorbalance-identity.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 0.0,
+          "shadowMagentaGreen": 0.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 0.0,
+          "midMagentaGreen": 0.0,
+          "midYellowBlue": 0.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 0.0,
+          "preserveLuminosity": true
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "colorbalance-warm",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [
+        "blackwhite-cube33"
+      ],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "warm shadows and midtones, cooler highlights, luminosity preserved",
+      "package": "colorbalance-warm.comp",
+      "expected": "expected/colorbalance-warm.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 25.0,
+          "shadowMagentaGreen": -15.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 10.0,
+          "midMagentaGreen": 8.0,
+          "midYellowBlue": -20.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 30.0,
+          "preserveLuminosity": true
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true,
+      "variant_stats": {
+        "blackwhite-cube33": {
+          "worst": 5,
+          "mean": 0.2992621527777778,
+          "worst_alpha": 0,
+          "mismatched": 146,
+          "worst_pixels": [
+            {
+              "x": 34,
+              "y": 5,
+              "expected": [
+                161,
+                1,
+                250,
+                255
+              ],
+              "actual": [
+                163,
+                0,
+                255,
+                255
+              ],
+              "difference": [
+                2,
+                1,
+                5,
+                0
+              ]
+            },
+            {
+              "x": 38,
+              "y": 4,
+              "expected": [
+                170,
+                0,
+                251,
+                255
+              ],
+              "actual": [
+                170,
+                0,
+                255,
+                255
+              ],
+              "difference": [
+                0,
+                0,
+                4,
+                0
+              ]
+            },
+            {
+              "x": 54,
+              "y": 4,
+              "expected": [
+                251,
+                0,
+                10,
+                255
+              ],
+              "actual": [
+                255,
+                0,
+                9,
+                255
+              ],
+              "difference": [
+                4,
+                0,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "colorbalance-noluminosity",
+      "group": "adjustment",
+      "kind": "Color Balance",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "the same shift without preserve luminosity, so brightness moves too",
+      "package": "colorbalance-noluminosity.comp",
+      "expected": "expected/colorbalance-noluminosity.png",
+      "adjustment": {
+        "kind": "Color Balance",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        },
+        "colorBalanceSettings": {
+          "shadowCyanRed": 25.0,
+          "shadowMagentaGreen": -15.0,
+          "shadowYellowBlue": 0.0,
+          "midCyanRed": 10.0,
+          "midMagentaGreen": 8.0,
+          "midYellowBlue": -20.0,
+          "highlightCyanRed": 0.0,
+          "highlightMagentaGreen": 0.0,
+          "highlightYellowBlue": 30.0,
+          "preserveLuminosity": false
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "control-base",
+      "group": "control",
+      "kind": "none",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 0,
+      "note": "the chart with no adjustment layer: proves the base renders exactly",
+      "package": "control-base.comp",
+      "expected": "expected/control-base.png",
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "control-identity-normal",
+      "group": "control",
+      "kind": "Levels",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 0,
+      "note": "an identity adjustment layer above the chart must leave it alone",
+      "package": "control-identity-normal.comp",
+      "expected": "expected/control-identity-normal.png",
+      "adjustment": {
+        "kind": "Levels",
+        "hue": 0.0,
+        "saturation": 0.0,
+        "lightness": 0.0,
+        "colorize": false,
+        "levels": {
+          "channel": "RGB",
+          "ranges": [
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            },
+            {
+              "black": 0,
+              "gamma": 1,
+              "white": 255,
+              "outputBlack": 0,
+              "outputWhite": 255
+            }
+          ]
+        },
+        "curves": {
+          "channel": "RGB",
+          "channels": [
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ],
+            [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 255,
+                "y": 255
+              }
+            ]
+          ]
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": false,
+      "expected_change": false
+    },
+    {
+      "name": "effect-coloroverlay",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "flat color through the shape at 60%: no blur anywhere, so formula-exact",
+      "package": "effect-coloroverlay.comp",
+      "expected": "expected/effect-coloroverlay.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "colorOverlay": {
+          "red": 0.9,
+          "green": 0.2,
+          "blue": 0.1,
+          "opacity": 0.6
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.018229166666666668,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 31,
+            "y": 28,
+            "expected": [
+              240,
+              133,
+              117,
+              255
+            ],
+            "actual": [
+              240,
+              133,
+              118,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 30,
+            "y": 28,
+            "expected": [
+              240,
+              133,
+              117,
+              255
+            ],
+            "actual": [
+              240,
+              133,
+              118,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 29,
+            "y": 28,
+            "expected": [
+              240,
+              133,
+              117,
+              255
+            ],
+            "actual": [
+              240,
+              133,
+              118,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              1,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-stroke-outside",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "outside stroke, 3 pixels of square dilation: formula-exact",
+      "package": "effect-stroke-outside.comp",
+      "expected": "expected/effect-stroke-outside.png",
+      "inset": 5,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "stroke": {
+          "size": 3.0,
+          "red": 0.0,
+          "green": 0.35,
+          "blue": 0.9,
+          "opacity": 0.8,
+          "inside": false
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-stroke-inside",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "inside stroke, 3 pixels of square erosion: formula-exact",
+      "package": "effect-stroke-inside.comp",
+      "expected": "expected/effect-stroke-inside.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "stroke": {
+          "size": 3.0,
+          "red": 1.0,
+          "green": 0.6,
+          "blue": 0.0,
+          "opacity": 1.0,
+          "inside": true
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-shadow-hard",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "drop shadow straight down 6 pixels with no blur: only the offset and the fill",
+      "package": "effect-shadow-hard.comp",
+      "expected": "expected/effect-shadow-hard.png",
+      "inset": 8,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 6.0,
+          "blur": 0.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.7
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-shadow-ang180",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "exact",
+      "tolerance": 1,
+      "note": "shadow at 180 degrees moves right with no blur: the horizontal offset and its sign",
+      "package": "effect-shadow-ang180.comp",
+      "expected": "expected/effect-shadow-ang180.png",
+      "inset": 7,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 180.0,
+          "distance": 5.0,
+          "blur": 0.0,
+          "red": 0.2,
+          "green": 0.1,
+          "blue": 0.0,
+          "opacity": 0.5
+        }
+      },
+      "stats": {
+        "worst": 0,
+        "mean": 0.0,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 63,
+            "y": 47,
+            "expected": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "actual": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 62,
+            "y": 47,
+            "expected": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "actual": [
+              248,
+              235,
+              44,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 61,
+            "y": 47,
+            "expected": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "actual": [
+              244,
+              235,
+              40,
+              255
+            ],
+            "difference": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-shadow-blur",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "blurred drop shadow: sigma 3, so a different kernel shows as a soft difference",
+      "package": "effect-shadow-blur.comp",
+      "expected": "expected/effect-shadow-blur.png",
+      "inset": 24,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 6.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.6
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.010633680555555556,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 32,
+            "y": 32,
+            "expected": [
+              76,
+              95,
+              0,
+              255
+            ],
+            "actual": [
+              75,
+              94,
+              0,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 48,
+            "y": 27,
+            "expected": [
+              191,
+              134,
+              4,
+              255
+            ],
+            "actual": [
+              192,
+              135,
+              4,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 30,
+            "y": 32,
+            "expected": [
+              72,
+              95,
+              148,
+              255
+            ],
+            "actual": [
+              71,
+              95,
+              147,
+              255
+            ],
+            "difference": [
+              1,
+              0,
+              1,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-outerglow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "outer glow, sigma 3 all round minus the shape",
+      "package": "effect-outerglow.comp",
+      "expected": "expected/effect-outerglow.png",
+      "inset": 20,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "outerGlow": {
+          "size": 6.0,
+          "red": 1.0,
+          "green": 0.9,
+          "blue": 0.2,
+          "opacity": 0.8
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.011935763888888888,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 30,
+            "y": 30,
+            "expected": [
+              166,
+              177,
+              165,
+              255
+            ],
+            "actual": [
+              166,
+              178,
+              165,
+              255
+            ],
+            "difference": [
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 44,
+            "y": 25,
+            "expected": [
+              180,
+              131,
+              212,
+              255
+            ],
+            "actual": [
+              180,
+              130,
+              212,
+              255
+            ],
+            "difference": [
+              0,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 38,
+            "y": 36,
+            "expected": [
+              153,
+              181,
+              71,
+              255
+            ],
+            "actual": [
+              153,
+              180,
+              71,
+              255
+            ],
+            "difference": [
+              0,
+              1,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-innerglow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "inner glow: the shape less its own softening, all inside the shape",
+      "package": "effect-innerglow.comp",
+      "expected": "expected/effect-innerglow.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "innerGlow": {
+          "size": 5.0,
+          "red": 0.2,
+          "green": 0.8,
+          "blue": 1.0,
+          "opacity": 0.9
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.002495659722222222,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 35,
+            "y": 26,
+            "expected": [
+              234,
+              250,
+              255,
+              255
+            ],
+            "actual": [
+              235,
+              250,
+              255,
+              255
+            ],
+            "difference": [
+              1,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 30,
+            "y": 25,
+            "expected": [
+              241,
+              252,
+              255,
+              255
+            ],
+            "actual": [
+              242,
+              252,
+              255,
+              255
+            ],
+            "difference": [
+              1,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 26,
+            "y": 28,
+            "expected": [
+              183,
+              237,
+              255,
+              255
+            ],
+            "actual": [
+              184,
+              237,
+              255,
+              255
+            ],
+            "difference": [
+              1,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-innershadow",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "inner shadow in from the top edge, sigma 2",
+      "package": "effect-innershadow.comp",
+      "expected": "expected/effect-innershadow.png",
+      "inset": 2,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "innerShadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 4.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.7
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.004231770833333333,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 32,
+            "y": 27,
+            "expected": [
+              250,
+              250,
+              250,
+              255
+            ],
+            "actual": [
+              251,
+              251,
+              251,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 36,
+            "y": 27,
+            "expected": [
+              247,
+              247,
+              247,
+              255
+            ],
+            "actual": [
+              248,
+              248,
+              248,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 29,
+            "y": 29,
+            "expected": [
+              250,
+              250,
+              250,
+              255
+            ],
+            "actual": [
+              251,
+              251,
+              251,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              1,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    },
+    {
+      "name": "effect-stack",
+      "group": "effect",
+      "kind": "effects",
+      "base": "chart",
+      "variants": [],
+      "class": "kernel",
+      "tolerance": 40,
+      "note": "shadow, overlay and outside stroke together: checks the stacking order",
+      "package": "effect-stack.comp",
+      "expected": "expected/effect-stack.png",
+      "inset": 18,
+      "origin": [
+        24,
+        18
+      ],
+      "effects": {
+        "shadow": {
+          "angle": 90.0,
+          "distance": 4.0,
+          "blur": 4.0,
+          "red": 0.0,
+          "green": 0.0,
+          "blue": 0.0,
+          "opacity": 0.6
+        },
+        "colorOverlay": {
+          "red": 0.1,
+          "green": 0.1,
+          "blue": 0.6,
+          "opacity": 0.5
+        },
+        "stroke": {
+          "size": 2.0,
+          "red": 1.0,
+          "green": 1.0,
+          "blue": 0.0,
+          "opacity": 1.0,
+          "inside": false
+        }
+      },
+      "stats": {
+        "worst": 1,
+        "mean": 0.03927951388888889,
+        "worst_alpha": 0,
+        "mismatched": 0,
+        "worst_pixels": [
+          {
+            "x": 33,
+            "y": 26,
+            "expected": [
+              140,
+              140,
+              204,
+              255
+            ],
+            "actual": [
+              141,
+              141,
+              204,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              0,
+              0
+            ]
+          },
+          {
+            "x": 18,
+            "y": 27,
+            "expected": [
+              72,
+              134,
+              139,
+              255
+            ],
+            "actual": [
+              72,
+              135,
+              140,
+              255
+            ],
+            "difference": [
+              0,
+              1,
+              1,
+              0
+            ]
+          },
+          {
+            "x": 32,
+            "y": 26,
+            "expected": [
+              140,
+              140,
+              204,
+              255
+            ],
+            "actual": [
+              141,
+              141,
+              204,
+              255
+            ],
+            "difference": [
+              1,
+              1,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "pass": true,
+      "changed": true,
+      "expected_change": true
+    }
+  ]
+}

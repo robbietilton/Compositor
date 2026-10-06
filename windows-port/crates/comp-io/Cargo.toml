@@ -1,0 +1,40 @@
+[package]
+name = "comp-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+comp-core = { workspace = true }
+image = { workspace = true }
+# JPEG decoding goes through zune-jpeg directly: the chroma planes have to be readable to rebuild
+# the last column of a subsampled image the way libjpeg does. Same release image depends on.
+zune-jpeg = "0.5"
+jpeg-encoder = { workspace = true }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+# PSD layer channels may be ZIP-compressed (compression 2 and 3); flate2's default
+# backends (miniz_oxide, zlib-rs) are pure Rust, so no C toolchain is needed.
+flate2 = "1"
+resvg = "0.45.0"
+
+[target.'cfg(windows)'.dependencies]
+# HEIC and HEIF have no pure-Rust decoder. The system's Windows Imaging Component reads them with
+# the HEIF Image Extension from the Store, so the import goes through WIC rather than bundling a
+# decoder. Only the interfaces the codec uses are enabled.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    # PROPVARIANT and its VARENUM tags, for reading the EXIF orientation out of a HEIF frame.
+    "Win32_System_Variant",
+] }
+
+[dev-dependencies]
+# Tests read pHYs back and write the 16-bit files the importer must scale.
+png = "0.17"
+# The codec reference test reads the case index the Pillow generator writes.
+serde_json = { workspace = true }
+

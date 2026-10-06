@@ -1,0 +1,58 @@
+{
+  "activeLayerID": "768510BA-6E51-4793-9C80-31099BFCEA9C",
+  "colorSpace": "sRGB",
+  "documentID": "C4273014-075D-4E89-8C6E-79DB1D6321A3",
+  "format": "com.compositor.project",
+  "height": 64,
+  "layers": [
+    {
+      "blendMode": "Normal",
+      "id": "4145B94B-68E0-4B91-8C26-0E0E0DA991AF",
+      "imageFile": "4145B94B-68E0-4B91-8C26-0E0E0DA991AF.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Backdrop",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    },
+    {
+      "blendMode": "Color Dodge",
+      "id": "768510BA-6E51-4793-9C80-31099BFCEA9C",
+      "imageFile": "768510BA-6E51-4793-9C80-31099BFCEA9C.png",
+      "isGroup": false,
+      "isVisible": true,
+      "name": "Probe Color Dodge",
+      "opacity": 1.0,
+      "transform": {
+        "flipX": false,
+        "flipY": false,
+        "origin": [
+          0.0,
+          0.0
+        ],
+        "rotation": 0.0,
+        "sampling": "High quality",
+        "size": [
+          64.0,
+          64.0
+        ]
+      }
+    }
+  ],
+  "resolution": 72,
+  "version": 11,
+  "width": 64
+}
