@@ -258,11 +258,21 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             popover.sourceView = layersPanel
             popover.sourceRect = CGRect(x: 0, y: 140, width: 1, height: 1)
             popover.permittedArrowDirections = .right
-            // Beside an effect's panel the Layers panel, the tools and their options stay free too, as beside the Mac's;
-            // not the tabs or the toolbar, which would leave it over another tab.
-            popover.passthroughViews = editor is EffectEditorController ? [canvasHost, layersPanel, rail, optionsBar] : [canvasHost]
+            // Beside an effect's panel the Layers panel, the tools and their options stay free too, as beside the Mac's,
+            // and the toolbar's Undo and Redo, which take back what the panel did; not the tabs or the rest of the
+            // toolbar, which would leave it over another tab.
+            popover.passthroughViews = editor is EffectEditorController
+                ? [canvasHost, layersPanel, rail, optionsBar] + [undoItem, redoItem].compactMap(barView) : [canvasHost]
         }
         present(editor, animated: true)
+    }
+
+    /// The view the toolbar shows `item` in, which UIKit doesn't hand out: what the bar has under the item's middle, if it
+    /// covers no more than the item.
+    private func barView(_ item: UIBarButtonItem) -> UIView? {
+        guard let bar = navigationController?.navigationBar, !item.isHidden, let frame = item.frame(in: bar), !frame.isEmpty,
+              let view = bar.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil) else { return nil }
+        return frame.insetBy(dx: -1, dy: -1).contains(view.convert(view.bounds, to: bar)) ? view : nil
     }
 
     private func presentEditorRequests(for tab: EditorTab) {

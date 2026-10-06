@@ -1153,6 +1153,52 @@ import UIKit
         #expect(undo.undoMenuItemTitle == "Undo Import Image" && undo.redoMenuItemTitle == "Redo Layer Opacity")
     }
 
+    /// Beside an effect's panel the toolbar's Undo and Redo take a finger, as the Layers panel and the tools do, but
+    /// nothing else on the toolbar does, nor the tabs, which would leave the panel over another tab. They undo and redo
+    /// what the panel did, the panel showing it, and an Undo that takes the effect away closes the panel.
+    @Test func theToolbarsUndoAndRedoWorkBesideThePanel() async throws {
+        let (window, controller, session) = try await shownWindow(withToolbar: true)
+        defer { window.isHidden = true }
+        try add(.stroke, in: controller)
+        let editor = try await effectEditor(for: .stroke, over: controller)
+        try await eventually { !editor.isBeingPresented }
+        controller.updatePropertiesIfNeeded()
+        let bar = try #require(controller.navigationController?.navigationBar)
+        let free = editor.popoverPresentationController?.passthroughViews ?? []
+        /// Whether a finger at `point`, in the window, lands on something left free beside the panel.
+        func takesAFinger(at point: CGPoint) -> Bool {
+            let landed = bar.hitTest(bar.convert(point, from: window), with: nil)
+            return free.contains { landed?.isDescendant(of: $0) == true }
+        }
+        let items = (controller.navigationItem.leadingItemGroups + controller.navigationItem.trailingItemGroups)
+            .flatMap(\.barButtonItems).filter { !$0.isHidden }
+        try #require(items.count == 7)
+        for item in items {
+            let frame = try #require(item.frame(in: window), "\(item.accessibilityLabel ?? "")")
+            let leftFree = ["Undo", "Redo"].contains(item.accessibilityLabel)
+            #expect(takesAFinger(at: CGPoint(x: frame.midX, y: frame.midY)) == leftFree, "\(item.accessibilityLabel ?? "")")
+        }
+        let strip = try #require(views(TabStripView.self, in: bar).first)
+        let tab = try #require(views(UIControl.self, in: strip).first { !($0 is UIButton) })
+        #expect(!takesAFinger(at: tab.convert(CGPoint(x: tab.bounds.midX, y: tab.bounds.midY), to: window)))
+        #expect(!free.contains { strip.isDescendant(of: $0) })
+
+        let id = try #require(session.activeLayerID)
+        func size() -> CGFloat? { session.document?.layers.first { $0.id == id }?.effects?.stroke?.size }
+        let field = try #require(views(NumberField.self, in: try row("Size", in: editor)).first)
+        try drag(views(UISlider.self, in: try row("Size", in: editor)).first, through: [6, 9, 12])
+        try toolbarItem("Undo", in: controller).primaryAction?.performWithSender(nil, target: nil)
+        editor.updatePropertiesIfNeeded()
+        #expect(size() == 4 && controller.presentedViewController === editor && field.field.text == "4")
+        try toolbarItem("Redo", in: controller).primaryAction?.performWithSender(nil, target: nil)
+        editor.updatePropertiesIfNeeded()
+        #expect(size() == 12 && field.field.text == "12")
+        try toolbarItem("Undo", in: controller).primaryAction?.performWithSender(nil, target: nil)
+        try toolbarItem("Undo", in: controller).primaryAction?.performWithSender(nil, target: nil)
+        try await closes(controller)
+        #expect(session.activeLayer?.effects == nil && session.effectsEditing == nil)
+    }
+
     // MARK: Selecting
 
     /// The gray layer's row in the Layers panel, laid out, with a Stroke and a Drop Shadow under it and neither selected.
