@@ -553,19 +553,19 @@ final class EditorSession {
     /// Tests assign this to skip the conversion sheet.
     @ObservationIgnored var confirmConversions: (([PSDConversion]) async -> Bool)?
     /// The RAW file being developed, and the settings the sheet is editing (see RawImporter).
-    var rawDevelop: (url: URL, settings: RawDevelopSettings)?
+    var rawDevelop: (source: RawBacking, settings: RawDevelopSettings)?
     var showsRawDevelop = false { didSet { resumeFileRequests() } }
     @ObservationIgnored private var rawContinuation: CheckedContinuation<RawDevelopSettings?, Never>?
     /// Tests assign this to develop without a sheet.
-    @ObservationIgnored var confirmRawDevelop: ((URL, RawDevelopSettings) async -> RawDevelopSettings?)?
+    @ObservationIgnored var confirmRawDevelop: ((RawBacking, RawDevelopSettings) async -> RawDevelopSettings?)?
 
     /// Puts the develop sheet up and waits for the choice; nil means the import was cancelled.
-    func developRaw(_ url: URL) async -> RawDevelopSettings? {
-        let asShot = RawImporter.asShot(url) ?? RawDevelopSettings()
-        if let confirmRawDevelop { return await confirmRawDevelop(url, asShot) }
+    func developRaw(_ source: RawBacking, settings: RawDevelopSettings? = nil) async -> RawDevelopSettings? {
+        let initial = settings ?? RawImporter.asShot(source) ?? RawDevelopSettings()
+        if let confirmRawDevelop { return await confirmRawDevelop(source, initial) }
         return await withCheckedContinuation { continuation in
             rawContinuation = continuation
-            rawDevelop = (url, asShot)
+            rawDevelop = (source, initial)
             showsRawDevelop = true
         }
     }
@@ -796,13 +796,17 @@ final class EditorSession {
                     guard let size = RawImporter.pixelSize(url) else { throw ImageImportError.unreadable }
                     guard size.width <= DocumentLimits.maxSide, size.height <= DocumentLimits.maxSide,
                           size.width * size.height <= DocumentLimits.documentPixelBudget - usedPixels else { throw ImageImportError.tooLarge }
-                    guard let settings = await developRaw(url) else { continue }
+                    var source = try await Task.detached(priority: .userInitiated) {
+                        try RawBacking(contentsOf: url)
+                    }.value
+                    guard let settings = await developRaw(source) else { continue }
+                    source.settings = settings
                     // Seconds of work: off the main actor, or pressing Import freezes the window.
-                    guard let developed = await RawImporter.Queue.shared.develop(url, settings: settings, limit: nil)
+                    guard let developed = await RawImporter.Queue.shared.develop(source, settings: settings, limit: nil)
                     else { throw ImageImportError.unreadable }
                     let thumbnail = try PixelAdjust.thumbnail(of: developed)
                     insert(ImportedImage(image: developed, thumbnail: thumbnail,
-                                         name: url.deletingPathExtension().lastPathComponent), centeredAt: point)
+                                         name: url.deletingPathExtension().lastPathComponent, rawBacking: source), centeredAt: point)
                 } else if UTType(filenameExtension: url.pathExtension)?.conforms(to: .svg) == true {
                     let asset = try await ImageImporter.shared.decodeSVG(url, fitting: document?.size,
                                                                          remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
@@ -842,6 +846,26 @@ final class EditorSession {
         }
         isImporting = false
         if !failures.isEmpty { importError = failures.joined(separator: "\n\n") }
+    }
+
+    var canRedevelopRaw: Bool {
+        !isProjectBusy && !isImporting && rawDevelop == nil && activeLayer?.asset?.rawBacking != nil
+    }
+
+    /// Reopens the camera source with its last settings. Replacing the displayed pixels is one undo
+    /// step; the old asset in history still owns the prior source and settings.
+    func redevelopActiveRaw() async {
+        guard canRedevelopRaw, let id = activeLayerID,
+              let original = activeLayer?.asset, var source = original.rawBacking,
+              let settings = await developRaw(source, settings: source.settings) else { return }
+        source.settings = settings
+        guard let developed = await RawImporter.Queue.shared.develop(source, settings: settings, limit: nil),
+              let thumbnail = try? PixelAdjust.thumbnail(of: developed),
+              let index = document?.layers.firstIndex(where: { $0.id == id }) else { return }
+        beginEdit("Develop RAW")
+        document?.layers[index].asset = ImportedImage(image: developed, thumbnail: thumbnail,
+                                                       name: original.name, rawBacking: source)
+        endEdit()
     }
 
     func insert(_ asset: ImportedImage, centeredAt point: CGPoint? = nil) {

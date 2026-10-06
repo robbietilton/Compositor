@@ -250,6 +250,9 @@ struct CompositorApp: App {
                         .disabled(!session.canModifySelection)
                 }
                 CommandMenu("Image") {
+                    Button("Develop RAW…") { Task { await session.redevelopActiveRaw() } }
+                        .disabled(!session.canRedevelopRaw)
+                    Divider()
                     Button("Curves…") { session.beginFilter(.curves) }
                         .configuredKeyboardShortcut("m").disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     Button("Levels…") { session.beginLevels() }

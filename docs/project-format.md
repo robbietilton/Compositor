@@ -1,12 +1,12 @@
-# Compositor project format, versions 1–11
+# Compositor project format, versions 1–12
 
-A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
+A `.comp` file is a macOS document package containing `manifest.json`, an `images/` directory of `<layer UUID>.png` assets, and an optional `raw/` directory of embedded camera sources.
 
-The manifest identifies `com.compositor.project`, version `11` for new saves (versions `1`–`10` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+The manifest identifies `com.compositor.project`, version `12` for new saves (versions `1`–`11` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 
 Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
 
-Limits: 30,000 pixels per canvas/image side, 100 million total source pixels, 10,000 layers, 4 MiB manifest, 512 MiB per encoded asset. See `ProjectStore.swift` for validation.
+Limits: 30,000 pixels per canvas/image side, 100 million total source pixels, 10,000 layers, 4 MiB manifest, 512 MiB per encoded image asset, and 2 GiB per embedded RAW source. See `ProjectStore.swift` for validation.
 
 Undo history and viewport are session-only. Opening fits the canvas, restores selection, and starts with clean history. Future editable features must extend the schema and round-trip tests. PNG export is a flattened derivative and does not mark project edits saved.
 
@@ -35,6 +35,8 @@ Version 9 adds three adjustment kinds that sample neighboring pixels: `Gaussian 
 Version 10 lets a text layer color some of its letters differently: optional `colorRuns` in its `text` metadata (see Editable text). Files declaring 1–9 cannot contain it.
 
 Version 11 lets those letters use different faces too: optional `fontRuns` in the same metadata. Files declaring 1–10 cannot contain it. `colorRuns` stays valid from version 10.
+
+Version 12 adds an optional embedded camera source for a pixel layer. `rawFile` is `<layer UUID>.raw` in the package's `raw/` directory; `rawName`, optional `rawTypeIdentifier`, and `rawSettings` retain the original display name, ImageIO type hint, exposure, white balance, selective tone controls, and RGB point curves. Missing tone and curve fields use identity values, including in version-12 files written before those controls were added. The ordinary 8-bit PNG remains the rendered fallback. A destructive pixel edit drops the RAW metadata, while Develop RAW decodes the embedded source again. Files declaring versions 1–11 cannot contain RAW metadata.
 
 ### Additive layer fields
 

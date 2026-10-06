@@ -18,14 +18,17 @@ nonisolated struct ProjectDigest: Equatable, Sendable {
         var hasher = SHA256()
         let manifest = try Data(contentsOf: url.appendingPathComponent("manifest.json"))
         hasher.update(data: manifest)
-        let images = url.appendingPathComponent("images", isDirectory: true)
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: images.path)) ?? []).sorted()
-        for name in names {
-            let values = try images.appendingPathComponent(name).resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-            guard values.isRegularFile == true else { continue }
-            hasher.update(data: Data(name.utf8))
-            let count = UInt64(values.fileSize ?? 0)
-            withUnsafeBytes(of: count) { hasher.update(bufferPointer: $0) }
+        for directoryName in ["images", "raw"] {
+            let directory = url.appendingPathComponent(directoryName, isDirectory: true)
+            let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+            for name in names {
+                let values = try directory.appendingPathComponent(name).resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values.isRegularFile == true else { continue }
+                hasher.update(data: Data(directoryName.utf8))
+                hasher.update(data: Data(name.utf8))
+                let count = UInt64(values.fileSize ?? 0)
+                withUnsafeBytes(of: count) { hasher.update(bufferPointer: $0) }
+            }
         }
         return ProjectDigest(value: Data(hasher.finalize()))
     }

@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import UniformTypeIdentifiers
 import Testing
 @testable import Compositor
@@ -69,6 +70,110 @@ struct ProjectTests {
         #expect(reopened.isModified)
         reopened.undo()
         #expect(!reopened.isModified)
+    }
+
+    @Test func rawSourceAndDevelopSettingsSurviveProjectRoundTrip() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let session = EditorSession()
+        await session.importImages([source])
+        let id = try #require(session.activeLayerID)
+        let bytes = Data((0..<257).map { UInt8($0 & 0xff) })
+        let settings = RawDevelopSettings(exposure: 1.25, temperature: 6_400, tint: -18,
+                                          boost: 0.72, asShotTemperature: 5_250, asShotTint: 4)
+        var asset = try #require(session.activeLayer?.asset)
+        asset.rawBacking = RawBacking(data: bytes, name: "DSCF0123.RAF",
+                                      typeIdentifier: "com.fujifilm.raw-image", settings: settings)
+        session.document?.layers[0].asset = asset
+
+        let snapshot = try #require(session.projectSnapshot())
+        let record = try #require(snapshot.manifest.layers.first)
+        #expect(snapshot.manifest.version == 12)
+        #expect(record.rawFile == "\(id.uuidString).raw")
+        #expect(record.rawName == "DSCF0123.RAF")
+        #expect(record.rawSettings == settings)
+
+        let url = root.appendingPathComponent("Raw.comp")
+        try await ProjectStore.shared.save(snapshot, to: url)
+        #expect(try Data(contentsOf: url.appendingPathComponent("raw/\(id.uuidString).raw")) == bytes)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        let backing = try #require(loaded.images[id]?.rawBacking)
+        #expect(backing.data == bytes)
+        #expect(backing.name == "DSCF0123.RAF")
+        #expect(backing.typeIdentifier == "com.fujifilm.raw-image")
+        #expect(backing.settings == settings)
+    }
+
+    @Test func legacyAndInvalidRawMetadataAreRejected() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = EditorSession()
+        await session.importImages([try ImageImportTests().fixture(.png)])
+        let snapshot = try #require(session.projectSnapshot())
+        var legacy = snapshot.manifest
+        legacy.version = 11
+        legacy.layers[0].rawFile = "\(legacy.layers[0].id.uuidString).raw"
+        legacy.layers[0].rawName = "source.raf"
+        legacy.layers[0].rawSettings = RawDevelopSettings()
+        do {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: legacy, images: snapshot.images),
+                                                to: root.appendingPathComponent("Legacy.comp"))
+            Issue.record("Version 11 accepted RAW metadata")
+        } catch {}
+
+        var invalid = snapshot.manifest
+        invalid.layers[0].rawFile = "\(invalid.layers[0].id.uuidString).raw"
+        invalid.layers[0].rawName = "source.raf"
+        invalid.layers[0].rawSettings = RawDevelopSettings(exposure: 100)
+        do {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: invalid, images: snapshot.images),
+                                                to: root.appendingPathComponent("Invalid.comp"))
+            Issue.record("Out-of-range RAW settings were accepted")
+        } catch {}
+    }
+
+    @Test func expandedRawSettingsDecodeOldVersion12ValuesAndAdjustTones() throws {
+        let old = Data(#"{"exposure":0.5,"temperature":5400,"tint":3,"boost":0.8,"asShotTemperature":5200,"asShotTint":1}"#.utf8)
+        let decoded = try JSONDecoder().decode(RawDevelopSettings.self, from: old)
+        #expect(decoded.highlights == 0 && decoded.shadows == 0 && decoded.whites == 0 && decoded.blacks == 0)
+        #expect(decoded.curves.channels == CurvesSettings().channels)
+
+        let extent = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let context = CIContext(options: [.workingColorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!])
+        func red(_ level: CGFloat, _ settings: RawDevelopSettings) throws -> CGFloat {
+            let input = CIImage(color: CIColor(red: level, green: level, blue: level)).cropped(to: extent)
+            let adjusted = try #require(RawImporter.toneAdjusted(input, settings: settings))
+            let image = try #require(context.createCGImage(adjusted, from: extent, format: .RGBA8,
+                                                           colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!))
+            return try #require(NSBitmapImageRep(cgImage: image).colorAt(x: 0, y: 0)).redComponent
+        }
+        let dark = try red(0.05, RawDevelopSettings())
+        let lifted = try red(0.05, RawDevelopSettings(shadows: 100, blacks: 100))
+        #expect(lifted > dark)
+        let bright = try red(0.9, RawDevelopSettings())
+        let recovered = try red(0.9, RawDevelopSettings(highlights: -100, whites: -100))
+        #expect(recovered < bright)
+
+        var curve = CurvesSettings()
+        curve.channels[0] = [CurvePoint(x: 0, y: 0), CurvePoint(x: 128, y: 210), CurvePoint(x: 255, y: 255)]
+        #expect(try red(0.25, RawDevelopSettings(curves: curve)) > red(0.25, RawDevelopSettings()))
+    }
+
+    @Test func rawDevelopHistogramIncludesRGBAndLuminance() throws {
+        let context = try BrushRaster.context(width: 2, height: 1, mask: false)
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 1, y: 0, width: 1, height: 1))
+        let image = try #require(context.makeImage())
+        let result = try #require(RawDevelopHistogram.make(image))
+        #expect(result.red[255] == 2)
+        #expect(result.green[0] == 1 && result.green[255] == 1)
+        #expect(result.blue[0] == 1 && result.blue[255] == 1)
+        #expect(result.luminance[54] == 1, "Rec. 709 red is approximately code value 54")
+        #expect(result.luminance[255] == 1)
     }
 
     /// Folders took an opacity of their own in 1.1.6, but project validation still demanded that

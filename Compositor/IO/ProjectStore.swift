@@ -12,7 +12,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 11
+    static let current = 12
     /// Every version `load` accepts. The package-header check, the manifest check and the error
     /// message all read this, so they cannot drift apart when `current` is bumped.
     static let supported = 1...ProjectManifest.current
@@ -53,6 +53,12 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     /// The stroke and drop shadow drawn around the layer.
     var effects: LayerEffects? = nil
     var text: LayerTextStyle? = nil
+    /// An embedded camera source lets this layer be developed again. Its displayed PNG remains the
+    /// fallback for ordinary canvas rendering.
+    var rawFile: String? = nil
+    var rawName: String? = nil
+    var rawTypeIdentifier: String? = nil
+    var rawSettings: RawDevelopSettings? = nil
 }
 
 nonisolated struct ProjectSnapshot: @unchecked Sendable {
@@ -84,6 +90,7 @@ actor ProjectStore {
     func save(_ snapshot: ProjectSnapshot, to url: URL, quickLook: QuickLookImages? = nil) throws {
         try validate(snapshot.manifest)
         var images: [String: FileWrapper] = [:]
+        var rawFiles: [String: FileWrapper] = [:]
         var pixels = 0, maskPixels = 0
         for layer in snapshot.manifest.layers {
           for isMask in [false, true] {
@@ -104,6 +111,13 @@ actor ProjectStore {
             }
             images[filename] = FileWrapper(regularFileWithContents: data)
           }
+          if let filename = layer.rawFile {
+            guard let source = snapshot.images[layer.id]?.rawBacking,
+                  layer.rawName == source.name, layer.rawTypeIdentifier == source.typeIdentifier,
+                  layer.rawSettings == source.settings else { throw ProjectError.missingImage }
+            guard source.data.count <= 2 * 1024 * 1024 * 1024 else { throw ProjectError.tooLarge }
+            rawFiles[filename] = FileWrapper(regularFileWithContents: source.data)
+          }
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -113,6 +127,7 @@ actor ProjectStore {
             "manifest.json": FileWrapper(regularFileWithContents: metadata),
             "images": FileWrapper(directoryWithFileWrappers: images)
         ]
+        if !rawFiles.isEmpty { contents["raw"] = FileWrapper(directoryWithFileWrappers: rawFiles) }
         // Quick Look's Space-bar preview reads this by name; loading ignores it.
         if let quickLook {
             contents["QuickLook"] = FileWrapper(directoryWithFileWrappers: [
@@ -187,7 +202,16 @@ actor ProjectStore {
                         kCGImageSourceShouldCacheImmediately: true
                       ] as CFDictionary) else { throw ProjectError.missingImage }
                 if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
-                return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name)
+                let rawBacking: RawBacking?
+                if !isMask, let rawFile = layer.rawFile, let rawName = layer.rawName, let rawSettings = layer.rawSettings {
+                    let sourceURL = url.appendingPathComponent("raw").appendingPathComponent(rawFile)
+                    try checkFile(sourceURL, inside: url, maximumBytes: 2 * 1024 * 1024 * 1024)
+                    // Own these bytes: the next save atomically replaces the package, but undo and
+                    // Develop RAW must keep reading the source that was actually opened.
+                    rawBacking = RawBacking(data: try Data(contentsOf: sourceURL),
+                                            name: rawName, typeIdentifier: layer.rawTypeIdentifier, settings: rawSettings)
+                } else { rawBacking = nil }
+                return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name, rawBacking: rawBacking)
             }
             if isMask { masks[layer.id] = asset } else { images[layer.id] = asset }
           }
@@ -205,6 +229,13 @@ actor ProjectStore {
         guard (1...DocumentLimits.maxSide).contains(manifest.width), (1...DocumentLimits.maxSide).contains(manifest.height),
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
+            let hasRaw = layer.rawFile != nil || layer.rawName != nil || layer.rawTypeIdentifier != nil || layer.rawSettings != nil
+            if hasRaw {
+                guard manifest.version >= 12, layer.rawFile == "\(layer.id.uuidString).raw",
+                      let rawName = layer.rawName, !rawName.isEmpty, rawName.utf8.count <= 16_384,
+                      layer.rawSettings?.isValid == true, layer.imageFile != nil, layer.isGroup != true,
+                      layer.adjustment == nil else { throw ProjectError.invalid }
+            }
             if let text = layer.text {
                 // Per-letter colors arrived in version 10, per-letter faces in version 11.
                 guard text.isValid,

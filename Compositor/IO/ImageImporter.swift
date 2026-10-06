@@ -10,6 +10,9 @@ nonisolated struct ImportedImage: @unchecked Sendable {
     let thumbnail: CGImage
     let name: String
     var raster: RasterSnapshot? = nil
+    /// Present until a destructive pixel operation replaces the asset. It lets a camera image be
+    /// developed again from its original sensor file instead of from the 8-bit display pixels.
+    var rawBacking: RawBacking? = nil
 }
 
 nonisolated enum ImageImportError: LocalizedError {

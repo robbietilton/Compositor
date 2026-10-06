@@ -2,7 +2,7 @@ import Foundation
 
 /// Tells its owner when a project package changes on disk, whoever changed it: another app, an agent, a sync
 /// client, a git checkout. It listens to the kernel's file system events for the package folder, its manifest and
-/// its images folder, so there is no polling and no dependency on the writer using file coordination (which
+/// its asset folders, so there is no polling and no dependency on the writer using file coordination (which
 /// `NSFilePresenter` needs and most other writers skip). Events are coalesced, and the handler runs on the main actor.
 ///
 /// A package is replaced atomically by renaming a sibling over it, which retires the file descriptors being watched;
@@ -32,7 +32,11 @@ final class ProjectWatcher {
     }
 
     private var watchedPaths: [String] {
-        [url.path, url.appendingPathComponent("manifest.json").path, url.appendingPathComponent("images", isDirectory: true).path]
+        var paths = [url.path, url.appendingPathComponent("manifest.json").path,
+                     url.appendingPathComponent("images", isDirectory: true).path]
+        let raw = url.appendingPathComponent("raw", isDirectory: true)
+        if FileManager.default.fileExists(atPath: raw.path) { paths.append(raw.path) }
+        return paths
     }
 
     private func arm() {
