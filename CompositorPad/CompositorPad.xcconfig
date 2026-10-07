@@ -48,3 +48,7 @@ PRODUCT_MODULE_NAME = Compositor
 // else in Compositor/ is shared. A new file there is shared too, unless it's listed here.
 MAC_ONLY_SOURCES = $(SRCROOT)/Compositor/CompositorApp.swift $(SRCROOT)/Compositor/ContentView.swift $(SRCROOT)/Compositor/UI/* $(SRCROOT)/Compositor/Document/ProjectWorkspace.swift $(SRCROOT)/Compositor/IO/CompositorApplicationDelegate.swift $(SRCROOT)/Compositor/IO/ImageFileDrop.swift $(SRCROOT)/Compositor/IO/ProjectController.swift $(SRCROOT)/Compositor/IO/ProjectController+ExternalChanges.swift $(SRCROOT)/Compositor/IO/RecentProjects.swift $(SRCROOT)/Compositor/Rendering/EditorCanvas.swift $(SRCROOT)/Compositor/Rendering/BrushCursorOverlay.swift $(SRCROOT)/Compositor/Rendering/CanvasLinesOverlay.swift $(SRCROOT)/Compositor/Rendering/InlineTextEditor.swift $(SRCROOT)/Compositor/Rendering/SampleRingOverlay.swift $(SRCROOT)/Compositor/Rendering/TransformOverlay.swift
 EXCLUDED_SOURCE_FILE_NAMES = $(MAC_ONLY_SOURCES) $(SRCROOT)/CompositorPad/CompositorPad.xcconfig
+
+// Settings personal to one machine, such as DEVELOPMENT_TEAM, go in this file, which git ignores, so signing for your own
+// device doesn't touch the project. It's optional: without it the app builds unsigned for the simulator as before.
+#include? "../Config/CompositorPad.local.xcconfig"
