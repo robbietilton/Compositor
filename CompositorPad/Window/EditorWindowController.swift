@@ -957,9 +957,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return true
     }
 
-    /// The project as an export takes it.
+    /// The project as an export takes it. An effect's panel gives way to the export, its effect kept as its OK keeps it,
+    /// as it gives way to anything else the window shows: the export holds the project while it makes its image.
     private func exportSnapshot(of session: EditorSession) -> ProjectSnapshot? {
-        beginProjectOperation(on: session) ? session.projectSnapshot() : nil
+        guard beginProjectOperation(on: session) else { return nil }
+        session.finishEffectsEditing(commit: true)
+        return session.projectSnapshot()
     }
 
     /// The resize a size dialog set going, if any. Tests wait for it.
@@ -1014,11 +1017,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The flattened image as PNG, to share, save to Photos or keep in Files.
     @objc func exportPNG(_ sender: Any?) {
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
-        let name = tab.title
-        // The window waits on its tab while the image its share sheet offers is made, as Export JPEG's.
+        let session = tab.session, name = tab.title
+        // The project waits while the image its share sheet offers is made, as on the Mac and as Export JPEG's does,
+        // and the window waits on its tab.
+        session.isProjectBusy = true
         exporting = tab
         makingExport = Task {
             defer {
+                session.isProjectBusy = false
                 exporting = nil
                 setNeedsUpdateProperties()
             }

@@ -416,4 +416,52 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         try await Task.sleep(for: .milliseconds(600))
         #expect(controller.presentedViewController == nil)
     }
+
+    /// Export PNG holds the project while it makes its image, as on the Mac and as Export JPEG does: from the moment it's
+    /// chosen, nothing else is done to the project, nor does another export or a resize begin; once its share sheet is
+    /// up, the project is free.
+    @Test func exportPNGHoldsTheProjectWhileItMakesItsImage() async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let session = tab.session, layers = session.document?.layers.count
+        try start("Export PNG", in: controller)
+        #expect(session.isProjectBusy && !session.canEditLayers && !session.canEditPalette)
+        for action in [#selector(EditorWindowController.exportJPEG(_:)), #selector(EditorWindowController.imageSize(_:))] {
+            #expect(!controller.canPerformAction(action, withSender: nil), "\(action)")
+        }
+        session.addBlankLayer()
+        #expect(session.document?.layers.count == layers)
+
+        let share = try await shown(over: controller)
+        try #require(share is UIActivityViewController)
+        // Required, as a project left held would hold up closing its tab.
+        try #require(!session.isProjectBusy)
+        try await dismissExport(share)
+        await cleanUp(controller)
+    }
+
+    /// An effect's panel goes as an export begins, its effect kept as the panel's OK keeps it, as it goes for anything
+    /// else the window shows: the export takes the project as the panel left it, and holds it meanwhile.
+    @Test(arguments: ["Export PNG", "Export JPEG"])
+    func anEffectsPanelGoesAsAnExportBegins(_ export: String) async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let session = tab.session
+        let effects = try layersButton("Layer effects", in: controller)
+        let stroke = try #require(effects.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == LayerEffectKind.stroke.rawValue + "…" })
+        stroke.performWithSender(nil, target: nil)
+        let panel = try await shown(over: controller)
+        try #require(panel is EffectEditorController)
+        let size = try #require(views(SliderField.self, in: panel.view).first { views(UILabel.self, in: $0).first?.text == "Size" })
+        size.onChange(9)
+
+        try start(export, in: controller)
+        #expect(session.effectsEditing == nil && session.activeLayer?.effects?.stroke?.size == 9)
+        try await eventually { !(controller.presentedViewController is EffectEditorController) }
+        let shown = try await shown(over: controller)
+        #expect(export == "Export JPEG" ? shown is JPEGExportController : shown is UIActivityViewController)
+        #expect(session.activeLayer?.effects?.stroke?.size == 9)
+        try await dismissExport(shown)
+        await cleanUp(controller)
+    }
 }
