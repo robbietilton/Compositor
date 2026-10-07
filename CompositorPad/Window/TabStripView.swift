@@ -2,7 +2,8 @@ import UIKit
 
 /// The window's projects as tabs, as the Mac's toolbar shows them: one capsule per project with a dot while it has
 /// changes not yet saved, and a close button. It takes the room the bar has between New Canvas and the zoom controls,
-/// and scrolls when the tabs outgrow it.
+/// and scrolls when the tabs outgrow it. While the window is held on the tab in front, the other tabs and every close
+/// button are dimmed, as on the Mac.
 final class TabStripView: UIView {
     struct Tab: Equatable {
         let id: UUID
@@ -17,7 +18,7 @@ final class TabStripView: UIView {
 
     private let scroll = UIScrollView()
     private let stack = UIStackView()
-    private var shown: ([Tab], UUID?) = ([], nil)
+    private var shown: (tabs: [Tab], active: UUID?, held: Bool) = ([], nil, false)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -45,12 +46,14 @@ final class TabStripView: UIView {
     /// room between its leading and trailing items.
     override var intrinsicContentSize: CGSize { CGSize(width: UIView.layoutFittingExpandedSize.width, height: 36) }
 
-    func show(_ tabs: [Tab], active: UUID?) {
-        guard shown.0 != tabs || shown.1 != active else { return }
-        shown = (tabs, active)
+    /// Shows `tabs`, `active` in front. `held` on the tab in front, as while an adjustment's editor holds the window on
+    /// it, the other tabs and the close buttons take no touch.
+    func show(_ tabs: [Tab], active: UUID?, held: Bool = false) {
+        guard shown != (tabs, active, held) else { return }
+        shown = (tabs, active, held)
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for tab in tabs {
-            let pill = TabPill(tab: tab, active: tab.id == active)
+            let pill = TabPill(tab: tab, active: tab.id == active, held: held)
             pill.addAction(UIAction { [weak self] _ in self?.onSelect(tab.id) }, for: .touchUpInside)
             pill.onClose = { [weak self] in self?.onClose(tab.id) }
             pill.menu = { [weak self] in self?.menu(tab.id) }
@@ -63,31 +66,35 @@ final class TabStripView: UIView {
     }
 }
 
-/// One project's tab: its name, a dot while it has changes not yet saved, and a close button.
+/// One project's tab: its name, a dot while it has changes not yet saved, and a close button; dimmed, the tab in front
+/// apart from its close button, while the window is held on the tab in front.
 private final class TabPill: UIControl {
     let id: UUID
     var onClose: () -> Void = {}
     var menu: () -> UIMenu? = { nil }
     private let close: UIButton
 
-    init(tab: TabStripView.Tab, active: Bool) {
+    init(tab: TabStripView.Tab, active: Bool, held: Bool) {
         id = tab.id
+        let dimmed = !active && held
         let title = UILabel()
         title.text = tab.title
         title.font = .systemFont(ofSize: 14, weight: active ? .semibold : .regular)
-        title.textColor = active ? .label : .secondaryLabel
+        title.textColor = active ? .label : dimmed ? .tertiaryLabel : .secondaryLabel
         title.lineBreakMode = .byTruncatingMiddle
         let dot = UILabel()
         dot.text = "•"
         dot.font = .systemFont(ofSize: 14, weight: .bold)
-        dot.textColor = .secondaryLabel
+        dot.textColor = dimmed ? .tertiaryLabel : .secondaryLabel
         dot.isHidden = !tab.modified
         var configuration = UIButton.Configuration.plain()
         configuration.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 10, weight: .semibold))
-        configuration.baseForegroundColor = .secondaryLabel
+        configuration.baseForegroundColor = held ? .tertiaryLabel : .secondaryLabel
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
         close = UIButton(configuration: configuration)
+        close.isEnabled = !held
         super.init(frame: .zero)
+        isEnabled = !dimmed
         close.accessibilityLabel = "Close \(tab.title)"
         close.addAction(UIAction { [weak self] _ in self?.onClose() }, for: .primaryActionTriggered)
         let row = UIStackView(arrangedSubviews: [dot, title, close])
@@ -111,7 +118,7 @@ private final class TabPill: UIControl {
         isContextMenuInteractionEnabled = true
         isAccessibilityElement = true
         accessibilityLabel = tab.title + (tab.modified ? ", edited" : "")
-        accessibilityTraits = active ? [.button, .selected] : .button
+        accessibilityTraits = active ? [.button, .selected] : dimmed ? [.button, .notEnabled] : .button
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 

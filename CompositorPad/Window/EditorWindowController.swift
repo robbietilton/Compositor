@@ -174,10 +174,19 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     override func updateProperties() {
         super.updateProperties()
         showInputSwitch()
+        // A tab asked for while an adjustment's editor held the window comes forward once the editor has gone.
+        if heldSwitch != nil || !afterHeldSwitch.isEmpty {
+            DispatchQueue.main.async { [weak self] in self?.switchIfFree() }
+        }
         guard let tab = activeTab else { return }
         let session = tab.session
+        // While an adjustment's editor holds the window on this tab, the other tabs, the close buttons and New Canvas
+        // are dimmed, as on the Mac; only then, not whenever `canSwitch` is off, since anything else over the window
+        // covers them, and isn't watched for going.
+        let held = holdingTab != nil
         tabStrip.show(tabs.map { .init(id: $0.id, title: $0.title, modified: $0.document != nil && $0.session.isModified) },
-                      active: activeID)
+                      active: activeID, held: held)
+        newTabItem.isEnabled = !held
         // Typing changes the draft, which brings this round again.
         _ = session.textDraft
         undoItem.isEnabled = textUndo?.canUndo ?? session.canUndo
@@ -231,8 +240,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let shown = presentedViewController as? AdjustmentEditorController
         if let shown, !shown.isOpen {
             guard !shown.isBeingDismissed else { return }
-            // With whatever is over it, as its color picker; then the next editor, as one effect's follows another's.
-            dismiss(animated: true) { [weak self] in self?.followAdjustmentEditing(for: tab) }
+            // With whatever is over it, as its color picker; then the tab asked for meanwhile comes forward, or the next
+            // editor opens, as one effect's follows another's.
+            dismiss(animated: true) { [weak self] in
+                guard let self else { return }
+                setNeedsUpdateProperties()
+                switchIfFree()
+                followAdjustmentEditing(for: tab)
+            }
             return
         }
         if let id = session.adjustmentEditingID, session.adjustmentOriginal == nil, session.levels == nil,
@@ -252,7 +267,15 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             }
             return
         }
-        guard shown == nil, presentedViewController == nil, let editor = AdjustmentEditors.editor(for: session) else { return }
+        guard shown == nil else { return }
+        guard presentedViewController == nil else {
+            // An edit begun while something else was over the window, as a question that came up while an adjustment
+            // layer got the pixels beneath it, gets its editor once that has gone; it holds the window on its tab
+            // meanwhile.
+            if session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil { recheckRequests() }
+            return
+        }
+        guard let editor = AdjustmentEditors.editor(for: session) else { return }
         editor.modalPresentationStyle = .popover
         if let popover = editor.popoverPresentationController {
             popover.sourceView = layersPanel
@@ -282,12 +305,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             // A failed save or a change made elsewhere comes whenever it comes: it waits for what's over the window to
             // go, checked twice a second; so does anything else beside an effect's panel, for what's over the panel.
             if session.saveError != nil || (session.changedOnDisk && presentedViewController !== changeQuestion)
-                || presentedViewController is EffectEditorController, !rechecksRequests {
-                rechecksRequests = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.rechecksRequests = false
-                    self?.setNeedsUpdateProperties()
-                }
+                || presentedViewController is EffectEditorController {
+                recheckRequests()
             }
             return
         }
@@ -338,6 +357,50 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return presented is EffectEditorController && presented.presentedViewController == nil && !presented.isBeingDismissed
     }
 
+    /// The tab an adjustment's editor holds the window on: that of Levels, Curves, Hue/Saturation or a filter, or of an
+    /// adjustment layer, from the moment the layer is chosen for editing; until the editor has gone. Bound to the tab's
+    /// project, the editor keeps it in front, as the Mac's panels keep theirs. Not a tab that's closing, which takes its
+    /// editor with it, nor an effect's panel's, which gives way to another tab.
+    private var holdingTab: EditorTab? {
+        let shown = (presentedViewController as? AdjustmentEditorController).flatMap { editor in
+            editor is EffectEditorController ? nil : tabs.first { $0.session === editor.session }
+        }
+        let editing = activeTab.flatMap { tab -> EditorTab? in
+            let session = tab.session
+            return session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
+                || session.adjustmentEditingID != nil ? tab : nil
+        }
+        return [shown, editing].compactMap { $0 }.first { !closing.contains($0.id) }
+    }
+
+    /// Whether another tab may come forward, or a tab close, as the Mac's `canSwitch` asks: not while an adjustment's
+    /// editor holds the window on its tab, nor while anything but an effect's panel is over the window.
+    private var canSwitch: Bool { isClear && holdingTab == nil }
+
+    /// The tab asked for last while an adjustment's editor held the window, to come forward once the editor has gone.
+    private var heldSwitch: UUID?
+    /// What waits for an adjustment's editor to go before bringing its tab forward, after the tab asked for meanwhile:
+    /// a closing tab's question.
+    private var afterHeldSwitch: [(EditorWindowController) -> Void] = []
+
+    /// Runs `action` on the window once no adjustment's editor holds it on its tab: now, or once the editor has gone.
+    private func whenFree(_ action: @escaping (EditorWindowController) -> Void) {
+        if holdingTab == nil { action(self) } else { afterHeldSwitch.append(action) }
+    }
+
+    /// Brings forward the tab asked for while an adjustment's editor held the window, then what waited for it, once the
+    /// editor has gone.
+    private func switchIfFree() {
+        guard holdingTab == nil else { return }
+        if let id = heldSwitch {
+            heldSwitch = nil
+            select(id)
+        }
+        let waiting = afterHeldSwitch
+        afterHeldSwitch = []
+        waiting.forEach { $0(self) }
+    }
+
     /// An effect's panel gives way to anything else the window shows, its effect kept as its OK keeps it: the iPad shows
     /// one at a time, where the Mac's panel stays beside a dialog or another panel.
     override func present(_ controller: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
@@ -350,6 +413,15 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
     /// A check for what the editor asks is due, once what's over the window may have gone.
     private var rechecksRequests = false
+    /// Looks at what the editor asks again in half a second, as nothing says when what's over the window goes.
+    private func recheckRequests() {
+        guard !rechecksRequests else { return }
+        rechecksRequests = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.rechecksRequests = false
+            self?.setNeedsUpdateProperties()
+        }
+    }
 
     /// Expand, Contract or Feather from the Select menu asks by how many pixels, as the Mac's sheet does.
     private func askSelectionAmount(_ operation: EditorSession.SelectionAmountOperation, for session: EditorSession) {
@@ -383,12 +455,24 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     func select(_ id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        // An adjustment's editor is bound to its tab's project, so another tab waits for it to go, as on the Mac, rather
+        // than coming forward under it; the one asked for last comes forward then.
+        if let holding = holdingTab, holding !== tab {
+            heldSwitch = id
+            setNeedsUpdateProperties()
+            return
+        }
+        heldSwitch = nil
         // An effect's panel is bound to its tab's layer: it goes with that tab, OK'd, as when anything else takes its
         // place; a tab closing cancels its own as it settles.
         if let panel = presentedViewController as? EffectEditorController, panel.session !== tab.session,
            tabs.contains(where: { $0.session === panel.session }), !panel.isBeingDismissed {
             panel.session.finishEffectsEditing(commit: true)
             dismiss(animated: true)
+        } else if let editor = presentedViewController as? AdjustmentEditorController, editor.session !== tab.session,
+                  !editor.isBeingDismissed {
+            // Any other editor left is a closing tab's, which goes with it, cancelled as the tab settles.
+            dismiss(animated: true) { [weak self] in self?.setNeedsUpdateProperties() }
         }
         // Keys held go with the canvas that had them: one let up after the switch never reaches this window.
         releaseKeys()
@@ -426,7 +510,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tab.session.finishBrushImmediately()
         // Its editor goes with it; closing cancels the edit.
         if let editor = presentedViewController as? AdjustmentEditorController, editor.session === tab.session {
-            dismiss(animated: true)
+            dismiss(animated: true) { [weak self] in self?.setNeedsUpdateProperties() }
         }
         guard let document = tab.document else {
             remove(tab)
@@ -437,14 +521,18 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             defer { closing.remove(id) }
             await tab.settle()
             // A change made elsewhere is settled first, in front, where its question shows: taken up, there may be
-            // nothing left to save.
-            if document.changeWaits, tabs.contains(where: { $0 === tab }) { select(id) }
+            // nothing left to save. An adjustment's editor open over another tab meanwhile goes first.
+            if document.changeWaits, tabs.contains(where: { $0 === tab }) {
+                whenFree { window in if window.tabs.contains(where: { $0 === tab }) { window.select(id) } }
+            }
             await document.settleChange()
             if tab.session.isModified || document.hasUnsavedChanges {
                 do { try await document.saveNow() } catch {
-                    guard tabs.contains(where: { $0 === tab }) else { return }
-                    select(id)
-                    askToClose(tab, unsaved: error)
+                    whenFree { window in
+                        guard window.tabs.contains(where: { $0 === tab }) else { return }
+                        window.select(id)
+                        window.askToClose(tab, unsaved: error)
+                    }
                     return
                 }
             }
@@ -485,13 +573,25 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     private func tabMenu(_ id: UUID) -> UIMenu? {
         guard let tab = tabs.first(where: { $0.id == id }) else { return nil }
+        // Each brings the tab forward or closes it, so they're dimmed while the window can't switch tabs.
+        let attributes: UIMenuElement.Attributes = canSwitch ? [] : .disabled
         let fileActions: [UIMenuElement] = tab.document == nil ? [] : [
-            UIAction(title: "Rename…", image: UIImage(systemName: "pencil")) { [weak self] _ in self?.select(id); self?.renameProject(nil) },
-            UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square")) { [weak self] _ in self?.select(id); self?.duplicateProject(nil) },
-            UIAction(title: "Export PNG…", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in self?.select(id); self?.exportPNG(nil) },
-            UIAction(title: "Export JPEG…", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in self?.select(id); self?.exportJPEG(nil) },
+            UIAction(title: "Rename…", image: UIImage(systemName: "pencil"), attributes: attributes) { [weak self] _ in
+                self?.select(id); self?.renameProject(nil)
+            },
+            UIAction(title: "Duplicate", image: UIImage(systemName: "plus.square.on.square"), attributes: attributes) { [weak self] _ in
+                self?.select(id); self?.duplicateProject(nil)
+            },
+            UIAction(title: "Export PNG…", image: UIImage(systemName: "square.and.arrow.up"), attributes: attributes) { [weak self] _ in
+                self?.select(id); self?.exportPNG(nil)
+            },
+            UIAction(title: "Export JPEG…", image: UIImage(systemName: "square.and.arrow.up"), attributes: attributes) { [weak self] _ in
+                self?.select(id); self?.exportJPEG(nil)
+            },
         ]
-        let close = UIAction(title: "Close Tab", image: UIImage(systemName: "xmark")) { [weak self] _ in self?.close(id) }
+        let close = UIAction(title: "Close Tab", image: UIImage(systemName: "xmark"), attributes: attributes) { [weak self] _ in
+            self?.close(id)
+        }
         return UIMenu(children: [UIMenu(options: .displayInline, children: fileActions), close])
     }
 
@@ -1094,15 +1194,20 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return false
         }
         switch action {
-        case #selector(saveProject(_:)), #selector(duplicateProject(_:)):
+        case #selector(saveProject(_:)):
             return hasFile && session?.canStartProjectOperation == true && session?.changedOnDisk == false
-        case #selector(renameProject(_:)): return hasFile
+        // Duplicate's copy opens in a tab of its own; Rename asks in an alert, which can't come over another.
+        case #selector(duplicateProject(_:)):
+            return hasFile && session?.canStartProjectOperation == true && session?.changedOnDisk == false && canSwitch
+        case #selector(renameProject(_:)): return hasFile && canSwitch
         case #selector(exportPNG(_:)), #selector(exportJPEG(_:)), #selector(canvasSize(_:)), #selector(imageSize(_:)):
             return hasDocument && session?.canStartProjectOperation == true && isClear
         case #selector(fitCanvas(_:)), #selector(actualPixels(_:)),
              #selector(zoomIn(_:)), #selector(zoomOut(_:)): return hasDocument
+        // Not while an adjustment's editor holds the window on its tab, as on the Mac, nor over anything but an effect's
+        // panel: they bring another tab forward or close one, or show a picker, which can't come over what's shown.
         case #selector(newCanvasTab(_:)), #selector(openProject(_:)), #selector(importImages(_:)), #selector(importPhotos(_:)),
-             #selector(openRecentProject(_:)), #selector(closeTab(_:)): return true
+             #selector(openRecentProject(_:)), #selector(closeTab(_:)): return canSwitch
         case #selector(clearRecentProjects(_:)): return !PadRecentProjects.shared.urls.isEmpty
         case #selector(cut(_:)): return session.map { $0.selection != nil && $0.canCopyPixels } ?? false
         case #selector(copy(_:)): return session.map { $0.canCopyPixels || $0.canCopyLayer } ?? false
@@ -1145,23 +1250,26 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return session?.canModifySelection ?? false
         case #selector(fillWithForeground(_:)), #selector(fillWithBackground(_:)): return session?.canEditPixels ?? false
         case #selector(clearSelectionPixels(_:)): return session.map { $0.selection != nil && $0.canEditPixels } ?? false
+        // An adjustment's editor can't come over anything but an effect's panel, as an alert can't come over another, so
+        // none is opened under anything else, where it would hold the window on its tab with nothing to show yet.
         case #selector(newAdjustmentLayer(_:)):
             // The kinds the iPad has an editor for, and Invert, which has nothing to set.
             guard let name = (sender as? UICommand)?.propertyList as? String, let kind = AdjustmentKind(rawValue: name),
-                  AdjustmentEditors.kinds.contains(kind) || kind == .invert else { return false }
+                  AdjustmentEditors.kinds.contains(kind) ? isClear : kind == .invert else { return false }
             return session.map { $0.canEditLayers && $0.document != nil } ?? false
         case #selector(editAdjustment(_:)):
             return session.map { session in
                 session.canEditLayers && session.activeLayer?.adjustment.map { AdjustmentEditors.kinds.contains($0.kind) } == true
-            } ?? false
-        case #selector(levels(_:)), #selector(curves(_:)): return session.map { $0.canAdjustColors && $0.hueSaturation == nil } ?? false
+            } == true && isClear
+        case #selector(levels(_:)), #selector(curves(_:)):
+            return session.map { $0.canAdjustColors && $0.hueSaturation == nil } == true && isClear
         case #selector(applyFilter(_:)):
             // Never without an editor to close it, since an open filter holds the project.
-            guard let session, let raw = (sender as? UICommand)?.propertyList as? String, let kind = FilterKind(rawValue: raw),
+            guard let session, isClear, let raw = (sender as? UICommand)?.propertyList as? String, let kind = FilterKind(rawValue: raw),
                   Self.filterEditors.contains(kind) else { return false }
             if kind == .contentAwareFill { return session.canContentAwareFill }
             return (kind == .vignette ? session.canVignette : session.canAdjustColors) && session.hueSaturation == nil
-        case #selector(hueSaturation(_:)): return session?.canAdjustColors ?? false
+        case #selector(hueSaturation(_:)): return session?.canAdjustColors == true && isClear
         case #selector(invertPixels(_:)): return session?.canInvert ?? false
         case #selector(escapeKey(_:)), #selector(returnKey(_:)): return canvasTakes(action)
         case #selector(deleteKey(_:)): return hasDocument
