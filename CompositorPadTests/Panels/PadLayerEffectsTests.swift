@@ -415,9 +415,9 @@ import UIKit
         try await closes(controller)
     }
 
-    /// Something else the window shows while the panel's picker is up (the rail's color picker stands in for it here, as
-    /// a project opened from Files would) takes the place of both, the picking OK'd with the panel: the color kept, and
-    /// no picking left behind.
+    /// Something else the window shows while the panel's picker is up (a color picker of its own stands in for it here,
+    /// as a project opened from Files would; the rail's waits for the window to be clear) takes the place of both, the
+    /// picking OK'd with the panel: the color kept, and no picking left behind.
     @Test func whatElseTheWindowShowsOKsThePicking() async throws {
         let (window, controller, session) = try await shownWindow()
         defer { window.isHidden = true }
@@ -426,8 +426,7 @@ import UIKit
         try #require(views(SwatchButton.self, in: editor.view).first).sendActions(for: .primaryActionTriggered)
         try await eventually { editor.presentedViewController is UIColorPickerViewController }
         try pick(.red, over: editor)
-        let rail = try #require(views(ToolRailView.self, in: controller.view).first)
-        rail.chooseColor(background: false)
+        controller.present(UIColorPickerViewController(), animated: true)
         try await eventually { controller.presentedViewController is UIColorPickerViewController }
         #expect(controller.presentedViewController is UIColorPickerViewController)
         #expect(session.colorPicker == nil && session.effectsEditing == nil)

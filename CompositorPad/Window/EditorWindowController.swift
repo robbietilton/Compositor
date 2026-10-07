@@ -99,6 +99,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tabStrip.menu = { [weak self] in self?.tabMenu($0) }
 
         rail.presenter = self
+        rail.canPresent = { [weak self] in self?.isClear == true }
+        optionsBar.canPresent = { [weak self] in self?.isClear == true }
         optionsBar.onChooseForeground = { [weak self] in self?.rail.chooseColor(background: false, from: $0) }
         optionsBar.onChooseFont = { [weak self] source in
             guard let self else { return }
@@ -109,6 +111,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             self.typePickers.chooseTextColor(from: source, presenter: self)
         }
         layersPanel.presenter = self
+        layersPanel.canPresent = { [weak self] in self?.isClear == true }
 
         newCanvas.onCreate = { [weak self] in self?.createCanvas(width: $0, height: $1) }
         newCanvas.onOpen = { [weak self] in self?.openProject(nil) }
@@ -211,6 +214,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         optionsBar.session = session
         layersPanel.session = session
         statusBar.session = session
+        followClear()
         // An opening tab isn't empty, though it has nothing yet; its canvas's handles and outlines wait for its picture.
         let opening = tab.loading?.isShowing == true
         layersPanel.isOpening = opening
@@ -225,6 +229,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             || session.cropError != nil || session.saveError != nil || session.changedOnDisk || session.selectionAmountOperation != nil {
             DispatchQueue.main.async { [weak self] in self?.presentEditorRequests(for: tab) }
         }
+        // What an export made, once what came up over the window meanwhile has gone.
+        if exportShows != nil { DispatchQueue.main.async { [weak self] in self?.showExportWhenClear() } }
         // Whether the editor shown is still open, whichever tab's project it edits, so it goes once its edit ends.
         _ = (presentedViewController as? AdjustmentEditorController)?.isOpen
         if session.adjustmentEditingID != nil || session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
@@ -364,19 +370,38 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// to whatever the window shows next; not while the panel shows something itself, its color picker, or is going;
     /// nor while what's asked for has yet to come up, as UIKit readies a share sheet or a picker, or an export makes
     /// the image its dialog or share sheet is to show.
-    private var isClear: Bool {
-        guard exporting == nil, presenting == nil || presenting is EffectEditorController else { return false }
+    private var isClear: Bool { exporting == nil && showsNothingElse }
+
+    /// Nothing over the window but an effect's panel, as `isClear` asks, whether or not an export is under way: what the
+    /// export shows once its image is made waits for this.
+    private var showsNothingElse: Bool {
+        guard presenting == nil || presenting is EffectEditorController else { return false }
         guard let presented = presentedViewController else { return true }
         return presented is EffectEditorController && presented.presentedViewController == nil && !presented.isBeingDismissed
     }
 
+    /// Dims what shows something over the window from the tools and their options while the window isn't clear, as the
+    /// commands that show something are dimmed: whenever the window looks again, as it does when it asks for something
+    /// or an export begins, and as what's over it begins to go. Not while what's over the window is a picker they
+    /// opened, though they show nothing more meanwhile: nothing in them can be reached under it, and their swatches show
+    /// its color as it's picked; but from the moment it begins to go, as they can be reached then. The Layers panel's
+    /// Rename… is dimmed as its menu is made.
+    private func followClear() {
+        let clear = isClear
+        let shown = presenting ?? presentedViewController
+        let source = shown?.isBeingDismissed == true ? nil : shown?.popoverPresentationController?.sourceView
+        let picking = source.map { $0.isDescendant(of: rail) || $0.isDescendant(of: optionsBar) } == true
+        rail.dimsPickerControls = !clear && !picking
+        optionsBar.dimsPickerControls = !clear && !picking
+    }
+
     /// The tab the window is held on, which no other tab comes forward over: the tab in front while the window shows
     /// anything over it but an effect's panel, a dialog, an alert, a sheet, a picker or a menu, from the moment it's
-    /// asked for until it has gone, and while an export makes its image; an adjustment's editor's, bound to its tab's
-    /// project; and the tab in front while Levels, Curves, Hue/Saturation or a filter is open, or an adjustment layer
-    /// from the moment it's chosen for editing. Each keeps its tab in front, as the Mac's sheets and panels keep
-    /// theirs. Not a closing tab for its editor, which goes with it, though its question holds it; nor an effect's
-    /// panel's, which gives way to another tab.
+    /// asked for until it has gone, and while an export makes its image, until what it shows can come up; an
+    /// adjustment's editor's, bound to its tab's project; and the tab in front while Levels, Curves, Hue/Saturation or
+    /// a filter is open, or an adjustment layer from the moment it's chosen for editing. Each keeps its tab in front, as
+    /// the Mac's sheets and panels keep theirs. Not a closing tab for its editor, which goes with it, though its
+    /// question holds it; nor an effect's panel's, which gives way to another tab.
     private var holdingTab: EditorTab? {
         // What's asked for comes first: an effect's panel may still be going to make way for it.
         let shown: EditorTab? = switch presenting ?? presentedViewController {
@@ -445,6 +470,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// by its own buttons, put away by a picker itself or by a tap off a popover. The window looks again once that's
     /// over, when what held it on its tab has gone.
     private func presentationChanged() {
+        // What opens the pickers is dimmed from the moment one of them begins to go.
+        followClear()
         guard let transition = presentedViewController?.transitionCoordinator else { return setNeedsUpdateProperties() }
         // At once, should the transition be over before it could say so.
         if !transition.animate(alongsideTransition: nil, completion: { [weak self] _ in self?.setNeedsUpdateProperties() }) {
@@ -990,7 +1017,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let name = tab.title
         // The window waits on its tab while the image its share sheet offers is made, as Export JPEG's.
         exporting = tab
-        Task {
+        makingExport = Task {
             defer {
                 exporting = nil
                 setNeedsUpdateProperties()
@@ -1008,44 +1035,70 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
         let session = tab.session, name = tab.title
         // The project waits while the dialog is open, as on the Mac, and the window waits on its tab from now on, while
-        // the image the dialog previews is made.
+        // the image the dialog previews is made and until the dialog can come up.
         session.isProjectBusy = true
         exporting = tab
-        Task { [weak self] in
-            defer {
-                self?.exporting = nil
-                self?.setNeedsUpdateProperties()
-            }
+        makingExport = Task { [weak self] in
             do {
                 let raster = try await ImageExporter.shared.render(snapshot)
-                // Its dialog holds the window from here. Something else may have come up meanwhile, as a menu, or the
-                // tab closed.
-                self?.exporting = nil
-                guard let self, self.isClear, self.tabs.contains(where: { $0 === tab }),
-                      !self.closing.contains(tab.id), !tab.isClosed else {
+                guard let self else {
                     session.isProjectBusy = false
                     return
                 }
-                self.dialogSession = session
-                let dialog = JPEGExportController(raster: raster) { [weak self] data in
-                    session.isProjectBusy = false
-                    self?.dismiss(animated: true) {
-                        guard let self, let data else { return }
-                        do { try self.share(data, named: name + ".jpg") }
-                        catch { self.showError("Couldn’t export JPEG", error) }
+                // Something else may have come up meanwhile, as a menu, which the dialog waits for; or the tab may
+                // have closed, as its window went.
+                showExportWhenClear { [weak self] in
+                    guard let self else { return }
+                    exporting = nil
+                    guard isStillOpen(tab) else {
+                        session.isProjectBusy = false
+                        return
                     }
+                    // Its dialog holds the window from here.
+                    dialogSession = session
+                    let dialog = JPEGExportController(raster: raster) { [weak self] data in
+                        session.isProjectBusy = false
+                        self?.dismiss(animated: true) {
+                            guard let self, let data else { return }
+                            do { try self.share(data, named: name + ".jpg") }
+                            catch { self.showError("Couldn’t export JPEG", error) }
+                        }
+                    }
+                    let presenting = Timing.begin("JPEG dialog")
+                    present(dialog, animated: true) { Timing.end(presenting) }
                 }
-                let presenting = Timing.begin("JPEG dialog")
-                self.present(dialog, animated: true) { Timing.end(presenting) }
             } catch {
                 session.isProjectBusy = false
+                self?.exporting = nil
+                self?.setNeedsUpdateProperties()
                 self?.showError("Couldn’t export JPEG", error)
             }
         }
     }
 
-    /// The tab whose export is on its way, while the image its dialog previews or its share sheet offers is made.
-    private weak var exporting: EditorTab?
+    /// Whether `tab` is still there for its export to show what it made: not closed meanwhile, as when its window goes.
+    private func isStillOpen(_ tab: EditorTab) -> Bool {
+        tabs.contains { $0 === tab } && !closing.contains(tab.id) && !tab.isClosed
+    }
+
+    /// What the export under way shows once its image is made, its dialog, while it waits for anything else that came
+    /// up over the window meanwhile to go, as a menu. The export holds the window on its tab until then.
+    private var exportShows: (() -> Void)?
+
+    /// Shows what the export under way made, `show` or what waits already, once nothing else is over the window but an
+    /// effect's panel: now, or as the window looks again once what's over it has gone.
+    private func showExportWhenClear(_ show: (() -> Void)? = nil) {
+        if let show { exportShows = show }
+        guard let shows = exportShows, showsNothingElse else { return }
+        exportShows = nil
+        shows()
+    }
+
+    /// The tab whose export is on its way, while the image its dialog previews or its share sheet offers is made, and
+    /// until its dialog can come up.
+    private weak var exporting: EditorTab? { didSet { followClear() } }
+    /// The export set going last, while it makes its image. Tests wait for it.
+    private(set) var makingExport: Task<Void, Never>?
 
     /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
     private func share(_ data: Data, named name: String) throws {
@@ -1733,6 +1786,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// for to finish.
     func closeAll() {
         cancelDialog()
+        // So does an export whose dialog waits to come up.
+        if exportShows != nil {
+            exportShows = nil
+            exporting?.session.isProjectBusy = false
+            exporting = nil
+        }
         let tabs = tabs
         _ = Self.withBackgroundTime("Close projects") {
             await withTaskGroup { group in

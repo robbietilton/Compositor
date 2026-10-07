@@ -684,6 +684,9 @@ final class SwatchButton: UIControl {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Faded while it can't be used, as the options bar's swatches are.
+    override var isEnabled: Bool { didSet { alpha = isEnabled ? 1 : 0.4 } }
+
     /// At least 44 points to a finger, around a smaller swatch.
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)

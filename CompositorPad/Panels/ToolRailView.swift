@@ -6,6 +6,14 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
     var session: EditorSession? { didSet { if session !== oldValue { setNeedsUpdateProperties() } } }
     /// Shows the color picker and the mask's color choice over the window.
     weak var presenter: UIViewController?
+    /// Whether the window can show them now: not while it shows anything else but an effect's panel, nor while an
+    /// export is under way, as its commands that show something wait then: asked the moment they're asked for, as the
+    /// window may have changed since it last looked.
+    var canPresent: () -> Bool = { true }
+    /// Whether their swatches are dimmed, as they are while the window can't show them: but not while what it shows is
+    /// a picker the rail or the options bar opened, under which they can't be reached, and whose color they show as
+    /// it's picked, until it begins to go.
+    var dimsPickerControls = false { didSet { if dimsPickerControls != oldValue { setNeedsUpdateProperties() } } }
     /// A tool lent for the moment, shown in hand and tinted in place of the session's own, as Space lends the Hand
     /// while it's held; the session's tool stays as it is.
     var heldTool: NavigationTool? { didSet { if heldTool != oldValue { setNeedsUpdateProperties() } } }
@@ -104,7 +112,7 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
         }
         foreground.color = session.paletteColor(background: false)
         background.color = session.paletteColor(background: true)
-        for swatch in [foreground, background] { swatch.isEnabled = session.canEditPalette }
+        for swatch in [foreground, background] { swatch.isEnabled = session.canEditPalette && !dimsPickerControls }
     }
 
     /// The Mac rail's icons: SF Symbols, the Marquee's following its shape and the Brush's its mode, and the Mac's own
@@ -139,7 +147,7 @@ final class ToolRailView: UIView, UIColorPickerViewControllerDelegate {
 
     /// Picks the foreground or background color, with the picker pointing at `anchor` (the color's swatch by default).
     func chooseColor(background: Bool, from anchor: UIView? = nil) {
-        guard let session, let presenter else { return }
+        guard let session, let presenter, canPresent() else { return }
         let source = anchor ?? (background ? self.background : foreground)
         // A mask paints in black or white only; the Mac asks which, as this does.
         if session.isMaskSelected {

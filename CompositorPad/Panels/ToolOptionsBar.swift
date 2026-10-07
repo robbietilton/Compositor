@@ -11,11 +11,19 @@ final class ToolOptionsBar: UIView {
             setNeedsUpdateProperties()
         }
     }
-    /// Opens the foreground color's picker from the brush's Color swatch, as the rail's swatch does.
+    /// Opens the foreground color's picker from the brush's Color swatch, as the rail's swatch does, when it can.
     var onChooseForeground: (UIView) -> Void = { _ in }
     /// Opens the font picker, or the text color's, from the Type bar.
     var onChooseFont: (UIView) -> Void = { _ in }
     var onChooseTextColor: (UIView) -> Void = { _ in }
+    /// Whether the window can show the pickers now: not while it shows anything else but an effect's panel, nor while
+    /// an export is under way, as its commands that show something wait then: asked the moment they're asked for, as
+    /// the window may have changed since it last looked.
+    var canPresent: () -> Bool = { true }
+    /// Whether what opens them is dimmed, as it is while the window can't show them: but not while what it shows is a
+    /// picker the bar or the rail opened, under which nothing in the bar can be reached, and whose color its swatches
+    /// show as it's picked, until it begins to go.
+    var dimsPickerControls = false { didSet { if dimsPickerControls != oldValue { setNeedsUpdateProperties() } } }
 
     static let height: CGFloat = 50
 
@@ -350,9 +358,9 @@ final class ToolOptionsBar: UIView {
                 self?.onChooseForeground(swatch)
             }, for: .primaryActionTriggered)
             add(OptionControls.row([OptionControls.caption("Color", color: .secondaryLabel), swatch], spacing: 8))
-            refreshers.append { session in
+            refreshers.append { [weak self] session in
                 swatch.color = session.foregroundColor
-                swatch.isEnabled = session.canEditPalette
+                swatch.isEnabled = session.canEditPalette && self?.dimsPickerControls != true
             }
         }
         addSpace()
@@ -542,7 +550,7 @@ final class ToolOptionsBar: UIView {
 
         refreshers.append { [weak self] session in
             swatch.color = session.foregroundColor
-            swatch.isEnabled = session.canEditPalette
+            swatch.isEnabled = session.canEditPalette && self?.dimsPickerControls != true
             let usable = !session.showsBusy && session.document != nil
             self?.content.isUserInteractionEnabled = usable
             self?.content.alpha = usable ? 1 : 0.5
@@ -570,8 +578,8 @@ final class ToolOptionsBar: UIView {
         font.accessibilityLabel = "Font"
         font.widthAnchor.constraint(equalToConstant: 200).isActive = true
         font.addAction(UIAction { [weak self, weak font] _ in
-            guard let font else { return }
-            self?.onChooseFont(font)
+            guard let self, let font, canPresent() else { return }
+            onChooseFont(font)
         }, for: .primaryActionTriggered)
 
         let size = NumberField(caption: "Size", unit: "px", width: 56, range: 1...2000)
@@ -579,8 +587,8 @@ final class ToolOptionsBar: UIView {
         let color = ColorSwatchButton()
         color.accessibilityLabel = "Text color"
         color.addAction(UIAction { [weak self, weak color] _ in
-            guard let color else { return }
-            self?.onChooseTextColor(color)
+            guard let self, let color, canPresent() else { return }
+            onChooseTextColor(color)
         }, for: .primaryActionTriggered)
         let alignments = TextAlignment.allCases
         let alignment = UISegmentedControl(items: alignments.map { alignment -> UIImage in
@@ -617,9 +625,10 @@ final class ToolOptionsBar: UIView {
                     : draft.style.uniformFontName(in: selection) ?? "Multiple"
             }
             font.configuration?.title = name
+            font.isEnabled = self?.dimsPickerControls != true
             size.show(Double(style.fontSize))
             color.color = session.typeColor
-            color.isEnabled = session.canEditPalette
+            color.isEnabled = session.canEditPalette && self?.dimsPickerControls != true
             alignment.selectedSegmentIndex = alignments.firstIndex(of: style.alignment) ?? 0
             tracking.show(Double(style.tracking))
             leading.show(Double(style.leading))

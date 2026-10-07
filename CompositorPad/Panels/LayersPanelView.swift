@@ -20,6 +20,10 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
     var isOpening = false { didSet { if isOpening != oldValue { setNeedsUpdateProperties() } } }
     /// Shows the rename prompt.
     weak var presenter: UIViewController?
+    /// Whether the window can show it now: not while it shows anything else but an effect's panel, nor while an export
+    /// is under way, as its commands that show something wait then. Asked the moment Rename… is chosen, as a menu's
+    /// choice comes once the menu has gone, before the window looks again; Rename… is dimmed in a menu made meanwhile.
+    var canPresent: () -> Bool = { true }
 
     static let width: CGFloat = 252
 
@@ -277,7 +281,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
 
     /// Asks for layer `id`'s new name, and names it so.
     func rename(_ id: UUID) {
-        guard let session, session.canEditLayers, let layer = session.document?.layers.first(where: { $0.id == id }),
+        guard canPresent(), let session, session.canEditLayers, let layer = session.document?.layers.first(where: { $0.id == id }),
               let presenter else { return }
         let alert = UIAlertController(title: "Rename Layer", message: nil, preferredStyle: .alert)
         alert.addTextField { field in
@@ -346,7 +350,9 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
             },
         ]) + [
             action("Duplicate Layer", "plus.square.on.square", enabled: editable) { $0.duplicateActiveLayer() },
-            action("Rename…", "pencil", enabled: editable && session.selectedLayerIDs.count == 1) { [weak self] _ in self?.rename(id) },
+            action("Rename…", "pencil", enabled: editable && session.selectedLayerIDs.count == 1 && canPresent()) { [weak self] _ in
+                self?.rename(id)
+            },
             action(deleteTitle, "trash", enabled: editable, destructive: true) { $0.deleteLayerOrMask() },
         ])
         var arranging: [UIMenuElement] = [
