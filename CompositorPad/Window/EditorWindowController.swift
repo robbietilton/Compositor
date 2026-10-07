@@ -217,6 +217,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             || session.cropError != nil || session.saveError != nil || session.changedOnDisk || session.selectionAmountOperation != nil {
             DispatchQueue.main.async { [weak self] in self?.presentEditorRequests(for: tab) }
         }
+        // Whether the editor shown is still open, whichever tab's project it edits, so it goes once its edit ends.
+        _ = (presentedViewController as? AdjustmentEditorController)?.isOpen
         if session.adjustmentEditingID != nil || session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
             || session.effectsEditing != nil || presentedViewController is AdjustmentEditorController {
             DispatchQueue.main.async { [weak self] in self?.followAdjustmentEditing(for: tab) }

@@ -662,4 +662,38 @@ import UIKit
         #expect(tab.session.hueSaturation == nil)
         await cleanUp(controller)
     }
+
+    // MARK: An editor whose edit ended
+
+    /// An editor whose edit ended while another tab was in front goes, rather than staying with a spinner after its OK,
+    /// or with buttons that do nothing after its Cancel. Nothing leaves an editor over another tab now, so the state is
+    /// set up directly: Levels open on the tab behind, its editor shown over the tab in front, as a switch left it.
+    @Test(arguments: [true, false])
+    func anEditorWhoseEditEndedBehindGoes(ok: Bool) async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let behind = try tabBehind(in: controller)
+        behind.session.beginLevels()
+        var settings = try #require(behind.session.levels?.settings)
+        settings.current = LevelsEditorController.range(settings.current, input: 0, at: 40)
+        behind.session.updateLevels(settings, preview: true)
+        let editor = LevelsEditorController(session: behind.session)
+        editor.modalPresentationStyle = .popover
+        editor.popoverPresentationController?.sourceView = controller.view
+        controller.present(editor, animated: false)
+        try await eventually { controller.presentedViewController === editor && !editor.isBeingPresented }
+        // The window looks at what it shows once more, as a switch has it do, and is done with that.
+        controller.setNeedsUpdateProperties()
+        controller.updatePropertiesIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        try #require(controller.activeTab === tab && controller.presentedViewController === editor)
+
+        try tap(ok: ok, in: editor)
+        try await eventually { behind.session.levels == nil }
+        try await eventually { controller.presentedViewController == nil }
+        #expect(controller.presentedViewController == nil)
+        #expect(controller.activeTab === tab && behind.session.levels == nil)
+        if ok { #expect(behind.session.history.undoName == "Levels") }
+        await cleanUp(controller)
+    }
 }
