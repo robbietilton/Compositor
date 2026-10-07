@@ -391,7 +391,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
     }
 
     /// The window going while Export JPEG's dialog waits for a menu lets the project go, as the dialog's Cancel would,
-    /// so every project is saved and closed; the dialog doesn't come up once the menu goes.
+    /// so every project is saved and closed, the card gone; the dialog doesn't come up once the menu goes.
     @Test func theWindowGoingWhileTheJPEGDialogWaitsClosesEveryProject() async throws {
         let (window, controller, tab) = try await shownWindow()
         defer { window.isHidden = true }
@@ -411,6 +411,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         try await eventually { tab.document == nil }
         #expect(tab.document == nil && !tab.session.isProjectBusy)
         #expect(try ProjectStore.readPackage(url).manifest.layers.count == layers)
+        #expect(try exportCard(in: controller).isHidden)
         try #require(button.contextMenuInteraction).dismissMenu()
         try await eventually { controller.presentedViewController == nil }
         try await Task.sleep(for: .milliseconds(600))
@@ -463,5 +464,130 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         #expect(session.activeLayer?.effects?.stroke?.size == 9)
         try await dismissExport(shown)
         await cleanUp(controller)
+    }
+
+    // MARK: The Export card
+
+    private typealias Line = LoadingProgress.Line
+    private func running(_ text: String) -> Line { Line(text: text, isDone: false) }
+    private func done(_ text: String) -> Line { Line(text: text, isDone: true) }
+
+    /// Each step of an export has a line once it's reached, as the Loading card's: composing the layers, counting as it
+    /// goes, then encoding, then opening what shows the file; the steps done say what they did, and a count said late
+    /// doesn't move a line back, nor keep a step under way once a later one is said.
+    @Test func theExportCardSaysWhatEachStepHasDone() {
+        var steps = ExportProgress.Steps()
+        func lines(_ kind: ExportProgress.Kind = .png, opening: Bool = false) -> [Line] {
+            ExportProgress.lines(steps, kind: kind, opening: opening)
+        }
+        #expect(lines() == [running("Waiting to compose the image…")])
+        steps.record(.composing(total: 8))
+        #expect(lines() == [running("Composing 0/8 layers…")])
+        steps.record(.composed(done: 3))
+        steps.record(.composed(done: 2))
+        #expect(lines() == [running("Composing 3/8 layers…")])
+        steps.record(.composed(done: 8))
+        #expect(lines() == [done("8/8 layers composed.")])
+        steps.record(.encoding)
+        #expect(lines() == [done("8/8 layers composed."), running("Encoding PNG…")])
+        #expect(lines(.jpeg) == [done("8/8 layers composed."), running("Encoding JPEG…")])
+        #expect(lines(opening: true) == [done("8/8 layers composed."), done("PNG encoded."), running("Opening the share sheet…")])
+        #expect(lines(.jpeg, opening: true) == [done("8/8 layers composed."), done("JPEG encoded."), running("Opening the dialog…")])
+
+        // A step said, the ones before it are done, should their last counts come after it.
+        steps = ExportProgress.Steps()
+        steps.record(.composing(total: 8))
+        steps.record(.composed(done: 5))
+        #expect(lines(opening: true) == [done("8/8 layers composed."), done("PNG encoded."), running("Opening the share sheet…")])
+        steps.record(.encoding)
+        #expect(lines() == [done("8/8 layers composed."), running("Encoding PNG…")])
+
+        // One layer has no count to show, and none has no line of its own.
+        steps = ExportProgress.Steps()
+        steps.record(.composing(total: 1))
+        #expect(lines() == [running("Composing the layer…")])
+        steps.record(.composed(done: 1))
+        #expect(lines() == [done("1/1 layer composed.")])
+        steps = ExportProgress.Steps()
+        steps.record(.composing(total: 0))
+        #expect(lines() == [])
+        steps.record(.encoding)
+        #expect(lines() == [running("Encoding PNG…")])
+    }
+
+    /// The card names the project and its format, says the image's size, takes the steps said on the exporter's thread
+    /// in the order they were said, ends once, and hears nothing afterwards.
+    @Test func theExportCardTakesTheStepsInOrderAndEndsOnce() async throws {
+        let progress = ExportProgress(name: "Harbor", kind: .jpeg, width: 4032, height: 3024)
+        #expect(progress.title == "Exporting “Harbor” as JPEG…" && progress.caption == "4032 × 3024 px" && progress.isShowing)
+        await Task.detached {
+            progress.said(.composing(total: 500))
+            for done in 1...500 { progress.said(.composed(done: done)) }
+            progress.said(.encoding)
+        }.value
+        try await eventually { progress.lines.count == 2 }
+        #expect(progress.lines == [done("500/500 layers composed."), running("Encoding JPEG…")])
+        progress.opening()
+        progress.ended()
+        progress.ended()
+        progress.said(.composed(done: 600))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!progress.isShowing && progress.steps.composed == 500 && progress.doneAnnouncement == nil)
+    }
+
+    /// The window's Export card, which a tab shows while its export makes its file.
+    private func exportCard(in controller: EditorWindowController) throws -> ProgressCardView {
+        controller.updatePropertiesIfNeeded()
+        let cards = views(ProgressCardView.self, in: controller.view)
+        for card in cards { card.updatePropertiesIfNeeded() }
+        return try #require(cards.first { $0.progress is ExportProgress } ?? cards.last)
+    }
+
+    /// An export's card shows from the moment it's chosen, in the same refresh, over the canvas of the tab it exports,
+    /// saying what it exports and how big; it then says each step the export takes, and goes as what it opens comes up:
+    /// the share sheet, or the dialog, which opens with the JPEG the card said it encoded, ready to export.
+    @Test(arguments: ["Export PNG", "Export JPEG"])
+    func theCardShowsFromTheMomentAnExportIsChosen(_ export: String) async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let format = export == "Export JPEG" ? "JPEG" : "PNG"
+        // Nothing else is left for the window to follow.
+        controller.updatePropertiesIfNeeded()
+        try start(export, in: controller)
+        let card = try exportCard(in: controller)
+        let progress = try #require(card.progress as? ExportProgress)
+        #expect(!card.isHidden && progress.title == "Exporting “\(tab.title)” as \(format)…" && progress.caption == "200 × 100 px")
+        #expect(progress.lines == [running("Waiting to compose the image…")])
+        #expect(card.convert(card.bounds, to: nil) == tab.canvas.convert(tab.canvas.bounds, to: nil))
+        // To VoiceOver, the title is a heading, and the line under way changes often.
+        let labels = views(UILabel.self, in: card)
+        #expect(labels.first { $0.text == progress.title }?.accessibilityTraits.contains(.header) == true)
+        #expect(labels.first { $0.text == "Waiting to compose the image…" }?.accessibilityTraits.contains(.updatesFrequently) == true)
+
+        let shown = try await shown(over: controller)
+        #expect(progress.lines == [done("2/2 layers composed."), done("\(format) encoded."),
+                                   running(format == "PNG" ? "Opening the share sheet…" : "Opening the dialog…")])
+        #expect(try exportCard(in: controller).isHidden && !progress.isShowing)
+        if let dialog = shown as? JPEGExportController {
+            let exportButton = try button("Export…", in: dialog)
+            #expect(dialog.encoding == nil && dialog.result != nil && exportButton.isEnabled)
+        } else {
+            #expect(shown is UIActivityViewController)
+        }
+        try await dismissExport(shown)
+        await cleanUp(controller)
+    }
+
+    /// The dialog opens with the JPEG it's handed and its settings, ready to export at once.
+    @Test func theDialogOpensWithTheJPEGItsHanded() async throws {
+        let raster = try raster()
+        let options = JPEGOptions(quality: 0.4, red: 0, green: 0, blue: 1)
+        let encoded = try await ImageExporter.shared.jpeg(raster, options: options)
+        var exported: Data?
+        let dialog = JPEGExportController(raster: raster, encoded: (encoded, options)) { exported = $0 }
+        dialog.loadViewIfNeeded()
+        #expect(dialog.encoding == nil && dialog.options == options)
+        dialog.export()
+        #expect(exported == encoded.data)
     }
 }

@@ -62,7 +62,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private let rail = ToolRailView()
     private let canvasHost = UIView()
     private let newCanvas = NewCanvasView()
-    private let loadingCard = LoadingView()
+    private let loadingCard = ProgressCardView()
+    private let exportCard = ProgressCardView()
     /// The outline around the canvas while something dragged over the window can be dropped, as on the Mac.
     private let dropTarget = UIView()
     private let layersPanel = LayersPanelView()
@@ -129,8 +130,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let optionsLine = Self.separator(vertical: false)
         let railLine = Self.separator(vertical: true), panelLine = Self.separator(vertical: true)
         let statusLine = Self.separator(vertical: false)
-        for subview in [optionsBar, optionsLine, rail, railLine, canvasHost, newCanvas, loadingCard, dropTarget, panelLine,
-                        layersPanel, statusLine, statusBar] as [UIView] {
+        for subview in [optionsBar, optionsLine, rail, railLine, canvasHost, newCanvas, loadingCard, exportCard, dropTarget,
+                        panelLine, layersPanel, statusLine, statusBar] as [UIView] {
             view.addSubview(subview)
             subview.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -153,6 +154,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             newCanvas.topAnchor.constraint(equalTo: canvasHost.topAnchor), newCanvas.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
             loadingCard.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), loadingCard.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
             loadingCard.topAnchor.constraint(equalTo: canvasHost.topAnchor), loadingCard.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
+            exportCard.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), exportCard.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
+            exportCard.topAnchor.constraint(equalTo: canvasHost.topAnchor), exportCard.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
             dropTarget.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor), dropTarget.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
             dropTarget.topAnchor.constraint(equalTo: canvasHost.topAnchor), dropTarget.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor),
             panelLine.topAnchor.constraint(equalTo: rail.topAnchor), panelLine.bottomAnchor.constraint(equalTo: rail.bottomAnchor),
@@ -209,6 +212,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         // The opening tab's Loading card, in the same pass that hides New canvas.
         loadingCard.progress = tab.loading
         loadingCard.updatePropertiesIfNeeded()
+        // The Export card of the tab whose export makes its file, from the refresh the export is chosen in.
+        exportCard.progress = exporting.flatMap { $0.tab === tab ? $0.progress : nil }
+        exportCard.updatePropertiesIfNeeded()
         view.window?.windowScene?.title = tab.title
         rail.session = session
         optionsBar.session = session
@@ -414,7 +420,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             return session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
                 || session.adjustmentEditingID != nil ? tab : nil
         }
-        return shown ?? exporting ?? editing.flatMap { closing.contains($0.id) ? nil : $0 }
+        return shown ?? exporting?.tab ?? editing.flatMap { closing.contains($0.id) ? nil : $0 }
     }
 
     /// Whether another tab may come forward, or a tab close, as the Mac's `canSwitch` asks: not while the window is
@@ -1019,17 +1025,19 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
         let session = tab.session, name = tab.title
         // The project waits while the image its share sheet offers is made, as on the Mac and as Export JPEG's does,
-        // and the window waits on its tab.
+        // and the window waits on its tab, the export's card over its canvas saying how far the export has come.
+        let progress = ExportProgress(name: name, kind: .png, width: snapshot.manifest.width, height: snapshot.manifest.height)
         session.isProjectBusy = true
-        exporting = tab
+        exporting = (tab, progress)
+        setNeedsUpdateProperties()
         makingExport = Task {
             defer {
                 session.isProjectBusy = false
-                exporting = nil
-                setNeedsUpdateProperties()
+                endExport(progress)
             }
             do {
-                let data = try await ImageExporter.shared.pngData(snapshot)
+                let data = try await ImageExporter.shared.pngData(snapshot, progress: { progress.said($0) })
+                progress.opening()
                 try share(data, named: name + ".png")
             } catch { showError("Couldn’t export the image", error) }
         }
@@ -1040,29 +1048,34 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc func exportJPEG(_ sender: Any?) {
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
         let session = tab.session, name = tab.title
-        // The project waits while the dialog is open, as on the Mac, and the window waits on its tab from now on, while
-        // the image the dialog previews is made and until the dialog can come up.
+        // The project waits while the dialog is open, as on the Mac, and the window waits on its tab from now on, the
+        // export's card over its canvas saying how far it has come, while the image the dialog previews is made and
+        // encoded at the dialog's settings, until the dialog is up.
+        let progress = ExportProgress(name: name, kind: .jpeg, width: snapshot.manifest.width, height: snapshot.manifest.height)
         session.isProjectBusy = true
-        exporting = tab
+        exporting = (tab, progress)
+        setNeedsUpdateProperties()
         makingExport = Task { [weak self] in
             do {
-                let raster = try await ImageExporter.shared.render(snapshot)
+                let raster = try await ImageExporter.shared.render(snapshot, progress: { progress.said($0) })
+                let options = JPEGExportController.startingOptions
+                let encoded = try await ImageExporter.shared.jpeg(raster, options: options, progress: { progress.said($0) })
                 guard let self else {
                     session.isProjectBusy = false
                     return
                 }
+                progress.opening()
                 // Something else may have come up meanwhile, as a menu, which the dialog waits for; or the tab may
                 // have closed, as its window went.
                 showExportWhenClear { [weak self] in
                     guard let self else { return }
-                    exporting = nil
                     guard isStillOpen(tab) else {
                         session.isProjectBusy = false
+                        endExport(progress)
                         return
                     }
-                    // Its dialog holds the window from here.
                     dialogSession = session
-                    let dialog = JPEGExportController(raster: raster) { [weak self] data in
+                    let dialog = JPEGExportController(raster: raster, encoded: (encoded, options)) { [weak self] data in
                         session.isProjectBusy = false
                         self?.dismiss(animated: true) {
                             guard let self, let data else { return }
@@ -1070,13 +1083,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                             catch { self.showError("Couldn’t export JPEG", error) }
                         }
                     }
+                    // Its dialog holds the window from here; the card goes once it's up.
                     let presenting = Timing.begin("JPEG dialog")
-                    present(dialog, animated: true) { Timing.end(presenting) }
+                    present(dialog, animated: true) { [weak self] in
+                        Timing.end(presenting)
+                        self?.endExport(progress)
+                    }
                 }
             } catch {
                 session.isProjectBusy = false
-                self?.exporting = nil
-                self?.setNeedsUpdateProperties()
+                self?.endExport(progress)
                 self?.showError("Couldn’t export JPEG", error)
             }
         }
@@ -1100,9 +1116,17 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         shows()
     }
 
-    /// The tab whose export is on its way, while the image its dialog previews or its share sheet offers is made, and
-    /// until its dialog can come up.
-    private weak var exporting: EditorTab? { didSet { followClear() } }
+    /// The export on its way, and how far it has come, for the card over its tab's canvas: while the image its dialog
+    /// previews or its share sheet offers is made, and until its dialog is up.
+    private var exporting: (tab: EditorTab, progress: ExportProgress)?
+
+    /// The export `progress` is of is over: what it shows is up, or it failed or stopped. Its card goes.
+    private func endExport(_ progress: ExportProgress) {
+        progress.ended()
+        if exporting?.progress === progress { exporting = nil }
+        setNeedsUpdateProperties()
+    }
+
     /// The export set going last, while it makes its image. Tests wait for it.
     private(set) var makingExport: Task<Void, Never>?
 
@@ -1793,10 +1817,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     func closeAll() {
         cancelDialog()
         // So does an export whose dialog waits to come up.
-        if exportShows != nil {
+        if exportShows != nil, let export = exporting {
             exportShows = nil
-            exporting?.session.isProjectBusy = false
-            exporting = nil
+            export.tab.session.isProjectBusy = false
+            endExport(export.progress)
         }
         let tabs = tabs
         _ = Self.withBackgroundTime("Close projects") {

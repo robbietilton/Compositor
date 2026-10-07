@@ -1,13 +1,22 @@
 import UIKit
 
 /// The Mac's Export JPEG dialog: the image as it will be encoded, at a quality and over a color for its transparent
-/// areas, to look over up to 800% before exporting. `finish` gets the encoded file, or nil for Cancel.
+/// areas, to look over up to 800% before exporting. Handed the image `encoded` already, it opens with it and its
+/// settings, ready to export. `finish` gets the encoded file, or nil for Cancel.
 final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     /// The quality of the last export, which the next one starts from, as on the Mac.
     static let qualityKey = "jpegExportQuality"
     /// The zooms the buttons and the View menu step through, as the Mac's preview has them. 1 is 100%: one pixel of the
     /// JPEG to one of the screen, as the canvas counts it.
     static let steps: [CGFloat] = [0.25, 0.5, 1, 2, 4, 8]
+    /// The settings a dialog starts from: the quality of the last export, over white.
+    static var startingOptions: JPEGOptions {
+        var start = JPEGOptions()
+        if let saved = UserDefaults.standard.object(forKey: qualityKey) as? Double, saved.isFinite {
+            start.quality = min(1, max(0, saved))
+        }
+        return start
+    }
 
     let raster: ExportRaster
     private let finish: (Data?) -> Void
@@ -33,14 +42,12 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     private lazy var zoomOutButton = OptionControls.button(symbol: "minus.magnifyingglass", label: "Zoom Out") { [weak self] in self?.zoomOut(nil) }
     private lazy var exportButton = OptionControls.button("Export…", prominent: true) { [weak self] in self?.export() }
 
-    init(raster: ExportRaster, finish: @escaping (Data?) -> Void) {
+    init(raster: ExportRaster, encoded: (result: JPEGResult, options: JPEGOptions)? = nil, finish: @escaping (Data?) -> Void) {
         self.raster = raster
         self.finish = finish
-        var start = JPEGOptions()
-        if let saved = UserDefaults.standard.object(forKey: Self.qualityKey) as? Double, saved.isFinite {
-            start.quality = min(1, max(0, saved))
-        }
-        options = start
+        options = encoded?.options ?? Self.startingOptions
+        result = encoded?.result
+        readyOptions = encoded?.options
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .formSheet
         isModalInPresentation = true
@@ -118,7 +125,12 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
             stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
             stack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
         ])
-        encode()
+        if let result {
+            imageView.image = UIImage(cgImage: result.preview)
+            refresh()
+        } else {
+            encode()
+        }
     }
 
     override func viewDidLayoutSubviews() {

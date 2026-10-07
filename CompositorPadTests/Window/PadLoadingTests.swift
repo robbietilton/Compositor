@@ -240,7 +240,7 @@ import UIKit
         controller.loadViewIfNeeded()
         controller.view.frame = window.bounds
         controller.view.layoutIfNeeded()
-        let card = try #require(controller.view.subviews.lazy.compactMap { $0 as? LoadingView }.first)
+        let card = try #require(controller.view.subviews.lazy.compactMap { $0 as? ProgressCardView }.first)
         let newCanvas = try #require(controller.view.subviews.lazy.compactMap { $0 as? NewCanvasView }.first)
         func update() {
             controller.updatePropertiesIfNeeded()

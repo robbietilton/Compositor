@@ -4,7 +4,7 @@ import Synchronization
 
 /// A project opening in a tab, step by step as the open takes the steps, for the window's Loading card. Each open makes
 /// one; it ends once the project's first frame is on screen, or when the open fails or stops.
-@Observable final class LoadingProgress {
+@Observable final class LoadingProgress: CardProgress {
     enum Ending { case shown, stopped }
 
     /// A line of the card: a step under way, its count updating as it goes, or a step done.
@@ -85,6 +85,7 @@ import Synchronization
         counts.layers.map { "\(counts.width) × \(counts.height) px · \($0.formatted()) \(Self.noun($0, "layer"))" }
     }
     var lines: [Line] { Self.lines(counts, made: made, drawing: isDrawing) }
+    var doneAnnouncement: String? { ending == .shown ? "“\(name)” is open." : nil }
 
     /// Said by `ProjectStore.readPackage`, on UIDocument's queue and the reading lanes.
     nonisolated func read(_ event: ProjectStore.ReadProgress) {
@@ -158,15 +159,15 @@ import Synchronization
     }
 
     /// "Loading 3/8 layers…"; for one, `the`, as "0/1" would sit there until it's done.
-    private static func running(_ verb: String, _ done: Int, of total: Int, _ noun: String, _ rest: String? = nil,
-                                the single: String) -> Line {
+    static func running(_ verb: String, _ done: Int, of total: Int, _ noun: String, _ rest: String? = nil,
+                        the single: String) -> Line {
         guard total > 1 else { return Line(text: single, isDone: false) }
         let words = [verb, "\(min(done, total).formatted())/\(total.formatted())", Self.noun(total, noun), rest].compactMap { $0 }
         return Line(text: words.joined(separator: " ") + "…", isDone: false)
     }
 
     /// "8/8 layers loaded."
-    private static func done(_ done: Int, of total: Int, _ noun: String, _ what: String) -> Line {
+    static func done(_ done: Int, of total: Int, _ noun: String, _ what: String) -> Line {
         Line(text: "\(done.formatted())/\(total.formatted()) \(Self.noun(total, noun)) \(what).", isDone: true)
     }
 
