@@ -219,7 +219,9 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
     private static func quickLookImages(_ snapshot: ProjectSnapshot) -> QuickLookImages? {
         final class Box: @unchecked Sendable { var images: QuickLookImages? }
         let box = Box(), done = DispatchSemaphore(value: 0)
-        Task.detached {
+        // At the save's own priority, which Task.currentPriority reads from the thread outside a task: waiting on a
+        // semaphore raises nothing, as it has no owner.
+        Task.detached(priority: Task.currentPriority) {
             box.images = await ImageExporter.shared.quickLookImages(snapshot)
             done.signal()
         }
