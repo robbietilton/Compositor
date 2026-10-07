@@ -75,6 +75,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     // MARK: Layout
 
+    override func loadView() {
+        let view = WindowView()
+        view.tintAdjusted = { [weak self] in self?.presentationChanged() }
+        self.view = view
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         Self.controllers.add(self)
@@ -174,19 +180,21 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     override func updateProperties() {
         super.updateProperties()
         showInputSwitch()
-        // A tab asked for while an adjustment's editor held the window comes forward once the editor has gone.
+        // A tab asked for while the window was held comes forward once it's free.
         if heldSwitch != nil || !afterHeldSwitch.isEmpty {
             DispatchQueue.main.async { [weak self] in self?.switchIfFree() }
         }
         guard let tab = activeTab else { return }
         let session = tab.session
-        // While an adjustment's editor holds the window on this tab, the other tabs, the close buttons and New Canvas
-        // are dimmed, as on the Mac; only then, not whenever `canSwitch` is off, since anything else over the window
-        // covers them, and isn't watched for going.
+        // While the window is held on this tab, by what it shows over it or an adjustment's edit, the other tabs, the
+        // close buttons and New Canvas are dimmed, as on the Mac.
         let held = holdingTab != nil
         tabStrip.show(tabs.map { .init(id: $0.id, title: $0.title, modified: $0.document != nil && $0.session.isModified) },
                       active: activeID, held: held)
         newTabItem.isEnabled = !held
+        // A menu over the window, which UIKit shows without dimming the window's tint, says nothing as it goes, and may
+        // have gone already: while the window is held and its tint isn't dimmed, it looks again twice a second.
+        if held, view.tintAdjustmentMode != .dimmed { recheckRequests() }
         // Typing changes the draft, which brings this round again.
         _ = session.textDraft
         undoItem.isEnabled = textUndo?.canUndo ?? session.canUndo
@@ -353,69 +361,100 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private weak var changeQuestion: UIAlertController?
 
     /// Nothing over the window, or only an effect's panel, which leaves the window free as the Mac's does and gives way
-    /// to whatever the window shows next; not while the panel shows something itself, its color picker, or is going.
+    /// to whatever the window shows next; not while the panel shows something itself, its color picker, or is going;
+    /// nor while what's asked for has yet to come up, as UIKit readies a share sheet or a picker, or an export makes
+    /// the image its dialog or share sheet is to show.
     private var isClear: Bool {
+        guard exporting == nil, presenting == nil || presenting is EffectEditorController else { return false }
         guard let presented = presentedViewController else { return true }
         return presented is EffectEditorController && presented.presentedViewController == nil && !presented.isBeingDismissed
     }
 
-    /// The tab an adjustment's editor holds the window on: that of Levels, Curves, Hue/Saturation or a filter, or of an
-    /// adjustment layer, from the moment the layer is chosen for editing; until the editor has gone. Bound to the tab's
-    /// project, the editor keeps it in front, as the Mac's panels keep theirs. Not a tab that's closing, which takes its
-    /// editor with it, nor an effect's panel's, which gives way to another tab.
+    /// The tab the window is held on, which no other tab comes forward over: the tab in front while the window shows
+    /// anything over it but an effect's panel, a dialog, an alert, a sheet, a picker or a menu, from the moment it's
+    /// asked for until it has gone, and while an export makes its image; an adjustment's editor's, bound to its tab's
+    /// project; and the tab in front while Levels, Curves, Hue/Saturation or a filter is open, or an adjustment layer
+    /// from the moment it's chosen for editing. Each keeps its tab in front, as the Mac's sheets and panels keep
+    /// theirs. Not a closing tab for its editor, which goes with it, though its question holds it; nor an effect's
+    /// panel's, which gives way to another tab.
     private var holdingTab: EditorTab? {
-        let shown = (presentedViewController as? AdjustmentEditorController).flatMap { editor in
-            editor is EffectEditorController ? nil : tabs.first { $0.session === editor.session }
+        // What's asked for comes first: an effect's panel may still be going to make way for it.
+        let shown: EditorTab? = switch presenting ?? presentedViewController {
+        case nil, is EffectEditorController: nil
+        case let editor as AdjustmentEditorController: tabs.first { $0.session === editor.session && !closing.contains($0.id) }
+        default: activeTab
         }
         let editing = activeTab.flatMap { tab -> EditorTab? in
             let session = tab.session
             return session.levels != nil || session.hueSaturation != nil || session.filterEdit != nil
                 || session.adjustmentEditingID != nil ? tab : nil
         }
-        return [shown, editing].compactMap { $0 }.first { !closing.contains($0.id) }
+        return shown ?? exporting ?? editing.flatMap { closing.contains($0.id) ? nil : $0 }
     }
 
-    /// Whether another tab may come forward, or a tab close, as the Mac's `canSwitch` asks: not while an adjustment's
-    /// editor holds the window on its tab, nor while anything but an effect's panel is over the window.
+    /// Whether another tab may come forward, or a tab close, as the Mac's `canSwitch` asks: not while the window is
+    /// held on its tab, nor while anything but an effect's panel is over the window.
     private var canSwitch: Bool { isClear && holdingTab == nil }
 
-    /// The tab asked for last while an adjustment's editor held the window, to come forward once the editor has gone.
+    /// The tab asked for last while the window was held, to come forward once it's free.
     private var heldSwitch: UUID?
-    /// What waits for an adjustment's editor to go before bringing its tab forward, after the tab asked for meanwhile:
-    /// a closing tab's question.
+    /// What waits for the window to be free before bringing its tab forward, after the tab asked for meanwhile: a
+    /// closing tab's question.
     private var afterHeldSwitch: [(EditorWindowController) -> Void] = []
 
-    /// Runs `action` on the window once no adjustment's editor holds it on its tab: now, or once the editor has gone.
+    /// Runs `action` on the window once it isn't held on a tab: now, or once what held it has gone.
     private func whenFree(_ action: @escaping (EditorWindowController) -> Void) {
         if holdingTab == nil { action(self) } else { afterHeldSwitch.append(action) }
     }
 
-    /// Brings forward the tab asked for while an adjustment's editor held the window, then what waited for it, once the
-    /// editor has gone.
+    /// Brings forward the tab asked for while the window was held, then what waited for it, once it's free: one at a
+    /// time, as a closing tab's question holds the window again, the rest waiting for it to go.
     private func switchIfFree() {
         guard holdingTab == nil else { return }
         if let id = heldSwitch {
             heldSwitch = nil
             select(id)
         }
-        let waiting = afterHeldSwitch
-        afterHeldSwitch = []
-        waiting.forEach { $0(self) }
+        while holdingTab == nil, !afterHeldSwitch.isEmpty {
+            afterHeldSwitch.removeFirst()(self)
+        }
     }
 
     /// An effect's panel gives way to anything else the window shows, its effect kept as its OK keeps it: the iPad shows
-    /// one at a time, where the Mac's panel stays beside a dialog or another panel.
+    /// one at a time, where the Mac's panel stays beside a dialog or another panel. What's shown holds the window from
+    /// the moment it's asked for, as UIKit readies a popover or a picker before it shows.
     override func present(_ controller: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
+        presenting = controller
+        setNeedsUpdateProperties()
+        let shown = { [weak self] in
+            if self?.presenting === controller { self?.presenting = nil }
+            completion?()
+        }
         guard let panel = presentedViewController as? EffectEditorController, controller !== panel else {
-            super.present(controller, animated: animated, completion: completion)
+            super.present(controller, animated: animated, completion: shown)
             return
         }
         panel.session.finishEffectsEditing(commit: true)
-        dismiss(animated: false) { super.present(controller, animated: animated, completion: completion) }
+        dismiss(animated: false) { super.present(controller, animated: animated, completion: shown) }
+    }
+    /// What the window has asked to show, until it's up.
+    private weak var presenting: UIViewController?
+
+    /// What's over the window came up, or began to go. Nothing else says so for all of it: UIKit dims the window's tint
+    /// behind whatever it shows over it but a menu, and brings it back as the last of it begins to go, however it goes,
+    /// by its own buttons, put away by a picker itself or by a tap off a popover. The window looks again once that's
+    /// over, when what held it on its tab has gone.
+    private func presentationChanged() {
+        guard let transition = presentedViewController?.transitionCoordinator else { return setNeedsUpdateProperties() }
+        // At once, should the transition be over before it could say so.
+        if !transition.animate(alongsideTransition: nil, completion: { [weak self] _ in self?.setNeedsUpdateProperties() }) {
+            setNeedsUpdateProperties()
+        }
     }
     /// A check for what the editor asks is due, once what's over the window may have gone.
     private var rechecksRequests = false
-    /// Looks at what the editor asks again in half a second, as nothing says when what's over the window goes.
+    /// Looks at what the editor asks, and what holds the window, again in half a second, for what goes without the
+    /// window's tint saying so: a menu, and what an effect's panel shows over itself.
     private func recheckRequests() {
         guard !rechecksRequests else { return }
         rechecksRequests = true
@@ -457,8 +496,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     func select(_ id: UUID) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
-        // An adjustment's editor is bound to its tab's project, so another tab waits for it to go, as on the Mac, rather
-        // than coming forward under it; the one asked for last comes forward then.
+        // What's over the window, or an adjustment's editor, is bound to its tab's project, so another tab waits for it
+        // to go, as on the Mac, rather than coming forward under it; the one asked for last comes forward then.
         if let holding = holdingTab, holding !== tab {
             heldSwitch = id
             setNeedsUpdateProperties()
@@ -523,7 +562,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             defer { closing.remove(id) }
             await tab.settle()
             // A change made elsewhere is settled first, in front, where its question shows: taken up, there may be
-            // nothing left to save. An adjustment's editor open over another tab meanwhile goes first.
+            // nothing left to save. What holds the window on another tab meanwhile goes first.
             if document.changeWaits, tabs.contains(where: { $0 === tab }) {
                 whenFree { window in if window.tabs.contains(where: { $0 === tab }) { window.select(id) } }
             }
@@ -537,6 +576,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                     }
                     return
                 }
+            }
+            // What was asked for over it as it saved, as Rename, keeps it in front: it closes once that's done, saving
+            // what that did.
+            if holdingTab === tab {
+                whenFree { $0.close(id) }
+                return
             }
             remove(tab)
         }
@@ -655,8 +700,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             }
             return
         }
-        // An empty tab in front takes the project; otherwise it gets a tab of its own.
-        let tab = activeTab.flatMap { $0.isEmpty ? $0 : nil } ?? addTab()
+        // An empty tab in front takes the project, unless the window is held on it; otherwise it gets a tab of its own.
+        let tab = activeTab.flatMap { $0.isEmpty && holdingTab == nil ? $0 : nil } ?? addTab()
         let opening = tab.open(url) { [weak self] error in
             // Closed while it opened, it says nothing.
             guard let self, tabs.contains(where: { $0 === tab }) else { return }
@@ -748,7 +793,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         switch picking {
-        case .project: urls.first.map { open(project: $0) }
+        // Once the picker has gone, should it still be going, so an empty tab in front takes the project as it would
+        // with nothing over the window.
+        case .project: urls.first.map { url in whenFree { $0.open(project: url) } }
         case .images: Task { await bringIn(urls) }
         case nil: break
         }
@@ -801,7 +848,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         Task { await receive(images, at: canvasHost.bounds.contains(location) ? location : nil) }
     }
 
-    /// Not while the project is busy or a dialog is up, as on the Mac.
+    /// Not while the project is busy or a dialog is up, as on the Mac, nor while an export makes its image.
     private var acceptsDrop: Bool {
         guard let session = activeTab?.session, isClear else { return false }
         return session.levels == nil && !session.isProjectBusy && !session.showsNewDocument && !session.showsImporter
@@ -863,8 +910,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
 
     /// Readies the project for something that works on all of it, as the Mac's project operations begin: a crop in
-    /// progress is set aside and a transform kept. Not while an editor or a dialog is open over the window, which what
-    /// the operation shows would have to wait for.
+    /// progress is set aside and a transform kept. Not while an editor or a dialog is open over the window, or an
+    /// export makes its image, which what the operation shows would have to wait for.
     private func beginProjectOperation(on session: EditorSession) -> Bool {
         guard isClear, session.canStartProjectOperation else { return false }
         session.cancelCrop()
@@ -939,7 +986,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc func exportPNG(_ sender: Any?) {
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
         let name = tab.title
+        // The window waits on its tab while the image its share sheet offers is made, as Export JPEG's.
+        exporting = tab
         Task {
+            defer {
+                exporting = nil
+                setNeedsUpdateProperties()
+            }
             do {
                 let data = try await ImageExporter.shared.pngData(snapshot)
                 try share(data, named: name + ".png")
@@ -952,12 +1005,20 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     @objc func exportJPEG(_ sender: Any?) {
         guard let tab = activeTab, let snapshot = exportSnapshot(of: tab.session) else { return }
         let session = tab.session, name = tab.title
-        // The project waits while the dialog is open, as on the Mac.
+        // The project waits while the dialog is open, as on the Mac, and the window waits on its tab from now on, while
+        // the image the dialog previews is made.
         session.isProjectBusy = true
+        exporting = tab
         Task { [weak self] in
+            defer {
+                self?.exporting = nil
+                self?.setNeedsUpdateProperties()
+            }
             do {
                 let raster = try await ImageExporter.shared.render(snapshot)
-                // Another export's share sheet may have opened meanwhile, or the tab closed.
+                // Its dialog holds the window from here. Something else may have come up meanwhile, as a menu, or the
+                // tab closed.
+                self?.exporting = nil
                 guard let self, self.isClear, self.tabs.contains(where: { $0 === tab }),
                       !self.closing.contains(tab.id), !tab.isClosed else {
                     session.isProjectBusy = false
@@ -980,6 +1041,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             }
         }
     }
+
+    /// The tab whose export is on its way, while the image its dialog previews or its share sheet offers is made.
+    private weak var exporting: EditorTab?
 
     /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
     private func share(_ data: Data, named name: String) throws {
@@ -1739,5 +1803,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         line.translatesAutoresizingMaskIntoConstraints = false
         (vertical ? line.widthAnchor : line.heightAnchor).constraint(equalToConstant: 1).isActive = true
         return line
+    }
+}
+
+/// The window's view, which says when UIKit dims its tint or brings it back: as it shows something over the window, and
+/// as the last of that begins to go.
+private final class WindowView: UIView {
+    var tintAdjusted: () -> Void = {}
+
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        tintAdjusted()
     }
 }

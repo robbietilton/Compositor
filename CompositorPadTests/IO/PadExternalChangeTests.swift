@@ -410,10 +410,10 @@ import UIKit
         try await writeElsewhere(url, layers: 3)
         try await eventually { controller.presentedViewController is UIAlertController }
         try #require(tab.session.changedOnDisk && controller.presentedViewController is UIAlertController)
-        controller.presentedViewController?.dismiss(animated: false)
+        // As Revert does: answered once the question has gone.
+        controller.presentedViewController?.dismiss(animated: false) { tab.document?.answerChangeOnDisk(revert: true) }
         try await eventually { controller.presentedViewController == nil }
 
-        tab.document?.answerChangeOnDisk(revert: true)
         try await eventually { tab.session.document?.layers.count == 3 }
         #expect(tab.session.document?.layers.count == 3)
         #expect(tab.session.document?.layers.first?.name != "Unsaved here")
@@ -436,10 +436,10 @@ import UIKit
         try await writeElsewhere(url, layers: 3)
         try await eventually { controller.presentedViewController is UIAlertController }
         try #require(tab.session.changedOnDisk && controller.presentedViewController is UIAlertController)
-        controller.presentedViewController?.dismiss(animated: false)
+        // As Keep Mine does: answered once the question has gone.
+        controller.presentedViewController?.dismiss(animated: false) { document.answerChangeOnDisk(revert: false) }
         try await eventually { controller.presentedViewController == nil }
 
-        document.answerChangeOnDisk(revert: false)
         try await eventually { !document.changeWaits }
         #expect(!tab.session.changedOnDisk)
         #expect(tab.session.document?.layers.first?.name == "Unsaved here")

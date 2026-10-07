@@ -632,9 +632,9 @@ import UIKit
         try await eventually { controller.presentedViewController is UIAlertController }
         #expect((controller.presentedViewController as? UIAlertController)?.title == "“Project.comp” was changed on disk.")
         #expect(controller.activeTab === closing)
-        controller.presentedViewController?.dismiss(animated: false)
+        // As Revert does: answered once the question has gone.
+        controller.presentedViewController?.dismiss(animated: false) { document.answerChangeOnDisk(revert: true) }
         try await eventually { controller.presentedViewController == nil }
-        document.answerChangeOnDisk(revert: true)
         try await eventually { !controller.tabs.contains { $0 === closing } }
         #expect(!controller.tabs.contains { $0 === closing })
         await cleanUp(controller)
