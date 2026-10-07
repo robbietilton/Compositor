@@ -1173,14 +1173,16 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The export set going last, while it makes its image. Tests wait for it.
     private(set) var makingExport: Task<Void, Never>?
 
-    /// A share sheet offering `data` as a file named `name`, to share, save to Photos or keep in Files. `done` hears
-    /// whether the file was shared, as UIKit says so as the sheet goes, however it goes.
+    /// A share sheet offering `data` as a file named `name`, to share, save to Photos or keep in Files, from a folder of
+    /// its own. `done` hears whether the file was shared, as UIKit says so as the sheet goes, however it goes.
     private func shareSheet(for data: Data, named name: String, done: @escaping (Bool) -> Void = { _ in }) throws -> UIActivityViewController {
-        let url = FileManager.default.temporaryDirectory.appending(path: name)
-        try Timing.measure("Write export", Timing.bytes(data.count)) { try data.write(to: url, options: .atomic) }
+        let url = try ExportFolders.write(data, named: name)
         offeredFile = url
         let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        share.completionWithItemsHandler = { _, completed, _, _ in done(completed) }
+        share.completionWithItemsHandler = { _, completed, _, _ in
+            ExportFolders.release(url)
+            done(completed)
+        }
         return share
     }
     /// The file the share sheet offered last. Tests read it.

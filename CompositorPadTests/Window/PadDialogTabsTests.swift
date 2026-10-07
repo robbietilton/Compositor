@@ -329,9 +329,9 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
         case "Canvas Size":
             #expect(session.document?.width == 300 && other.session.document?.width == 200, sourceLocation: sourceLocation)
         case "Export JPEG":
-            let file = FileManager.default.temporaryDirectory.appending(path: tab.title + ".jpg")
-            #expect(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)), sourceLocation: sourceLocation)
-            try? FileManager.default.removeItem(at: file)
+            let file = try #require(controller.offeredFile, sourceLocation: sourceLocation)
+            #expect(file.lastPathComponent == tab.title + ".jpg" && FileManager.default.fileExists(atPath: file.path(percentEncoded: false)),
+                    sourceLocation: sourceLocation)
         case "Contract Selection":
             #expect(session.selectionContractAmount == 7 && other.session.selectionContractAmount != 7, sourceLocation: sourceLocation)
         case "Photoshop file", "RAW file":
@@ -703,7 +703,6 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
         try await eventually { controller.activeTab === opened && controller.presentedViewController == nil }
         #expect(controller.activeTab === opened && controller.presentedViewController == nil)
         #expect(!tab.session.isProjectBusy)
-        try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: tab.title + ".png"))
         await cleanUp(controller)
     }
 
@@ -762,7 +761,6 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
         alert.dismiss(animated: true)
         try await eventually { controller.presentedViewController == nil }
         expectCommands(free: true)
-        try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appending(path: tab.title + ".png"))
         await cleanUp(controller)
     }
 

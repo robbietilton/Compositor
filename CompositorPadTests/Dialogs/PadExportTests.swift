@@ -728,4 +728,45 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         #expect(tab.session.viewport.zoom > zoom)
         await cleanUp(controller)
     }
+
+    // MARK: The files exports offer
+
+    /// Whether there's a file or folder at `url`.
+    private func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) }
+
+    /// Each export offers its file from a folder of its own, so one never writes over another's, as two windows' exports
+    /// of projects of the same name would: a file still offered stays, and the folders of the exports that are over go as
+    /// the next export writes its file, with any left from before.
+    @Test func eachExportOffersItsFileFromAFolderOfItsOwn() async throws {
+        let first = try await shownWindow(), second = try await shownWindow()
+        defer { for window in [first.window, second.window] { window.isHidden = true } }
+        let left = FileManager.default.temporaryDirectory.appending(path: "Exports/Left from before", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: left, withIntermediateDirectories: true)
+
+        try start("Export PNG", in: first.controller)
+        let firstShare = try #require(try await shown(over: first.controller) as? UIActivityViewController)
+        let firstFile = try #require(first.controller.offeredFile)
+        try start("Export PNG", in: second.controller)
+        let secondShare = try #require(try await shown(over: second.controller) as? UIActivityViewController)
+        let secondFile = try #require(second.controller.offeredFile)
+        #expect(firstFile.lastPathComponent == "Untitled.png" && secondFile.lastPathComponent == "Untitled.png")
+        #expect(firstFile.deletingLastPathComponent() != secondFile.deletingLastPathComponent())
+        #expect(firstFile.deletingLastPathComponent().deletingLastPathComponent() == left.deletingLastPathComponent())
+        #expect(exists(firstFile) && exists(secondFile) && !exists(left))
+        #expect(try Data(contentsOf: firstFile).starts(with: [0x89, 0x50, 0x4E, 0x47]))
+
+        try await finish(firstShare, completed: true)
+        try await finish(secondShare, completed: false)
+        #expect(exists(firstFile) && exists(secondFile))
+        try start("Export JPEG", in: first.controller)
+        let dialog = try #require(try await shown(over: first.controller) as? JPEGExportController)
+        try button("Export…", in: dialog).sendActions(for: .primaryActionTriggered)
+        let thirdShare = try await shareSheet(over: dialog)
+        let thirdFile = try #require(first.controller.offeredFile)
+        #expect(exists(thirdFile) && !exists(firstFile.deletingLastPathComponent()) && !exists(secondFile.deletingLastPathComponent()))
+        try await finish(thirdShare, completed: true)
+        try await eventually { first.controller.presentedViewController == nil }
+        await cleanUp(first.controller)
+        await cleanUp(second.controller)
+    }
 }
