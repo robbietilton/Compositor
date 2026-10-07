@@ -908,6 +908,12 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         if let reference = sender.propertyList as? Data, let url = PadRecentProjects.resolve(reference) { open([url]) }
     }
 
+    /// The app menu's About: the app's version and license, in a sheet over the tab in front, as the Mac's About panel.
+    @objc func showAbout(_ sender: Any?) {
+        guard isClear else { return }
+        presentSheet(AboutController())
+    }
+
     /// Saves now, though the project saves itself as it changes; ⌘S is a habit worth keeping. Each failure says why, as
     /// on the Mac.
     @objc func saveProject(_ sender: Any?) {
@@ -1409,6 +1415,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         case #selector(newCanvasTab(_:)), #selector(openProject(_:)), #selector(importImages(_:)), #selector(importPhotos(_:)),
              #selector(openRecentProject(_:)), #selector(closeTab(_:)): return canSwitch
         case #selector(clearRecentProjects(_:)): return !PadRecentProjects.shared.urls.isEmpty
+        // A sheet, which can't come over another.
+        case #selector(showAbout(_:)): return isClear
         case #selector(cut(_:)): return session.map { $0.selection != nil && $0.canCopyPixels } ?? false
         case #selector(copy(_:)): return session.map { $0.canCopyPixels || $0.canCopyLayer } ?? false
         case #selector(copyMerged(_:)): return session?.canCopyMerged ?? false

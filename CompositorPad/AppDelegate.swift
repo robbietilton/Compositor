@@ -26,6 +26,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // The Mac has no Find: its ⌘G, ⇧⌘G and ⌘E are the Layer menu's.
         builder.remove(menu: .find)
         typealias Window = EditorWindowController
+        // The app menu's About, which iPadOS leaves empty: the app's version, as the Mac's About panel shows it, and its
+        // license.
+        builder.replaceChildren(ofMenu: .about) { _ in
+            [UICommand(title: "About " + AboutController.appName, action: #selector(Window.showAbout(_:)))]
+        }
         let recent = UIMenu(title: "Open Recent", children: [UIDeferredMenuElement.uncached { completion in
             Task { @MainActor in completion(Self.recentItems(for: PadRecentProjects.shared.urls)) }
         }])
