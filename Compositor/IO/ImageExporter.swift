@@ -17,9 +17,19 @@ nonisolated enum ExportError: LocalizedError {
 actor ImageExporter {
     static let shared = ImageExporter()
 
+    /// How far an export has come, said on the exporter's thread for whoever shows it.
+    nonisolated enum Progress: Sendable, Equatable {
+        /// The image is about to be composed of `total` layers: those drawn, visible and not folders.
+        case composing(total: Int)
+        /// The first `done` of them are composed, in order.
+        case composed(done: Int)
+        /// The image is composed, and is being encoded.
+        case encoding
+    }
+
     /// `snapshot` flattened, at its own size or, for a preview, `scale` of it: drawn at that size, not shrunk from the
-    /// whole.
-    func render(_ snapshot: ProjectSnapshot, scale: CGFloat = 1) throws -> ExportRaster {
+    /// whole. `progress` is told how far it has come as it goes.
+    func render(_ snapshot: ProjectSnapshot, scale: CGFloat = 1, progress: (@Sendable (Progress) -> Void)? = nil) throws -> ExportRaster {
         let width = snapshot.manifest.width, height = snapshot.manifest.height
         guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
               width * height <= DocumentLimits.maxSurfacePixels else { throw ExportError.tooLarge }
@@ -72,12 +82,19 @@ actor ImageExporter {
                     FolderMaskClip(image: image, transform: layer.transform).apply(center: layer.transform.center, in: ctx)
                 }
             }
-            live.prepareStacks(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
-            FolderMaskClip.draw(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, clip: { id in
+            let visible = LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id)
+            live.prepareStacks(visible, parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
+            progress?(.composing(total: visible.count))
+            var composed = 0
+            FolderMaskClip.draw(visible, parent: { records[$0]?.parentID }, clip: { id in
                 guard let folder = records[id], let image = snapshot.mask(for: folder)?.enabledImage else { return nil }
                 let clip = FolderMaskClip(image: image, transform: folder.transform)
                 return { clip.apply(center: folder.transform.center, in: $0) }
-            }, in: context) { live.drawComposite($0, in: context) }
+            }, in: context) { id in
+                live.drawComposite(id, in: context)
+                composed += 1
+                progress?(.composed(done: composed))
+            }
             guard let image = context.makeImage() else { throw ExportError.render }
             return ExportRaster(image: image, resolution: snapshot.manifest.resolution ?? 72)
         }
@@ -118,8 +135,10 @@ actor ImageExporter {
         }
     }
 
-    func pngData(_ snapshot: ProjectSnapshot) throws -> Data {
-        let raster = try render(snapshot)
+    /// `snapshot` flattened and encoded as PNG. `progress` is told how far it has come as it goes.
+    func pngData(_ snapshot: ProjectSnapshot, progress: (@Sendable (Progress) -> Void)? = nil) throws -> Data {
+        let raster = try render(snapshot, progress: progress)
+        progress?(.encoding)
         let encoding = Timing.begin("Encode PNG")
         let data = try encode(raster.image, type: .png, properties: [
             kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution
@@ -138,8 +157,11 @@ actor ImageExporter {
         return data as Data
     }
 
-    func jpeg(_ raster: ExportRaster, options: JPEGOptions) throws -> JPEGResult {
+    /// `raster` over the options' color and encoded as JPEG at their quality, with a preview of it decoded. `progress` is
+    /// told as it encodes.
+    func jpeg(_ raster: ExportRaster, options: JPEGOptions, progress: (@Sendable (Progress) -> Void)? = nil) throws -> JPEGResult {
         try Task.checkCancellation()
+        progress?(.encoding)
         let encoding = Timing.begin("Encode JPEG")
         let result = try autoreleasepool {
             let image = raster.image

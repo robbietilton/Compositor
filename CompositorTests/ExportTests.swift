@@ -73,4 +73,34 @@ struct ExportTests {
             activeLayerID: nil, layers: []), images: [:])
         await #expect(throws: ExportError.self) { try await ImageExporter.shared.pngData(huge) }
     }
+
+    /// An export says how far it has come, on the exporter's thread: how many layers it composes, those drawn, leaving
+    /// out hidden layers and folders; each of them composed, in order; then that it encodes. A render alone says nothing
+    /// of encoding, and a JPEG's encoding says only that. Each makes what it makes with no one told.
+    @Test func anExportSaysHowFarItHasCome() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 64, height: 48)
+        session.addBlankLayer()
+        session.addBlankLayer()
+        session.toggleLayerVisibility(try #require(session.activeLayerID))
+        session.addGroup()
+        session.addBlankLayer()
+        session.addAdjustment(.invert)
+        let snapshot = try #require(session.projectSnapshot())
+        try #require(snapshot.manifest.layers.count == 5)
+        let composing: [ImageExporter.Progress] = [.composing(total: 3), .composed(done: 1), .composed(done: 2), .composed(done: 3)]
+
+        let png = Said<ImageExporter.Progress>()
+        let data = try await ImageExporter.shared.pngData(snapshot, progress: png.add)
+        #expect(png.events == composing + [.encoding])
+        #expect(try await data == ImageExporter.shared.pngData(snapshot))
+
+        let rendered = Said<ImageExporter.Progress>()
+        let raster = try await ImageExporter.shared.render(snapshot, progress: rendered.add)
+        #expect(rendered.events == composing)
+        let encoded = Said<ImageExporter.Progress>()
+        let jpeg = try await ImageExporter.shared.jpeg(raster, options: JPEGOptions(), progress: encoded.add)
+        #expect(encoded.events == [.encoding])
+        #expect(try await jpeg.data == ImageExporter.shared.jpeg(raster, options: JPEGOptions()).data)
+    }
 }
