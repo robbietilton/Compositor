@@ -769,4 +769,11 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         await cleanUp(first.controller)
         await cleanUp(second.controller)
     }
+
+    /// iPadOS offers Save Image in the share sheet only to an app that says why it adds to the photo library, which it
+    /// asks the first time: the app says so.
+    @Test func theAppSaysWhyItAddsToThePhotoLibrary() {
+        let reason = Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryAddUsageDescription") as? String
+        #expect(reason == "Compositor saves the images you export to your photo library.")
+    }
 }

@@ -21,6 +21,9 @@ INFOPLIST_FILE = Config/CompositorPad-Info.plist
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_KEY_CFBundleDisplayName = Compositor
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.graphics-design
+// Why the share sheet's Save Image adds an export to the photo library, which iPadOS asks the first time. Without it,
+// Save Image isn't offered.
+INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = Compositor saves the images you export to your photo library.
 INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
