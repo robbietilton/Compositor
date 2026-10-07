@@ -369,33 +369,42 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         return try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == title }, "\(title)")
     }
 
-    /// Export JPEG's dialog waits for what came up over the window as the export made its image, as a menu, rather than
-    /// being dropped: the window stays on its tab, the project held, however often it looks again, until the menu is put
-    /// away; then the dialog comes up, and its Cancel lets the project go.
-    @Test func theJPEGDialogWaitsForAMenu() async throws {
+    /// What an export shows waits for what came up over the window as the export made its image, as a menu, rather than
+    /// being dropped, or refused by UIKit and lost: the window stays on its tab, the project held and the card saying
+    /// what it opens, however often the window looks again, until the menu is put away; then Export JPEG's dialog or
+    /// Export PNG's share sheet comes up, and the card goes. Once that's put away, the project is free.
+    @Test(arguments: ["Export JPEG", "Export PNG"])
+    func whatAnExportShowsWaitsForAMenu(_ export: String) async throws {
         let (window, controller, tab) = try await shownWindow()
         defer { window.isHidden = true }
-        try start("Export JPEG", in: controller)
+        try start(export, in: controller)
         let button = try layersButton("New adjustment layer", in: controller)
         button.performPrimaryAction()
         let menu = try await shown(over: controller)
         await controller.makingExport?.value
         try await Task.sleep(for: .milliseconds(600))
         #expect(controller.presentedViewController === menu && tab.session.isProjectBusy)
+        let card = try exportCard(in: controller)
+        let opening = export == "Export JPEG" ? "Opening the dialog…" : "Opening the share sheet…"
+        #expect(!card.isHidden && card.progress?.lines.last == running(opening))
 
         try #require(button.contextMenuInteraction).dismissMenu()
-        try await eventually { controller.presentedViewController is JPEGExportController }
-        let dialog = try await shown(over: controller)
-        try #require(dialog is JPEGExportController)
-        try await dismissExport(dialog)
+        let isExports: (UIViewController?) -> Bool = { export == "Export JPEG" ? $0 is JPEGExportController : $0 is UIActivityViewController }
+        try await eventually { isExports(controller.presentedViewController) }
+        let shown = try await shown(over: controller)
+        try #require(isExports(shown), "\(shown)")
+        #expect(try exportCard(in: controller).isHidden)
+        try await dismissExport(shown)
         try await eventually { controller.presentedViewController == nil }
-        #expect(!tab.session.isProjectBusy)
+        try #require(!tab.session.isProjectBusy)
         await cleanUp(controller)
     }
 
-    /// The window going while Export JPEG's dialog waits for a menu lets the project go, as the dialog's Cancel would,
-    /// so every project is saved and closed, the card gone; the dialog doesn't come up once the menu goes.
-    @Test func theWindowGoingWhileTheJPEGDialogWaitsClosesEveryProject() async throws {
+    /// The window going while what an export shows, its dialog or its share sheet, waits for a menu lets the project go,
+    /// as a dialog's Cancel would, so every project is saved and closed, the card gone; nothing comes up once the menu
+    /// goes.
+    @Test(arguments: ["Export JPEG", "Export PNG"])
+    func theWindowGoingWhileWhatAnExportShowsWaitsClosesEveryProject(_ export: String) async throws {
         let (window, controller, tab) = try await shownWindow()
         defer { window.isHidden = true }
         try await tab.createDocument(named: "PadExportTests \(UUID().uuidString)")
@@ -403,7 +412,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         defer { try? FileManager.default.removeItem(at: url) }
         tab.session.addBlankLayer()
         let layers = try #require(tab.session.document?.layers.count)
-        try start("Export JPEG", in: controller)
+        try start(export, in: controller)
         let button = try layersButton("New adjustment layer", in: controller)
         button.performPrimaryAction()
         let menu = try await shown(over: controller)
@@ -681,7 +690,8 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
     /// sheet gone, shared or put away. Once a share sheet has been over the dialog, UIKit gives the keyboard back to
     /// nothing as the dialog goes, with the sheet or after it, so those cases fail unless the window asks for it back.
     /// UIKit does so too once a tap on Save Image or Copy has taken the keyboard into the sheet, which runs in another
-    /// process: that's checked on the device, and the PNG cases here check only that the canvas has the keyboard.
+    /// process: that's checked on the device. Here UIKit gives the canvas the keyboard back itself as Export PNG's
+    /// sheet goes, so the PNG cases check too that the window asks for it back once the sheet has gone.
     @Test(arguments: ["Export JPEG shared", "Export JPEG put away, then cancelled", "Export JPEG cancelled", "Export PNG shared",
                       "Export PNG put away"])
     func theCanvasHasTheKeyboardOnceAnExportEnds(_ ending: String) async throws {
@@ -704,9 +714,11 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
                 try button("Cancel", in: dialog).sendActions(for: .primaryActionTriggered)
             }
         } else {
+            let focusRequests = tab.session.canvasFocusRequest
             try start("Export PNG", in: controller)
             let share = try #require(try await shown(over: controller) as? UIActivityViewController)
             try await finish(share, completed: ending == "Export PNG shared")
+            #expect(tab.session.canvasFocusRequest > focusRequests, "The window asks for the keyboard back")
         }
         try await eventually { controller.presentedViewController == nil && tab.canvas.isFirstResponder }
         #expect(controller.presentedViewController == nil)

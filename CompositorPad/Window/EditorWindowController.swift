@@ -1030,16 +1030,47 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         session.isProjectBusy = true
         exporting = (tab, progress)
         setNeedsUpdateProperties()
-        makingExport = Task {
-            defer {
-                session.isProjectBusy = false
-                endExport(progress)
-            }
+        makingExport = Task { [weak self] in
             do {
                 let data = try await ImageExporter.shared.pngData(snapshot, progress: { progress.said($0) })
+                guard let self else {
+                    session.isProjectBusy = false
+                    return
+                }
                 progress.opening()
-                try share(data, named: name + ".png")
-            } catch { showError("Couldn’t export the image", error) }
+                // Something else may have come up meanwhile, as a menu, which the share sheet waits for, as UIKit
+                // wouldn't show it over that; or the tab may have closed, as its window went.
+                showExportWhenClear { [weak self] in
+                    guard let self else { return }
+                    guard isStillOpen(tab) else {
+                        session.isProjectBusy = false
+                        endExport(progress)
+                        return
+                    }
+                    do {
+                        // Once it has gone, the canvas has the keyboard again, which UIKit gives back to nothing once
+                        // the sheet has taken it, as a tap on Save Image does.
+                        let share = try shareSheet(for: data, named: name + ".png") { _ in session.canvasFocusRequest += 1 }
+                        share.popoverPresentationController?.sourceView = tabStrip
+                        share.popoverPresentationController?.sourceRect = tabStrip.bounds
+                        // The project is free, and the card goes, once the share sheet is up.
+                        let presenting = Timing.begin("Share sheet")
+                        present(share, animated: true) { [weak self] in
+                            Timing.end(presenting)
+                            session.isProjectBusy = false
+                            self?.endExport(progress)
+                        }
+                    } catch {
+                        session.isProjectBusy = false
+                        endExport(progress)
+                        showError("Couldn’t export the image", error)
+                    }
+                }
+            } catch {
+                session.isProjectBusy = false
+                self?.endExport(progress)
+                self?.showError("Couldn’t export the image", error)
+            }
         }
     }
 
@@ -1115,8 +1146,8 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         tabs.contains { $0 === tab } && !closing.contains(tab.id) && !tab.isClosed
     }
 
-    /// What the export under way shows once its image is made, its dialog, while it waits for anything else that came
-    /// up over the window meanwhile to go, as a menu. The export holds the window on its tab until then.
+    /// What the export under way shows once its image is made, its dialog or its share sheet, while it waits for anything
+    /// else that came up over the window meanwhile to go, as a menu. The export holds the window on its tab until then.
     private var exportShows: (() -> Void)?
 
     /// Shows what the export under way made, `show` or what waits already, once nothing else is over the window but an
@@ -1129,7 +1160,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
 
     /// The export on its way, and how far it has come, for the card over its tab's canvas: while the image its dialog
-    /// previews or its share sheet offers is made, and until its dialog is up.
+    /// previews or its share sheet offers is made, and until the dialog or the share sheet is up.
     private var exporting: (tab: EditorTab, progress: ExportProgress)?
 
     /// The export `progress` is of is over: what it shows is up, or it failed or stopped. Its card goes.
@@ -1154,15 +1185,6 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     }
     /// The file the share sheet offered last. Tests read it.
     private(set) var offeredFile: URL?
-
-    /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
-    private func share(_ data: Data, named name: String) throws {
-        let share = try shareSheet(for: data, named: name)
-        share.popoverPresentationController?.sourceView = tabStrip
-        share.popoverPresentationController?.sourceRect = tabStrip.bounds
-        let presenting = Timing.begin("Share sheet")
-        present(share, animated: true) { Timing.end(presenting) }
-    }
 
     @objc func closeTab(_ sender: Any?) { if let id = activeID { close(id) } }
     @objc func fitCanvas(_ sender: Any?) { activeTab?.session.fit() }
@@ -1839,7 +1861,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// for to finish.
     func closeAll() {
         cancelDialog()
-        // So does an export whose dialog waits to come up.
+        // So does an export whose dialog or share sheet waits to come up.
         if exportShows != nil, let export = exporting {
             exportShows = nil
             export.tab.session.isProjectBusy = false
