@@ -31,7 +31,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         return (Int(pixel[0]), Int(pixel[1]), Int(pixel[2]))
     }
 
-    /// The dialog starts at the quality last exported, in hundredths as the Mac's slider steps; Export hands over the JPEG
+    /// The dialog starts at the quality last exported, in hundredths as the Mac's slider steps; Export offers the JPEG
     /// encoded at the quality chosen, which the next export starts from.
     @Test func theDialogStartsAtTheQualityLastExported() async throws {
         let defaults = UserDefaults.standard
@@ -39,7 +39,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         defer { defaults.set(saved, forKey: JPEGExportController.qualityKey) }
         defaults.set(0.6, forKey: JPEGExportController.qualityKey)
         var exported: Data?
-        let dialog = JPEGExportController(raster: try raster()) { exported = $0 }
+        let dialog = JPEGExportController(raster: try raster(), share: { exported = $0; return nil }, cancelled: {})
         dialog.loadViewIfNeeded()
         #expect(dialog.options.quality == 0.6)
 
@@ -52,10 +52,10 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         #expect(defaults.double(forKey: JPEGExportController.qualityKey) == 0.73)
     }
 
-    /// Nothing is exported before the preview is up to date with the settings, and Cancel hands over nothing.
+    /// Nothing is exported before the preview is up to date with the settings, and Cancel offers nothing.
     @Test func exportWaitsForThePreview() async throws {
         var finished: [Data?] = []
-        let dialog = JPEGExportController(raster: try raster()) { finished.append($0) }
+        let dialog = JPEGExportController(raster: try raster(), share: { finished.append($0); return nil }, cancelled: { finished.append(nil) })
         dialog.loadViewIfNeeded()
         dialog.export()
         #expect(finished.isEmpty)
@@ -66,7 +66,7 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
 
     /// The image's transparent areas take the color chosen for them.
     @Test func transparentAreasTakeTheColorChosen() async throws {
-        let dialog = JPEGExportController(raster: try raster()) { _ in }
+        let dialog = JPEGExportController(raster: try raster(), share: { _ in nil }, cancelled: {})
         dialog.loadViewIfNeeded()
         dialog.chooseMatte(UIColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
         await dialog.encoding?.value
@@ -143,12 +143,15 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         try #require(views(UIButton.self, in: controller.view).first { $0.configuration?.title == title }, "\(title)")
     }
 
-    /// Puts the share sheet away as UIKit does once a tap off it puts it away, or once what's chosen in it is done: it
-    /// goes, then says so, with whether the file was shared.
+    /// Puts the share sheet away as UIKit does once a tap off it puts it away, or once what's chosen in it is done, as
+    /// Save Image: the sheet goes, and UIKit tells its handler as it goes, with whether the file was shared.
     private func finish(_ share: UIActivityViewController, completed: Bool) async throws {
+        if completed {
+            let handler = share.completionWithItemsHandler
+            share.completionWithItemsHandler = { _, _, items, error in handler?(.saveToCameraRoll, true, items, error) }
+        }
         share.presentingViewController?.dismiss(animated: true)
-        try await eventually { share.presentingViewController == nil }
-        share.completionWithItemsHandler?(completed ? .saveToCameraRoll : nil, completed, nil, nil)
+        try await eventually { share.presentingViewController == nil && !share.isBeingDismissed }
     }
 
     /// Ends what an export shows: the share sheet put away, or the dialog's Cancel.
@@ -584,10 +587,133 @@ private let presenters = ["Foreground color", "Background color", "Mask color", 
         let options = JPEGOptions(quality: 0.4, red: 0, green: 0, blue: 1)
         let encoded = try await ImageExporter.shared.jpeg(raster, options: options)
         var exported: Data?
-        let dialog = JPEGExportController(raster: raster, encoded: (encoded, options)) { exported = $0 }
+        let dialog = JPEGExportController(raster: raster, encoded: (encoded, options), share: { exported = $0; return nil }, cancelled: {})
         dialog.loadViewIfNeeded()
         #expect(dialog.encoding == nil && dialog.options == options)
         dialog.export()
         #expect(exported == encoded.data)
+    }
+
+    // MARK: Export JPEG's share sheet
+
+    /// The dialog's commands that a share sheet over it takes away: Return and Escape, and the View menu's zooms.
+    private func keysAndZooms(of dialog: JPEGExportController) -> [(Selector, Any?)] {
+        let keys = (dialog.keyCommands ?? []).compactMap { command in command.action.map { ($0, command as Any?) } }
+        let zooms = [#selector(JPEGExportController.zoomIn(_:)), #selector(JPEGExportController.zoomOut(_:)),
+                     #selector(JPEGExportController.fitCanvas(_:)), #selector(JPEGExportController.actualPixels(_:))]
+        return keys + zooms.map { ($0, nil) }
+    }
+
+    /// The share sheet over the dialog, once it's up.
+    private func shareSheet(over dialog: UIViewController) async throws -> UIActivityViewController {
+        try await eventually { dialog.presentedViewController.map { !$0.isBeingPresented } == true }
+        return try #require(dialog.presentedViewController as? UIActivityViewController)
+    }
+
+    /// Export… offers the JPEG at once in a share sheet over the dialog, from its Export… button, the project still held;
+    /// while it's up, Return, Escape, Export… and the zoom commands aren't the dialog's. Once the JPEG is shared, the sheet
+    /// and the dialog go together, letting the project go.
+    @Test func sharingTheJPEGEndsTheExport() async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        try start("Export JPEG", in: controller)
+        let dialog = try #require(try await shown(over: controller) as? JPEGExportController)
+        let exportButton = try button("Export…", in: dialog)
+        for (action, sender) in keysAndZooms(of: dialog) { #expect(dialog.canPerformAction(action, withSender: sender), "\(action)") }
+
+        exportButton.sendActions(for: .primaryActionTriggered)
+        let share = try await shareSheet(over: dialog)
+        #expect(controller.presentedViewController === dialog && tab.session.isProjectBusy)
+        #expect(share.popoverPresentationController?.sourceView === exportButton)
+        let file = try #require(controller.offeredFile)
+        #expect(try Data(contentsOf: file) == dialog.result?.data && file.pathExtension == "jpg")
+        for (action, sender) in keysAndZooms(of: dialog) { #expect(!dialog.canPerformAction(action, withSender: sender), "\(action)") }
+        let written = try FileManager.default.attributesOfItem(atPath: file.path(percentEncoded: false))[.systemFileNumber] as? Int
+        exportButton.sendActions(for: .primaryActionTriggered)
+        #expect(dialog.presentedViewController === share && controller.offeredFile == file)
+        #expect(try FileManager.default.attributesOfItem(atPath: file.path(percentEncoded: false))[.systemFileNumber] as? Int == written)
+
+        try await finish(share, completed: true)
+        try await eventually { controller.presentedViewController == nil }
+        #expect(controller.presentedViewController == nil)
+        // Required, as a project left held would hold up closing its tab.
+        try #require(!tab.session.isProjectBusy)
+        await cleanUp(controller)
+    }
+
+    /// A share sheet put away with nothing shared, as by a tap off it, leaves the dialog as it was, the project held and
+    /// its keys and zooms its own again; Export… then offers the JPEG as it's set by then, and Cancel ends the export.
+    @Test func puttingTheShareSheetAwayReturnsToTheDialog() async throws {
+        let (window, controller, tab) = try await shownWindow()
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: JPEGExportController.qualityKey)
+        defer {
+            window.isHidden = true
+            defaults.set(saved, forKey: JPEGExportController.qualityKey)
+        }
+        try start("Export JPEG", in: controller)
+        let dialog = try #require(try await shown(over: controller) as? JPEGExportController)
+        let exportButton = try button("Export…", in: dialog)
+        exportButton.sendActions(for: .primaryActionTriggered)
+        try await finish(try await shareSheet(over: dialog), completed: false)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(controller.presentedViewController === dialog && dialog.presentedViewController == nil && tab.session.isProjectBusy)
+        for (action, sender) in keysAndZooms(of: dialog) { #expect(dialog.canPerformAction(action, withSender: sender), "\(action)") }
+
+        dialog.chooseQuality(0.3)
+        await dialog.encoding?.value
+        exportButton.sendActions(for: .primaryActionTriggered)
+        let again = try await shareSheet(over: dialog)
+        #expect(try Data(contentsOf: try #require(controller.offeredFile)) == dialog.result?.data)
+        try await finish(again, completed: false)
+        try button("Cancel", in: dialog).sendActions(for: .primaryActionTriggered)
+        try await eventually { controller.presentedViewController == nil }
+        #expect(controller.presentedViewController == nil)
+        try #require(!tab.session.isProjectBusy)
+        await cleanUp(controller)
+    }
+
+    // MARK: The keyboard once an export ends
+
+    /// Once an export ends, however it ends, the canvas has the keyboard again, as before the export, and the menu
+    /// bar's commands reach the window without a tap on the canvas first: Export JPEG's dialog gone with its share
+    /// sheet, once the JPEG is shared, or by its Cancel, a share sheet put away over it or not, and Export PNG's share
+    /// sheet gone, shared or put away. Once a share sheet has been over the dialog, UIKit gives the keyboard back to
+    /// nothing as the dialog goes, with the sheet or after it, so those cases fail unless the window asks for it back.
+    /// UIKit does so too once a tap on Save Image or Copy has taken the keyboard into the sheet, which runs in another
+    /// process: that's checked on the device, and the PNG cases here check only that the canvas has the keyboard.
+    @Test(arguments: ["Export JPEG shared", "Export JPEG put away, then cancelled", "Export JPEG cancelled", "Export PNG shared",
+                      "Export PNG put away"])
+    func theCanvasHasTheKeyboardOnceAnExportEnds(_ ending: String) async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        try await eventually { tab.canvas.isFirstResponder }
+        try #require(tab.canvas.isFirstResponder)
+
+        if ending.hasPrefix("Export JPEG") {
+            try start("Export JPEG", in: controller)
+            let dialog = try #require(try await shown(over: controller) as? JPEGExportController)
+            if ending != "Export JPEG cancelled" {
+                try button("Export…", in: dialog).sendActions(for: .primaryActionTriggered)
+                let share = try await shareSheet(over: dialog)
+                try await finish(share, completed: ending == "Export JPEG shared")
+            }
+            if ending != "Export JPEG shared" {
+                try await eventually { dialog.isFirstResponder }
+                try #require(dialog.isFirstResponder)
+                try button("Cancel", in: dialog).sendActions(for: .primaryActionTriggered)
+            }
+        } else {
+            try start("Export PNG", in: controller)
+            let share = try #require(try await shown(over: controller) as? UIActivityViewController)
+            try await finish(share, completed: ending == "Export PNG shared")
+        }
+        try await eventually { controller.presentedViewController == nil && tab.canvas.isFirstResponder }
+        #expect(controller.presentedViewController == nil)
+        #expect(tab.canvas.isFirstResponder)
+        let zoom = tab.session.viewport.zoom
+        #expect(UIApplication.shared.sendAction(#selector(EditorWindowController.zoomIn(_:)), to: nil, from: nil, for: nil))
+        #expect(tab.session.viewport.zoom > zoom)
+        await cleanUp(controller)
     }
 }

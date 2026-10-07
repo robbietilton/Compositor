@@ -245,7 +245,8 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
     }
 
     /// Ends `shown` with its OK, or its Cancel, as a finger or the keyboard does. Export JPEG's OK offers the JPEG in a
-    /// share sheet, which is put away too, once it's checked that the window is still on `front` under it.
+    /// share sheet over the dialog; once it's checked that the window is still on `front` under it, the JPEG is shared,
+    /// which takes the dialog away with the sheet.
     private func end(_ dialog: String, _ shown: Shown, ok: Bool, picks: Picks, front: EditorTab,
                      in controller: EditorWindowController) async throws {
         switch dialog {
@@ -271,10 +272,13 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
             }
             await export.encoding?.value
             try button("Export…", in: export).sendActions(for: .primaryActionTriggered)
-            try await eventually { (controller.presentedViewController as? UIActivityViewController)?.isBeingPresented == false }
-            let share = try #require(controller.presentedViewController as? UIActivityViewController)
+            try await eventually { (export.presentedViewController as? UIActivityViewController)?.isBeingPresented == false }
+            let share = try #require(export.presentedViewController as? UIActivityViewController)
             #expect(controller.activeTab === front, "The share sheet is over the tab it exports")
-            share.dismiss(animated: true)
+            // As UIKit does once the file is shared: the sheet goes, saying so as it goes.
+            let handler = share.completionWithItemsHandler
+            share.completionWithItemsHandler = { _, _, items, error in handler?(.saveToCameraRoll, true, items, error) }
+            export.dismiss(animated: true)
         case "Contract Selection", "Rename", "Rename Layer":
             let alert = try #require(shown.alert)
             if ok {

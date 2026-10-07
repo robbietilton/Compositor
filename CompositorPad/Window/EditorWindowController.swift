@@ -1075,13 +1075,25 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                         return
                     }
                     dialogSession = session
+                    // Once the dialog has gone, however it goes, the canvas has the keyboard again, which UIKit gives
+                    // back to nothing once a share sheet has been over the dialog.
                     let dialog = JPEGExportController(raster: raster, encoded: (encoded, options)) { [weak self] data in
-                        session.isProjectBusy = false
-                        self?.dismiss(animated: true) {
-                            guard let self, let data else { return }
-                            do { try self.share(data, named: name + ".jpg") }
-                            catch { self.showError("Couldn’t export JPEG", error) }
+                        // Export…: the file, offered over the dialog. Shared, the dialog goes with the share sheet, as the
+                        // Mac's goes once the file is saved; put away, the sheet leaves the dialog, to export again.
+                        guard let self else { return nil }
+                        do {
+                            return try shareSheet(for: data, named: name + ".jpg") { [weak self] shared in
+                                guard shared else { return }
+                                session.isProjectBusy = false
+                                self?.dismiss(animated: true) { session.canvasFocusRequest += 1 }
+                            }
+                        } catch {
+                            showError("Couldn’t export JPEG", error)
+                            return nil
                         }
+                    } cancelled: { [weak self] in
+                        session.isProjectBusy = false
+                        self?.dismiss(animated: true) { session.canvasFocusRequest += 1 }
                     }
                     // Its dialog holds the window from here; the card goes once it's up.
                     let presenting = Timing.begin("JPEG dialog")
@@ -1130,11 +1142,22 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     /// The export set going last, while it makes its image. Tests wait for it.
     private(set) var makingExport: Task<Void, Never>?
 
-    /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
-    private func share(_ data: Data, named name: String) throws {
+    /// A share sheet offering `data` as a file named `name`, to share, save to Photos or keep in Files. `done` hears
+    /// whether the file was shared, as UIKit says so as the sheet goes, however it goes.
+    private func shareSheet(for data: Data, named name: String, done: @escaping (Bool) -> Void = { _ in }) throws -> UIActivityViewController {
         let url = FileManager.default.temporaryDirectory.appending(path: name)
         try Timing.measure("Write export", Timing.bytes(data.count)) { try data.write(to: url, options: .atomic) }
+        offeredFile = url
         let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        share.completionWithItemsHandler = { _, completed, _, _ in done(completed) }
+        return share
+    }
+    /// The file the share sheet offered last. Tests read it.
+    private(set) var offeredFile: URL?
+
+    /// Offers `data` as a file named `name`, to share, save to Photos or keep in Files.
+    private func share(_ data: Data, named name: String) throws {
+        let share = try shareSheet(for: data, named: name)
         share.popoverPresentationController?.sourceView = tabStrip
         share.popoverPresentationController?.sourceRect = tabStrip.bounds
         let presenting = Timing.begin("Share sheet")

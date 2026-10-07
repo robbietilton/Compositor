@@ -2,7 +2,9 @@ import UIKit
 
 /// The Mac's Export JPEG dialog: the image as it will be encoded, at a quality and over a color for its transparent
 /// areas, to look over up to 800% before exporting. Handed the image `encoded` already, it opens with it and its
-/// settings, ready to export. `finish` gets the encoded file, or nil for Cancel.
+/// settings, ready to export. Export… offers the encoded file in the share sheet `share` makes of it, which the dialog
+/// shows over itself from the button: whoever makes it sees to what sharing the file does, and a sheet put away leaves
+/// the dialog as it was, to export again. `cancelled` hears Cancel.
 final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     /// The quality of the last export, which the next one starts from, as on the Mac.
     static let qualityKey = "jpegExportQuality"
@@ -19,7 +21,8 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     }
 
     let raster: ExportRaster
-    private let finish: (Data?) -> Void
+    private let share: (Data) -> UIViewController?
+    private let cancelled: () -> Void
     private(set) var options: JPEGOptions
     /// The latest encoding, and the settings it was made with.
     private(set) var result: JPEGResult?
@@ -42,9 +45,11 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     private lazy var zoomOutButton = OptionControls.button(symbol: "minus.magnifyingglass", label: "Zoom Out") { [weak self] in self?.zoomOut(nil) }
     private lazy var exportButton = OptionControls.button("Export…", prominent: true) { [weak self] in self?.export() }
 
-    init(raster: ExportRaster, encoded: (result: JPEGResult, options: JPEGOptions)? = nil, finish: @escaping (Data?) -> Void) {
+    init(raster: ExportRaster, encoded: (result: JPEGResult, options: JPEGOptions)? = nil,
+         share: @escaping (Data) -> UIViewController?, cancelled: @escaping () -> Void) {
         self.raster = raster
-        self.finish = finish
+        self.share = share
+        self.cancelled = cancelled
         options = encoded?.options ?? Self.startingOptions
         result = encoded?.result
         readyOptions = encoded?.options
@@ -153,6 +158,14 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
     }
     @objc private func returnKey(_ command: UIKeyCommand) { export() }
     @objc private func escapeKey(_ command: UIKeyCommand) { cancel() }
+    /// While the share sheet is over the dialog, the keys and the zoom commands aren't the dialog's: Return would export
+    /// again under it, and Escape cancel what it shares.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if presentedViewController != nil, Self.keysAndZooms.contains(action) { return false }
+        return super.canPerformAction(action, withSender: sender)
+    }
+    private static let keysAndZooms: Set<Selector> = [#selector(returnKey(_:)), #selector(escapeKey(_:)), #selector(zoomIn(_:)),
+                                                      #selector(zoomOut(_:)), #selector(fitCanvas(_:)), #selector(actualPixels(_:))]
     @objc func zoomIn(_ sender: Any?) { step(1) }
     @objc func zoomOut(_ sender: Any?) { step(-1) }
     @objc func fitCanvas(_ sender: Any?) {
@@ -178,16 +191,21 @@ final class JPEGExportController: UIViewController, UIScrollViewDelegate {
         encode()
     }
 
-    /// Exports what the preview shows, once it's up to date.
+    /// Offers what the preview shows, once it's up to date, in a share sheet over the dialog from its Export… button; not
+    /// while the sheet, or anything else, is over the dialog.
     func export() {
-        guard let result, readyOptions == options, failure == nil else { return }
+        guard let result, readyOptions == options, failure == nil, presentedViewController == nil else { return }
         UserDefaults.standard.set(options.quality, forKey: Self.qualityKey)
-        finish(result.data)
+        guard let sheet = share(result.data) else { return }
+        sheet.popoverPresentationController?.sourceView = exportButton
+        sheet.popoverPresentationController?.sourceRect = exportButton.bounds
+        let presenting = Timing.begin("Share sheet")
+        present(sheet, animated: true) { Timing.end(presenting) }
     }
 
     func cancel() {
         encoding?.cancel()
-        finish(nil)
+        cancelled()
     }
 
     /// Encodes the image with the settings as they are now, a moment after the last change, as the Mac's dialog does.
