@@ -556,6 +556,31 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
         await cleanUp(controller)
     }
 
+    /// A project that can't be opened beside an effect's panel says why, though the panel, which gives way to the tab
+    /// opened for it, is still going as that tab goes again.
+    @Test func aProjectThatCantOpenBesideAnEffectsPanelSaysWhy() async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let effects = try layersButton("Layer effects", in: controller)
+        let stroke = try #require(effects.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == LayerEffectKind.stroke.rawValue + "…" })
+        stroke.performWithSender(nil, target: nil)
+        try await eventually { (controller.presentedViewController as? EffectEditorController)?.isBeingPresented == false }
+        try #require(controller.presentedViewController is EffectEditorController)
+        // A package with no project in it, in a folder of its own.
+        let url = FileManager.default.temporaryDirectory.appending(path: "PadDialogTabsTests \(UUID().uuidString)/Broken.comp")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        defer { remove(url) }
+
+        controller.open([url])
+        try await eventually { (controller.presentedViewController as? UIAlertController)?.isBeingPresented == false }
+        let alert = try #require(controller.presentedViewController as? UIAlertController)
+        #expect(alert.title == "Couldn’t open “Broken”")
+        #expect(controller.tabs.count == 1 && controller.activeTab === tab)
+        #expect(tab.session.effectsEditing == nil && tab.session.document?.layers.contains { $0.effects?.stroke != nil } == true)
+        alert.dismiss(animated: false)
+        await cleanUp(controller)
+    }
+
     /// A menu over the window, as the Layers panel's buttons show, holds it as what else it shows does, though UIKit
     /// doesn't dim the window behind it: a project opened from elsewhere meanwhile opens behind, and once the menu is
     /// put away with nothing chosen, the project comes forward and nothing is left dimmed.
@@ -831,6 +856,45 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
     /// The question a closing tab asks once its save has failed, while the window shows it.
     private func saveQuestion(in controller: EditorWindowController) -> UIAlertController? {
         (controller.presentedViewController as? UIAlertController).flatMap { $0.title == "Couldn’t save the project" ? $0 : nil }
+    }
+
+    /// Beside an effect's panel, which holds nothing, a tab whose save fails as it closes comes forward at once, the
+    /// panel giving way to it as to any other tab, its effect kept, and says why.
+    @Test func aClosingTabsFailedSaveBesideAnEffectsPanelAsks() async throws {
+        let (window, controller, tab) = try await shownWindow()
+        defer { window.isHidden = true }
+        let url = try savedProject()
+        defer { remove(url) }
+        controller.open([url])
+        let closing = try #require(controller.activeTab)
+        try await eventually { closing.document != nil }
+        closing.session.addBlankLayer()
+        try await eventually { closing.document?.hasUnsavedChanges == true }
+        // Every save into its folder fails, as with a full disk.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: url.deletingLastPathComponent().path(percentEncoded: false))
+        try tabStrip(of: controller).strip.onSelect(tab.id)
+        controller.updatePropertiesIfNeeded()
+        try #require(controller.activeTab === tab)
+        let effects = try layersButton("Layer effects", in: controller)
+        let stroke = try #require(effects.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == LayerEffectKind.stroke.rawValue + "…" })
+        stroke.performWithSender(nil, target: nil)
+        try await eventually { (controller.presentedViewController as? EffectEditorController)?.isBeingPresented == false }
+        try #require(controller.presentedViewController is EffectEditorController)
+
+        // As its close button does, there beside the panel.
+        let close = try #require(tabStrip(of: controller).closes.first { $0.accessibilityLabel == "Close \(closing.title)" })
+        try #require(close.isEnabled)
+        close.sendActions(for: .primaryActionTriggered)
+        try await eventually { saveQuestion(in: controller)?.isBeingPresented == false }
+        let alert = try #require(saveQuestion(in: controller))
+        #expect(alert.actions.map(\.title) == ["Don’t Save", "Cancel"])
+        #expect(controller.activeTab === closing && controller.tabs.contains { $0 === closing })
+        #expect(tab.session.effectsEditing == nil && tab.session.document?.layers.contains { $0.effects?.stroke != nil } == true)
+        alert.dismiss(animated: false)
+        try await eventually { controller.presentedViewController == nil }
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.deletingLastPathComponent().path(percentEncoded: false))
+        controller.closeWithoutSaving(closing.id)
+        await cleanUp(controller)
     }
 
     /// Tabs whose saves failed as they closed, while something was over another tab, ask one at a time once it's done,

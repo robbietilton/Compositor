@@ -608,7 +608,9 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Don’t Save", style: .destructive) { [weak self] _ in self?.closeWithoutSaving(tab.id) })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        (presentedViewController ?? self).present(alert, animated: true)
+        // From the window itself, which nothing holds now: an effect's panel, all it may still show, gives way to the
+        // question, as it may be doing already for the tab that came forward.
+        present(alert, animated: true)
     }
 
     /// Closes the tab, letting go of what its project hasn't saved: Don't Save, once a save has failed as it closed.
@@ -1789,11 +1791,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private func showError(_ title: String, _ error: any Error) { showMessage(title, error.localizedDescription) }
 
     /// Says `message` over whatever the window shows, or, `overWhatsShown` false, from the window itself, so an
-    /// effect's panel gives way to it as to anything else.
+    /// effect's panel gives way to it as to anything else; from the window itself too over what's going, as an
+    /// effect's panel making way for another tab, which it couldn't come up over.
     private func showMessage(_ title: String, _ message: String, overWhatsShown: Bool = true) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
-        (overWhatsShown ? presentedViewController ?? self : self).present(alert, animated: true)
+        let shown = overWhatsShown ? presentedViewController.flatMap { $0.isBeingDismissed ? nil : $0 } : nil
+        (shown ?? self).present(alert, animated: true)
     }
 
     /// A one-point line between regions, as the Mac's dividers are.
