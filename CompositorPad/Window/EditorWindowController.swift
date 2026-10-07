@@ -10,7 +10,9 @@ import UniformTypeIdentifiers
 /// is the Mac's toolbar here.
 final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate,
                                     UIDropInteractionDelegate {
-    static let restorationActivityType = "com.wonderassembly.compositor.ipad.window"
+    /// The activity a window's tabs are kept in for iPadOS to bring back, which the Info.plist lists: both named for the
+    /// app's bundle identifier, so the two can't drift apart, and a build of your own under another has its own.
+    static let restorationActivityType = (Bundle.main.bundleIdentifier ?? "Compositor") + ".window"
     /// Every window's controller, so a project already open in one is brought forward rather than opened twice.
     private static let controllers = NSHashTable<EditorWindowController>.weakObjects()
 

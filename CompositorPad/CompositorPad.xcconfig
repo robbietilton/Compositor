@@ -11,6 +11,8 @@ SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
 SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
 
 PRODUCT_NAME = $(TARGET_NAME)
+// A build of your own, for your own device or TestFlight, sets its bundle identifier, build number and display name,
+// with DEVELOPMENT_TEAM, in the local file included at the end rather than here.
 PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.ipad
 MARKETING_VERSION = 0.1
 CURRENT_PROJECT_VERSION = 1
@@ -19,6 +21,7 @@ DEVELOPMENT_TEAM =
 
 INFOPLIST_FILE = Config/CompositorPad-Info.plist
 GENERATE_INFOPLIST_FILE = YES
+// Set in the local file too, by a build of your own.
 INFOPLIST_KEY_CFBundleDisplayName = Compositor
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.graphics-design
 // Why the share sheet's Save Image adds an export to the photo library, which iPadOS asks the first time. Without it,
@@ -27,6 +30,9 @@ INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = Compositor saves the images yo
 INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+// The app sends nothing anywhere and encrypts nothing (a project's fingerprint is a SHA-256 hash, which is exempt), so
+// App Store Connect needn't ask about export compliance on every upload.
+INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO
 LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
 
 // The Mac's icon set, whose iPad entry is the Mac artwork redrawn by scripts/ipad-icon.swift.
@@ -52,6 +58,7 @@ PRODUCT_MODULE_NAME = Compositor
 MAC_ONLY_SOURCES = $(SRCROOT)/Compositor/CompositorApp.swift $(SRCROOT)/Compositor/ContentView.swift $(SRCROOT)/Compositor/UI/* $(SRCROOT)/Compositor/Document/ProjectWorkspace.swift $(SRCROOT)/Compositor/IO/CompositorApplicationDelegate.swift $(SRCROOT)/Compositor/IO/ImageFileDrop.swift $(SRCROOT)/Compositor/IO/ProjectController.swift $(SRCROOT)/Compositor/IO/ProjectController+ExternalChanges.swift $(SRCROOT)/Compositor/IO/RecentProjects.swift $(SRCROOT)/Compositor/Rendering/EditorCanvas.swift $(SRCROOT)/Compositor/Rendering/BrushCursorOverlay.swift $(SRCROOT)/Compositor/Rendering/CanvasLinesOverlay.swift $(SRCROOT)/Compositor/Rendering/InlineTextEditor.swift $(SRCROOT)/Compositor/Rendering/SampleRingOverlay.swift $(SRCROOT)/Compositor/Rendering/TransformOverlay.swift
 EXCLUDED_SOURCE_FILE_NAMES = $(MAC_ONLY_SOURCES) $(SRCROOT)/CompositorPad/CompositorPad.xcconfig
 
-// Settings personal to one machine, such as DEVELOPMENT_TEAM, go in this file, which git ignores, so signing for your own
-// device doesn't touch the project. It's optional: without it the app builds unsigned for the simulator as before.
+// Settings personal to one machine or to a build of your own, such as DEVELOPMENT_TEAM and the bundle identifier, build
+// number and display name above, go in this file, which git ignores, so signing for your own device or TestFlight
+// doesn't touch the project. It's optional: without it the app builds unsigned for the simulator as before.
 #include? "../Config/CompositorPad.local.xcconfig"

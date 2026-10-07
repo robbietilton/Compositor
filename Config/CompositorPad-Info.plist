@@ -41,7 +41,7 @@
 	<true/>
 	<key>NSUserActivityTypes</key>
 	<array>
-		<string>com.wonderassembly.compositor.ipad.window</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).window</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
