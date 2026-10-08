@@ -304,6 +304,18 @@ struct CompositorApp: App {
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
                             .disabled(!(kind == .vignette ? session.canVignette : session.canAdjustColors) || session.hueSaturation != nil)
                     }
+                    Divider()
+                    Menu("Edit in External App") {
+                        ForEach(ExternalEditorApp.available()) { app in
+                            Button("\(app.name)…") { Task { await session.editExternally(in: app) } }
+                        }
+                        Divider()
+                        Button("Other App…") { Task { await session.editExternallyInOtherApp() } }
+                        Divider()
+                        Toggle("Keep Original Layer", isOn: Bindable(ExternalEditSettings.shared).keepsOriginal)
+                        Toggle("Enlarge Canvas to Fit Result", isOn: Bindable(ExternalEditSettings.shared).enlargesCanvas)
+                        Button("Choose Folder for External Edits…") { Task { await session.chooseExternalEditFolder() } }
+                    }.disabled(!session.canEditExternally || session.hueSaturation != nil)
                 }
                 CommandMenu("Layer") {
                     Menu("New Adjustment Layer") {

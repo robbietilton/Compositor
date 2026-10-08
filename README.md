@@ -58,6 +58,7 @@ brew install --cask robbietilton-compositor
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Black & White, Color Balance and Invert
 - Gaussian Blur and Motion Blur that spread past a layer's edges
 - Add Noise, Vignette, Bloom / Glow, Tonal Contrast, Lens Correction and Remove Background
+- Edit in External App: send a layer to Topaz Gigapixel (or any app) to upscale or retouch it; the saved result comes back on its own as a new layer over the original (kept, hidden), with the canvas enlarged so it shows at full size, as one undo step
 - Live previews, limited to the selection when there is one
 - Last Filter (⌃⌘F) runs the last filter again with the same settings
 
