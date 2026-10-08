@@ -46,6 +46,7 @@ brew install --cask robbietilton-compositor
 
 ### Painting and retouching
 - Brush with size, hardness, opacity and smoothing, in Paint or Erase mode (B and E), and Shift for straight lines
+- Dodge and Burn brush modes, lightening or darkening the shadows, midtones or highlights by an exposure
 - Spot Healing Brush (content-aware)
 - Clone Stamp, aligned or not, sampling one layer or all of them
 - Blur tool, on pixels or masks

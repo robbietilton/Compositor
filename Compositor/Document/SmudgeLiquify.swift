@@ -5,6 +5,8 @@ import AppKit
 nonisolated enum BrushToolMode: String, CaseIterable, Sendable {
     case paint = "Paint"
     case erase = "Erase"
+    case dodge = "Dodge"
+    case burn = "Burn"
 }
 
 nonisolated enum BlurToolMode: String, CaseIterable, Sendable {
