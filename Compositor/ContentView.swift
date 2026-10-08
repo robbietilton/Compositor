@@ -218,21 +218,21 @@ struct ContentView: View {
             if closed { levelsPanel.close() }
             else {
                 levelsPanel.onClose = { session.cancelLevels() }
-                levelsPanel.show(title: "Levels", content: LevelsSheet(session: session))
+                levelsPanel.show(title: String(localized: "Levels"), content: LevelsSheet(session: session))
             }
         }
         .onChange(of: session.colorRange == nil) { _, closed in
             if closed { colorRangePanel.close() }
             else {
                 colorRangePanel.onClose = { session.cancelColorRange() }
-                colorRangePanel.show(title: "Color Range", content: ColorRangeSheet(session: session))
+                colorRangePanel.show(title: String(localized: "Color Range"), content: ColorRangeSheet(session: session))
             }
         }
         .onChange(of: session.hueSaturation == nil) { _, closed in
             if closed { adjustmentPanel.close() }
             else {
                 adjustmentPanel.onClose = { session.cancelHueSaturation() }
-                adjustmentPanel.show(title: "Hue/Saturation", content: HueSaturationSheet(session: session))
+                adjustmentPanel.show(title: String(localized: "Hue/Saturation"), content: HueSaturationSheet(session: session))
             }
         }
         .onChange(of: session.effectsEditing) { _, selection in

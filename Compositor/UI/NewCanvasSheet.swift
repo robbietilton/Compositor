@@ -207,7 +207,7 @@ struct NewCanvasSheet: View {
                 TextField(title, text: text).textFieldStyle(.plain)
                     .focused($focusedField, equals: field)
                     .accessibilityIdentifier(title.lowercased() + "Input")
-                Text(unit.rawValue).foregroundStyle(.secondary)
+                Text(LocalizedStringKey(unit.rawValue)).foregroundStyle(.secondary)
             }
             .padding(12).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
         }

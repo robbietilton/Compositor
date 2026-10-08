@@ -56,15 +56,15 @@ struct GridSettingsSheet: View {
             HStack {
                 Text("Color").frame(width: 110, alignment: .leading)
                 Picker("Color", selection: $appearance.preset) {
-                    ForEach(GridAppearance.Preset.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(GridAppearance.Preset.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                 }.labelsHidden()
-                DialogColorSwatch(title: "Grid Color", color: swatchColor, session: session)
+                DialogColorSwatch(title: String(localized: "Grid Color"), color: swatchColor, session: session)
                     .help("Choose a custom grid color")
             }
             HStack {
                 Text("Style").frame(width: 110, alignment: .leading)
                 Picker("Style", selection: $appearance.style) {
-                    ForEach(GridAppearance.Style.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(GridAppearance.Style.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                 }.labelsHidden()
             }
             HStack {

@@ -89,6 +89,10 @@ brew install --cask robbietilton-compositor
 
 Open `Compositor.xcodeproj` and run the **Compositor** scheme.
 
+## Localization
+
+User-facing strings are localized through a String Catalog at `Compositor/Localizable.xcstrings`. Chinese (Simplified) is included; add another language by adding its localization in Xcode's String Catalog editor or by extending the catalog by hand. Dynamic strings (enum display names, menu items, tool names) are routed through `NSLocalizedString`, `LocalizedStringKey`, or `String(localized:)` so the catalog can translate them.
+
 ## Releasing
 
 `scripts/release.sh` builds a Release version, signs it with Developer ID, notarizes and staples it, and packages it into `dist/Compositor-<version>.dmg`.

@@ -72,7 +72,7 @@ struct CanvasSizeSheet: View {
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
             Picker("Units", selection: $draft.unit) {
-                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CanvasUnit.allCases, id: \.self) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             HStack {
                 Text("Width").frame(width: 60, alignment: .leading)
@@ -123,12 +123,12 @@ struct CanvasSizeSheet: View {
                 }.padding(.top, 28)
             }
             Picker("Canvas extension", selection: $extensionChoice) {
-                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text($0) }
+                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text(LocalizedStringKey($0)) }
             }
             if extensionChoice == "Custom" {
                 HStack(spacing: 8) {
                     Text("Extension color")
-                    DialogColorSwatch(title: "Extension Color", color: $customColor, session: session)
+                    DialogColorSwatch(title: String(localized: "Extension Color"), color: $customColor, session: session)
                         .help("Color for the added canvas")
                 }
             }

@@ -163,7 +163,7 @@ struct EffectsSheet: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .help(kind.rawValue + " color")
+        .help(NSLocalizedString(kind.rawValue, comment: "") + " " + NSLocalizedString("color", comment: ""))
         .accessibilityLabel(kind.rawValue + " color")
     }
 

@@ -63,8 +63,8 @@ struct TypeControls: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 4))
                             }
                             .buttonStyle(.plain)
-                            .help("Align " + alignment.rawValue.lowercased())
-                            .accessibilityLabel("Align " + alignment.rawValue.lowercased())
+                            .help(NSLocalizedString("Align ", comment: "") + NSLocalizedString(alignment.rawValue, comment: ""))
+                            .accessibilityLabel(NSLocalizedString("Align ", comment: "") + NSLocalizedString(alignment.rawValue, comment: ""))
                             .accessibilityAddTraits(selected ? .isSelected : [])
                         }
                     }

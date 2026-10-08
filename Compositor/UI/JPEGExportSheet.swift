@@ -65,7 +65,7 @@ struct JPEGExportSheet: View {
             }
             HStack(spacing: 8) {
                 Text("Background for transparency")
-                DialogColorSwatch(title: "JPEG Background", color: matte, session: session)
+                DialogColorSwatch(title: String(localized: "JPEG Background"), color: matte, session: session)
                     .help("Color that fills transparent areas")
             }
             HStack(spacing: 12) {
