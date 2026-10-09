@@ -9,13 +9,13 @@ struct GradientControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     Picker("Shape", selection: $session.gradientSettings.shape) {
-                        ForEach(GradientShape.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(GradientShape.allCases, id: \.self) { Text(localized($0.rawValue)).tag($0) }
                     }
                     .pickerStyle(.segmented).labelsHidden().fixedSize()
-                    .help("Linear runs along the line; Radial spreads out from the start point")
+                    .help(localized("Linear runs along the line; Radial spreads out from the start point"))
                     swatch
                     Picker("Colors", selection: $session.gradientSettings.style) {
-                        ForEach(GradientStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(GradientStyle.allCases, id: \.self) { Text(localized($0.rawValue)).tag($0) }
                     }
                     .labelsHidden().fixedSize()
                     Toggle("Reverse", isOn: $session.gradientSettings.reversed)
@@ -27,7 +27,7 @@ struct GradientControls: View {
                     .frame(width: 42).textFieldStyle(.roundedBorder)
                     .arrowSteps(value: { Double(session.gradientSettings.opacity * 100) },
                                 change: { session.gradientSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
-                    .help("Press 1–9 for 10–90%, 0 for 100%")
+                    .help(localized("Press 1–9 for 10–90%, 0 for 100%"))
                     .unitSuffix("%")
                 }
             }

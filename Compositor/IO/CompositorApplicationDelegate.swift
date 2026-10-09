@@ -9,6 +9,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     /// Checks the update feed and installs new versions (Sparkle). Started only after launch: its first-run prompt,
     /// shown during launch, kept the editor window from ever opening.
     let updater = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+    private var menuTitleObserver: CFRunLoopObserver?
 
     // Finder Open With and Dock drops, including files delivered during launch.
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -72,8 +73,21 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         // added, before the menu is drawn.
         NotificationCenter.default.addObserver(forName: NSMenu.didAddItemNotification, object: nil, queue: nil) { note in
             guard let menu = note.object as? NSMenu, let index = note.userInfo?["NSMenuItemIndex"] as? Int else { return }
-            MainActor.assumeIsolated { Self.removeIfSystemExtra(at: index, in: menu) }
+            MainActor.assumeIsolated {
+                Self.removeIfSystemExtra(at: index, in: menu)
+                Self.normalizeViewMenuTitle()
+            }
         }
+        NotificationCenter.default.addObserver(forName: NSMenu.didChangeItemNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated { Self.normalizeViewMenuTitle() }
+        }
+        // SwiftUI may restore its system menu title after the item notifications, including in file panels.
+        // Normalize once the main run loop finishes that update; only a changed title is written.
+        menuTitleObserver = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault,
+            CFRunLoopActivity.beforeWaiting.rawValue, true, 0) { _, _ in
+                MainActor.assumeIsolated { Self.normalizeViewMenuTitle() }
+            }
+        if let menuTitleObserver { CFRunLoopAddObserver(CFRunLoopGetMain(), menuTitleObserver, .commonModes) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [updater] in updater.startUpdater() }
     }
 
@@ -144,6 +158,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     /// Takes macOS's extras (text-typing items and Enter Full Screen) out of the menu bar's menus, found by what they do rather than their titles, so
     /// it holds in any language, then tidies the separators they leave behind.
     @MainActor static func removeSystemExtras() {
+        normalizeViewMenuTitle()
         for top in NSApp.mainMenu?.items ?? [] {
             guard let menu = top.submenu else { continue }
             let extras = menu.items.filter(isSystemExtra)
@@ -153,7 +168,22 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// One item just added to a menu bar menu: taken out again if it's one of macOS's extras.
+    private static var normalizingMenuTitle = false
+    /// SwiftUI also refreshes menu titles when editor state changes, without opening a menu.
+    @MainActor private static func normalizeViewMenuTitle() {
+        guard !normalizingMenuTitle else { return }
+        normalizingMenuTitle = true
+        defer { normalizingMenuTitle = false }
+        for top in NSApp.mainMenu?.items ?? [] {
+            guard let menu = top.submenu,
+                  menu.items.contains(where: { $0.title == localized("Search Commands…") }) else { continue }
+            let title = localized("View")
+            if top.title != title { top.title = title }
+            if menu.title != title { menu.title = title }
+        }
+    }
+
+    /// One item just added to a menu bar menu: taken out again if it's one of the text extras.
     @MainActor private static func removeIfSystemExtra(at index: Int, in menu: NSMenu) {
         guard menu.supermenu === NSApp.mainMenu, menu.items.indices.contains(index), isSystemExtra(menu.items[index]) else { return }
         menu.removeItem(at: index)

@@ -43,6 +43,9 @@ jobs:
           -derivedDataPath DerivedData
           CODE_SIGN_IDENTITY=-
 
+      - name: Check Simplified Chinese resources and extracted strings
+        run: python3 scripts/check-localization.py --derived-data DerivedData
+
       # These two suites show real windows and time them, so they run alone after the rest.
       - name: Run unit tests in parallel
         run: >

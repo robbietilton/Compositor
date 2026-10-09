@@ -45,6 +45,8 @@ nonisolated enum DitherColors: String, CaseIterable, Sendable {
     case blackWhite = "Black & White"
     case twoColors = "Two Colors"
     case original = "Original"
+
+    var localizedTitle: String { localized(self == .original ? "Original Colors" : rawValue) }
 }
 
 nonisolated struct DitherSettings: Equatable, Sendable {

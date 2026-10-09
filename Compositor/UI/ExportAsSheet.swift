@@ -119,13 +119,13 @@ struct ExportAsSheet: View {
                 if format != .png {
                     GridRow {
                         Text("Background")
-                        DialogColorSwatch(title: "Export Background", color: matte, session: session)
+                        DialogColorSwatch(title: localized("Export Background"), color: matte, session: session)
                             .help("Color that fills transparent areas")
                     }
                 }
             }
             HStack(spacing: 12) {
-                Text(format == .png ? "Transparency kept · sRGB" : "sRGB")
+                Text(localized(format == .png ? "Transparency kept · sRGB" : "sRGB"))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let error { Text(error).foregroundStyle(.red) }
@@ -200,7 +200,7 @@ struct ExportAsSheet: View {
     private var pageSize: String {
         let dpi = raster.resolution > 0 ? raster.resolution : 72
         let inches = { (pixels: Int) in (Double(pixels) / dpi).formatted(.number.precision(.fractionLength(0...2))) }
-        return "\(inches(width)) × \(inches(height)) in at \(Int(dpi.rounded())) DPI"
+        return String(localized: "\(inches(width)) × \(inches(height)) in at \(Int(dpi.rounded())) DPI")
     }
     private var percent: String { "\(Int((shownZoom * 100).rounded()))%" }
     private func zoomBy(_ direction: Int) {

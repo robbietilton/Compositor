@@ -130,7 +130,7 @@ final class CanvasView: NSView {
     static let hiddenCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
     static let movePixelsCursor: NSCursor = {
         let base = NSCursor.arrow
-        let symbol = NSImage(systemSymbolName: "scissors", accessibilityDescription: "Move pixels")!
+        let symbol = NSImage(systemSymbolName: "scissors", accessibilityDescription: localized("Move pixels"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let image = NSImage(size: NSSize(width: 36, height: 36), flipped: true) { _ in
@@ -406,7 +406,7 @@ final class CanvasView: NSView {
     private var displayedTransformGeometry: TransformOverlayGeometry?
     private var hoverTrackingArea: NSTrackingArea?
     private static let rotationCursor: NSCursor = {
-        let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Rotate")!
+        let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: localized("Rotate"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let image = NSImage(size: NSSize(width: 24, height: 24), flipped: false) { _ in
@@ -426,7 +426,7 @@ final class CanvasView: NSView {
     private static let eyedropperAddCursor = makeEyedropperCursor(badge: "plus")
     private static let eyedropperRemoveCursor = makeEyedropperCursor(badge: "minus")
     private static func makeEyedropperCursor(badge: String?) -> NSCursor {
-        let symbol = NSImage(systemSymbolName: "eyedropper", accessibilityDescription: "Sample color")!
+        let symbol = NSImage(systemSymbolName: "eyedropper", accessibilityDescription: localized("Sample color"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let mark = badge.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
@@ -479,7 +479,7 @@ final class CanvasView: NSView {
     /// The Zoom tool's cursors: a magnifier with a plus, or a minus while Option is held.
     private static func zoomCursor(out: Bool) -> NSCursor {
         let symbol = NSImage(systemSymbolName: out ? "minus.magnifyingglass" : "plus.magnifyingglass",
-                             accessibilityDescription: out ? "Zoom out" : "Zoom in")!
+                             accessibilityDescription: localized(out ? "Zoom out" : "Zoom in"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let image = NSImage(size: NSSize(width: 24, height: 24), flipped: false) { _ in
@@ -663,7 +663,7 @@ final class CanvasView: NSView {
         clipsToBounds = true
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Canvas")
+        setAccessibilityLabel(localized("Canvas"))
         setAccessibilityIdentifier("editorCanvas")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

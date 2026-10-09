@@ -116,7 +116,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         // picker previewing the selected letters) has focus, where AppKit would otherwise paint it solid gray.
         textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.45)]
         textView.textContainer?.replaceLayoutManager(SeeThroughSelectionLayout())
-        textView.setAccessibilityLabel("Canvas text")
+        textView.setAccessibilityLabel(localized("Canvas text"))
         // Both backed by layers from the start. Left to AppKit, the text surface's layer is first placed in the
         // canvas's own layer tree and only moved inside this view a frame later; with a flipped layer, whose
         // mirroring hangs off that placement, the move is visible as a jump.

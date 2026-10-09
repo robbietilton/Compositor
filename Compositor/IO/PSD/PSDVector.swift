@@ -33,7 +33,7 @@ nonisolated enum PSDVector {
         let image = try EditorSession.shapeImage(style.kind, size: box.size, color: style.color, cornerRadius: style.cornerRadius)
         var notes: [String] = []
         if strokeEnabled {
-            notes.append("The Photoshop stroke isn’t supported on shape layers and was omitted.")
+            notes.append(localized("The Photoshop stroke isn’t supported on shape layers and was omitted."))
         }
         notes.append(contentsOf: origin.notes)
         return Live(style: style, bounds: box, image: image, notes: notes)

@@ -5,7 +5,7 @@ nonisolated enum TextAlignment: String, Codable, CaseIterable, Sendable {
 }
 
 nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
-    var content = "Text"
+    var content = localized("Text")
     var fontName = "Helvetica"
     var fontSize: CGFloat = 72
     var red: CGFloat = 0
@@ -333,7 +333,7 @@ extension EditorSession {
         guard canEditLayers, textDraft == nil, rect.width.isFinite, rect.height.isFinite else { return }
         var style = textDefaults
         style.boxSize = CGSize(width: max(16, rect.width.rounded()), height: max(16, rect.height.rounded()))
-        guard style.boxIsValid else { brushError = "That text box exceeds the \(DocumentLimits.maxSide.formatted())-pixel or \(DocumentLimits.maxSurfaceMegapixels)-megapixel limit."; return }
+        guard style.boxIsValid else { brushError = String(localized: "That text box exceeds the \(DocumentLimits.maxSide.formatted())-pixel or \(DocumentLimits.maxSurfaceMegapixels)-megapixel limit."); return }
         beginText(at: rect.origin, newLayer: true)
         // A dragged box is exactly where it was drawn.
         textDraft?.origin = rect.origin
@@ -397,7 +397,7 @@ extension EditorSession {
     /// paragraph never makes the row in the Layers panel taller than one line.
     static func layerName(for content: String) -> String {
         let flattened = content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")
-        return flattened.isEmpty ? "Text" : String(flattened.prefix(40))
+        return flattened.isEmpty ? localized("Text") : String(flattened.prefix(40))
     }
 
     nonisolated static func textAttributes(_ style: LayerTextStyle) -> [NSAttributedString.Key: Any] {

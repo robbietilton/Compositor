@@ -274,7 +274,7 @@ enum ColorPickerTarget: Equatable {
         case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
         case .vignette: return "Color Picker (Vignette Color)"
         case .dither(let light): return light ? "Color Picker (Dither Light Color)" : "Color Picker (Dither Dark Color)"
-        case .dialog(let title): return "Color Picker (\(title))"
+        case .dialog(let title): return String(localized: "Color Picker (\(localized(title)))")
         }
     }
 }

@@ -19,7 +19,7 @@ struct CommandPaletteEntry: Identifiable {
     init(id: String, title: String? = nil, shortcut: String?, isEnabled: Bool, isOn: Bool = false,
          perform: @escaping @MainActor () -> Void) {
         self.id = id
-        self.title = title ?? id
+        self.title = title ?? id.components(separatedBy: " › ").map { localized($0) }.joined(separator: " › ")
         self.shortcut = shortcut
         self.isEnabled = isEnabled
         self.isOn = isOn

@@ -10,10 +10,10 @@ struct ShapeControls: View {
                 session.cancelShape()
                 session.shapeKind = kind
             })) {
-                ForEach(ShapeKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(ShapeKind.allCases, id: \.self) { Text(localized($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
-            .help("Shift-U (or Tab) steps through Rectangle, Ellipse and Line")
+            .help(localized("Shift-U (or Tab) steps through Rectangle, Ellipse and Line"))
             if session.shapeKind == .line {
                 HStack(spacing: 6) {
                     Text("Width").scrubbable(sensitivity: 1, value: $session.shapeLineWidth, range: 1...5000)
@@ -43,7 +43,7 @@ struct ShapeControls: View {
                                     change: { session.shapeCornerRadius = min(5000, max(0, CGFloat($0))) })
                         .unitSuffix("px")
                 }
-                .help("Round the rectangle's corners by this many pixels; 0 keeps them square")
+                .help(localized("Round the rectangle's corners by this many pixels; 0 keeps them square"))
             }
             HStack(spacing: 6) {
                 Text("Fill")
@@ -54,7 +54,7 @@ struct ShapeControls: View {
                         .frame(width: 36, height: 18)
                 }
                 .buttonStyle(.plain)
-                .help("Shapes fill with the foreground color; click to change it")
+                .help(localized("Shapes fill with the foreground color; click to change it"))
             }
             Spacer(minLength: 0)
         }

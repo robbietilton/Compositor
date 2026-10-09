@@ -13,21 +13,21 @@ extension EditorSession {
     /// nothing about the target is in the way; while the editor is busy (a transform, a dialog) a press just waits.
     var paintRefusal: String? {
         guard canEditLayers, let layer = activeLayer, !canPaint else { return nil }
-        if selectedLayerIDs.count > 1 { return "Several layers are selected. Select just one to paint on it." }
+        if selectedLayerIDs.count > 1 { return String(localized: "Several layers are selected. Select just one to paint on it.") }
         if layer.isGroup, !isMaskSelected {
-            return "“\(layer.name)” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask."
+            return String(localized: "“\(layer.name)” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask.")
         }
         if document?.effectiveVisibleIDs.contains(layer.id) != true {
-            return "“\(layer.name)” is hidden, or inside a hidden folder. Show it to paint on it."
+            return String(localized: "“\(layer.name)” is hidden, or inside a hidden folder. Show it to paint on it.")
         }
         if isMaskSelected, layer.mask?.isEnabled != true {
-            return "The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint."
+            return String(localized: "The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint.")
         }
         if !isMaskSelected, layer.adjustment != nil {
-            return "“\(layer.name)” is an adjustment layer, with no pixels to paint. Paint on its mask instead."
+            return String(localized: "“\(layer.name)” is an adjustment layer, with no pixels to paint. Paint on its mask instead.")
         }
         if selection?.isEmpty == true {
-            return "Nothing is selected, so there’s nowhere to paint. Choose Select › Deselect (⌘D) to paint anywhere."
+            return String(localized: "Nothing is selected, so there’s nowhere to paint. Choose Select › Deselect (⌘D) to paint anywhere.")
         }
         return nil
     }
@@ -55,7 +55,7 @@ extension EditorSession {
         var sourceOffset: CGSize?
         if tool == .cloneStamp {
             guard let offset = cloneStrokeOffset(at: point) else {
-                brushError = "Option-click where Clone Stamp should copy from first."
+                brushError = localized("Option-click where Clone Stamp should copy from first.")
                 return
             }
             sourceOffset = offset

@@ -18,8 +18,8 @@ nonisolated enum ObjectSelection {
 
         var errorDescription: String? {
             switch self {
-            case .unsupported: "Object Selection requires macOS 14 or later."
-            case .render: "The object mask could not be rendered."
+            case .unsupported: localized("Object Selection requires macOS 14 or later.")
+            case .render: localized("The object mask could not be rendered.")
             }
         }
     }
