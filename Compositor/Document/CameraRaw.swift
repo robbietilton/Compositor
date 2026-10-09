@@ -388,6 +388,25 @@ nonisolated struct CameraRawScope: Equatable, Sendable {
         return Self(red: Array(bins[256..<512]), green: Array(bins[512..<768]), blue: Array(bins[768..<1024]), vectorscope: scope)
     }
 
+    /// Longest side the histogram and vectorscope count. They show the spread of tones and colors, which a copy this
+    /// size keeps, and counting every pixel of the preview on each slider step took longer than grading it.
+    static let sampleSide = 512
+
+    /// `image`, or a copy no larger than `sampleSide` on its longer side. Never enlarged.
+    static func sample(_ image: CGImage) -> CGImage {
+        let longest = max(image.width, image.height)
+        guard longest > sampleSide else { return image }
+        let factor = Double(sampleSide) / Double(longest)
+        let width = max(1, Int((Double(image.width) * factor).rounded()))
+        let height = max(1, Int((Double(image.height) * factor).rounded()))
+        guard let context = try? BrushRaster.context(width: width, height: height, mask: false) else { return image }
+        // Picks pixels rather than averaging them, so scattered clipped ones still reach the ends of the histogram.
+        // (The copy comes out upside down in this context, which counting doesn't mind.)
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage() ?? image
+    }
+
     /// Paints clipped shadows blue and clipped highlights red. The histogram is counted before this.
     static func overlay(_ image: CGImage, shadows: Bool, highlights: Bool) throws -> CGImage {
         guard shadows || highlights else { return image }
@@ -405,7 +424,7 @@ nonisolated struct CameraRawScope: Equatable, Sendable {
         grade.visualizesPointColor = -1
         grade.showsSharpenMask = false
         let graded = try PixelFilter.run(grade)
-        let scope = make(graded) ?? Self(red: Array(repeating: 0, count: binCount), green: Array(repeating: 0, count: binCount),
+        let scope = make(sample(graded)) ?? Self(red: Array(repeating: 0, count: binCount), green: Array(repeating: 0, count: binCount),
                                          blue: Array(repeating: 0, count: binCount), vectorscope: Array(repeating: 0, count: scopeSide * scopeSide))
         if job.cameraRawClipping != nil || job.showsSharpenMask { return (try PixelFilter.run(job), scope) }
         if job.showsShadowClipping || job.showsHighlightClipping {
