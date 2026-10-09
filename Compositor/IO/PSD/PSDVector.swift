@@ -14,7 +14,7 @@ nonisolated enum PSDVector {
         var style: LayerShapeStyle
         var bounds: CGRect
         var image: CGImage
-        var notes: [String]
+        var notes: [LocalizedStringResource]
     }
 
     static func live(extra: [String: Data], canvas: CGSize, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> Live? {
@@ -31,7 +31,7 @@ nonisolated enum PSDVector {
         box.size = CGSize(width: size.width, height: size.height)
         let style = LayerShapeStyle(kind: origin.kind, red: fill.r, green: fill.g, blue: fill.b, cornerRadius: origin.cornerRadius)
         let image = try EditorSession.shapeImage(style.kind, size: box.size, color: style.color, cornerRadius: style.cornerRadius)
-        var notes: [String] = []
+        var notes: [LocalizedStringResource] = []
         if strokeEnabled {
             notes.append("The Photoshop stroke isn’t supported on shape layers and was omitted.")
         }
@@ -100,7 +100,7 @@ nonisolated enum PSDVector {
         var kind: ShapeKind
         var bounds: CGRect
         var cornerRadius: CGFloat = 0
-        var notes: [String] = []
+        var notes: [LocalizedStringResource] = []
     }
 
     /// Photoshop `vogk` origination: 1/2 = rectangle (2 is rounded), 5 = ellipse.

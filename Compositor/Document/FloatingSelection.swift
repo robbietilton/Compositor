@@ -41,9 +41,9 @@ extension EditorSession {
             endEdit()
             return
         }
-        var floating = ImageLayer(asset: ImportedImage(image: lifted.image, thumbnail: thumbnail, name: "Floating Selection"),
+        var floating = ImageLayer(asset: ImportedImage(image: lifted.image, thumbnail: thumbnail, name: String(localized: "Floating Selection")),
                                   origin: lifted.region.origin)
-        floating.name = "Floating Selection"
+        floating.name = String(localized: "Floating Selection")
         floating.parentID = source.parentID
         floating.opacity = source.opacity
         floating.blendMode = source.blendMode

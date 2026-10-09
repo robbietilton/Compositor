@@ -175,11 +175,13 @@ extension CommandPaletteEntry {
     static func layerCommands(for session: EditorSession) -> [CommandPaletteEntry] {
         let canAdd = session.canEditMask && session.activeLayer?.mask == nil
         let selected = session.selection != nil
+        let reveal: LocalizedStringResource = selected ? "Layer › Add Layer Mask from Selection" : "Layer › Add Layer Mask"
+        let hide: LocalizedStringResource = selected ? "Layer › Add Layer Mask Hiding Selection" : "Layer › Add Layer Mask (Hide All)"
         return [
-            CommandPaletteEntry(id: selected ? "Layer › Add Layer Mask from Selection" : "Layer › Add Layer Mask",
+            CommandPaletteEntry(id: reveal.key, title: String(localized: reveal),
                                 shortcut: nil, isEnabled: canAdd,
                                 perform: { [weak session] in session?.addMask(revealing: true) }),
-            CommandPaletteEntry(id: selected ? "Layer › Add Layer Mask Hiding Selection" : "Layer › Add Layer Mask (Hide All)",
+            CommandPaletteEntry(id: hide.key, title: String(localized: hide),
                                 shortcut: nil, isEnabled: canAdd,
                                 perform: { [weak session] in session?.addMask(revealing: false) }),
         ]
@@ -190,7 +192,7 @@ extension CommandPaletteEntry {
     /// command's shortcut would.
     static func tools(for session: EditorSession) -> [CommandPaletteEntry] {
         typealias Setup = (EditorSession) -> Void
-        let tools: [(String, String, NavigationTool, Setup?)] = [
+        let tools: [(LocalizedStringResource, String, NavigationTool, Setup?)] = [
             ("Move / Transform", "V", .move, nil),
             ("Rectangular Marquee", "M", .marquee, { $0.marqueeKind = .rectangle }),
             ("Elliptical Marquee", "M", .marquee, { $0.marqueeKind = .ellipse }),
@@ -216,7 +218,7 @@ extension CommandPaletteEntry {
             ("Zoom", "Z", .zoom, nil),
         ]
         return tools.map { name, key, tool, setup in
-            CommandPaletteEntry(id: "Tool › \(name)", shortcut: key, isEnabled: session.document != nil,
+            CommandPaletteEntry(id: "Tool › \(name.key)", title: String(localized: "Tool › \(String(localized: name))"), shortcut: key, isEnabled: session.document != nil,
                                 perform: { [weak session] in
                                     guard let session else { return }
                                     session.selectTool(tool)

@@ -96,7 +96,25 @@ enum NavigationTool: String, CaseIterable {
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
     var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var label: String {
+        switch self {
+        case .type: String(localized: "Type (T)")
+        case .eyedropper: String(localized: "Eyedropper (I)")
+        case .marquee: String(localized: "Marquee (M)")
+        case .lasso: String(localized: "Lasso (L)")
+        case .wand: String(localized: "Magic (W) · Tab switches Wand and Object")
+        case .brush: String(localized: "Brush (B) · Eraser (E)")
+        case .spotHealing: String(localized: "Spot Healing Brush (J)")
+        case .cloneStamp: String(localized: "Clone Stamp (S) · Option-click sets the source")
+        case .blur: String(localized: "Smear (R)")
+        case .gradient: String(localized: "Gradient (G)")
+        case .shape: String(localized: "Shape (U) · Shift-U switches Rectangle/Ellipse")
+        case .crop: String(localized: "Crop (C)")
+        case .move: String(localized: "Move / Transform (V)")
+        case .hand: String(localized: "Hand (H)")
+        case .zoom, .idle: String(localized: "Zoom (Z)")
+        }
+    }
 }
 
 @Observable
@@ -666,7 +684,7 @@ final class EditorSession {
     }
 
     /// Nestable transaction boundary; future tools can group a complete gesture.
-    func beginEdit(_ name: String) {
+    func beginEdit(_ name: LocalizedStringResource) {
         history.begin(name, document: document, selection: activeLayerID)
     }
 
@@ -681,8 +699,8 @@ final class EditorSession {
         guard canEditLayers, let document else { return }
         let names = Set(document.layers.map(\.name))
         var number = 1
-        while names.contains("Layer \(number)") { number += 1 }
-        var layer = ImageLayer(name: "Layer \(number)", blankSize: document.size)
+        while names.contains(String(localized: "Layer \(number)")) { number += 1 }
+        var layer = ImageLayer(name: String(localized: "Layer \(number)"), blankSize: document.size)
         layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
         if let parent = layer.parentID { collapsedGroupIDs.remove(parent) }
         var insertion = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
@@ -842,7 +860,7 @@ final class EditorSession {
                                                                          remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
                     insert(asset, centeredAt: point)
                 } else if PSDReader.matches(url) {
-                    beginPSDReading(title: "Open “\(url.lastPathComponent)”?", confirmTitle: "Import")
+                    beginPSDReading(title: String(localized: "Open “\(url.lastPathComponent)”?"), confirmTitle: String(localized: "Import"))
                     let imported: PSDImport
                     do {
                         let parsed = try await ImageImporter.shared.loadPhotoshop(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
@@ -999,13 +1017,13 @@ final class EditorSession {
     /// every pixel's detail.
     private static func firstLayer(size: CGSize, background: CGColor?) -> ImageLayer {
         guard let background, let context = try? BrushRaster.context(width: Int(size.width), height: Int(size.height), mask: false)
-        else { return ImageLayer(name: "Layer 1", blankSize: size) }
+        else { return ImageLayer(name: String(localized: "Layer \(1)"), blankSize: size) }
         context.setFillColor(background)
         context.fill(CGRect(origin: .zero, size: size))
         guard let image = context.makeImage(), let thumbnail = try? PixelAdjust.thumbnail(of: image)
-        else { return ImageLayer(name: "Layer 1", blankSize: size) }
-        var layer = ImageLayer(name: "Background", blankSize: size)
-        layer.asset = ImportedImage(image: image, thumbnail: thumbnail, name: "Background")
+        else { return ImageLayer(name: String(localized: "Layer \(1)"), blankSize: size) }
+        var layer = ImageLayer(name: String(localized: "Background"), blankSize: size)
+        layer.asset = ImportedImage(image: image, thumbnail: thumbnail, name: String(localized: "Background"))
         return layer
     }
 

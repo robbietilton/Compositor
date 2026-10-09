@@ -11,7 +11,7 @@ import Foundation
 nonisolated enum PSDText {
     struct Source: Sendable {
         var style: LayerTextStyle
-        var notes: [String]
+        var notes: [LocalizedStringResource]
         /// Document point that `imageAnchor` should land on.
         var documentAnchor: CGPoint
         var rotation: CGFloat
@@ -20,13 +20,13 @@ nonisolated enum PSDText {
         var anchorIsFrame: Bool
     }
 
-    static let rasterizedNote = "Editable Photoshop text becomes pixels and can’t be retyped."
-    static let firstStyleNote = "Only the first text style was kept."
-    static let warpNote = "The Photoshop text warp was omitted."
-    static let fauxNote = "Faux bold or faux italic was omitted."
-    static let justifyNote = "Full justification was imported as left alignment."
+    static let rasterizedNote: LocalizedStringResource = "Editable Photoshop text becomes pixels and can’t be retyped."
+    static let firstStyleNote: LocalizedStringResource = "Only the first text style was kept."
+    static let warpNote: LocalizedStringResource = "The Photoshop text warp was omitted."
+    static let fauxNote: LocalizedStringResource = "Faux bold or faux italic was omitted."
+    static let justifyNote: LocalizedStringResource = "Full justification was imported as left alignment."
 
-    static func missingFontNote(_ name: String) -> String? {
+    static func missingFontNote(_ name: String) -> LocalizedStringResource? {
         guard NSFont(name: name, size: 12) == nil else { return nil }
         return "The font “\(name)” isn’t installed, so the text was drawn with the system font."
     }
@@ -42,7 +42,7 @@ nonisolated enum PSDText {
         if let orientation = text.enumeration("Ornt"), orientation == "Vrtc" { return nil }
         guard let placed = placement(xx: xx, xy: xy, yx: yx, yy: yy, tx: tx, ty: ty) else { return nil }
 
-        var notes: [String] = []
+        var notes: [LocalizedStringResource] = []
         if reader.remaining >= 2, reader.u16() == 1, let warp = reader.descriptor(versioned: true),
            let style = warp.enumeration("warpStyle"), style != "warpNone", style != "none" {
             notes.append(warpNote)
@@ -131,7 +131,7 @@ nonisolated enum PSDText {
         }
     }
 
-    private static func applyStyle(_ style: inout LayerTextStyle, engine: Engine, pixelScale: Double, notes: inout [String]) {
+    private static func applyStyle(_ style: inout LayerTextStyle, engine: Engine, pixelScale: Double, notes: inout [LocalizedStringResource]) {
         let runs = array(walk(engine, "EngineDict", "StyleRun", "RunArray"))
         let first = runs.first ?? engine
         let sheet = walk(first, "StyleSheet", "StyleSheetData") ?? walk(engine, "EngineDict", "StyleRun", "RunArray")

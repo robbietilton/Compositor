@@ -30,7 +30,7 @@ nonisolated enum PSDDocumentBuilder {
                                                  message: "Cropped to the canvas so the file fits in memory. Pixels outside the canvas weren't imported."))
             }
             let renderedText = record.text.flatMap { try? PSDText.render($0) }
-            var notes: [String] = []
+            var notes: [LocalizedStringResource] = []
             if record.kind == .text {
                 if let source = record.text, renderedText != nil {
                     notes.append(contentsOf: source.notes)

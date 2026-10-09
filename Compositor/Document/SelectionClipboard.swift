@@ -184,7 +184,7 @@ extension EditorSession {
     /// A copy of each layer (a folder with all it holds), as one undo step: Duplicate Layer, and Paste of layers Copy
     /// took whole. One copy sits just above its original; several stack together, in their order, above the topmost
     /// original, as Photoshop's do. The copies end up selected.
-    func duplicateLayers(_ ids: [UUID], editName: String = "Duplicate Layer") {
+    func duplicateLayers(_ ids: [UUID], editName: LocalizedStringResource = "Duplicate Layer") {
         guard canEditLayers, !ids.isEmpty else { return }
         let active = activeLayerID
         beginEdit(editName)
@@ -248,7 +248,7 @@ extension EditorSession {
 
     /// Inserts pixels as a new layer above the active one (inside its folder), all in one undo
     /// step. Pasting drops the selection, as in Photoshop; a drawn shape keeps it.
-    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true, shape: LayerShape? = nil, text: LayerText? = nil) {
+    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: LocalizedStringResource, dropsSelection: Bool = true, shape: LayerShape? = nil, text: LayerText? = nil) {
         guard let document, let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
         var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: thumbnail, name: name), origin: origin)
         layer.name = name
@@ -267,8 +267,8 @@ extension EditorSession {
     func nextLayerName() -> String {
         let names = Set(document?.layers.map(\.name) ?? [])
         var number = 1
-        while names.contains("Layer \(number)") { number += 1 }
-        return "Layer \(number)"
+        while names.contains(String(localized: "Layer \(number)")) { number += 1 }
+        return String(localized: "Layer \(number)")
     }
 
     /// Normalizes an image from another app to the working sRGB RGBA format.

@@ -210,7 +210,7 @@ extension EditorSession {
         await finishPixelMove()
     }
 
-    private func applyPixelEdit(to layer: ImageLayer, name: String, _ paint: (BrushStroke) throws -> Void) async {
+    private func applyPixelEdit(to layer: ImageLayer, name: LocalizedStringResource, _ paint: (BrushStroke) throws -> Void) async {
         finishOpacityEdit()
         do {
             // On a mask, a fill covers the whole canvas, past the mask's own area, as the brush can.

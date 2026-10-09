@@ -37,7 +37,7 @@ struct TransformInspector: View {
                 Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.localizedTitle).tag($0) }
                 }.frame(width: 170)
                 Button("Flip H") { change { $0.flipX.toggle() } }
                 Button("Flip V") { change { $0.flipY.toggle() } }
@@ -64,7 +64,7 @@ struct TransformInspector: View {
     /// 100% scale: the layer's pixels (a blank layer's size before this edit, so typing doesn't compound).
     private var held: NSEvent.ModifierFlags { HeldModifiers.shared.flags }
     private var pixelSize: CGSize { session.transformPixelSize ?? session.activeLayer?.size ?? value.size }
-    private func field(_ label: String, value: CGFloat, range: ClosedRange<CGFloat> = -30_000...30_000,
+    private func field(_ label: LocalizedStringResource, value: CGFloat, range: ClosedRange<CGFloat> = -30_000...30_000,
                        set: @escaping (inout LayerTransform, CGFloat) -> Void) -> some View {
         TransformValueField(label: label, value: value, range: range, finish: finish) { number in change { set(&$0, number) } }
     }
@@ -101,7 +101,7 @@ struct TransformInspector: View {
 }
 
 private struct TransformValueField: View {
-    let label: String
+    let label: LocalizedStringResource
     var suffix: String? = nil
     let value: CGFloat
     let range: ClosedRange<CGFloat>
@@ -113,14 +113,14 @@ private struct TransformValueField: View {
     @FocusState private var focused: Bool
     var body: some View {
         HStack(spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(String(localized: label)).font(.caption).foregroundStyle(.secondary)
                 .scrubbable(sensitivity: 1, value: Binding(get: { value }, set: { newValue in
                     change(newValue)
                     text = Self.formatted(Double(newValue))
                 }), range: range, step: 1, onEnd: finish)
-            TextField(label, text: $text)
+            TextField(String(localized: label), text: $text)
                 .textFieldStyle(.roundedBorder).focused($focused)
-                .accessibilityIdentifier("transform\(label)")
+                .accessibilityIdentifier("transform\(label.key)")
                 .onAppear { sync() }
                 .onChange(of: value) { if !focused { sync() } }
                 .onChange(of: focused) { if !focused { finish(); sync() } }

@@ -11,7 +11,7 @@ final class DocumentHistory {
         let revision: UUID
     }
     private struct Entry {
-        let name: String
+        let name: LocalizedStringResource
         let before: Snapshot
         let after: Snapshot
     }
@@ -20,7 +20,7 @@ final class DocumentHistory {
     private var revision = UUID()
     private var savedRevision: UUID?
     private var pending: Snapshot?
-    private var pendingName = "Edit"
+    private var pendingName: LocalizedStringResource = "Edit"
     private var depth = 0
     let entryLimit: Int
     let retainedByteLimit: Int
@@ -33,8 +33,8 @@ final class DocumentHistory {
 
     var canUndo: Bool { depth == 0 && !past.isEmpty }
     var canRedo: Bool { depth == 0 && !future.isEmpty }
-    var undoName: String { past.last?.name ?? "" }
-    var redoName: String { future.last?.name ?? "" }
+    var undoName: String { past.last.map { String(localized: $0.name) } ?? "" }
+    var redoName: String { future.last.map { String(localized: $0.name) } ?? "" }
     var isModified: Bool { revision != savedRevision }
     var undoCount: Int { past.count }
     func markSaved() { savedRevision = revision }
@@ -51,7 +51,7 @@ final class DocumentHistory {
         savedRevision = revision
     }
 
-    func begin(_ name: String, document: CanvasDocument?, selection: UUID?) {
+    func begin(_ name: LocalizedStringResource, document: CanvasDocument?, selection: UUID?) {
         if depth == 0 {
             pending = Snapshot(document: document, activeLayerID: selection, revision: revision)
             pendingName = name

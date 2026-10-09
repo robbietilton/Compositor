@@ -106,7 +106,7 @@ extension EditorSession {
         applyDocumentSize(snapshot, actionName: "Image Size")
     }
 
-    func applyDocumentSize(_ snapshot: ProjectSnapshot, actionName: String) {
+    func applyDocumentSize(_ snapshot: ProjectSnapshot, actionName: LocalizedStringResource) {
         guard document?.id == snapshot.manifest.documentID else { return }
         beginEdit(actionName)
         let m = snapshot.manifest

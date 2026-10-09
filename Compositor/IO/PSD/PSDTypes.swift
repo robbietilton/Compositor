@@ -6,11 +6,11 @@ nonisolated enum PSDError: LocalizedError, Equatable {
     case truncated, unsupportedVersion, unsupportedColorMode, unsupportedDepth, unsupportedCompression
     var errorDescription: String? {
         switch self {
-        case .truncated: "The Photoshop file could not be read. It may be damaged or incomplete."
-        case .unsupportedVersion: "This Photoshop file uses a format version Compositor can’t read."
-        case .unsupportedColorMode: "Only 8-bit RGB Photoshop files can be imported."
-        case .unsupportedDepth: "Only 8-bit RGB Photoshop files can be imported."
-        case .unsupportedCompression: "This Photoshop file uses a layer compression method that isn’t supported."
+        case .truncated: String(localized: "The Photoshop file could not be read. It may be damaged or incomplete.")
+        case .unsupportedVersion: String(localized: "This Photoshop file uses a format version Compositor can’t read.")
+        case .unsupportedColorMode: String(localized: "Only 8-bit RGB Photoshop files can be imported.")
+        case .unsupportedDepth: String(localized: "Only 8-bit RGB Photoshop files can be imported.")
+        case .unsupportedCompression: String(localized: "This Photoshop file uses a layer compression method that isn’t supported.")
         }
     }
 }
@@ -18,8 +18,8 @@ nonisolated enum PSDError: LocalizedError, Equatable {
 nonisolated struct PSDConversion: Identifiable, Equatable, Sendable {
     let id: UUID
     let layerName: String
-    let message: String
-    init(id: UUID = UUID(), layerName: String, message: String) {
+    let message: LocalizedStringResource
+    init(id: UUID = UUID(), layerName: String, message: LocalizedStringResource) {
         self.id = id
         self.layerName = layerName
         self.message = message
@@ -56,7 +56,7 @@ nonisolated struct PSDRecord: @unchecked Sendable {
     var adjustment: LayerAdjustment?
     var kind = PSDLayerKind.raster
     var shape: LayerShapeStyle?
-    var shapeNotes: [String] = []
+    var shapeNotes: [LocalizedStringResource] = []
     /// Parsed Photoshop type, when the `TySh` block maps onto an editable text layer.
     var text: PSDText.Source?
 }

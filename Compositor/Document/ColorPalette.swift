@@ -175,7 +175,7 @@ extension EditorSession {
     }
     /// Opens the app's picker on a dialog's color. `change` hears the working color as it moves, the chosen one on OK,
     /// and the original again on Cancel.
-    func openDialogColorPicker(title: String, color: PaletteColor, change: @escaping (PaletteColor) -> Void) {
+    func openDialogColorPicker(title: LocalizedStringResource, color: PaletteColor, change: @escaping (PaletteColor) -> Void) {
         guard colorPicker == nil else { return }
         dialogColorChange = change
         colorPicker = ColorPickerState(target: .dialog(title: title), original: color)
@@ -265,16 +265,16 @@ enum ColorPickerTarget: Equatable {
     case dither(light: Bool)
     case text(draftID: UUID?)
     /// A dialog's own color, such as Export JPEG's background for transparency. The dialog is told as it changes.
-    case dialog(title: String)
+    case dialog(title: LocalizedStringResource)
     var title: String {
         switch self {
-        case .text: return "Color Picker (Text Color)"
-        case .effect(let kind): return "Color Picker (\(kind.rawValue) Color)"
-        case .palette(let background): return background ? "Color Picker (Background Color)" : "Color Picker (Foreground Color)"
-        case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
-        case .vignette: return "Color Picker (Vignette Color)"
-        case .dither(let light): return light ? "Color Picker (Dither Light Color)" : "Color Picker (Dither Dark Color)"
-        case .dialog(let title): return "Color Picker (\(title))"
+        case .text: return String(localized: "Color Picker (Text Color)")
+        case .effect(let kind): return String(localized: "Color Picker (\(kind.localizedTitle) Color)")
+        case .palette(let background): return background ? String(localized: "Color Picker (Background Color)") : String(localized: "Color Picker (Foreground Color)")
+        case .gradientMap(let highlights): return highlights ? String(localized: "Color Picker (Gradient Map Highlights)") : String(localized: "Color Picker (Gradient Map Shadows)")
+        case .vignette: return String(localized: "Color Picker (Vignette Color)")
+        case .dither(let light): return light ? String(localized: "Color Picker (Dither Light Color)") : String(localized: "Color Picker (Dither Dark Color)")
+        case .dialog(let title): return String(localized: "Color Picker (\(String(localized: title)))")
         }
     }
 }

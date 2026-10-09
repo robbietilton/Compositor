@@ -164,7 +164,7 @@ final class BrushStroke {
     /// The clone sample replaces what's under the tip rather than drawing over it, so it can also clear pixels.
     var replacesWithClone = false
     /// The undo name, when the stroke's kind doesn't say it.
-    var editName: String?
+    var editName: LocalizedStringResource?
     private var allocatedBounds: CGRect?
     private var previous: CGPoint?
     private var samples: [CGPoint] = []

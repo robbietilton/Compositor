@@ -238,7 +238,7 @@ struct ContentView: View {
         .onChange(of: session.effectsEditing) { _, selection in
             if let selection {
                 effectsPanel.onClose = { session.finishEffectsEditing(commit: false) }
-                effectsPanel.show(title: selection.kind.rawValue, content: EffectsSheet(session: session, kind: selection.kind))
+                effectsPanel.show(title: selection.kind.localizedTitle, content: EffectsSheet(session: session, kind: selection.kind))
             } else { effectsPanel.close() }
         }
         .onChange(of: session.document?.layers) { _, layers in
@@ -252,7 +252,7 @@ struct ContentView: View {
         .onChange(of: session.selectionAmountOperation) { _, operation in
             if let operation {
                 selectionAmountPanel.onClose = { session.selectionAmountOperation = nil }
-                selectionAmountPanel.show(title: operation.rawValue + " Selection",
+                selectionAmountPanel.show(title: String(localized: "\(operation.localizedTitle) Selection"),
                     content: SelectionAmountSheet(session: session, operation: operation))
             } else { selectionAmountPanel.close() }
         }
@@ -262,7 +262,7 @@ struct ContentView: View {
             else {
                 filterPanel.onClose = { session.cancelFilter() }
                 let placement: FloatingPanelPlacement = session.filterEdit?.kind == .cameraRaw ? .dockedToMainWindowRight : .automatic
-                filterPanel.show(title: session.filterEdit?.kind.rawValue ?? "Filter", content: FilterSheet(session: session),
+                filterPanel.show(title: session.filterEdit?.kind.localizedTitle ?? String(localized: "Filter"), content: FilterSheet(session: session),
                                  placement: placement)
             }
         }
@@ -334,6 +334,70 @@ struct ContentView: View {
             onCreate: { session.createNewProject(width: $0, height: $1, resolution: $2, background: $3) },
             onOpen: { Task { await applicationDelegate?.projects.open() } })
     }
+    /// One literal per hint so the catalog gets a format, not a sentence assembled with `+`.
+    private var toolHint: LocalizedStringResource {
+        switch session.tool {
+        case .marquee:
+            if session.marqueeKind == .ellipse {
+                "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect"
+            } else {
+                "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect"
+            }
+        case .wand:
+            if session.wandMode == .object {
+                "Click an object to select its outline · Tab for Wand · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect"
+            } else {
+                "Click to select similar colors · Tab for Object · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect"
+            }
+        case .lasso:
+            if session.lassoKind == .freehand {
+                "Drag to select · Drag inside to move · Shift add · Option subtract · Delete clears · ⌥⌫/⌘⌫ fill · ⌘D deselect"
+            } else {
+                "Click corners · Click start, double-click or Enter to close · Delete removes corner · Escape cancel"
+            }
+        case .brush:
+            if session.brushMode == .erase {
+                "Drag to erase · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan"
+            } else {
+                "Drag to paint · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan"
+            }
+        case .blur:
+            if session.blurMode == .blur {
+                "Drag to soften · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan"
+            } else if session.blurMode == .smudge {
+                "Drag to smudge · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan"
+            } else {
+                "Drag to push pixels · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan"
+            }
+        case .cloneStamp:
+            "Option-click to set the source · Drag to clone · [ ] size · Shift-[ ] hardness · 1–0 opacity · Space to pan"
+        case .spotHealing:
+            "Drag over blemishes to heal · [ ] size · Shift-[ ] hardness · Escape cancel · Space to pan"
+        case .type:
+            "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel"
+        case .shape:
+            switch session.shapeKind {
+            case .line:
+                "Drag to draw a shape on a new layer · Shift 45° · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan"
+            case .rectangle:
+                "Drag to draw a shape on a new layer · Shift square · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan"
+            case .ellipse:
+                "Drag to draw a shape on a new layer · Shift circle · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan"
+            }
+        case .gradient:
+            "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel"
+        case .crop:
+            "Drag to crop · Enter apply · Escape cancel · Space to pan"
+        case .move:
+            "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan"
+        case .hand:
+            "Drag to pan · Pinch to zoom"
+        case .idle:
+            "No tool selected · Press a tool's key to pick one · Space to pan"
+        case .zoom, .eyedropper:
+            "Click to zoom in · Option-click to zoom out · Drag right or left to zoom smoothly · Space to pan"
+        }
+    }
     private var statusBar: some View {
         HStack(spacing: 16) {
             if let document = session.document {
@@ -350,7 +414,7 @@ struct ContentView: View {
                 ProgressView().controlSize(.mini)
                 Text("Importing images…")
             } else {
-                Text(session.tool == .marquee ? (session.marqueeKind == .ellipse ? "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect" : "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect") : session.tool == .wand ? (session.wandMode == .object ? "Click an object to select its outline · Tab for Wand · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" : "Click to select similar colors · Tab for Object · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect") : session.tool == .lasso ? (session.lassoKind == .freehand ? "Drag to select · Drag inside to move · Shift add · Option subtract · Delete clears · ⌥⌫/⌘⌫ fill · ⌘D deselect" : "Click corners · Click start, double-click or Enter to close · Delete removes corner · Escape cancel") : session.tool == .brush ? (session.brushMode == .erase ? "Drag to erase" : "Drag to paint") + " · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan" : session.tool == .blur ? (session.blurMode == .blur ? "Drag to soften" : session.blurMode == .smudge ? "Drag to smudge" : "Drag to push pixels") + " · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" : session.tool == .cloneStamp ? "Option-click to set the source · Drag to clone · [ ] size · Shift-[ ] hardness · 1–0 opacity · Space to pan" : session.tool == .spotHealing ? "Drag over blemishes to heal · [ ] size · Shift-[ ] hardness · Escape cancel · Space to pan" : session.tool == .type ? "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel" : session.tool == .shape ? "Drag to draw a shape on a new layer · Shift \(session.shapeKind == .line ? "45°" : session.shapeKind == .rectangle ? "square" : "circle") · Option from center · Shift-U or Tab for the next shape · Escape cancel · Space to pan" : session.tool == .gradient ? "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel" : session.tool == .crop ? "Drag to crop · Enter apply · Escape cancel · Space to pan" : session.tool == .move ? "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan" : session.tool == .hand ? "Drag to pan · Pinch to zoom" : session.tool == .idle ? "No tool selected · Press a tool's key to pick one · Space to pan" : "Click to zoom in · Option-click to zoom out · Drag right or left to zoom smoothly · Space to pan")
+                Text(String(localized: toolHint))
             }
         }
         .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)

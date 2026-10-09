@@ -61,7 +61,7 @@ struct CameraRawSlider: NSViewRepresentable {
     var value: Double
     var range: ClosedRange<Double>
     var track: CameraRawSliderTrack
-    var help: String
+    var help: LocalizedStringResource
     var onChange: (Double) -> Void
     var onReset: () -> Void
 
@@ -78,11 +78,11 @@ struct CameraRawSlider: NSViewRepresentable {
         slider.isContinuous = true
         slider.target = context.coordinator
         slider.action = #selector(Coordinator.changed(_:))
-        slider.toolTip = help
+        slider.toolTip = String(localized: help)
         slider.onReset = context.coordinator.reset
         slider.onTrackClick = context.coordinator.onChange
         (slider.cell as? GradientSliderCell)?.gradientColors = track.colors
-        slider.setAccessibilityLabel(help)
+        slider.setAccessibilityLabel(String(localized: help))
         return slider
     }
 
@@ -95,7 +95,7 @@ struct CameraRawSlider: NSViewRepresentable {
         context.coordinator.onReset = onReset
         slider.onReset = context.coordinator.reset
         slider.onTrackClick = context.coordinator.onChange
-        slider.toolTip = help
+        slider.toolTip = String(localized: help)
         slider.minValue = range.lowerBound
         slider.maxValue = range.upperBound
         if !slider.isTrackingValue { slider.doubleValue = value }

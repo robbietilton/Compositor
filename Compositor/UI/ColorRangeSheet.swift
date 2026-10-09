@@ -14,8 +14,8 @@ struct ColorRangeSheet: View {
                         // Holding Shift or Option lights up the eyedropper a click will use.
                         .background(edit?.effectiveMode == mode ? Color.accentColor.opacity(0.25) : .clear,
                                     in: RoundedRectangle(cornerRadius: 4))
-                        .help(help(mode))
-                        .accessibilityLabel("\(mode.rawValue) color")
+                        .help(Text(String(localized: help(mode))))
+                        .accessibilityLabel("\(mode.localizedTitle) color")
                 }
                 Spacer()
             }
@@ -70,7 +70,7 @@ struct ColorRangeSheet: View {
         })
     }
 
-    private func help(_ mode: HueSampleMode) -> String {
+    private func help(_ mode: HueSampleMode) -> LocalizedStringResource {
         switch mode {
         case .replace: "Click the image to select that color"
         case .add: "Click the image to add that color to the selection"

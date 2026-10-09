@@ -199,7 +199,7 @@ final class WarpStroke {
 extension EditorSession {
     func beginWarp(at point: CGPoint) {
         guard canPaint, !isMaskSelected, let layer = activeLayer, let image = layer.asset?.image, let document else {
-            brushError = isMaskSelected ? "Smudge and Liquify work on a layer's pixels, not its mask." : paintRefusal
+            brushError = isMaskSelected ? String(localized: "Smudge and Liquify work on a layer's pixels, not its mask.") : paintRefusal
             return
         }
         finishOpacityEdit()
@@ -230,7 +230,7 @@ extension EditorSession {
             let stroke = try makeRasterEdit(for: current, settings: settings)
             stroke.clone = (result, CGRect(x: 0, y: 0, width: result.width, height: result.height), false)
             stroke.replacesWithClone = true
-            stroke.editName = warp.mode.rawValue
+            stroke.editName = warp.mode.localizedName
             // The tip is solid and a little wider than the brush, so a point every twentieth of its width covers what
             // every dab did: a big brush on a big canvas lays thousands of dabs, and replaying each one stalled the release.
             let spacing = max(1, warp.diameter * 0.05)

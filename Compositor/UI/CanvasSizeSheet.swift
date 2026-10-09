@@ -9,7 +9,17 @@ struct CanvasSizeSheet: View {
     @State private var anchor = 4
     @State private var extensionChoice = "Transparent"
     @State private var customColor = PaletteColor.white
-    private let anchorNames = ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"]
+    private let anchorNames: [LocalizedStringResource] = ["Top left", "Top center", "Top right", "Middle left", "Center", "Middle right", "Bottom left", "Bottom center", "Bottom right"]
+    private func fillTitle(_ name: String) -> LocalizedStringResource {
+        switch name {
+        case "Transparent": "Transparent"
+        case "Foreground": "Foreground"
+        case "Background": "Background"
+        case "Black": "Black"
+        case "White": "White"
+        default: "Custom"
+        }
+    }
 
     init(document: CanvasDocument, session: EditorSession, finish: @escaping (CanvasSizeOptions?) -> Void) {
         self.foreground = session.foregroundColor
@@ -72,7 +82,7 @@ struct CanvasSizeSheet: View {
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
             Picker("Units", selection: $draft.unit) {
-                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.localizedTitle).tag($0) }
             }
             HStack {
                 Text("Width").frame(width: 60, alignment: .leading)
@@ -109,7 +119,7 @@ struct CanvasSizeSheet: View {
                                             .frame(width: 25, height: 25)
                                     }
                                     .tint(index == anchor ? .accentColor : .secondary)
-                                    .help(anchorNames[index]).accessibilityLabel(anchorNames[index])
+                                    .help(Text(String(localized: anchorNames[index]))).accessibilityLabel(String(localized: anchorNames[index]))
                                     .accessibilityValue(index == anchor ? "Selected" : "")
                                 }
                             }
@@ -117,13 +127,15 @@ struct CanvasSizeSheet: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(anchorNames[anchor]).font(.callout.bold())
+                    Text(String(localized: anchorNames[anchor])).font(.callout.bold())
                     Text("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas.")
                         .font(.callout).foregroundStyle(.secondary)
                 }.padding(.top, 28)
             }
             Picker("Canvas extension", selection: $extensionChoice) {
-                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text($0) }
+                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { name in
+                    Text(String(localized: fillTitle(name))).tag(name)
+                }
             }
             if extensionChoice == "Custom" {
                 HStack(spacing: 8) {

@@ -75,10 +75,10 @@ struct RawDevelopSheet: View {
         if let image { preview = image }
     }
 
-    private func slider(_ title: String, value: Binding<Float>, range: ClosedRange<Float>,
+    private func slider(_ title: LocalizedStringResource, value: Binding<Float>, range: ClosedRange<Float>,
                         unit: String, precision: Int) -> some View {
         HStack(spacing: 10) {
-            Text(title).frame(width: 90, alignment: .leading)
+            Text(String(localized: title)).frame(width: 90, alignment: .leading)
             Slider(value: value, in: range).frame(width: 300)
             Text(String(format: "%.\(precision)f%@", value.wrappedValue, unit))
                 .monospacedDigit().foregroundStyle(.secondary)

@@ -230,7 +230,7 @@ extension EditorSession {
                            : draft.kind == .ellipse ? "Elliptical Marquee" : "Rectangular Marquee")
     }
 
-    func applySelection(_ shape: CGPath, mode: SelectionMode, name: String) {
+    func applySelection(_ shape: CGPath, mode: SelectionMode, name: LocalizedStringResource) {
         guard let document, canEditSelection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
         let clipped = shape.intersection(canvas, using: .winding)
@@ -246,7 +246,7 @@ extension EditorSession {
         setSelection(DocumentSelection(path: result, antialiased: selectionAntialiased), name: name)
     }
 
-    func setSelection(_ value: DocumentSelection?, name: String) {
+    func setSelection(_ value: DocumentSelection?, name: LocalizedStringResource) {
         guard document != nil, canEditSelection, value != selection else { return }
         beginEdit(name)
         document?.selection = value
@@ -330,7 +330,7 @@ extension EditorSession {
                                        feather: min(250, softened)), name: "Feather Selection")
     }
 
-    private func resizeSelection(by delta: CGFloat, name: String) {
+    private func resizeSelection(by delta: CGFloat, name: LocalizedStringResource) {
         guard let document, let current = selection, canModifySelection, delta != 0, abs(delta) <= 500 else { return }
         // A band `|delta|` wide on each side of the outline, added or removed.
         let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .round, lineJoin: .round, miterLimit: 10)

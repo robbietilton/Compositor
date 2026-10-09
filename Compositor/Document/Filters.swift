@@ -672,7 +672,7 @@ extension EditorSession {
                                                       width: asset.image.width, height: asset.image.height) else { throw ExportError.render }
                 mask = owned.replacing(try LayerMask.asset(from: carried))
             }
-            beginEdit(edit.kind.rawValue)
+            beginEdit(edit.kind.localizedName)
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: made.transform ?? current.transform, parentID: current.parentID, isGroup: false,
                 opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID,
@@ -710,7 +710,7 @@ extension EditorSession {
                   let layer = document?.layers[index], layer.asset?.image === edit.original.image,
                   layer.transform == edit.transform else { return }
             let asset = try LayerMask.asset(from: made)
-            beginEdit(edit.kind.rawValue)
+            beginEdit(edit.kind.localizedName)
             document?.layers[index].mask = layer.mask.map { $0.replacing(asset) } ?? LayerMask(asset: asset)
             document?.layers[index].mask?.isEnabled = true
             isMaskSelected = true

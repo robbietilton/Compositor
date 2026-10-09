@@ -37,7 +37,7 @@ struct PSDConversionSheet: View {
                 List(request.conversions) { item in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.layerName).font(.headline)
-                        Text(item.message)
+                        Text(String(localized: item.message))
                     }.padding(.vertical, 4)
                 }
                 .frame(minHeight: 180)

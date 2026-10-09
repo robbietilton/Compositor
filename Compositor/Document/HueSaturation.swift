@@ -143,7 +143,7 @@ nonisolated enum HueSampleMode: String, CaseIterable, Sendable {
         case .remove: "minus.circle.fill"
         }
     }
-    var help: String {
+    var help: LocalizedStringResource {
         switch self {
         case .replace: "Click the image to center this range on that color"
         case .add: "Click the image to widen this range to include that color"

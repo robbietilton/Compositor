@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 extension LayerTransform {
     /// This placement turned a quarter turn with the canvas it sits on (`width` × `height` before the turn): the

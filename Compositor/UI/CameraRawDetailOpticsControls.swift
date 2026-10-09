@@ -41,12 +41,12 @@ struct CameraRawDetailControls: View {
         }
     }
 
-    private func sharpenSlider(_ title: String, _ key: WritableKeyPath<CameraRawDetailSettings, Double>, range: ClosedRange<Double>,
-                               decimals: Int, reset: Double, maskingPreview: Bool = false, help: String) -> some View {
+    private func sharpenSlider(_ title: LocalizedStringResource, _ key: WritableKeyPath<CameraRawDetailSettings, Double>, range: ClosedRange<Double>,
+                               decimals: Int, reset: Double, maskingPreview: Bool = false, help: LocalizedStringResource) -> some View {
         let step = pow(10, Double(decimals))
         let value = raw.detail[keyPath: key]
         return HStack(spacing: 10) {
-            Text(title).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(help)
+            Text(String(localized: title)).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(Text(String(localized: help)))
                 .scrubbable(sensitivity: 1 / step,
                             value: Binding(get: { raw.detail[keyPath: key] },
                                            set: { assignDetail(key, $0, maskingPreview: false) }), range: range)
@@ -56,14 +56,14 @@ struct CameraRawDetailControls: View {
                                 assignDetail(key, stepped, maskingPreview: maskingPreview)
                             },
                             onReset: { assignDetail(key, reset, maskingPreview: false) })
-            TextField(title, value: Binding(get: { raw.detail[keyPath: key] }, set: { assignDetail(key, $0, maskingPreview: false) }),
+            TextField(String(localized: title), value: Binding(get: { raw.detail[keyPath: key] }, set: { assignDetail(key, $0, maskingPreview: false) }),
                       format: .number.precision(.fractionLength(0...decimals)))
-                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(help)
+                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(Text(String(localized: help)))
         }
     }
 
-    private func slider(_ title: String, _ key: WritableKeyPath<CameraRawDetailSettings, Double>, range: ClosedRange<Double>,
-                        decimals: Int, reset: Double, help: String) -> some View {
+    private func slider(_ title: LocalizedStringResource, _ key: WritableKeyPath<CameraRawDetailSettings, Double>, range: ClosedRange<Double>,
+                        decimals: Int, reset: Double, help: LocalizedStringResource) -> some View {
         sharpenSlider(title, key, range: range, decimals: decimals, reset: reset, help: help)
     }
 
@@ -141,11 +141,11 @@ struct CameraRawOpticsControls: View {
         Binding(get: { raw.optics[keyPath: key] }, set: { newValue in update { $0.cameraRaw.optics[keyPath: key] = newValue } })
     }
 
-    private func opticsSlider(_ title: String, _ key: WritableKeyPath<CameraRawOpticsSettings, Double>, range: ClosedRange<Double>,
-                              reset: Double, help: String) -> some View {
+    private func opticsSlider(_ title: LocalizedStringResource, _ key: WritableKeyPath<CameraRawOpticsSettings, Double>, range: ClosedRange<Double>,
+                              reset: Double, help: LocalizedStringResource) -> some View {
         let value = raw.optics[keyPath: key]
         return HStack(spacing: 10) {
-            Text(title).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(help)
+            Text(String(localized: title)).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(Text(String(localized: help)))
                 .scrubbable(sensitivity: 1,
                             value: Binding(get: { raw.optics[keyPath: key] },
                                            set: { newValue in update { $0.cameraRaw.optics[keyPath: key] = newValue } }), range: range)
@@ -155,27 +155,27 @@ struct CameraRawOpticsControls: View {
                                 update { $0.cameraRaw.optics[keyPath: key] = stepped }
                             },
                             onReset: { update { $0.cameraRaw.optics[keyPath: key] = reset } })
-            TextField(title, value: Binding(get: { raw.optics[keyPath: key] }, set: { newValue in update { $0.cameraRaw.optics[keyPath: key] = newValue } }),
+            TextField(String(localized: title), value: Binding(get: { raw.optics[keyPath: key] }, set: { newValue in update { $0.cameraRaw.optics[keyPath: key] = newValue } }),
                       format: .number.precision(.fractionLength(0)))
-                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(help)
+                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(Text(String(localized: help)))
         }
     }
 
-    private func hueRange(_ title: String, low: WritableKeyPath<CameraRawOpticsSettings, Double>,
-                          high: WritableKeyPath<CameraRawOpticsSettings, Double>, help: String) -> some View {
+    private func hueRange(_ title: LocalizedStringResource, low: WritableKeyPath<CameraRawOpticsSettings, Double>,
+                          high: WritableKeyPath<CameraRawOpticsSettings, Double>, help: LocalizedStringResource) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary).help(help)
+            Text(String(localized: title)).font(.caption).foregroundStyle(.secondary).help(Text(String(localized: help)))
             HStack(spacing: 8) {
                 Text("Low").font(.caption2).help("Start of the hue range, in degrees.")
                 CameraRawSlider(value: raw.optics[keyPath: low], range: CameraRawOpticsSettings.hueRange, track: .plain,
                                 help: "Start of the hue range, in degrees.",
                                 onChange: { value in update { $0.cameraRaw.optics[keyPath: low] = value.rounded() } },
-                                onReset: { update { $0.cameraRaw.optics[keyPath: low] = title.contains("Purple") ? 270 : 60 } })
+                                onReset: { update { $0.cameraRaw.optics[keyPath: low] = title.key.contains("Purple") ? 270 : 60 } })
                 Text("High").font(.caption2).help("End of the hue range, in degrees.")
                 CameraRawSlider(value: raw.optics[keyPath: high], range: CameraRawOpticsSettings.hueRange, track: .plain,
                                 help: "End of the hue range, in degrees.",
                                 onChange: { value in update { $0.cameraRaw.optics[keyPath: high] = value.rounded() } },
-                                onReset: { update { $0.cameraRaw.optics[keyPath: high] = title.contains("Purple") ? 310 : 120 } })
+                                onReset: { update { $0.cameraRaw.optics[keyPath: high] = title.key.contains("Purple") ? 310 : 120 } })
             }
         }
         .padding(.leading, CameraRawControls.labelWidth + 10)
