@@ -94,6 +94,7 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
             cell.configure(row, session: session)
             cell.onRename = { [weak self] in self?.rename(id) }
             cell.onEditAdjustment = { [weak self] in self?.editAdjustment(id) }
+            cell.onEditText = { [weak self] in self?.editText(id) }
         }
         dataSource = UICollectionViewDiffableDataSource(collectionView: list) { collectionView, indexPath, id in
             collectionView.dequeueConfiguredReusableCell(using: registration, for: indexPath, item: id)
@@ -326,6 +327,13 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
               AdjustmentEditors.kinds.contains(kind) else { return }
         session.selectLayer(id)
         session.adjustmentEditingID = id
+    }
+
+    /// A text layer's text, opened for typing, as a double click on its thumbnail opens it on the Mac.
+    private func editText(_ id: UUID) {
+        guard let session else { return }
+        session.selectLayer(id)
+        session.editActiveText()
     }
 
     /// The Mac's menu for a layer's row, in its order.
@@ -572,8 +580,10 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
     static let effectHeight: CGFloat = 28
 
     var onRename: () -> Void = {}
-    /// A double tap on an adjustment layer's thumbnail.
+    /// A double tap on an adjustment layer's thumbnail or its mask's.
     var onEditAdjustment: () -> Void = {}
+    /// A double tap on a text layer's thumbnail or its mask's.
+    var onEditText: () -> Void = {}
     private weak var session: EditorSession?
     private(set) var layerID: UUID?
     private var rowIDs: () -> [UUID] = { [] }
@@ -754,58 +764,25 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
         background.backgroundColor = row.selected ? UIColor.tintColor.withAlphaComponent(0.28) : .clear
         contentView.alpha = row.visible ? 1 : 0.35
 
-        effects.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        effectKinds = layer.effects?.kinds ?? []
-        for kind in effectKinds {
-            effects.addArrangedSubview(effectRow(kind, enabled: layer.effects?.isEnabled(kind) == true, indent: indent, editable: row.enabled,
-                                                 selected: row.effect == kind))
+        // The effects' rows are made again only when the effects listed change, so a second tap on an effect's eye,
+        // come down before its row shows the first, still finds the eye there, as it always finds the layer's own.
+        let kinds = layer.effects?.kinds ?? []
+        if kinds != effectKinds {
+            effects.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            effectKinds = kinds
+            for kind in kinds {
+                effects.addArrangedSubview(EffectRowView(kind) { [weak self] in self?.perform { $0.toggleEffect(kind, on: $1) } })
+            }
+        }
+        for case let effect as EffectRowView in effects.arrangedSubviews {
+            effect.show(enabled: layer.effects?.isEnabled(effect.kind) == true, indent: indent, editable: row.enabled,
+                        selected: row.effect == effect.kind)
         }
         height.constant = Self.height + CGFloat(layer.effects?.kinds.count ?? 0) * Self.effectHeight
 
         isAccessibilityElement = false
         accessibilityElements = [eye, disclosure, thumbnail, link, maskThumbnail, name, detail, effects].filter { !$0.isHidden }
         name.accessibilityTraits = row.selected ? [.button, .selected] : .button
-    }
-
-    /// An effect under its layer, with its own visibility, as the Mac's effect rows: a tap selects it, highlighted, and a
-    /// double tap edits it.
-    private func effectRow(_ kind: LayerEffectKind, enabled: Bool, indent: CGFloat, editable: Bool, selected: Bool) -> UIView {
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: enabled ? "eye" : "eye.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))
-        configuration.baseForegroundColor = .secondaryLabel
-        let eye = UIButton(configuration: configuration)
-        eye.accessibilityLabel = (enabled ? "Hide " : "Show ") + kind.rawValue
-        eye.isEnabled = editable
-        eye.addAction(UIAction { [weak self] _ in self?.perform { $0.toggleEffect(kind, on: $1) } }, for: .primaryActionTriggered)
-        let label = UILabel()
-        label.text = kind.rawValue
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = enabled ? .label : .secondaryLabel
-        label.accessibilityLabel = kind.rawValue + " effect"
-        label.accessibilityTraits = selected ? [.button, .selected] : .button
-        let highlight = UIView()
-        highlight.backgroundColor = selected ? UIColor.tintColor.withAlphaComponent(0.28) : .clear
-        highlight.layer.cornerRadius = 6
-        highlight.layer.cornerCurve = .continuous
-        highlight.isUserInteractionEnabled = false
-        let row = UIView()
-        for view in [highlight, eye, label] as [UIView] {
-            row.addSubview(view)
-            view.translatesAutoresizingMaskIntoConstraints = false
-        }
-        NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: Self.effectHeight),
-            highlight.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 4),
-            highlight.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -4),
-            highlight.topAnchor.constraint(equalTo: row.topAnchor), highlight.bottomAnchor.constraint(equalTo: row.bottomAnchor),
-            eye.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 40 + indent),
-            eye.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            eye.widthAnchor.constraint(equalToConstant: 28), eye.heightAnchor.constraint(equalToConstant: Self.effectHeight),
-            label.leadingAnchor.constraint(equalTo: eye.trailingAnchor, constant: 4),
-            label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            label.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -8),
-        ])
-        return row
     }
 
     private func perform(_ action: (EditorSession, UUID) -> Void) {
@@ -841,21 +818,36 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
         LayersPanelView.select(layerID, in: session, rows: rowIDs(), modifiers: modifiers)
     }
 
-    /// A double tap on an effect opens its panel; elsewhere it renames, or on an adjustment's thumbnail opens its editor,
-    /// as a double click does on the Mac.
+    /// A double tap on an effect opens its panel; on the layer's thumbnail or its mask's it opens what the layer holds,
+    /// its text or an adjustment's editor, and elsewhere it renames, as a double click does on the Mac.
     func doubleTap(at point: CGPoint) {
         if let kind = effect(at: point), let session, let layerID {
             session.selectEffect(kind, on: layerID, editing: true)
             return
         }
-        let onThumbnail = thumbnail.frame.insetBy(dx: -8, dy: -8).contains(point)
+        let onThumbnail = [thumbnail, maskThumbnail].contains { !$0.isHidden && $0.frame.insetBy(dx: -8, dy: -8).contains(point) }
+        let layer = session?.document?.layers.first { $0.id == layerID }
         // Only an adjustment with settings has an editor; an Invert layer's thumbnail renames, as on the Mac.
-        if onThumbnail, let session, let layerID,
-           session.document?.layers.first(where: { $0.id == layerID })?.adjustment?.kind.isEditable == true {
+        if onThumbnail, layer?.liveText != nil {
+            onEditText()
+        } else if onThumbnail, layer?.adjustment?.kind.isEditable == true {
             onEditAdjustment()
         } else {
             onRename()
         }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        // The row's buttons, its eyes, the folder's disclosure and the mask's link, take each tap themselves, as the
+        // Mac's track the mouse themselves: a double tap presses one twice rather than renaming the layer or editing
+        // the effect. UIKit itself keeps only a button's single tap from the row. A disabled one, which UIKit doesn't
+        // hit-test, swallows its taps as the Mac's swallows a click, so the row neither selects, ending the typing or
+        // the transform it's disabled for, nor renames: a button is found by where the finger is, in its own turned
+        // bounds for the link. The thumbnails aren't buttons: a double tap on one opens what the layer holds, so a
+        // touch UIKit hands to one is the row's, though the link's turned bounds reach under the mask's corner.
+        if touch.view is ThumbnailControl { return true }
+        let buttons = [eye, disclosure, link] + effects.arrangedSubviews.compactMap { ($0 as? EffectRowView)?.eye }
+        return !buttons.contains { !$0.isHidden && $0.bounds.contains(touch.location(in: $0)) }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
@@ -869,6 +861,57 @@ final class LayerRowCell: UICollectionViewCell, UIGestureRecognizerDelegate {
         if let adjustment = layer.adjustment { return adjustment.kind.symbol }
         if layer.liveText != nil { return "textformat" }
         return layer.isGroup ? "folder" : nil
+    }
+}
+
+/// An effect under its layer, with its own visibility, as the Mac's effect rows: a tap selects it, highlighted, and a
+/// double tap edits it.
+private final class EffectRowView: UIView {
+    let kind: LayerEffectKind
+    let eye = UIButton(configuration: .plain())
+    private let label = UILabel()
+    private let highlight = UIView()
+    private var indentation: NSLayoutConstraint!
+
+    init(_ kind: LayerEffectKind, toggle: @escaping () -> Void) {
+        self.kind = kind
+        super.init(frame: .zero)
+        eye.configuration?.baseForegroundColor = .secondaryLabel
+        eye.addAction(UIAction { _ in toggle() }, for: .primaryActionTriggered)
+        label.text = kind.rawValue
+        label.font = .systemFont(ofSize: 12)
+        label.accessibilityLabel = kind.rawValue + " effect"
+        highlight.layer.cornerRadius = 6
+        highlight.layer.cornerCurve = .continuous
+        highlight.isUserInteractionEnabled = false
+        for view in [highlight, eye, label] as [UIView] {
+            addSubview(view)
+            view.translatesAutoresizingMaskIntoConstraints = false
+        }
+        indentation = eye.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: LayerRowCell.effectHeight),
+            highlight.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            highlight.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            highlight.topAnchor.constraint(equalTo: topAnchor), highlight.bottomAnchor.constraint(equalTo: bottomAnchor),
+            indentation,
+            eye.centerYAnchor.constraint(equalTo: centerYAnchor),
+            eye.widthAnchor.constraint(equalToConstant: 28), eye.heightAnchor.constraint(equalToConstant: LayerRowCell.effectHeight),
+            label.leadingAnchor.constraint(equalTo: eye.trailingAnchor, constant: 4),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(enabled: Bool, indent: CGFloat, editable: Bool, selected: Bool) {
+        eye.configuration?.image = UIImage(systemName: enabled ? "eye" : "eye.slash", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11))
+        eye.accessibilityLabel = (enabled ? "Hide " : "Show ") + kind.rawValue
+        eye.isEnabled = editable
+        label.textColor = enabled ? .label : .secondaryLabel
+        label.accessibilityTraits = selected ? [.button, .selected] : .button
+        highlight.backgroundColor = selected ? UIColor.tintColor.withAlphaComponent(0.28) : .clear
+        indentation.constant = 40 + indent
     }
 }
 
