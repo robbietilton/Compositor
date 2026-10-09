@@ -168,6 +168,11 @@ final class EditorSession {
             await withCheckedContinuation { projectWaiters.append($0) }
         }
     }
+    var printSettings = PrintSettings()
+    var showsPrintSetup = false
+    var showsPrintProof = false
+    var showsPrintGamutWarning = false
+    var printProofError: String?
     var viewport = CanvasViewport()
     var tool: NavigationTool = .move
     var collapsedGroupIDs: Set<UUID> = []

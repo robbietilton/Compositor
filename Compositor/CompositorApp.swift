@@ -130,6 +130,13 @@ struct CompositorApp: App {
                             if let preview = session.previewZoom { preview(.zoomOut) } else { session.zoomKeyboard(by: -1) }
                         }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
+                        Group {
+                            Button("Print Setup…") { session.showsPrintSetup = true }.disabled(session.document == nil)
+                            Toggle("CMYK Print Preview", isOn: Binding(get: { session.showsPrintProof }, set: { session.showsPrintProof = $0 }))
+                                .disabled(session.document == nil || session.printSettings.profile == nil)
+                            Toggle("Gamut Warning", isOn: Binding(get: { session.showsPrintGamutWarning }, set: { session.showsPrintGamutWarning = $0 }))
+                                .disabled(!session.showsPrintProof || session.printSettings.profile?.supportsGamutWarning != true)
+                        }
                         Toggle("Navigator (300% and above)", isOn: $showsNavigator)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))

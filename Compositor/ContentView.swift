@@ -100,6 +100,7 @@ struct ContentView: View {
                         }
                         ZStack {
                             EditorCanvas(session: session)
+                                .overlay(alignment: .topLeading) { PrintProofBadge(session: session) }
                             if session.document == nil { welcome }
                             if let layer = session.maskAloneLayer {
                                 // At the foot of the canvas, clear of the transform box's rotation handle.
@@ -275,6 +276,7 @@ struct ContentView: View {
         .onChange(of: session.document == nil) { _, empty in
             if !empty { session.canvasFocusRequest += 1 }
         }
+        .modifier(PrintSetupPresentation(session: session))
         .fileImporter(isPresented: $session.showsImporter,
                       allowedContentTypes: UTType.importableImages, allowsMultipleSelection: true) { result in
             switch result {

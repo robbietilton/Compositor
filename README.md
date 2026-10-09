@@ -72,7 +72,8 @@ brew install --cask robbietilton-compositor
 - Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
 - Import JPEG, PNG, HEIC, TIFF, SVG, camera RAW (with a develop step first) and Photoshop PSD and PSB (8-bit RGB; not CMYK). Photoshop folders, masks, blend modes, fill rectangles/ellipses, and simple horizontal text stay editable; other vectors and vertical text become pixels. A conversion report is shown before anything is applied.
 - Large documents: the memory budget scales with your Mac, and a Photoshop file too big to open has its layers cropped to the canvas instead
-- Export PNG (⇧⌘E), Export JPEG (⇧⌥⌘S), and Export As (⇧⌥⌘W) for PNG, JPEG or a one-page PDF at the print size, scaled if you like, with a live preview, JPEG quality and file size; Copy Merged
+- Export PNG (⇧⌘E), Export JPEG (⇧⌥⌘S), and Export As (⇧⌥⌘W) for PNG, JPEG, CMYK TIFF or a one-page PDF at the print size, scaled if you like, with a live preview, JPEG quality and file size; Copy Merged
+- CMYK print preview: View › Print Setup selects your print provider’s CMYK output ICC profile and conversion intent. Toggle the preview while editing; gamut warnings are available when the profile supplies them. Export As › CMYK TIFF uses the same profile, intent and background, embeds the ICC profile, and lets you compare the original sRGB colors. Editing stays in sRGB; preview settings last for the session. Paper-white and black-ink simulation, CMYK channel editing and PDF/X are not included.
 - Keep working while a project saves
 - Photoshop-style keyboard shortcuts throughout, remappable in Edit > Keyboard Shortcuts
 - Drag a number's label to scrub its value, as in Photoshop

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// File › Export As…: the flattened canvas as a PNG, a JPEG or a one-page PDF, at its own size or scaled, previewed
+/// File › Export As…: the flattened canvas as PNG, JPEG, PDF or CMYK TIFF, at its own size or scaled, previewed
 /// as it will be written. A light take on Photoshop's Export As: one image, the settings that matter, and its size.
 struct ExportAsSheet: View {
     let raster: ExportRaster
@@ -34,15 +34,18 @@ struct ExportAsSheet: View {
         var options: JPEGOptions
         var width: Int
         var height: Int
+        var printSettings: PrintSettings
     }
     struct Encoded {
         let settings: Settings
         let data: Data
         let preview: CGImage
+        let original: CGImage?
     }
-    private var settings: Settings { Settings(format: format, options: options, width: width, height: height) }
+    private var settings: Settings { Settings(format: format, options: options, width: width, height: height, printSettings: session.printSettings) }
     @State private var result: Encoded?
     @State private var error: String?
+    @State private var comparesOriginal = false
     private var isReady: Bool { result?.settings == settings && error == nil }
     /// The preview's zoom, 1 being 100%; nil fits the whole image.
     @State private var zoom: Double?
@@ -56,6 +59,10 @@ struct ExportAsSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
                 Text("Export As").font(.title2.bold())
+                if format == .cmykTIFF {
+                    Toggle("Compare sRGB", isOn: $comparesOriginal)
+                        .help("Show the original colors before CMYK conversion; the export stays CMYK")
+                }
                 Spacer()
                 Button("Fit") { zoom = nil }.disabled(zoom == nil)
                     .help("Show the whole image (⌘0)")
@@ -70,7 +77,7 @@ struct ExportAsSheet: View {
             ZStack {
                 Color(white: 0.12)
                 if let result {
-                    JPEGPreview(image: result.preview, pixelWidth: result.settings.width, pixelHeight: result.settings.height, zoom: $zoom)
+                    JPEGPreview(image: comparesOriginal && format == .cmykTIFF ? (result.original ?? result.preview) : result.preview, pixelWidth: result.settings.width, pixelHeight: result.settings.height, zoom: $zoom)
                 }
                 if !isReady && error == nil {
                     ProgressView().padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -116,7 +123,7 @@ struct ExportAsSheet: View {
                     }
                 }
                 // JPEG has no transparency, and a PDF's page shows through it, so both fill it with a color.
-                if format != .png {
+                if format != .png && format != .cmykTIFF {
                     GridRow {
                         Text("Background")
                         DialogColorSwatch(title: "Export Background", color: matte, session: session)
@@ -124,8 +131,9 @@ struct ExportAsSheet: View {
                     }
                 }
             }
+            if format == .cmykTIFF { PrintControls(session: session, showsPreviewControls: false) }
             HStack(spacing: 12) {
-                Text(format == .png ? "Transparency kept · sRGB" : "sRGB")
+                Text(format == .cmykTIFF ? "CMYK · ICC profile embedded" : format == .png ? "Transparency kept · sRGB" : "sRGB")
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let error { Text(error).foregroundStyle(.red) }
@@ -159,11 +167,16 @@ struct ExportAsSheet: View {
                 try await Task.sleep(for: .milliseconds(200))
                 let sized = try await ImageExporter.shared.resized(raster, width: requested.width, height: requested.height)
                 let data: Data, preview: CGImage
+                var original: CGImage?
                 switch requested.format {
                 case .jpeg:
                     let encoded = try await ImageExporter.shared.jpeg(sized, options: requested.options)
                     (data, preview) = (encoded.data, encoded.preview)
                 case .png: (data, preview) = (try await ImageExporter.shared.pngData(sized), sized.image)
+                case .cmykTIFF:
+                    let encoded = try await ImageExporter.shared.cmykTIFF(sized, settings: requested.printSettings)
+                    (data, preview) = (encoded.data, encoded.preview)
+                    original = try await ImageExporter.shared.flattened(sized, over: requested.printSettings.background.nsColor.cgColor)
                 case .pdf:
                     let background = CGColor(srgbRed: requested.options.red, green: requested.options.green,
                                              blue: requested.options.blue, alpha: 1)
@@ -171,7 +184,7 @@ struct ExportAsSheet: View {
                                        try await ImageExporter.shared.flattened(sized, over: background))
                 }
                 try Task.checkCancellation()
-                result = Encoded(settings: requested, data: data, preview: preview)
+                result = Encoded(settings: requested, data: data, preview: preview, original: original)
             } catch is CancellationError {
                 // A newer setting superseded this preview.
             } catch {

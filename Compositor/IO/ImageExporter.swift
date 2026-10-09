@@ -186,6 +186,25 @@ actor ImageExporter {
         return flattened
     }
 
+    /// The same profile and intent as the canvas proof, embedded in a lossless four-channel TIFF.
+    func cmykTIFF(_ raster: ExportRaster, settings: PrintSettings) throws -> JPEGResult {
+        guard let profile = settings.profile else { throw CMYKError.profile }
+        try Task.checkCancellation()
+        return try autoreleasepool {
+            let conversion = try CMYKConversion(profile: profile, intent: settings.intent)
+            let image = try conversion.image(raster.image, background: settings.background)
+            try Task.checkCancellation()
+            let data = try encode(image, type: .tiff, properties: [
+                kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution,
+                kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]
+            ] as CFDictionary)
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let preview = CGImageSourceCreateImageAtIndex(source, 0, nil),
+                  preview.colorSpace?.model == .cmyk else { throw ExportError.encode }
+            return JPEGResult(data: data, preview: try conversion.preview(preview))
+        }
+    }
+
     func exportPNG(_ snapshot: ProjectSnapshot, to url: URL) throws {
         let data = try pngData(snapshot)
         try write(data, to: url)
