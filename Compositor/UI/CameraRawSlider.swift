@@ -82,7 +82,7 @@ struct CameraRawSlider: NSViewRepresentable {
         slider.onReset = context.coordinator.reset
         slider.onTrackClick = context.coordinator.onChange
         (slider.cell as? GradientSliderCell)?.gradientColors = track.colors
-        slider.setAccessibilityLabel(help)
+        slider.setAccessibilityLabel(L10n.string(help))
         return slider
     }
 

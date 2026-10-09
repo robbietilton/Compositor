@@ -72,7 +72,7 @@ struct CanvasSizeSheet: View {
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
             Picker("Units", selection: $draft.unit) {
-                ForEach(CanvasUnit.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CanvasUnit.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             HStack {
                 Text("Width").frame(width: 60, alignment: .leading)
@@ -109,7 +109,7 @@ struct CanvasSizeSheet: View {
                                             .frame(width: 25, height: 25)
                                     }
                                     .tint(index == anchor ? .accentColor : .secondary)
-                                    .help(anchorNames[index]).accessibilityLabel(anchorNames[index])
+                                    .help(L10n.string(anchorNames[index])).accessibilityLabel(L10n.string(anchorNames[index]))
                                     .accessibilityValue(index == anchor ? "Selected" : "")
                                 }
                             }
@@ -117,13 +117,13 @@ struct CanvasSizeSheet: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(anchorNames[anchor]).font(.callout.bold())
+                    Text(L10n.string(anchorNames[anchor])).font(.callout.bold())
                     Text("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas.")
                         .font(.callout).foregroundStyle(.secondary)
                 }.padding(.top, 28)
             }
             Picker("Canvas extension", selection: $extensionChoice) {
-                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text($0) }
+                ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) { Text(L10n.string($0)) }
             }
             if extensionChoice == "Custom" {
                 HStack(spacing: 8) {

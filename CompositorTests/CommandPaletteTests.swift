@@ -57,15 +57,15 @@ struct CommandPaletteTests {
         let bar = try #require(NSApp.mainMenu)
         func entries() -> [CommandPaletteEntry] { CommandPaletteMenu.entries(in: bar, skipping: CommandPaletteController.skipped) }
         func gridState() -> NSControl.StateValue? {
-            bar.items.first { $0.title == "View" }?.submenu?.items.first { $0.title == "Pixel Grid (800% and above)" }?.state
+            bar.items.first { $0.title == L10n.string("View") }?.submenu?.items.first { $0.title == L10n.string("Pixel Grid (800% and above)") }?.state
         }
         let listed = entries()
         let titles = Set(listed.map(\.title))
-        #expect(titles.contains("Filter › Gaussian Blur…") && !titles.contains("View › Search Commands…"))
+        #expect(titles.contains(L10n.string("Filter") + " › " + L10n.string("Gaussian Blur") + "…") && !titles.contains(["View", "Search Commands…"].map { L10n.string($0) }.joined(separator: " › ")))
         // The test host has no document open, so Zoom In is disabled: listed, greyed.
-        let zoom = try #require(listed.first { $0.title == "View › Zoom In" })
+        let zoom = try #require(listed.first { $0.title == ["View", "Zoom In"].map { L10n.string($0) }.joined(separator: " › ") })
         #expect(!zoom.isEnabled)
-        let grid = try #require(listed.first { $0.title == "View › Pixel Grid (800% and above)" })
+        let grid = try #require(listed.first { $0.title == ["View", "Pixel Grid (800% and above)"].map { L10n.string($0) }.joined(separator: " › ") })
         let before = try #require(gridState())
         grid.perform()
         try await Task.sleep(for: .milliseconds(300))

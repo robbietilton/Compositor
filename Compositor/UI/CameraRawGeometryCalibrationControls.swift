@@ -10,7 +10,7 @@ struct CameraRawGeometryControls: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Upright").font(.subheadline)
             Picker("Upright", selection: uprightBinding) {
-                ForEach(CameraRawUprightMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawUprightMode.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
@@ -36,7 +36,7 @@ struct CameraRawGeometryControls: View {
                 }
             }
             Picker("Projection", selection: binding(\.projection)) {
-                ForEach(CameraRawProjection.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawProjection.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             .help("Perspective allows stronger keystone. Rectilinear keeps the warp gentler.")
             geometrySlider("Vertical", \.vertical, help: "Straightens vertical lines toward the center.")
@@ -66,17 +66,17 @@ struct CameraRawGeometryControls: View {
                                 range: ClosedRange<Double> = CameraRawGeometrySettings.toneRange, help: String) -> some View {
         let value = raw.geometry[keyPath: key]
         return HStack(spacing: 10) {
-            Text(title).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(help)
+            Text(L10n.string(title)).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(L10n.string(help))
                 .scrubbable(sensitivity: 1,
                             value: Binding(get: { raw.geometry[keyPath: key] },
                                            set: { newValue in update { $0.cameraRaw.geometry[keyPath: key] = newValue } }), range: range)
             CameraRawSlider(value: value, range: range, track: .plain, help: help,
                             onChange: { rawValue in update { $0.cameraRaw.geometry[keyPath: key] = rawValue.rounded() } },
                             onReset: { update { $0.cameraRaw.geometry[keyPath: key] = 0 } })
-            TextField(title, value: Binding(get: { raw.geometry[keyPath: key] },
+            TextField(L10n.string(title), value: Binding(get: { raw.geometry[keyPath: key] },
                                             set: { newValue in update { $0.cameraRaw.geometry[keyPath: key] = newValue } }),
                       format: .number.precision(.fractionLength(0)))
-                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(help)
+                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(L10n.string(help))
         }
     }
 
@@ -95,14 +95,14 @@ struct CameraRawCalibrationControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Process", selection: binding(\.process)) {
-                ForEach(CameraRawProcessVersion.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawProcessVersion.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             .help("Chooses how strongly the calibration sliders below are applied. Version 6 is the current default.")
-            Text(raw.calibration.process.summary)
+            Text(L10n.string(raw.calibration.process.summary))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .help(raw.calibration.process.summary)
+                .help(L10n.string(raw.calibration.process.summary))
             Text("Shadows").font(.subheadline)
             calibrationSlider("Tint", \.shadowTint, help: "Adds green or magenta to the darkest tones.")
             Text("Red Primary").font(.subheadline)
@@ -124,7 +124,7 @@ struct CameraRawCalibrationControls: View {
     private func calibrationSlider(_ title: String, _ key: WritableKeyPath<CameraRawCalibrationSettings, Double>, help: String) -> some View {
         let value = raw.calibration[keyPath: key]
         return HStack(spacing: 10) {
-            Text(title).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(help)
+            Text(L10n.string(title)).frame(minWidth: CameraRawControls.labelWidth, alignment: .leading).help(L10n.string(help))
                 .scrubbable(sensitivity: 1,
                             value: Binding(get: { raw.calibration[keyPath: key] },
                                            set: { newValue in update { $0.cameraRaw.calibration[keyPath: key] = newValue } }),
@@ -132,10 +132,10 @@ struct CameraRawCalibrationControls: View {
             CameraRawSlider(value: value, range: CameraRawCalibrationSettings.toneRange, track: .plain, help: help,
                             onChange: { rawValue in update { $0.cameraRaw.calibration[keyPath: key] = rawValue.rounded() } },
                             onReset: { update { $0.cameraRaw.calibration[keyPath: key] = 0 } })
-            TextField(title, value: Binding(get: { raw.calibration[keyPath: key] },
+            TextField(L10n.string(title), value: Binding(get: { raw.calibration[keyPath: key] },
                                             set: { newValue in update { $0.cameraRaw.calibration[keyPath: key] = newValue } }),
                       format: .number.precision(.fractionLength(0)))
-                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(help)
+                .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).help(L10n.string(help))
         }
     }
 
