@@ -267,7 +267,7 @@ private struct OverflowTabsPill: View {
     private var label: String { projectTabOverflowLabel(for: hiddenIDs.count) }
     var body: some View {
         HStack(spacing: 4) {
-            Text(label).font(.system(size: 12, weight: .medium))
+            Text(L10n.text(label)).font(.system(size: 12, weight: .medium))
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium))
         }
         .padding(.horizontal, 11)
@@ -284,7 +284,7 @@ private struct OverflowTabsPill: View {
                 }
             }
         })
-        .help(label)
+        .help(L10n.text(label))
         .accessibilityIdentifier("projectTabsOverflow")
     }
 }
@@ -296,7 +296,7 @@ private struct OverflowMenuAnchor: NSViewRepresentable {
     func makeNSView(context: Context) -> AnchorView { AnchorView() }
     func updateNSView(_ view: AnchorView, context: Context) {
         view.items = items
-        view.setAccessibilityLabel(label)
+        view.setAccessibilityLabel(L10n.text(label))
     }
     final class AnchorView: NSView {
         var items: () -> [(title: String, action: () -> Void)] = { [] }
@@ -358,13 +358,13 @@ private struct ProjectTabButton: View {
                     .frame(width: 16, height: 28)
                     .padding(.trailing, 5)
                     .contentShape(Rectangle())
-            }.buttonStyle(.plain).help("Close \(tab.title)").disabled(!workspace.canSwitch)
-                .accessibilityLabel("Close \(tab.title)")
+            }.buttonStyle(.plain).help(L10n.text(L10n.format("Close %@", String(describing: (tab.title))))).disabled(!workspace.canSwitch)
+                .accessibilityLabel(L10n.text(L10n.format("Close %@", String(describing: (tab.title)))))
         }
         .frame(height: 28)
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
-        .help(targeted ? "Add to \(tab.title)" : tab.title)
+        .help(L10n.text(targeted ? L10n.format("Add to %@", String(describing: (tab.title))) : tab.title))
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
     }
@@ -376,7 +376,7 @@ struct NewProjectDropTarget: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
-            .help(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs")
+            .help(L10n.text(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs"))
             .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }

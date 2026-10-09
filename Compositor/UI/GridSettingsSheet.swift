@@ -56,7 +56,7 @@ struct GridSettingsSheet: View {
             HStack {
                 Text("Color").frame(width: 110, alignment: .leading)
                 Picker("Color", selection: $appearance.preset) {
-                    ForEach(GridAppearance.Preset.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(GridAppearance.Preset.allCases) { Text(L10n.text($0.rawValue)).tag($0) }
                 }.labelsHidden()
                 DialogColorSwatch(title: "Grid Color", color: swatchColor, session: session)
                     .help("Choose a custom grid color")
@@ -64,7 +64,7 @@ struct GridSettingsSheet: View {
             HStack {
                 Text("Style").frame(width: 110, alignment: .leading)
                 Picker("Style", selection: $appearance.style) {
-                    ForEach(GridAppearance.Style.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(GridAppearance.Style.allCases) { Text(L10n.text($0.rawValue)).tag($0) }
                 }.labelsHidden()
             }
             HStack {
@@ -89,8 +89,8 @@ struct GridSettingsSheet: View {
                     .scrubbable(sensitivity: 0.2, value: $subdivisions, range: LayoutGrid.subdivisionRange)
                 TextField("Subdivisions", value: $subdivisions, format: .number)
             }
-            Text(valid ? "A subdivision every \(Double(grid.step).formatted(.number.precision(.fractionLength(0...2)))) pixels."
-                       : "Use gridlines every \(LayoutGrid.spacingRange.lowerBound)–\(LayoutGrid.spacingRange.upperBound.formatted()) pixels and \(LayoutGrid.subdivisionRange.lowerBound)–\(LayoutGrid.subdivisionRange.upperBound) subdivisions, no more than the pixels between gridlines.")
+            Text(L10n.text(valid ? L10n.format("A subdivision every %@ pixels.", String(describing: (Double(grid.step).formatted(.number.precision(.fractionLength(0...2))))))
+                       : L10n.format("Use gridlines every %@–%@ pixels and %@–%@ subdivisions, no more than the pixels between gridlines.", String(describing: (LayoutGrid.spacingRange.lowerBound)), String(describing: (LayoutGrid.spacingRange.upperBound.formatted())), String(describing: (LayoutGrid.subdivisionRange.lowerBound)), String(describing: (LayoutGrid.subdivisionRange.upperBound)))))
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

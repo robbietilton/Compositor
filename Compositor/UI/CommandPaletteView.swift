@@ -55,9 +55,9 @@ struct CommandPaletteView: View {
             if entry.isOn {
                 Image(systemName: "checkmark").font(.caption.weight(.semibold)).frame(width: 12)
             }
-            Text(entry.title).lineLimit(1)
+            Text(L10n.text(entry.title)).lineLimit(1)
             Spacer()
-            if let shortcut = entry.shortcut { Text(shortcut).font(.callout.monospaced()).foregroundStyle(.secondary) }
+            if let shortcut = entry.shortcut { Text(L10n.text(shortcut)).font(.callout.monospaced()).foregroundStyle(.secondary) }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(chosen ? Color.accentColor.opacity(0.35) : .clear, in: RoundedRectangle(cornerRadius: 6))
@@ -84,7 +84,7 @@ final class CommandPaletteController {
         if isOpen { close(); return }
         self.window = window
         let bar = menu ?? NSApp.mainMenu
-        let entries = (bar.map { CommandPaletteMenu.entries(in: $0, skipping: Self.skipped) } ?? []) + CommandPaletteEntry.layerCommands(for: session)
+        let entries = (bar.map { CommandPaletteMenu.entries(in: $0, skipping: Set(Self.skipped.map(L10n.text))) } ?? []) + CommandPaletteEntry.layerCommands(for: session)
             + CommandPaletteEntry.tools(for: session)
         let model = CommandPaletteModel(entries: entries)
         let panel = self.panel ?? makePanel()

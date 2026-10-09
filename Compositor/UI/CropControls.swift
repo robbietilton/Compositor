@@ -9,11 +9,11 @@ struct CropControls: View {
         HStack(spacing: 14) {
             Text("Crop").font(ToolHeaderStyle.titleFont)
             Picker("Ratio", selection: $session.cropRatioChoice) {
-                ForEach(["Free", "Original", "1:1", "4:3", "3:4", "16:9", "9:16"], id: \.self) { Text($0) }
+                ForEach(["Free", "Original", "1:1", "4:3", "3:4", "16:9", "9:16"], id: \.self) { Text(L10n.text($0)) }
             }.frame(width: 170)
                 .onChange(of: session.cropRatioChoice) { _, _ in session.changeCropRatio() }
             if let rect = session.cropRect {
-                Text("\(Int(rect.width)) × \(Int(rect.height)) px").monospacedDigit()
+                Text(L10n.text(L10n.format("%@ × %@ px", String(describing: (Int(rect.width))), String(describing: (Int(rect.height)))))).monospacedDigit()
             }
             Spacer()
             Button("Cancel") { session.cancelCrop() }.disabled(session.cropRect == nil)

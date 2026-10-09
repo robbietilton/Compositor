@@ -9,8 +9,8 @@ struct LayerMaskMenu: View {
         Button {
             session.addMask(revealing: NSApp.currentEvent?.modifierFlags.contains(.option) != true)
         } label: { FooterIcon(systemName: "rectangle.inset.filled") }
-        .help(session.selection == nil ? "Add layer mask (Option-click for a black mask)"
-              : "Add layer mask revealing the selection (Option-click to hide it)")
+        .help(L10n.text(session.selection == nil ? "Add layer mask (Option-click for a black mask)"
+              : "Add layer mask revealing the selection (Option-click to hide it)"))
         .accessibilityLabel("Add layer mask")
         .disabled(!session.layersLookEditable || session.selectedLayerIDs.count != 1 || session.activeLayer == nil
                   || session.activeLayer?.mask != nil)
@@ -30,7 +30,7 @@ struct MaskAloneBadge: NSViewRepresentable {
 
 final class MaskAloneBadgeView: NSView {
     var layerName = "" { didSet { name.stringValue = layerName; invalidateIntrinsicContentSize() } }
-    private let name = NSTextField(labelWithString: "")
+    private let name = NSTextField(labelWithString: L10n.text(""))
     private let stack: NSStackView
     private let close: () -> Void
 
@@ -38,7 +38,7 @@ final class MaskAloneBadgeView: NSView {
         self.close = close
         let icon = NSImageView(image: NSImage(systemSymbolName: "rectangle.inset.filled", accessibilityDescription: nil) ?? NSImage())
         icon.symbolConfiguration = .init(pointSize: 11, weight: .regular)
-        let title = NSTextField(labelWithString: "Layer Mask")
+        let title = NSTextField(labelWithString: L10n.text("Layer Mask"))
         title.font = .systemFont(ofSize: 12, weight: .semibold)
         title.textColor = .white
         name.font = .systemFont(ofSize: 12)
@@ -48,7 +48,7 @@ final class MaskAloneBadgeView: NSView {
                               target: nil, action: nil)
         button.isBordered = false
         button.symbolConfiguration = .init(pointSize: 9, weight: .bold)
-        button.toolTip = "Show the image again (or Option-click the mask thumbnail)"
+        button.toolTip = L10n.text("Show the image again (or Option-click the mask thumbnail)")
         stack = NSStackView(views: [icon, title, name, button])
         stack.spacing = 7
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 11, bottom: 0, right: 8)

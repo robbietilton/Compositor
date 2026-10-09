@@ -14,14 +14,14 @@ struct ColorRangeSheet: View {
                         // Holding Shift or Option lights up the eyedropper a click will use.
                         .background(edit?.effectiveMode == mode ? Color.accentColor.opacity(0.25) : .clear,
                                     in: RoundedRectangle(cornerRadius: 4))
-                        .help(help(mode))
-                        .accessibilityLabel("\(mode.rawValue) color")
+                        .help(L10n.text(help(mode)))
+                        .accessibilityLabel(L10n.text(L10n.format("%@ color", L10n.text(String(describing: (mode.rawValue))))))
                 }
                 Spacer()
             }
             preview
-            Text(edit?.hasColors == true ? "Shift-click adds a color, Option-click takes one away."
-                                         : "Click the image to pick the color to select.")
+            Text(L10n.text(edit?.hasColors == true ? "Shift-click adds a color, Option-click takes one away."
+                                         : "Click the image to pick the color to select."))
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Text("Fuzziness").fixedSize()
@@ -34,7 +34,7 @@ struct ColorRangeSheet: View {
             Toggle("Invert", isOn: Binding(get: { edit?.invert ?? false }, set: { edit?.invert = $0; session.updateColorRange() }))
                 .help("Select everything except those colors, such as all but a green screen")
             if let error = edit?.error {
-                Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Text(L10n.text(error)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
             Divider()
             HStack {
