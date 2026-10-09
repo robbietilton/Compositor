@@ -11,6 +11,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
     case dither = "Dither"
+    case scanlines = "Scanlines"
     case tonalContrast = "Tonal Contrast"
     case lensCorrection = "Lens Correction"
     case cameraRaw = "Camera Raw Filter"
@@ -79,6 +80,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var blackWhite = BlackWhiteSettings()
     var colorBalance = ColorBalanceSettings()
     var dither = DitherSettings()
+    var scanlines = ScanlinesSettings()
     var cameraRaw = CameraRawSettings()
     /// Remove Background: Basic is the quick subject mask; Advanced refines it (see the three settings below).
     var backgroundQuality: BackgroundQuality = .basic
@@ -118,6 +120,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
         result.dither = dither.normalized
+        result.scanlines = scanlines.normalized
         result.cameraRaw = cameraRaw.normalized
         return result
     }
@@ -198,6 +201,7 @@ nonisolated enum PixelFilter {
         // Grain sits in layer pixels; the job's seed gives each application its own pattern.
         case .grain: image = try settings.grain.apply(job.image, unitsPerPixel: 1 / job.scale, seed: job.seed)
         case .dither: image = try settings.dither.apply(job.image)
+        case .scanlines: image = try settings.scanlines.apply(job.image)
         case .removeBackground:
             image = try SubjectRemoval.run(job.image, settings: settings)
         case .contentAwareFill:
@@ -430,8 +434,9 @@ final class FilterEdit {
     private static func prepared(kind: FilterKind, from source: CGImage, placed: LayerTransform) throws
         -> (mapping: CGAffineTransform, previewSource: CGImage, previewScale: CGFloat, previewMapping: CGAffineTransform) {
         let mapping = BrushRaster.pixelToDocument(placed, width: source.width, height: source.height)
-        // Noise, grain and dither preview at full size: made on a smaller copy they would look coarser once enlarged.
-        let factor = [.addNoise, .grain, .dither, .contentAwareFill, .removeBackground].contains(kind)
+        // Noise, grain, dither and scanlines preview at full size: made on a smaller copy they would look coarser once
+        // enlarged.
+        let factor = [.addNoise, .grain, .dither, .scanlines, .contentAwareFill, .removeBackground].contains(kind)
             ? 1 : min(1, previewLimit / CGFloat(max(source.width, source.height)))
         guard factor < 1 else { return (mapping, source, 1, mapping) }
         let w = max(1, Int(CGFloat(source.width) * factor)), h = max(1, Int(CGFloat(source.height) * factor))

@@ -1827,6 +1827,28 @@
         }
       }
     },
+    "Choose the lines' color": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择扫描线颜色"
+          }
+        }
+      }
+    },
+    "Choose the screen's color": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择屏幕背景颜色"
+          }
+        }
+      }
+    },
     "Choose the vignette color": {
       "extractionState": "manual",
       "localizations": {
@@ -2410,6 +2432,17 @@
         }
       }
     },
+    "Color Picker (Dark Color)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拾色器（暗色）"
+          }
+        }
+      }
+    },
     "Color Picker (Dither Dark Color)": {
       "extractionState": "manual",
       "localizations": {
@@ -2498,6 +2531,17 @@
         }
       }
     },
+    "Color Picker (Light Color)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拾色器（亮色）"
+          }
+        }
+      }
+    },
     "Color Picker (Outer Glow Color)": {
       "extractionState": "manual",
       "localizations": {
@@ -2582,6 +2626,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "颜色平滑度"
+          }
+        }
+      }
+    },
+    "Color Split": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通道分离"
           }
         }
       }
@@ -3362,6 +3417,17 @@
         }
       }
     },
+    "Darker or lighter before the lines are drawn": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在绘制扫描线前调整图像明暗"
+          }
+        }
+      }
+    },
     "Darks": {
       "extractionState": "manual",
       "localizations": {
@@ -3743,6 +3809,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "停用蒙版"
+          }
+        }
+      }
+    },
+    "Displace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "置换"
           }
         }
       }
@@ -4216,6 +4293,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "将每个像素块绘制为实心方块，或绘制为类似点阵屏幕的圆点"
+          }
+        }
+      }
+    },
+    "Draw no line where the picture is darker than this, leaving the screen dark": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不绘制低于此亮度的扫描线，保留暗色背景"
           }
         }
       }
@@ -6332,6 +6420,17 @@
         }
       }
     },
+    "How much of the gap a bright line fills; dimmer parts draw it thinner": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置明亮扫描线占间距的比例；较暗区域的线条会更细"
+          }
+        }
+      }
+    },
     "How much of the profile distortion correction is applied.": {
       "extractionState": "manual",
       "localizations": {
@@ -7329,6 +7428,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "色阶…"
+          }
+        }
+      }
+    },
+    "Lift the lines where the picture is bright, so they ripple into its shapes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在图像较亮处抬升扫描线，使线条随图像轮廓起伏"
           }
         }
       }
@@ -8594,6 +8704,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "将所选像素上移 10 像素"
+          }
+        }
+      }
+    },
+    "Move the red and blue apart, for colored fringes on the lines": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分离红色和蓝色通道，使扫描线边缘呈现色彩偏移"
           }
         }
       }
@@ -13022,6 +13143,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "这些图层提供了动态蒙版"
+          }
+        }
+      }
+    },
+    "Thickness": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "线宽"
           }
         }
       }

@@ -2,14 +2,13 @@ import CoreGraphics
 import Testing
 @testable import Compositor
 
-struct DitherTests {
+struct ScanlinesTests {
     /// One column of a Scanlines render of a flat gray, as brightness per row.
     private func scanlines(gray: CGFloat, spacing: Double, glow: Double = 0) throws -> [Int] {
         let context = try BrushRaster.context(width: 16, height: 32, mask: false)
         context.setFillColor(CGColor(srgbRed: gray, green: gray, blue: gray, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: 16, height: 32))
-        var settings = DitherSettings()
-        settings.style = .scanlines
+        var settings = ScanlinesSettings()
         settings.lineSpacing = spacing
         settings.glow = glow
         let result = try BrushRaster.copy(try settings.apply(try #require(context.makeImage())))
@@ -31,9 +30,8 @@ struct DitherTests {
         #expect(black.allSatisfy { $0 == 0 })
     }
 
-    private func render(_ image: CGImage, _ adjust: (inout DitherSettings) -> Void) throws -> (data: UnsafeMutablePointer<UInt8>, row: Int, context: CGContext) {
-        var settings = DitherSettings()
-        settings.style = .scanlines
+    private func render(_ image: CGImage, _ adjust: (inout ScanlinesSettings) -> Void) throws -> (data: UnsafeMutablePointer<UInt8>, row: Int, context: CGContext) {
+        var settings = ScanlinesSettings()
         settings.glow = 0
         adjust(&settings)
         let result = try BrushRaster.copy(try settings.apply(image))
@@ -73,5 +71,44 @@ struct DitherTests {
         }
         #expect(try edges(0) == [32])
         #expect(try edges(12).count >= 3)
+    }
+
+    /// Displace lifts a line where the picture is bright: over a white half, the line's middle sits higher than over the
+    /// black half, where it stays put.
+    @Test func displaceLiftsLinesWhereThePictureIsBright() throws {
+        let half = try flat(64, 64) { context in
+            context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+            context.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+        }
+        let r = try render(half) { settings in
+            settings.lineSpacing = 16
+            settings.displace = 6
+            settings.colors = .original
+        }
+        func brightest(column x: Int) -> Int {
+            var best = 0, row = 0
+            for y in 16..<32 {
+                let value = Int(r.data[y * r.row + x * 4])
+                if value > best { best = value; row = y }
+            }
+            return row
+        }
+        #expect(brightest(column: 48) < 24, "the line over white rises above the line's own middle")
+    }
+
+    /// Threshold leaves the screen dark where the picture is darker than it.
+    @Test func thresholdDarkensWhatsBelowIt() throws {
+        let gray = try flat(32, 32) { context in
+            context.setFillColor(CGColor(srgbRed: 0.3, green: 0.3, blue: 0.3, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        }
+        let shown = try render(gray) { $0.lineSpacing = 8 }
+        let hidden = try render(gray) { settings in
+            settings.lineSpacing = 8
+            settings.threshold = 60
+        }
+        let litBefore = (0..<32).contains { y in shown.data[y * shown.row + 16 * 4] > 40 }
+        let litAfter = (0..<32).contains { y in hidden.data[y * hidden.row + 16 * 4] > 10 }
+        #expect(litBefore && !litAfter)
     }
 }

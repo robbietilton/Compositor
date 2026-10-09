@@ -1,5 +1,4 @@
 import AppKit
-import CoreImage
 import CoreText
 
 /// Filter › Dither's looks, grouped as the panel's menu lists them. The order matches `DitherPixels.h`.
@@ -14,13 +13,12 @@ nonisolated enum DitherStyle: String, CaseIterable, Sendable {
     case diamonds = "Halftone Diamonds"
     case patterns = "Mac Patterns"
     case ascii = "ASCII"
-    case scanlines = "Scanlines (CRT)"
 
     static let groups: [[DitherStyle]] = [
         [.atkinson, .floydSteinberg],
         [.bayer2, .bayer4, .bayer8],
         [.dots, .lines, .diamonds],
-        [.patterns, .ascii, .scanlines],
+        [.patterns, .ascii],
     ]
     var code: Int32 { Int32(Self.allCases.firstIndex(of: self)!) }
     /// Error diffusion: each pixel's rounding error is passed to its neighbors.
@@ -29,9 +27,9 @@ nonisolated enum DitherStyle: String, CaseIterable, Sendable {
     var hasTones: Bool { Self.groups[0].contains(self) || Self.groups[1].contains(self) }
     var isHalftone: Bool { Self.groups[2].contains(self) }
     /// Halftone shapes, patterns and characters mark one tone on the other, so which one is the mark matters.
-    var drawsMarks: Bool { !hasTones && self != .scanlines }
-    /// ASCII's characters and a CRT's lines are drawn at full resolution, not in chunky pixels.
-    var usesPixelSize: Bool { self != .ascii && self != .scanlines }
+    var drawsMarks: Bool { !hasTones }
+    /// ASCII's characters are drawn at full resolution, not in chunky pixels.
+    var usesPixelSize: Bool { self != .ascii }
 }
 
 /// How a chunky pixel is drawn: a solid square, or a round dot with the dark color showing around it, like the lit
@@ -54,8 +52,6 @@ nonisolated struct DitherSettings: Equatable, Sendable {
     static let cellSizeRange: ClosedRange<Double> = 4...64
     static let textSizeRange: ClosedRange<Double> = 6...64
     static let levelsRange: ClosedRange<Double> = 2...8
-    static let lineSpacingRange: ClosedRange<Double> = 2...32
-    static let wobbleRange: ClosedRange<Double> = 0...64
     static let defaultCharacters = " .:-=+*#%@"
     var style: DitherStyle = .atkinson
     /// Each dithered pixel covers this many layer pixels on a side, for chunky old-screen pixels.
@@ -65,13 +61,6 @@ nonisolated struct DitherSettings: Equatable, Sendable {
     var cellSize: Double = 8
     /// ASCII's line height in layer pixels; the characters are about six tenths as wide.
     var textSize: Double = 14
-    /// Scanlines: how far apart the lines are, in layer pixels.
-    var lineSpacing: Double = 4
-    /// Scanlines, 0–100%: light blooming around the lines, how far the lines break into round dots, and (in pixels)
-    /// how far they waver sideways.
-    var glow: Double = 35
-    var dots: Double = 0
-    var wobble: Double = 0
     /// Halftone screen angle in degrees.
     var angle: Double = 45
     /// Tones per channel for diffusion and ordered styles; 2 is 1-bit.
@@ -95,10 +84,6 @@ nonisolated struct DitherSettings: Equatable, Sendable {
         result.pixelSize = ImageAdjustmentPixels.clamp(pixelSize, Self.pixelSizeRange, 2).rounded()
         result.cellSize = ImageAdjustmentPixels.clamp(cellSize, Self.cellSizeRange, 8).rounded()
         result.textSize = ImageAdjustmentPixels.clamp(textSize, Self.textSizeRange, 14).rounded()
-        result.lineSpacing = ImageAdjustmentPixels.clamp(lineSpacing, Self.lineSpacingRange, 4).rounded()
-        result.glow = ImageAdjustmentPixels.clamp(glow, 0...100, 35)
-        result.dots = ImageAdjustmentPixels.clamp(dots, 0...100, 0)
-        result.wobble = ImageAdjustmentPixels.clamp(wobble, Self.wobbleRange, 0)
         result.angle = ImageAdjustmentPixels.clamp(angle, -90...90, 45)
         result.levels = ImageAdjustmentPixels.clamp(levels, Self.levelsRange, 2).rounded()
         result.diffusion = ImageAdjustmentPixels.clamp(diffusion, 0...100, 100)
@@ -112,7 +97,7 @@ nonisolated struct DitherSettings: Equatable, Sendable {
 
     func apply(_ image: CGImage) throws -> CGImage {
         let settings = normalized
-        // ASCII and Scanlines draw at full resolution: shrinking the image first would blur and break them up.
+        // ASCII draws at full resolution: shrinking the image first would blur and break its characters up.
         let block = settings.style.usesPixelSize ? Int(settings.pixelSize) : 1
         // Chunky pixels: dither a copy averaged down by the pixel size, then blow it back up without smoothing.
         var working = image
@@ -130,7 +115,6 @@ nonisolated struct DitherSettings: Equatable, Sendable {
             working = averaged
         }
         let dithered = try settings.dither(working)
-        if settings.style == .scanlines, settings.glow > 0 { return try settings.glowing(dithered) }
         guard block > 1 else { return dithered }
         let full = try BrushRaster.context(width: image.width, height: image.height, mask: false)
         BrushRaster.draw(dithered, in: CGRect(x: 0, y: 0, width: dithered.width * block, height: dithered.height * block), mask: false, context: full)
@@ -144,32 +128,12 @@ nonisolated struct DitherSettings: Equatable, Sendable {
         return result
     }
 
-    /// The lines' light, blurred across a few line spacings and added back over them, as a CRT's phosphors bloom.
-    private func glowing(_ image: CGImage) throws -> CGImage {
-        let extent = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-        // The glow is wide and soft, so it's blurred at a fraction of the size and scaled back up: the same light for a
-        // small part of the work.
-        let sigma = lineSpacing * 3 + 3, shrink = max(1, (sigma / 4).rounded(.down))
-        let blurred = CIImage(cgImage: image).clampedToExtent()
-            .transformed(by: CGAffineTransform(scaleX: 1 / shrink, y: 1 / shrink))
-            .applyingGaussianBlur(sigma: sigma / shrink)
-            .transformed(by: CGAffineTransform(scaleX: shrink, y: shrink))
-            .cropped(to: extent)
-        let bloom = try BrushRaster.copy(try PixelAdjust.render(blurred, width: image.width, height: image.height, isMask: false))
-        let result = try BrushRaster.copy(image)
-        guard let pixels = result.data, let light = bloom.data, bloom.bytesPerRow == result.bytesPerRow else { throw ExportError.render }
-        dither_glow(pixels.assumingMemoryBound(to: UInt8.self), light.assumingMemoryBound(to: UInt8.self), image.width, image.height,
-                    result.bytesPerRow, Float(glow / 100 * 2.5))
-        guard let glowing = result.makeImage() else { throw ExportError.render }
-        return glowing
-    }
-
     private var darkBytes: [UInt8] {
         [UInt8((dark.red * 255).rounded()), UInt8((dark.green * 255).rounded()), UInt8((dark.blue * 255).rounded())]
     }
 
     private func dither(_ image: CGImage) throws -> CGImage {
-        let cell = Int(style == .scanlines ? lineSpacing : cellSize)
+        let cell = Int(cellSize)
         let glyphs: (maps: [UInt8], coverage: [Float], width: Int, height: Int) = style == .ascii
             ? Self.glyphs(characters.isEmpty ? Self.defaultCharacters : characters, lineHeight: Int(textSize)) : ([], [], 1, 1)
         func bytes(_ color: AdjustmentColor) -> (UInt8, UInt8, UInt8) {
@@ -185,7 +149,7 @@ nonisolated struct DitherSettings: Equatable, Sendable {
                                               angle: Float(angle * .pi / 180), lightOnDark: lightOnDark ? 1 : 0,
                                               originalColors: colors == .original ? 1 : 0, dark: darkColor, light: lightColor,
                                               glyphWidth: Int32(glyphs.width), glyphHeight: Int32(glyphs.height), glyphs: maps.baseAddress, glyphCoverage: coverage.baseAddress,
-                                              glyphCount: Int32(coverage.count), dots: Float(dots / 100), wobble: Float(wobble))
+                                              glyphCount: Int32(coverage.count))
                     failed = dither_apply(pixels, width, height, stride, &params) == 0
                 }
             }

@@ -187,9 +187,13 @@ extension EditorSession {
         guard let colorPicker, case .dialog = colorPicker.target else { return }
         dialogColorChange?(colorPicker.color)
     }
+    /// Dither's, or Scanlines', dark or light color.
     func openDitherColorPicker(light: Bool) {
-        guard canEditPalette, colorPicker == nil, let edit = filterEdit, edit.kind == .dither, !edit.committing else { return }
-        let value = light ? edit.settings.dither.light : edit.settings.dither.dark
+        guard canEditPalette, colorPicker == nil, let edit = filterEdit, edit.kind == .dither || edit.kind == .scanlines,
+              !edit.committing else { return }
+        let colors = edit.kind == .scanlines ? (edit.settings.scanlines.dark, edit.settings.scanlines.light)
+                                             : (edit.settings.dither.dark, edit.settings.dither.light)
+        let value = light ? colors.1 : colors.0
         colorPicker = ColorPickerState(target: .dither(light: light),
                                        original: PaletteColor(red: value.red, green: value.green, blue: value.blue))
     }
@@ -198,9 +202,11 @@ extension EditorSession {
         setDitherColor(colorPicker.color, light: light)
     }
     private func setDitherColor(_ color: PaletteColor, light: Bool) {
-        guard let edit = filterEdit, edit.kind == .dither, !edit.committing else { return }
+        guard let edit = filterEdit, edit.kind == .dither || edit.kind == .scanlines, !edit.committing else { return }
         var settings = edit.settings
-        if light { settings.dither.light = AdjustmentColor(color) } else { settings.dither.dark = AdjustmentColor(color) }
+        if edit.kind == .scanlines {
+            if light { settings.scanlines.light = AdjustmentColor(color) } else { settings.scanlines.dark = AdjustmentColor(color) }
+        } else if light { settings.dither.light = AdjustmentColor(color) } else { settings.dither.dark = AdjustmentColor(color) }
         guard settings != edit.settings else { return }
         updateFilter(settings, preview: edit.preview)
     }
@@ -273,7 +279,7 @@ enum ColorPickerTarget: Equatable {
         case .palette(let background): return background ? "Color Picker (Background Color)" : "Color Picker (Foreground Color)"
         case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
         case .vignette: return "Color Picker (Vignette Color)"
-        case .dither(let light): return light ? "Color Picker (Dither Light Color)" : "Color Picker (Dither Dark Color)"
+        case .dither(let light): return light ? "Color Picker (Light Color)" : "Color Picker (Dark Color)"
         case .dialog(let title): return String(localized: "Color Picker (\(localized(title)))")
         }
     }
