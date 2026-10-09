@@ -7,6 +7,8 @@ import Observation
 nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case gaussianBlur = "Gaussian Blur"
     case motionBlur = "Motion Blur"
+    case unsharpMask = "Unsharp Mask"
+    case highPass = "High Pass"
     case addNoise = "Add Noise"
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
@@ -48,6 +50,13 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var angle: Double = 0
     /// Motion Blur streak length in layer pixels, 1–2000.
     var distance: Double = 10
+    /// Unsharp Mask: strength as Photoshop's percentage (1–500), the blur it sharpens away from (a radius in layer
+    /// pixels, 0.1–1000), and how different a pixel must be from it, in levels (0–255), before it's touched.
+    var sharpenAmount: Double = 100
+    var sharpenRadius: Double = 1
+    var sharpenThreshold: Double = 0
+    /// High Pass radius in layer pixels, 0.1–1000.
+    var highPassRadius: Double = 10
     /// Add Noise strength as Photoshop's percentage, 0.1–400.
     var amount: Double = 10
     /// Add Noise distribution: Gaussian (more speckled) instead of Uniform.
@@ -99,6 +108,10 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.angle = clamp(angle, -90...90, 0)
         result.distance = clamp(distance, 1...2000, 10)
         result.amount = clamp(amount, 0.1...400, 10)
+        result.sharpenAmount = clamp(sharpenAmount, 1...500, 100)
+        result.sharpenRadius = clamp(sharpenRadius, 0.1...1000, 1)
+        result.sharpenThreshold = clamp(sharpenThreshold, 0...255, 0).rounded()
+        result.highPassRadius = clamp(highPassRadius, 0.1...1000, 10)
         result.vignetteAmount = clamp(vignetteAmount, 0...100, 35)
         result.vignetteColor = vignetteColor.clamped
         result.vignetteMidpoint = clamp(vignetteMidpoint, 0...100, 50)
@@ -216,6 +229,29 @@ nonisolated enum PixelFilter {
                 kCIInputAngleKey: settings.angle * .pi / 180,
             ])
             image = try PixelAdjust.render(streaked.cropped(to: extent), width: width, height: height, isMask: false)
+        case .unsharpMask, .highPass:
+            // Blurred with the edge held, so the layer's border isn't read as detail against transparency.
+            let radius = (job.kind == .unsharpMask ? settings.sharpenRadius : settings.highPassRadius) * job.scale
+            let blurred = edges.clampedToExtent().applyingGaussianBlur(sigma: radius).cropped(to: extent)
+            // The blur rendered straight into memory, and the layer copied byte for byte: drawing either into a
+            // context would cost more than the sharpening does.
+            let context = try BrushRaster.copy(job.image)
+            let soft = try BrushRaster.context(width: width, height: height, mask: false)
+            guard let data = context.data?.assumingMemoryBound(to: UInt8.self),
+                  let softData = soft.data?.assumingMemoryBound(to: UInt8.self),
+                  context.bytesPerRow == width * 4, soft.bytesPerRow == width * 4 else { throw ExportError.render }
+            PixelAdjust.ciContext.render(blurred, toBitmap: softData, rowBytes: soft.bytesPerRow, bounds: extent,
+                                         format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+            let amount = settings.sharpenAmount / 100, threshold = Int32(settings.sharpenThreshold)
+            let sharpens = job.kind == .unsharpMask
+            // Rows are packed, so the image is one long row the bands can split anywhere.
+            BrushRaster.inBands(count: width * height) { start, length in
+                let into = data + start * 4, from = softData + start * 4
+                if sharpens { adjust_unsharp_mask(into, from, length, 1, length * 4, length * 4, amount, threshold) }
+                else { adjust_high_pass(into, from, length, 1, length * 4, length * 4) }
+            }
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
         case .addNoise:
             // C, not Core Image: its random generator is uniform only, and Gaussian noise is needed too.
             let context = try BrushRaster.context(width: width, height: height, mask: false)

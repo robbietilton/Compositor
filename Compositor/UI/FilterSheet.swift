@@ -90,6 +90,15 @@ struct FilterSheet: View {
             case .motionBlur:
                 control("Angle", \.angle, range: -90...90, unit: "°", decimals: 0, logarithmic: false)
                 control("Distance", \.distance, range: 1...2000, unit: "px", decimals: 0, logarithmic: true)
+            case .unsharpMask:
+                control("Amount", \.sharpenAmount, range: 1...500, unit: "%", decimals: 0, logarithmic: false)
+                control("Radius", \.sharpenRadius, range: 0.1...1000, unit: "px", decimals: 1, logarithmic: true)
+                    .help("How wide an edge the sharpening reaches across")
+                control("Threshold", \.sharpenThreshold, range: 0...255, unit: "levels", decimals: 0, logarithmic: false)
+                    .help("Leave alone anything this close to its surroundings, such as skin or sky, so it isn't made grainy")
+            case .highPass:
+                control("Radius", \.highPassRadius, range: 0.1...1000, unit: "px", decimals: 1, logarithmic: true)
+                    .help("Keep detail finer than this and turn the rest middle gray; set the layer to Overlay to sharpen with it")
             case .addNoise:
                 control("Amount", \.amount, range: 0.1...400, unit: "%", decimals: 1, logarithmic: true)
                 HStack(spacing: 10) {
