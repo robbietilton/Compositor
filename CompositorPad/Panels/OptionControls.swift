@@ -24,30 +24,116 @@ enum OptionControls {
         return label
     }
 
-    /// A setting that is on or off, drawn as the Mac's checkboxes are.
+    /// A setting that is on or off: a square checkbox before its title, on a rounded rectangle in the tint while on.
+    /// The box, 20 across with corners rounded by 2.84, sits 6 in from the highlight's top and left; the highlight, 32
+    /// tall, has corners rounded by 8.84, the box's 2.84 and those 6, so the two corners share a center. On or off, it's
+    /// the same size, so checking moves nothing.
     static func checkbox(_ title: String, action: @escaping (Bool) -> Void) -> UIButton {
         var configuration = UIButton.Configuration.plain()
         configuration.title = title
-        configuration.imagePadding = 6
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 4)
+        // The symbol rounds its corners by 0.142 of its side as UIKit's continuous corners count it, 2.84 at 20.
+        // Drawn, the highlight's edge runs within a quarter point of 6 outside the box's all round the corner.
+        configuration.cornerStyle = .fixed
+        configuration.background.cornerRadius = 2.84 + 6
+        // On one line: wrapped by a moment's squeeze, as an editor coming up as a sheet gives its rows, a title stays
+        // wrapped once there's room again.
+        configuration.titleLineBreakMode = .byTruncatingTail
+        configuration.imagePadding = 9
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 12)
         configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
             var attributes = attributes
             attributes.font = controlFont
             return attributes
         }
+        let button = toggle(configuration, action: action)
+        button.configurationUpdateHandler = { button in
+            // White when on, with the check cut out, so the highlight's tint shows through it.
+            let color: UIColor = !button.isEnabled ? .tertiaryLabel : button.isSelected ? .white : .secondaryLabel
+            button.configuration?.image = checkboxSymbol(button.isSelected ? "checkmark.square.fill" : "square", color: color,
+                                                         traits: button.traitCollection)
+            button.configuration?.baseForegroundColor = button.isEnabled ? .label : .tertiaryLabel
+            // Set either way, as UIKit puts its own behind a selected button that has none. None while the setting can't
+            // be changed, when the dimmed box says it alone.
+            button.configuration?.background.backgroundColor = button.isSelected && button.isEnabled
+                ? button.tintColor.withAlphaComponent(0.25) : .clear
+        }
+        return button
+    }
+
+    /// A setting that is on or off shown as a symbol alone, as the Transform bar's lock: in the tint, on a faint tint of
+    /// it, while on.
+    static func symbolToggle(_ symbol: String, label: String, action: @escaping (Bool) -> Void) -> UIButton {
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: symbol)
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 4)
+        let button = toggle(configuration, action: action)
+        button.configurationUpdateHandler = { button in
+            button.configuration?.baseForegroundColor = button.isSelected ? .tintColor : .secondaryLabel
+            button.configuration?.background.backgroundColor = button.isSelected ? UIColor.tintColor.withAlphaComponent(0.18) : .clear
+        }
+        button.accessibilityLabel = label
+        return button
+    }
+
+    /// A button that each tap turns on or off, telling `action` which.
+    private static func toggle(_ configuration: UIButton.Configuration, action: @escaping (Bool) -> Void) -> UIButton {
         let button = UIButton(configuration: configuration)
         button.changesSelectionAsPrimaryAction = true
-        button.configurationUpdateHandler = { button in
-            let checked = button.isSelected && button.isEnabled
-            button.configuration?.image = UIImage(systemName: button.isSelected ? "checkmark.square.fill" : "square")?
-                .withTintColor(checked ? .tintColor : .secondaryLabel, renderingMode: .alwaysOriginal)
-            button.configuration?.baseForegroundColor = button.isEnabled ? .label : .tertiaryLabel
-        }
         button.addAction(UIAction { [weak button] _ in
             guard let button else { return }
             action(button.isSelected)
         }, for: .primaryActionTriggered)
         return button
+    }
+
+    /// The system's symbol `name` in `color`, as `traits` show it, drawn so its outline is the checkbox's 20 points
+    /// across: the symbol's own image leaves room around the outline, more for some symbols than others.
+    private static func checkboxSymbol(_ name: String, color: UIColor, traits: UITraitCollection) -> UIImage? {
+        // Heavier with Bold Text, as the system draws its symbols, and wider for it: measured at the weight drawn, so
+        // a box that's heavier isn't cut off at the right and bottom, nor one that's lighter left short of them.
+        let weight: UILegibilityWeight = traits.legibilityWeight == .bold ? .bold : .regular
+        guard let symbol = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 400)
+            .withTraitCollection(UITraitCollection(legibilityWeight: weight))) else { return nil }
+        let outline = outlines[weight]?[name] ?? outline(of: symbol)
+        outlines[weight, default: [:]][name] = outline
+        let side: CGFloat = 20, scale = side / outline.width
+        let format = UIGraphicsImageRendererFormat(for: traits)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
+            symbol.withTintColor(.black, renderingMode: .alwaysOriginal)
+                .draw(in: CGRect(x: -outline.minX * scale, y: -outline.minY * scale, width: symbol.size.width * scale,
+                                 height: symbol.size.height * scale))
+            // The color laid over what the symbol covers, in proportion: a symbol drawn in a color comes out darker
+            // along its left and bottom edges, which a box shows.
+            color.resolvedColor(with: traits).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: side, height: side), blendMode: .sourceIn)
+        }
+        return image.withRenderingMode(.alwaysOriginal)
+    }
+
+    /// Where each symbol's outline sits in its image at 400 points, at each weight Bold Text gives, measured once.
+    private static var outlines: [UILegibilityWeight: [String: CGRect]] = [:]
+
+    /// The bounds of what `symbol` covers at least half of, drawn a pixel to the point.
+    private static func outline(of symbol: UIImage) -> CGRect {
+        let whole = CGRect(origin: .zero, size: symbol.size)
+        let width = Int(symbol.size.width.rounded(.up)), height = Int(symbol.size.height.rounded(.up))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return whole }
+        // Top down, as UIKit draws, so the rows in memory run as the image's do.
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        UIGraphicsPushContext(context)
+        symbol.withTintColor(.black, renderingMode: .alwaysOriginal).draw(at: .zero)
+        UIGraphicsPopContext()
+        guard let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return whole }
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width where pixels[y * context.bytesPerRow + x * 4 + 3] > 127 {
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        return maxX < minX ? whole : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
 
     /// A button that does one thing, as the Mac's bordered buttons do.

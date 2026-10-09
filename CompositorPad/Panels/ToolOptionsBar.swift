@@ -159,16 +159,10 @@ final class ToolOptionsBar: UIView {
         let y = transformField("Y") { $0.origin.y = $1 }
         let width = transformField("W", range: 1...30_000) { [weak self] value, number in self?.resize(&value, to: number, width: true) }
         let height = transformField("H", range: 1...30_000) { [weak self] value, number in self?.resize(&value, to: number, width: false) }
-        let lock = OptionControls.checkbox("") { [weak self] in
+        let lock = OptionControls.symbolToggle("link", label: "Lock aspect ratio") { [weak self] in
             guard let self else { return }
             session?.locksTransformRatio = $0 != heldKeys.contains(.shift)
         }
-        lock.configurationUpdateHandler = { button in
-            button.configuration?.image = UIImage(systemName: "link")
-            button.configuration?.baseForegroundColor = button.isSelected ? .tintColor : .secondaryLabel
-            button.configuration?.background.backgroundColor = button.isSelected ? UIColor.tintColor.withAlphaComponent(0.18) : .clear
-        }
-        lock.accessibilityLabel = "Lock aspect ratio"
         let scale = NumberField(caption: "Scale", unit: "%", width: 64, range: 0.1...30_000, format: NumberField.upToTwoDecimals)
         scale.live = true
         scale.onChange = { [weak self] number in
