@@ -5,6 +5,40 @@ import UniformTypeIdentifiers
 
 @MainActor
 struct CropTests {
+    @Test func customRatiosAcceptPositiveNumbersAndRejectInvalidInput() {
+        #expect(CropGeometry.ratio("9:20") == 0.45)
+        #expect(CropGeometry.ratio(" 2.5 : 1 ") == 2.5)
+        #expect(CropGeometry.ratio("2,5:1") == 2.5)
+        #expect(CropGeometry.ratio("900:2000") == 0.45)
+        for text in ["", "9", ":20", "9:", "9:20:1", "Free", "0:20", "9:0", "-9:20", "9:-20",
+                     "nan:1", "1:inf", "1e309:1", "1e308:1e-308", "1e-308:1e308", "1:30001", "30001:1"] {
+            #expect(CropGeometry.ratio(text) == nil, "\(text) must not be a crop ratio")
+        }
+    }
+
+    @Test func customRatioResizesTheFrameAndPreservesTheExistingChoices() throws {
+        let session = EditorSession()
+        session.createDocument(width: 900, height: 600)
+        session.selectTool(.crop)
+        session.cropRatioChoice = "9:20"
+        session.changeCropRatio()
+        #expect(session.cropRect == CGRect(x: 0, y: -700, width: 900, height: 2000))
+        session.cropRatioChoice = "Original"
+        #expect(session.cropRatio == 1.5)
+        session.cropRatioChoice = "Free"
+        #expect(session.cropRatio == nil)
+        session.cropRatioChoice = "4:3"
+        #expect(session.cropRatio == CGFloat(4) / 3)
+        session.cropRatioChoice = "1:30000"
+        session.changeCropRatio()
+        let rect = try #require(session.cropRect)
+        #expect(CropGeometry.valid(rect))
+        #expect(rect.width == 1 && rect.height == 30000)
+        session.cropRatioChoice = "30000:1"
+        session.changeCropRatio()
+        #expect(session.cropRect?.size == CGSize(width: 30000, height: 1))
+    }
+
     @Test func dragGeometrySupportsReverseRatioMoveAndEveryHandle() {
         let rect = CropGeometry.create(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 20, y: 60), ratio: 2)
         #expect(rect == CGRect(x: 20, y: 60, width: 80, height: 40))
