@@ -359,6 +359,18 @@ struct CompositorApp: App {
                             .disabled(!session.canTransform)
                         Button("Flip Layer Vertical") { session.flipLayers(horizontally: false) }
                             .disabled(!session.canTransform)
+                        Menu("Align") {
+                            ForEach(LayerAlignment.allCases, id: \.self) { alignment in
+                                Button(alignment.rawValue) { session.alignLayers(alignment) }
+                            }
+                        }
+                            .disabled(!session.canAlignLayers)
+                        Menu("Distribute") {
+                            ForEach(LayerDistribution.allCases, id: \.self) { distribution in
+                                Button(distribution.rawValue) { session.distributeLayers(distribution) }
+                            }
+                        }
+                            .disabled(!session.canDistributeLayers)
                     }
                     Divider()
                     Button(session.selectedEffect != nil ? "Delete " + session.selectedEffect!.kind.rawValue : session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer") {
