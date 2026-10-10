@@ -11,13 +11,16 @@ nonisolated enum AdjustmentSurface {
         // stretched back up and soft. Too big for that, it falls back to points.
         let device = LayerRenderer.deviceScale(of: context)
         let scale = bounds.width * bounds.height * device * device <= DocumentLimits.maxSurfaceExtent ? device : 1
-        guard bounds.width * bounds.height <= DocumentLimits.maxSurfaceExtent,
-              let surface = try? BrushRaster.context(width: Int((bounds.width * scale).rounded()),
-                                                     height: Int((bounds.height * scale).rounded()), mask: false) else { return }
-        surface.scaleBy(x: scale, y: scale)
-        surface.translateBy(x: -bounds.minX, y: -bounds.minY)
-        body(surface)
-        guard let image = surface.makeImage() else { return }
+        let width = Int((bounds.width * scale).rounded()), height = Int((bounds.height * scale).rounded())
+        // Same pixel size as the last frame: reuse that bitmap instead of allocating another full surface.
+        guard bounds.width * bounds.height <= DocumentLimits.maxSurfaceExtent, width > 0, height > 0,
+              let image = try? ImageAdjustmentPixels.withContext(width: width, height: height, clear: true, { surface -> CGImage in
+                  surface.scaleBy(x: scale, y: scale)
+                  surface.translateBy(x: -bounds.minX, y: -bounds.minY)
+                  body(surface)
+                  guard let image = surface.makeImage() else { throw ExportError.render }
+                  return image
+              }) else { return }
         context.saveGState()
         context.interpolationQuality = scale == device ? .none : .high
         context.translateBy(x: bounds.minX, y: bounds.maxY)

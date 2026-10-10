@@ -31,11 +31,12 @@ final class WarpStroke {
     /// The working copy on the GPU, where the dabs run when there is one (see MetalWarp).
     let gpu: MetalWarp?
     private var cpuImage: CGImage?
-    /// The working copy as an image, fetched from the GPU the first time it's asked for after a dab.
+    /// Document pixels the latest append changed, or nil when that move laid no dab.
+    private(set) var dirtyDocumentRect: CGRect?
+    /// The working copy as an image, made the first time it's asked for after a dab.
     var image: CGImage? {
-        guard let gpu else { return cpuImage }
         if cpuImage == nil {
-            gpu.read(into: context)
+            gpu?.read(into: context)
             cpuImage = context.makeImage()
         }
         return cpuImage
@@ -72,10 +73,12 @@ final class WarpStroke {
         return t * t * (3 - 2 * t)
     }
 
-    /// Continues the stroke to `point`, dabbing along the way, then refreshes `image`.
+    /// Continues the stroke to `point`, dabbing along the way. The pixels change only under those dabs; `image` is made
+    /// when something asks for it.
     func append(_ point: CGPoint) {
         guard let from = last else {
             last = point
+            dirtyDocumentRect = nil
             if mode == .smudge {
                 if let gpu { gpu.pickUp(at: point, radius: radius); gpu.commit() } else { pickUp(at: point) }
             }
@@ -86,9 +89,11 @@ final class WarpStroke {
         // left a faint copy of what it dragged, echoes along the stroke. A pixel apart (a little more for a huge brush)
         // the steps run together into one smear, as Photoshop's does.
         let spacing = max(1, diameter * (mode == .smudge ? 0.005 : 0.025))
-        guard distance >= spacing else { return }
+        guard distance >= spacing else { dirtyDocumentRect = nil; return }
         let steps = Int((distance / spacing).rounded(.up))
         var previous = from
+        var dirty: CGRect?
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
         for step in 1...steps {
             let t = CGFloat(step) / CGFloat(steps)
             let next = CGPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t)
@@ -96,16 +101,34 @@ final class WarpStroke {
                 if mode == .smudge { gpu.smudge(at: next, radius: radius, diameter: diameter, hardness: hardness, strength: strength) }
                 else { gpu.push(from: previous, to: next, radius: radius, diameter: diameter, hardness: hardness, strength: strength) }
             } else if mode == .smudge { smudge(at: next) } else { push(from: previous, to: next) }
+            let rect = (mode == .smudge ? smudgeRect(at: next) : pushRect(from: previous, to: next)).intersection(bounds)
+            if !rect.isNull, !rect.isEmpty { dirty = dirty.map { $0.union(rect) } ?? rect }
             points.append(next)
             previous = next
         }
         last = point
-        if let gpu {
-            gpu.commit()
-            cpuImage = nil
-        } else {
-            cpuImage = context.makeImage()
-        }
+        gpu?.commit()
+        cpuImage = nil
+        dirtyDocumentRect = dirty
+    }
+
+    /// Pixels a smudge dab can write: the brush square, the same one `smudge` walks.
+    private func smudgeRect(at center: CGPoint) -> CGRect {
+        let r = CGFloat(radius)
+        let cx = center.x.rounded(), cy = center.y.rounded()
+        return CGRect(x: cx - r, y: cy - r, width: r * 2 + 1, height: r * 2 + 1)
+    }
+
+    /// Pixels a liquify dab can write: the brush plus the travel it samples from, the same box `push` copies.
+    private func pushRect(from a: CGPoint, to b: CGPoint) -> CGRect {
+        let r = radius
+        let move = SIMD2<Float>(Float(b.x - a.x), Float(b.y - a.y)) * Float(strength)
+        let margin = Int(ceil(max(abs(move.x), abs(move.y)))) + 2
+        let cx = Int(b.x.rounded()), cy = Int(b.y.rounded())
+        let x0 = max(0, cx - r - margin), x1 = min(width - 1, cx + r + margin)
+        let y0 = max(0, cy - r - margin), y1 = min(height - 1, cy + r + margin)
+        guard x0 <= x1, y0 <= y1 else { return .null }
+        return CGRect(x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1)
     }
 
     private func pickUp(at center: CGPoint) {

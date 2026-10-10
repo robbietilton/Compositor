@@ -62,25 +62,63 @@ nonisolated struct LevelsJob: @unchecked Sendable {
     let mapping: CGAffineTransform
 }
 nonisolated enum LevelsFilter {
+    private struct Key: Equatable {
+        var settings: LevelsSettings
+        var mapping: CGAffineTransform
+        var selectionRect: CGRect?
+        var selectionCoverage: CGImage?
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.settings == rhs.settings && lhs.mapping == rhs.mapping && lhs.selectionRect == rhs.selectionRect
+                && lhs.selectionCoverage === rhs.selectionCoverage
+        }
+    }
+    private static let memo = ImageAdjustmentPixels.Memo<Key>()
+
     static func run(_ job: LevelsJob) throws -> CGImage {
         if job.settings.isIdentity { return job.image }
-        let context = try BrushRaster.copy(job.image)
-        let tables = [LevelsChannel.red, .green, .blue].flatMap { channel in
-            (0...255).map { Float(job.settings.apply(Double($0) / 255, channel: channel)) }
+        let key = Key(settings: job.settings, mapping: job.mapping, selectionRect: job.selection?.rect,
+                      selectionCoverage: job.selection?.coverage)
+        return try memo.value(job.image, key: key) { try render(job) }
+    }
+
+    private static func render(_ job: LevelsJob) throws -> CGImage {
+        try ImageAdjustmentPixels.withContext(width: job.image.width, height: job.image.height, clear: false) { context in
+            transfer(job.image, into: context)
+            let tables = [LevelsChannel.red, .green, .blue].flatMap { channel in
+                (0...255).map { Float(job.settings.apply(Double($0) / 255, channel: channel)) }
+            }
+            guard let data = context.data else { throw ExportError.render }
+            let pixels = data.assumingMemoryBound(to: UInt8.self)
+            let count = job.image.width * job.image.height
+            // The tables are for colors, not colors already multiplied by their alpha, and `levels_apply` already
+            // divides each channel by its alpha before the lookup and multiplies it back after. Doing it here as
+            // well ran a soft edge through the conversion twice: 50% grey at half alpha came out at a quarter.
+            // A Levels layer runs on the whole canvas view every frame: split across the cores.
+            BrushRaster.inBands(count: count) { start, length in levels_apply(pixels + start * 4, length, tables) }
+            guard let image = context.makeImage() else { throw ExportError.render }
+            if let selection = job.selection {
+                return try PixelAdjust.blend(image, over: job.image, through: selection, pixelToDocument: job.mapping, isMask: false)
+            }
+            return image
         }
-        guard let data = context.data else { throw ExportError.render }
-        let pixels = data.assumingMemoryBound(to: UInt8.self)
-        let count = job.image.width * job.image.height
-        // The tables are for colors, not colors already multiplied by their alpha, and `levels_apply` already
-        // divides each channel by its alpha before the lookup and multiplies it back after. Doing it here as
-        // well ran a soft edge through the conversion twice: 50% grey at half alpha came out at a quarter.
-        // A Levels layer runs on the whole canvas view every frame: split across the cores.
-        BrushRaster.inBands(count: count) { start, length in levels_apply(pixels + start * 4, length, tables) }
-        guard let image = context.makeImage() else { throw ExportError.render }
-        if let selection = job.selection {
-            return try PixelAdjust.blend(image, over: job.image, through: selection, pixelToDocument: job.mapping, isMask: false)
+    }
+
+    /// Byte copy when the image is already in this context's layout, as `BrushRaster.copy` does. Otherwise draw,
+    /// after zeroing, because a reused buffer is not empty.
+    private static func transfer(_ image: CGImage, into context: CGContext) {
+        let width = image.width, height = image.height
+        guard image.bitsPerPixel == 32, image.bitsPerComponent == 8, image.bitmapInfo == context.bitmapInfo,
+              image.colorSpace == context.colorSpace, let source = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(source), let target = context.data,
+              CFDataGetLength(source) >= image.bytesPerRow * (height - 1) + width * 4 else {
+            if let target = context.data { memset(target, 0, context.bytesPerRow * context.height) }
+            BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: context)
+            return
         }
-        return image
+        let row = width * 4
+        for y in 0..<height {
+            memcpy(target + y * context.bytesPerRow, bytes + y * image.bytesPerRow, row)
+        }
     }
     /// RGB is the mean of the three channel histograms, not a luminance histogram.
     static func histogram(_ job: LevelsJob) throws -> [[Double]] {

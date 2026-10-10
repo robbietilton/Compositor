@@ -1,4 +1,5 @@
 import AppKit
+import Metal
 import SwiftUI
 
 struct EditorCanvas: NSViewRepresentable {
@@ -1584,6 +1585,19 @@ final class CanvasView: NSView {
         clonePreviewCache = (key, image)
         return image
     }
+
+    /// What the backdrop was built from. A change means the stored image is out of date, so it is built again.
+    private struct GPUBackdropKey: Equatable {
+        var drawableSize: CGSize
+        var rect: CGRect
+        var surround: CGFloat
+        var backingScale: CGFloat
+        var canvasOnly: Bool
+    }
+    /// Surround, shadow, checkerboard and edge for the GPU frame, rebuilt only when the view or the document's
+    /// place in it changes. The blur does not depend on the layers. `texture` keeps what `image` references.
+    private var gpuBackdropCache: (key: GPUBackdropKey, image: CIImage, texture: MTLTexture?)?
+
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) {
         session.filterEdit?.cameraRawReadout = nil
@@ -2675,6 +2689,37 @@ extension CanvasView {
         let mapping = CGAffineTransform(a: perPixel, b: 0, c: 0, d: perPixel, tx: origin.x * device, ty: origin.y * device)
         let full = CGRect(origin: .zero, size: size)
         let rect = pixels.applying(mapping)
+        guard rect.intersects(full) else {
+            return gpuBackdrop(rect: rect, full: full, device: device, renderer: renderer)
+        }
+        // From 200% the document's own pixels are composited one to one and enlarged as crisp squares.
+        let crisp = viewport.zoom >= Self.crispZoom
+        let placement = GPUPlacement(mapping: crisp ? .identity : mapping, scale: crisp ? 1 : perPixel, renderer: renderer)
+        guard var layers = gpuLayers(document, placement: placement) else { return nil }
+        if crisp { layers = layers.cropped(to: pixels).samplingNearest().transformed(by: mapping) }
+        // The blur, checkerboard and edge do not change with the layers, so a frame only places the layers again.
+        let backdrop = gpuBackdrop(rect: rect, full: full, device: device, renderer: renderer)
+        return layers.cropped(to: rect).composited(over: backdrop).cropped(to: full)
+    }
+
+    /// The stored backdrop when the view still matches; otherwise a new one, kept for the next frame.
+    private func gpuBackdrop(rect: CGRect, full: CGRect, device: CGFloat, renderer: GPUCanvasRenderer) -> CIImage {
+        let key = GPUBackdropKey(drawableSize: full.size, rect: rect, surround: surround, backingScale: device,
+                                 canvasOnly: session.canvasOnly)
+        if let cache = gpuBackdropCache, cache.key == key { return cache.image }
+        let built = makeGPUBackdrop(rect: rect, full: full, device: device)
+        // Nothing blurred when the document is off screen: the fill is cheap, and a texture per pan frame is not.
+        guard rect.intersects(full) else {
+            gpuBackdropCache = (key, built, nil)
+            return built
+        }
+        let realized = realizeGPUBackdrop(built, full: full, renderer: renderer)
+        gpuBackdropCache = (key, realized.image, realized.texture)
+        return realized.image
+    }
+
+    /// Surround fill, the document's shadow, its checkerboard and its edge, without the layers.
+    private func makeGPUBackdrop(rect: CGRect, full: CGRect, device: CGFloat) -> CIImage {
         func gray(_ white: CGFloat, alpha: CGFloat = 1) -> CIImage {
             CIImage(color: CIColor(red: white, green: white, blue: white, alpha: alpha))
         }
@@ -2693,12 +2738,6 @@ extension CanvasView {
         offset.translateX(by: rect.minX, yBy: rect.minY)
         let checkerboard = squares.applyingFilter("CIAffineTile", parameters: [kCIInputTransformKey: offset]).cropped(to: rect)
         frame = checkerboard.composited(over: frame)
-        // From 200% the document's own pixels are composited one to one and enlarged as crisp squares.
-        let crisp = viewport.zoom >= Self.crispZoom
-        let placement = GPUPlacement(mapping: crisp ? .identity : mapping, scale: crisp ? 1 : perPixel, renderer: renderer)
-        guard var layers = gpuLayers(document, placement: placement) else { return nil }
-        if crisp { layers = layers.cropped(to: pixels).samplingNearest().transformed(by: mapping) }
-        frame = layers.cropped(to: rect).composited(over: frame)
         // The document's edge: a one-pixel line centered on it.
         let edge = gray(1, alpha: 0.13)
         for line in [CGRect(x: rect.minX - 0.5, y: rect.minY - 0.5, width: rect.width + 1, height: 1),
@@ -2708,6 +2747,24 @@ extension CanvasView {
             frame = edge.cropped(to: line).composited(over: frame)
         }
         return frame.cropped(to: full)
+    }
+
+    /// Pixels of the backdrop. The GPU context does not keep intermediates, so a stored recipe would blur again every frame.
+    private func realizeGPUBackdrop(_ image: CIImage, full: CGRect, renderer: GPUCanvasRenderer) -> (image: CIImage, texture: MTLTexture?) {
+        let width = Int(full.width), height = Int(full.height)
+        guard width > 0, height > 0, CGFloat(width) == full.width, CGFloat(height) == full.height,
+              width <= 16_384, height <= 16_384 else { return (image, nil) }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        descriptor.storageMode = .shared
+        guard let texture = renderer.device.makeTexture(descriptor: descriptor),
+              let buffer = renderer.queue.makeCommandBuffer(),
+              let wrapped = CIImage(mtlTexture: texture, options: [.colorSpace: renderer.space]) else { return (image, nil) }
+        renderer.context.render(image, to: texture, commandBuffer: buffer, bounds: full, colorSpace: renderer.space)
+        buffer.commit()
+        // The frame samples this texture next. It has to be finished first: Core Image only references it.
+        buffer.waitUntilCompleted()
+        return (wrapped, texture)
     }
 
     /// The layers composited as `drawLayers` composites them, over nothing. Nil when a layer needs the Core Graphics

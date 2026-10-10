@@ -53,6 +53,9 @@ final class EffectsPreviewCache {
     /// worker has rendered the layer's new pixels, so the effects don't blink off for a frame.
     private var seeds: [UUID: Result] = [:]
     private var sideLimit = 1536
+    /// Effect layers from the last prepare. A redraw with the same set has nothing to drop.
+    private var preparedEffectIDs: Set<UUID>?
+    private var preparedEffectCount = 0
 
     /// Shows `image` at `placement` for a layer until a fresh preview is ready.
     func seed(_ id: UUID, image: CGImage, placement: LayerTransform) {
@@ -70,6 +73,12 @@ final class EffectsPreviewCache {
 
     func prepare(layers: [ImageLayer]) {
         let ids = Set(layers.filter { $0.effects?.visible.isEmpty == false }.map(\.id))
+        // The frame builder calls this on every redraw. The same effect layers mean nothing has
+        // left the cache, and the budget is already set. Returning here does not cancel a render
+        // still in flight — a slider tick is superseded later, when its own preview is replaced.
+        if let preparedEffectIDs, preparedEffectIDs == ids, preparedEffectCount == ids.count { return }
+        preparedEffectIDs = ids
+        preparedEffectCount = ids.count
         for id in Array(entries.keys) where !ids.contains(id) { entries.removeValue(forKey: id)?.request.cancel() }
         for id in Array(seeds.keys) where !ids.contains(id) { seeds.removeValue(forKey: id) }
         for id in Array(recent.keys) where !ids.contains(id) { recent.removeValue(forKey: id) }
