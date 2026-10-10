@@ -221,8 +221,10 @@ struct CursorTests {
         host.layoutSubtreeIfNeeded()
         func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants($0) } }
         let table = try #require(descendants(host).compactMap { $0 as? LayerTableView }.first)
-        // Over the first row's name, away from its thumbnails.
-        let name = table.convert(NSPoint(x: table.visibleRect.midX, y: table.visibleRect.minY + 4), to: nil)
+        // Over the first row's name, away from its thumbnails. From the row's own rect: where row 0
+        // begins depends on the table's style, which inset moves down from the visible rect's top.
+        let firstRow = table.rect(ofRow: 0)
+        let name = table.convert(NSPoint(x: firstRow.midX, y: firstRow.minY + 4), to: nil)
         NSCursor.arrow.set()
         table.mouseMoved(with: mouse(at: name, flags: .option, in: window))
         #expect(NSCursor.current === CanvasView.duplicateCursor, "Option over a layer's name offers to duplicate it")

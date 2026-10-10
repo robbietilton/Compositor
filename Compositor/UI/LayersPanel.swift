@@ -4,7 +4,7 @@ struct LayersPanel: View {
     @Bindable var session: EditorSession
     /// Dragging the panel's left edge sets it, within `widths`.
     var width: CGFloat = 252
-    static let widths: ClosedRange<Double> = 202...352
+    static let widths: ClosedRange<Double> = 225...352
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -64,6 +64,7 @@ struct LayersPanel: View {
 
         }
         .frame(width: width)
+        .glassEffect(.regular, in: .rect(corners: .concentric(minimum: 10)))
         .task(id: session.adjustmentEditingID) {
             if let id = session.adjustmentEditingID { await session.beginAdjustmentEditing(id) }
         }

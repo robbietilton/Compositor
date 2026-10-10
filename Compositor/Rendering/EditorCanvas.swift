@@ -5,6 +5,9 @@ struct EditorCanvas: NSViewRepresentable {
     let session: EditorSession
     func makeNSView(context: Context) -> CanvasView { CanvasView(session: session) }
     func updateNSView(_ view: CanvasView, context: Context) {
+        // The safe area can change without the view resizing (a taller tool header, a wider panel),
+        // so it reaches the viewport from here too, not only from layout.
+        view.syncGeometry()
         view.consumeFocusRequest(session.canvasFocusRequest)
         _ = session.showsTransformControls // observed here so ⌘H redraws the transform box at once
         _ = session.showsGrid
@@ -847,15 +850,17 @@ final class CanvasView: NSView {
     }
     override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); syncGeometry() }
 
-    private func syncGeometry() {
+    func syncGeometry() {
+        let scale = convertToBacking(CGSize(width: 1, height: 1)).width
+        let safeArea = session.canvasSafeArea
+        guard session.viewport.viewSize != bounds.size ||
+                session.viewport.backingScale != scale ||
+                session.viewport.safeArea != safeArea else { return }
         // Defer observable mutations until after SwiftUI's layout pass.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let scale = self.convertToBacking(CGSize(width: 1, height: 1)).width
-            guard self.session.viewport.viewSize != self.bounds.size ||
-                    self.session.viewport.backingScale != scale else { return }
             self.session.viewport.resize(to: self.bounds.size, backingScale: scale,
-                                         documentSize: self.session.document?.size)
+                                         documentSize: self.session.document?.size, safeArea: self.session.canvasSafeArea)
             self.needsDisplay = true
         }
     }
@@ -2537,9 +2542,9 @@ final class CanvasView: NSView {
         return true
     }
 
-    /// Released on the top or left ruler strip, which sits just outside the canvas.
+    /// Released on the top or left ruler strip, which sits over the canvas (see `CanvasViewport.safeArea`).
     func isOverRuler(_ point: CGPoint) -> Bool {
-        session.showsRulers && (point.x < 0 || point.y < 0)
+        session.showsRulers && session.viewport.isOverRuler(point)
     }
 
     func documentPosition(axis: CanvasGuide.Axis, at point: CGPoint) -> Double? {

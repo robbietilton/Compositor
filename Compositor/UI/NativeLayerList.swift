@@ -11,7 +11,7 @@ struct NativeLayerList: NSViewRepresentable {
         table.session = session
         table.headerView = nil
         table.backgroundColor = .clear
-        table.style = .plain
+        table.style = .inset
         table.rowHeight = 52
         table.intercellSpacing = NSSize(width: 0, height: 2)
         table.allowsMultipleSelection = true

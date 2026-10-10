@@ -169,6 +169,9 @@ final class EditorSession {
         }
     }
     var viewport = CanvasViewport()
+    /// The canvas area the glass header, rulers and side panels leave clear, in canvas-view
+    /// coordinates. Reported by the editor layout; the canvas view hands it to `viewport`.
+    var canvasSafeArea: CGRect? = nil
     var tool: NavigationTool = .move
     var collapsedGroupIDs: Set<UUID> = []
     var cropRect: CGRect?
