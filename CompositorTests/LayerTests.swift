@@ -356,6 +356,78 @@ struct LayerTests {
         #expect(session.activeLayerID == layerB.id)
     }
 
+    /// Shift-click selects the visible rows between the anchor and the clicked row, and a later Shift-click
+    /// recomputes that range from the same anchor. The clicked row is the active layer.
+    @Test func shiftClickSelectsTheRowsBetween() throws {
+        let session = sessionWithThreeLayers()
+        let rows = session.layerRows.map(\.layer)
+        let (table, coordinator, _) = makeLayerTable(session: session)
+
+        table.selectSingleLayerRow(0)
+        #expect(session.selectedLayerIDs == [rows[0].id])
+        #expect(session.activeLayerID == rows[0].id)
+        #expect(table.selectionAnchor == 0)
+
+        table.extendLayerSelection(to: 2)
+        #expect(session.selectedLayerIDs == Set(rows.map(\.id)))
+        #expect(session.activeLayerID == rows[2].id)
+        #expect(table.selectionAnchor == 0)
+        #expect(table.selectedRowIndexes == IndexSet(integersIn: 0...2))
+
+        table.extendLayerSelection(to: 1)
+        #expect(session.selectedLayerIDs == [rows[0].id, rows[1].id])
+        #expect(session.activeLayerID == rows[1].id)
+        #expect(table.selectionAnchor == 0)
+
+        coordinator.update(table)
+        #expect(table.selectedRowIndexes == IndexSet(integersIn: 0...1))
+        #expect(table.selectionAnchor == 0)
+        #expect(session.selectedLayerIDs == [rows[0].id, rows[1].id])
+        #expect(session.activeLayerID == rows[1].id)
+
+        table.selectSingleLayerRow(2)
+        table.extendLayerSelection(to: 0)
+        #expect(session.selectedLayerIDs == Set(rows.map(\.id)))
+        #expect(session.activeLayerID == rows[0].id)
+        #expect(table.selectionAnchor == 2)
+    }
+
+    /// Shift on the mouse-down that reaches the table selects the same range, including a click on the row's name.
+    @Test func shiftMouseDownOnARowNameSelectsTheRange() throws {
+        let session = sessionWithThreeLayers()
+        let rows = session.layerRows.map(\.layer)
+        let (table, coordinator, window) = makeLayerTable(session: session)
+        #expect(table.delegate === coordinator)
+        window.layoutIfNeeded()
+        table.layoutSubtreeIfNeeded()
+        table.selectSingleLayerRow(0)
+
+        let rowRect = table.rect(ofRow: 2)
+        #expect(rowRect.width > 120, "the row has to be laid out before a name click means anything")
+        let namePoint = NSPoint(x: rowRect.maxX - 24, y: rowRect.midY)
+        let hit = table.hitTest(table.convert(namePoint, to: table.superview))
+        #expect(hit === table, "a name click has to reach the table, hit \(hit?.className ?? "nil")")
+
+        let windowPoint = table.convert(namePoint, to: nil)
+        let event = try #require(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: windowPoint,
+            modifierFlags: [.shift],
+            timestamp: 1,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1
+        ))
+        table.mouseDown(with: event)
+        #expect(table.row(at: table.convert(windowPoint, from: nil)) == 2)
+        #expect(table.selectedRowIndexes == IndexSet(integersIn: 0...2))
+        #expect(session.selectedLayerIDs == Set(rows.map(\.id)))
+        #expect(session.activeLayerID == rows[2].id)
+        #expect(table.selectionAnchor == 0)
+    }
+
     @Test func testRightClickOutsideRowsReturnsNoMenu() throws {
         let session = sessionWithThreeLayers()
         let initialSelection = session.selectedLayerIDs
