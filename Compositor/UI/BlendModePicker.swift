@@ -17,7 +17,12 @@ struct BlendModePicker: NSViewRepresentable {
         button.action = #selector(Coordinator.choose(_:))
         button.setAccessibilityLabel("Blend mode")
         // A capsule like the SwiftUI buttons and menus (`roundedControls`), which don't reach this AppKit pop-up.
-        button.borderShape = .capsule
+        // borderShape is macOS 26. The 15.5 SDK does not declare it, so Xcode 16.4 keeps the system bezel.
+        #if swift(>=6.2)
+        if #available(macOS 26.0, *) {
+            button.borderShape = .capsule
+        }
+        #endif
         return button
     }
     func updateNSView(_ button: NSPopUpButton, context: Context) {
@@ -30,6 +35,7 @@ struct BlendModePicker: NSViewRepresentable {
         if coordinator.tracking { coordinator.session.previewBlendMode(nil, for: nil) }
         button.menu?.delegate = nil
     }
+    @MainActor
     final class Coordinator: NSObject, NSMenuDelegate {
         let session: EditorSession
         var tracking = false

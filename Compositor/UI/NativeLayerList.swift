@@ -41,6 +41,7 @@ struct NativeLayerList: NSViewRepresentable {
         if let table = scroll.documentView as? NSTableView { context.coordinator.update(table) }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
         static let layerType = NSPasteboard.PasteboardType("com.compositor.layer-row")
         /// An Option-drag from a mask thumbnail: the id of the layer whose mask is being copied.
