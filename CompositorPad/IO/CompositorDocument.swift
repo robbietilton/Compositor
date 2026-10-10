@@ -177,7 +177,9 @@ nonisolated final class CompositorDocument: UIDocument, @unchecked Sendable {
                 let first = failing.withLock { failing in defer { failing = !success }; return !failing }
                 if !success, first, says {
                     // UIDocument has handled the error by now.
-                    let message = (lastError.withLock { $0 } ?? CocoaError(.fileWriteUnknown)).localizedDescription
+                    // Read into a typed constant first: Xcode 26's compiler infers withLock's result from the `??` and fails.
+                    let error: (any Error)? = lastError.withLock { $0 }
+                    let message = (error ?? CocoaError(.fileWriteUnknown)).localizedDescription
                     Task { @MainActor in session.saveError = message }
                 }
             }
