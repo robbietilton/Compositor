@@ -146,6 +146,7 @@ struct CameraRawControls: View {
                 if section == .optics, raw.adjustsOptics { eye(shown: session.filterEdit?.showsCameraRawOptics ?? true, name: "Optics", group: .optics) }
                 if section == .geometry, raw.adjustsGeometry { eye(shown: session.filterEdit?.showsCameraRawGeometry ?? true, name: "Geometry", group: .geometry) }
                 if section == .calibration, raw.adjustsCalibration { eye(shown: session.filterEdit?.showsCameraRawCalibration ?? true, name: "Calibration", group: .calibration) }
+                resetButton(section.group)
             }
             if expanded.contains(section) {
                 switch section {
@@ -292,6 +293,18 @@ struct CameraRawControls: View {
         .accessibilityLabel(shown ? "Hide \(name)" : "Show \(name)")
     }
 
+    /// Puts the section back to its defaults. Dimmed while there's nothing to put back.
+    private func resetButton(_ group: CameraRawGroup) -> some View {
+        let isDefault = raw.isDefault(group)
+        return Button { session.resetCameraRaw(group) } label: {
+            Image(systemName: "arrow.counterclockwise")
+        }
+        .buttonStyle(.borderless)
+        .disabled(isDefault || session.filterEdit?.committing == true)
+        .help(isDefault ? "\(group.rawValue) is at its defaults" : "Reset \(group.rawValue) to its defaults")
+        .accessibilityLabel("Reset \(group.rawValue)")
+    }
+
     private func slider(_ title: String, _ key: WritableKeyPath<CameraRawSettings, Double>, range: ClosedRange<Double>,
                         decimals: Int, clipping: CameraRawClipping?, track: CameraRawSliderTrack = .plain,
                         reset resetValue: Double = 0, help: String) -> some View {
@@ -382,5 +395,19 @@ struct CameraRawControls: View {
         case geometry = "Geometry"
         case calibration = "Calibration"
         var id: String { rawValue }
+        var group: CameraRawGroup {
+            switch self {
+            case .light: return .light
+            case .color: return .color
+            case .colorGrading: return .grading
+            case .effects: return .effects
+            case .curve: return .curve
+            case .colorMixer: return .mixer
+            case .detail: return .detail
+            case .optics: return .optics
+            case .geometry: return .geometry
+            case .calibration: return .calibration
+            }
+        }
     }
 }
