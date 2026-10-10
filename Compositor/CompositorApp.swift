@@ -223,6 +223,8 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut(.delete, modifiers: .command).disabled(!session.canEditPixels)
                     Button("Clear Selection Pixels") { Task { await session.clearSelectedPixels() } }
                         .disabled(session.selection == nil || !session.canEditPixels)
+                    Button("Stroke…") { Task { await applicationDelegate.projects.stroke() } }
+                        .disabled(!session.canStrokeSelection)
                     Button("Content-Aware Fill…") { session.beginFilter(.contentAwareFill) }
                         .configuredKeyboardShortcut(.delete, modifiers: .shift).disabled(!session.canContentAwareFill)
                 }
