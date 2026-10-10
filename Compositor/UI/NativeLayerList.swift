@@ -90,6 +90,16 @@ struct NativeLayerList: NSViewRepresentable {
             }
             let indices = IndexSet(next.indices.filter { session.selectedEffect == nil && session.selectedLayerIDs.contains(next[$0].id) })
             if table.selectedRowIndexes != indices { table.selectRowIndexes(indices, byExtendingSelection: false) }
+            // A selection written from the session leaves AppKit's Shift anchor unset. Keep the row a Shift-click
+            // ranges from while it is still selected; otherwise the range starts at the active layer.
+            if let layerTable = table as? LayerTableView,
+               layerTable.selectionAnchor.map({ indices.contains($0) }) != true {
+                if let id = activeLayerID, let row = next.firstIndex(where: { $0.id == id }), indices.contains(row) {
+                    layerTable.selectionAnchor = row
+                } else {
+                    layerTable.selectionAnchor = indices.first
+                }
+            }
             // Reveal a newly selected layer, without undoing a manual scroll on later display updates.
             if selectionChanged, let id = activeLayerID, let row = next.firstIndex(where: { $0.id == id }) {
                 table.scrollRowToVisible(row)
@@ -349,7 +359,10 @@ struct NativeLayerList: NSViewRepresentable {
             guard !synchronizing, let table = notification.object as? NSTableView else { return }
             let selected = table.selectedRowIndexes.filter { rows.indices.contains($0) }
             let ids = Set(selected.map { rows[$0].id })
-            let primary = selected.contains(table.clickedRow) ? rows[table.clickedRow].id : selected.first.map { rows[$0].id }
+            // clickedRow stays -1 when this selection was applied with selectRowIndexes. The Shift-clicked row is
+            // stored first so it, not the top of the range, becomes the active layer.
+            let clicked = (table as? LayerTableView)?.clickPrimaryRow ?? table.clickedRow
+            let primary = selected.contains(clicked) ? rows[clicked].id : selected.first.map { rows[$0].id }
             session.selectLayers(ids, primary: primary)
         }
         /// A click on a row's name (its thumbnails are buttons of their own) targets the layer itself, even when its
@@ -488,9 +501,41 @@ struct NativeLayerList: NSViewRepresentable {
 
 final class LayerTableView: NSTableView {
     weak var session: EditorSession?
+    /// Visible row the next Shift-click ranges from. selectRowIndexes never plants AppKit's own anchor.
+    var selectionAnchor: Int?
+    /// Row that should become the active layer for a selection applied here. Read by the delegate, then cleared.
+    var clickPrimaryRow: Int?
     private var clippingTracking: NSTrackingArea?
     private var clippingMonitor: Any?
     private var clippingCursorActive = false
+
+    /// One visible row, and the Shift anchor moves to it.
+    func selectSingleLayerRow(_ row: Int) {
+        guard row >= 0, row < numberOfRows else { return }
+        selectionAnchor = row
+        clickPrimaryRow = row
+        selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        clickPrimaryRow = nil
+    }
+
+    /// Every visible row from the anchor through `row`, inclusive. A later Shift-click recomputes that range
+    /// from the same anchor. The clicked row becomes the active layer.
+    func extendLayerSelection(to row: Int) {
+        guard row >= 0, row < numberOfRows else { return }
+        let anchor: Int
+        if let existing = selectionAnchor, (0..<numberOfRows).contains(existing) {
+            anchor = existing
+        } else if let first = selectedRowIndexes.first, (0..<numberOfRows).contains(first) {
+            anchor = first
+            selectionAnchor = first
+        } else {
+            anchor = row
+            selectionAnchor = row
+        }
+        clickPrimaryRow = row
+        selectRowIndexes(IndexSet(integersIn: min(anchor, row)...max(anchor, row)), byExtendingSelection: false)
+        clickPrimaryRow = nil
+    }
 
     /// Cmd-A selects the whole canvas, as Select > All does, even with the Layers panel just clicked — never every layer.
     /// A layer's name being edited keeps its own Select All: its field editor answers first.
@@ -524,7 +569,7 @@ final class LayerTableView: NSTableView {
                     currentSession.selectLayers(currentSession.selectedLayerIDs, primary: targetLayer.id)
                 }
             } else {
-                selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+                selectSingleLayerRow(row)
                 window?.makeFirstResponder(self)
                 if isMaskThumb {
                     currentSession.selectLayerTarget(targetLayer.id, mask: true)
@@ -710,10 +755,23 @@ final class LayerTableView: NSTableView {
             return
         }
         session?.effectSelection = nil
+        if row >= 0, event.modifierFlags.contains(.shift) {
+            // Shift is a contiguous range of visible rows. super.mouseDown would select only the clicked row:
+            // its anchor was never planted, because selection is always applied with selectRowIndexes.
+            extendLayerSelection(to: row)
+            window?.makeFirstResponder(self)
+            return
+        }
+        if row >= 0, event.modifierFlags.contains(.command) {
+            selectionAnchor = row
+        }
         if row >= 0, event.modifierFlags.intersection([.command, .shift]).isEmpty,
            !(selectedRowIndexes.count > 1 && selectedRowIndexes.contains(row)) {
             // Paint selection before AppKit enters its click/drag tracking loop.
+            selectionAnchor = row
+            clickPrimaryRow = row
             selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            clickPrimaryRow = nil
             window?.makeFirstResponder(self)
             displayIfNeeded()
         }
