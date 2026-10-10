@@ -220,8 +220,16 @@ nonisolated enum TiledLayerRenderer {
     }
 
     /// A committed raster placed at `offset` in the frame's grid, leaving `holes` for pieces drawn over it.
+    /// Squares are built only where this frame can show them. A hole is snapped out to the next device pixel, so the
+    /// build reaches one device pixel past the clip; anything farther cannot change a pixel this frame draws.
     private static func drawCommitted(_ raster: RasterSnapshot, at offset: CGPoint, holes: [CGRect], frame: Frame, in context: CGContext) {
-        let pieces = TiledPieceCache.shared.pieces(for: raster, level: frame.level).map { $0.offsetBy(offset) }
+        let gridPerDevice = max(frame.pixelWidth / max(frame.bounds.width, 1), frame.pixelHeight / max(frame.bounds.height, 1))
+            / max(frame.device, 1)
+        let pad = max(2, ceil(gridPerDevice) + 2)
+        let reach = frame.visible.insetBy(dx: -pad, dy: -pad).offsetBy(dx: -offset.x, dy: -offset.y)
+        let finite = [reach.minX, reach.minY, reach.width, reach.height].allSatisfy(\.isFinite) && !reach.isNull
+        let pieces = TiledPieceCache.shared.pieces(for: raster, level: frame.level, visible: finite ? reach : nil)
+            .map { $0.offsetBy(offset) }
         if let base = raster.base {
             drawBase(base, at: raster.baseRect.offsetBy(dx: offset.x, dy: offset.y), holes: pieces.map(\.interior) + holes,
                      frame: frame, in: context)
@@ -368,8 +376,9 @@ nonisolated enum TiledLayerRenderer {
     }
 }
 
-/// Committed rasters' pieces, built once per snapshot and level (snapshots never change); the least recently
-/// used are dropped beyond a pixel budget.
+/// Committed rasters' pieces, built once per snapshot, level and square (snapshots never change). A frame asks
+/// for the squares it can show; squares outside that wait until a later frame scrolls them in. The least recently
+/// used rasters are dropped beyond a pixel budget.
 nonisolated final class TiledPieceCache: @unchecked Sendable {
     static let shared = TiledPieceCache()
     static let pixelBudget = 150_000_000
@@ -379,41 +388,59 @@ nonisolated final class TiledPieceCache: @unchecked Sendable {
     }
     private struct Entry {
         let raster: RasterSnapshot
-        let pieces: [TiledLayerRenderer.Piece]
+        var pieces: [SIMD4<Int>: TiledLayerRenderer.Piece]
+        /// Squares already composed, including ones that produced nothing, so a later frame does not try them again.
+        var attempted: Set<SIMD4<Int>>
         var lastUse: UInt64
-        let pixels: Int
+        var pixels: Int
     }
     private var entries: [Key: Entry] = [:]
     private var clock: UInt64 = 0
     private let lock = NSLock()
 
-    func pieces(for raster: RasterSnapshot, level: Int) -> [TiledLayerRenderer.Piece] {
+    /// Pieces whose interiors meet `visible` (raster-local grid pixels), building any of those squares that are not
+    /// cached yet. `nil` builds every square, as an unclipped draw must.
+    func pieces(for raster: RasterSnapshot, level: Int, visible: CGRect?) -> [TiledLayerRenderer.Piece] {
         let key = Key(raster: ObjectIdentifier(raster), level: level)
-        lock.lock()
-        clock += 1
-        if let entry = entries[key], entry.raster === raster {
-            entries[key]?.lastUse = clock
-            lock.unlock()
-            return entry.pieces
-        }
-        lock.unlock()
         let origin = raster.alignment
         let full = CGRect(x: 0, y: 0, width: raster.width, height: raster.height)
         let squares = TiledLayerRenderer.interiors(near: raster.patches.map(\.rect), margin: TiledLayerRenderer.support(level: level),
-                                                   size: TiledLayerRenderer.committedCell, step: CGFloat(1 << level), origin: origin, visible: nil)
-        let pieces = squares.compactMap { square in
-            TiledLayerRenderer.piece(interior: square, level: level, origin: origin, bounds: full) { context, _ in raster.draw(in: full, context: context) }
+                                                   size: TiledLayerRenderer.committedCell, step: CGFloat(1 << level), origin: origin, visible: visible)
+        func index(of square: CGRect) -> SIMD4<Int> {
+            SIMD4(Int(square.minX.rounded()), Int(square.minY.rounded()), Int(square.maxX.rounded()), Int(square.maxY.rounded()))
         }
-        let pixels = pieces.reduce(0) { $0 + $1.image.width * $1.image.height }
         lock.lock()
-        entries[key] = Entry(raster: raster, pieces: pieces, lastUse: clock, pixels: pixels)
+        clock += 1
+        let known = entries[key].flatMap { $0.raster === raster ? $0.attempted : nil } ?? []
+        lock.unlock()
+        let missing = squares.filter { !known.contains(index(of: $0)) }
+        var built: [(SIMD4<Int>, TiledLayerRenderer.Piece?)] = []
+        built.reserveCapacity(missing.count)
+        for square in missing {
+            let made = TiledLayerRenderer.piece(interior: square, level: level, origin: origin, bounds: full) { context, _ in
+                raster.draw(in: full, context: context)
+            }
+            built.append((index(of: square), made))
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        var entry = entries[key].flatMap { $0.raster === raster ? $0 : nil }
+            ?? Entry(raster: raster, pieces: [:], attempted: [], lastUse: clock, pixels: 0)
+        entry.lastUse = clock
+        for (id, piece) in built where !entry.attempted.contains(id) {
+            entry.attempted.insert(id)
+            if let piece {
+                entry.pieces[id] = piece
+                entry.pixels += piece.image.width * piece.image.height
+            }
+        }
+        entries[key] = entry
         var total = entries.values.reduce(0) { $0 + $1.pixels }
         while total > Self.pixelBudget,
               let oldest = entries.filter({ $0.key != key }).min(by: { $0.value.lastUse < $1.value.lastUse }) {
             total -= oldest.value.pixels
             entries.removeValue(forKey: oldest.key)
         }
-        lock.unlock()
-        return pieces
+        return entry.pieces.values.filter { piece in visible.map { piece.interior.intersects($0) } ?? true }
     }
 }

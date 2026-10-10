@@ -3,13 +3,86 @@ import AppKit
 /// Draws an image into an RGBA buffer (premultiplied, alpha last), lets a C kernel change it in place,
 /// and returns the result.
 nonisolated enum ImageAdjustmentPixels {
+    /// The last result for one source image and key. Slider events repeat the same settings on the same image.
+    final class Memo<Key: Equatable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var source: CGImage?
+        private var key: Key?
+        private var result: CGImage?
+        func value(_ source: CGImage, key: Key, make: () throws -> CGImage) rethrows -> CGImage {
+            if let cached = lock.withLock({ () -> CGImage? in
+                self.source === source && self.key == key ? result : nil
+            }) { return cached }
+            let made = try make()
+            lock.withLock { self.source = source; self.key = key; self.result = made }
+            return made
+        }
+    }
+
+    /// Full-size bitmaps kept between calls. `makeImage` copies, so the next caller can overwrite this memory.
+    private final class RasterPool: @unchecked Sendable {
+        fileprivate final class Buffer {
+            var bytes: UnsafeMutableRawPointer?
+            var capacity = 0
+            func ensure(_ count: Int) -> UnsafeMutableRawPointer {
+                if bytes == nil || capacity < count {
+                    bytes?.deallocate()
+                    bytes = .allocate(byteCount: count, alignment: 64)
+                    capacity = count
+                }
+                return bytes!
+            }
+            deinit { bytes?.deallocate() }
+        }
+        private let lock = NSLock()
+        private var spares: [Buffer] = []
+        private let limit = 2
+        fileprivate func checkout(byteCount: Int) -> Buffer {
+            let buffer = lock.withLock { spares.popLast() ?? Buffer() }
+            _ = buffer.ensure(byteCount)
+            return buffer
+        }
+        fileprivate func checkin(_ buffer: Buffer) {
+            lock.withLock {
+                if spares.count < limit { spares.append(buffer); return }
+                if let index = spares.indices.min(by: { spares[$0].capacity < spares[$1].capacity }),
+                   spares[index].capacity < buffer.capacity {
+                    spares[index] = buffer
+                }
+            }
+        }
+    }
+    private static let pool = RasterPool()
+
+    /// A context with the same layout as `BrushRaster.context`. `clear` zeroes it; a full-buffer copy can skip that.
+    static func withContext<T>(width: Int, height: Int, clear: Bool, _ body: (CGContext) throws -> T) throws -> T {
+        let row = width * 4
+        guard width > 0, height > 0, row > 0, height <= Int.max / row else { throw ExportError.render }
+        let count = row * height
+        let buffer = pool.checkout(byteCount: count)
+        defer { pool.checkin(buffer) }
+        let bytes = buffer.ensure(count)
+        if clear { memset(bytes, 0, count) }
+        // The context is gone before the buffer goes back in the pool. `defer` runs after this closure returns.
+        return try {
+            guard let context = CGContext(data: bytes, width: width, height: height, bitsPerComponent: 8, bytesPerRow: row,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+            else { throw ExportError.render }
+            context.translateBy(x: 0, y: CGFloat(height))
+            context.scaleBy(x: 1, y: -1)
+            return try body(context)
+        }()
+    }
+
     static func run(_ image: CGImage, _ body: (UnsafeMutablePointer<UInt8>, Int, Int, Int) -> Void) throws -> CGImage {
-        let context = try BrushRaster.context(width: image.width, height: image.height, mask: false)
-        BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), mask: false, context: context)
-        guard let data = context.data else { throw ExportError.render }
-        body(data.assumingMemoryBound(to: UInt8.self), image.width, image.height, context.bytesPerRow)
-        guard let result = context.makeImage() else { throw ExportError.render }
-        return result
+        try withContext(width: image.width, height: image.height, clear: true) { context in
+            BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), mask: false, context: context)
+            guard let data = context.data else { throw ExportError.render }
+            body(data.assumingMemoryBound(to: UInt8.self), image.width, image.height, context.bytesPerRow)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            return result
+        }
     }
     static func clamp(_ value: Double, _ range: ClosedRange<Double>, _ fallback: Double) -> Double {
         value.isFinite ? min(range.upperBound, max(range.lowerBound, value)) : fallback
@@ -45,6 +118,7 @@ nonisolated struct ExposureSettings: Codable, Equatable, Sendable {
     /// Gamma correction, 0.01…9.99; above 1 brightens the midtones.
     var gamma: Double = 1
     var isValid: Bool { Self.exposureRange.contains(exposure) && Self.offsetRange.contains(offset) && Self.gammaRange.contains(gamma) }
+    private static let memo = ImageAdjustmentPixels.Memo<ExposureSettings>()
     var normalized: Self {
         Self(exposure: ImageAdjustmentPixels.clamp(exposure, Self.exposureRange, 0),
              offset: ImageAdjustmentPixels.clamp(offset, Self.offsetRange, 0),
@@ -63,9 +137,11 @@ nonisolated struct ExposureSettings: Codable, Equatable, Sendable {
     }
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
-        let tables = Array([[Float]](repeating: table, count: 3).joined())
-        return try ImageAdjustmentPixels.run(image) { pixels, width, height, _ in
-            levels_apply(pixels, width * height, tables)
+        return try Self.memo.value(image, key: self) {
+            let tables = Array([[Float]](repeating: table, count: 3).joined())
+            return try ImageAdjustmentPixels.run(image) { pixels, width, height, _ in
+                levels_apply(pixels, width * height, tables)
+            }
         }
     }
 }
@@ -77,6 +153,7 @@ nonisolated struct GradientMapSettings: Codable, Equatable, Sendable {
     var highlights = AdjustmentColor(red: 1, green: 1, blue: 1)
     var reversed = false
     var isValid: Bool { shadows.isValid && highlights.isValid }
+    private static let memo = ImageAdjustmentPixels.Memo<GradientMapSettings>()
     var normalized: Self {
         var result = self
         result.shadows = shadows.clamped
@@ -87,23 +164,25 @@ nonisolated struct GradientMapSettings: Codable, Equatable, Sendable {
     var ends: (dark: AdjustmentColor, light: AdjustmentColor) { reversed ? (highlights, shadows) : (shadows, highlights) }
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
-        let (dark, light) = ends
-        // Split into explicitly typed steps: as one expression the type checker times out (Xcode 26.1).
-        func channel(_ from: Double, _ to: Double, _ t: Double) -> UInt8 {
-            let value: Double = from + (to - from) * t
-            let scaled: Double = (value * 255).rounded()
-            return UInt8(min(255.0, max(0.0, scaled)))
-        }
-        var table = [UInt8]()
-        table.reserveCapacity(256 * 3)
-        for index in 0...255 {
-            let t: Double = Double(index) / 255
-            table.append(channel(dark.red, light.red, t))
-            table.append(channel(dark.green, light.green, t))
-            table.append(channel(dark.blue, light.blue, t))
-        }
-        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
-            adjust_gradient_map(pixels, width, height, stride, table)
+        return try Self.memo.value(image, key: self) {
+            let (dark, light) = ends
+            // Split into explicitly typed steps: as one expression the type checker times out (Xcode 26.1).
+            func channel(_ from: Double, _ to: Double, _ t: Double) -> UInt8 {
+                let value: Double = from + (to - from) * t
+                let scaled: Double = (value * 255).rounded()
+                return UInt8(min(255.0, max(0.0, scaled)))
+            }
+            var table = [UInt8]()
+            table.reserveCapacity(256 * 3)
+            for index in 0...255 {
+                let t: Double = Double(index) / 255
+                table.append(channel(dark.red, light.red, t))
+                table.append(channel(dark.green, light.green, t))
+                table.append(channel(dark.blue, light.blue, t))
+            }
+            return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+                adjust_gradient_map(pixels, width, height, stride, table)
+            }
         }
     }
 }
@@ -129,13 +208,16 @@ nonisolated struct BlackWhiteSettings: Codable, Equatable, Sendable {
             && tintHue.isFinite && (0...360).contains(tintHue)
             && tintSaturation.isFinite && (0...100).contains(tintSaturation)
     }
+    private static let memo = ImageAdjustmentPixels.Memo<BlackWhiteSettings>()
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
-        // The C routine's order: red, yellow, green, cyan, blue, magenta.
-        let weights = [reds, yellows, greens, cyans, blues, magentas].map { Float($0 / 100) }
-        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
-            adjust_black_white(pixels, width, height, stride, weights,
-                               tint ? 1 : 0, tintHue, tintSaturation / 100)
+        return try Self.memo.value(image, key: self) {
+            // The C routine's order: red, yellow, green, cyan, blue, magenta.
+            let weights = [reds, yellows, greens, cyans, blues, magentas].map { Float($0 / 100) }
+            return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+                adjust_black_white(pixels, width, height, stride, weights,
+                                   tint ? 1 : 0, tintHue, tintSaturation / 100)
+            }
         }
     }
 }
@@ -162,15 +244,18 @@ nonisolated struct ColorBalanceSettings: Codable, Equatable, Sendable {
     }
     var isValid: Bool { all.allSatisfy { $0.isFinite && Self.range.contains($0) } }
     var isIdentity: Bool { all.allSatisfy { $0 == 0 } }
+    private static let memo = ImageAdjustmentPixels.Memo<ColorBalanceSettings>()
     func apply(_ image: CGImage) throws -> CGImage {
         guard isValid else { throw ProjectError.invalid }
         guard !isIdentity else { return image }
-        let shadows = [shadowCyanRed, shadowMagentaGreen, shadowYellowBlue].map { Float($0 / 100) }
-        let midtones = [midCyanRed, midMagentaGreen, midYellowBlue].map { Float($0 / 100) }
-        let highlights = [highlightCyanRed, highlightMagentaGreen, highlightYellowBlue].map { Float($0 / 100) }
-        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
-            adjust_color_balance(pixels, width, height, stride, shadows, midtones, highlights,
-                                 preserveLuminosity ? 1 : 0)
+        return try Self.memo.value(image, key: self) {
+            let shadows = [shadowCyanRed, shadowMagentaGreen, shadowYellowBlue].map { Float($0 / 100) }
+            let midtones = [midCyanRed, midMagentaGreen, midYellowBlue].map { Float($0 / 100) }
+            let highlights = [highlightCyanRed, highlightMagentaGreen, highlightYellowBlue].map { Float($0 / 100) }
+            return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+                adjust_color_balance(pixels, width, height, stride, shadows, midtones, highlights,
+                                     preserveLuminosity ? 1 : 0)
+            }
         }
     }
 }
@@ -189,6 +274,16 @@ nonisolated struct GrainSettings: Codable, Equatable, Sendable {
     var roughness: Double = 50
     var seed: UInt32 = 0
     var isValid: Bool { Self.amountRange.contains(amount) && Self.sizeRange.contains(size) && Self.roughnessRange.contains(roughness) }
+    private struct ApplyKey: Equatable {
+        var amount: Double
+        var size: Double
+        var roughness: Double
+        var seed: UInt32
+        var originX: Double
+        var originY: Double
+        var unitsPerPixel: Double
+    }
+    private static let memo = ImageAdjustmentPixels.Memo<ApplyKey>()
     var normalized: Self {
         var result = self
         result.amount = ImageAdjustmentPixels.clamp(amount, Self.amountRange, 25)
@@ -202,9 +297,13 @@ nonisolated struct GrainSettings: Codable, Equatable, Sendable {
         guard isValid, unitsPerPixel.isFinite, unitsPerPixel > 0 else { throw ProjectError.invalid }
         guard amount > 0 else { return image }
         let pattern = seed ?? self.seed
-        return try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
-            adjust_grain(pixels, width, height, stride, amount, size, roughness, pattern,
-                         Double(origin.x), Double(origin.y), Double(unitsPerPixel))
+        let key = ApplyKey(amount: amount, size: size, roughness: roughness, seed: pattern,
+                           originX: Double(origin.x), originY: Double(origin.y), unitsPerPixel: Double(unitsPerPixel))
+        return try Self.memo.value(image, key: key) {
+            try ImageAdjustmentPixels.run(image) { pixels, width, height, stride in
+                adjust_grain(pixels, width, height, stride, amount, size, roughness, pattern,
+                             Double(origin.x), Double(origin.y), Double(unitsPerPixel))
+            }
         }
     }
 }

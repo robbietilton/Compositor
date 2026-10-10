@@ -177,7 +177,7 @@ final class TransformOverlay: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        drawLayoutGrid()
+        drawLayoutGrid(in: dirtyRect)
         drawGuides()
         if session.tool == .crop { drawCrop() }
         else if let line = gradientLine { drawGradientLine(line) }
@@ -189,7 +189,7 @@ final class TransformOverlay: NSView {
 
     /// Non-printing layout grid over the document: majors in the chosen style, dotted subdivisions, both in the
     /// chosen color.
-    private func drawLayoutGrid() {
+    private func drawLayoutGrid(in dirtyRect: NSRect) {
         guard session.showsGrid, let document = session.document, let transform = documentToView,
               let context = NSGraphicsContext.current?.cgContext else { return }
         let grid = session.layoutGrid
@@ -203,31 +203,48 @@ final class TransformOverlay: NSView {
         context.concatenate(transform)
         context.setLineWidth(hairline / max(scale, 0.0001))
         context.setStrokeColor(color.withAlphaComponent(appearance.subdivisionAlpha).cgColor)
+        // Same positions as `LayoutGrid.lines(along:)`, but only lines that cross this redraw.
+        // Each line still runs the full document edge, so its dash phase stays put.
+        let viewArea = dirtyRect.intersection(bounds)
+        guard !viewArea.isNull, !viewArea.isEmpty else { context.restoreGState(); return }
+        let visible = viewArea.applying(transform.inverted())
+        let pad = 1 / max(scale * max(session.viewport.backingScale, 1), 0.0001)
+        let step = grid.step
+        func add(_ path: CGMutablePath, vertical: Bool, low: CGFloat, high: CGFloat, major: Bool) {
+            guard step > 0, high >= low else { return }
+            let length = vertical ? size.width : size.height
+            guard length >= 0 else { return }
+            let count = Int((length / step + 0.001).rounded(.down))
+            var first = Int(((low - 0.5) / step).rounded(.down))
+            var last = Int(((high + 0.5) / step).rounded(.up))
+            if first < 0 { first = 0 }
+            if last > count { last = count }
+            guard first <= last else { return }
+            for index in first...last {
+                let value = (CGFloat(index) * step).rounded()
+                guard value >= low, value <= high, grid.isMajor(value) == major else { continue }
+                if vertical {
+                    path.move(to: CGPoint(x: value, y: 0))
+                    path.addLine(to: CGPoint(x: value, y: size.height))
+                } else {
+                    path.move(to: CGPoint(x: 0, y: value))
+                    path.addLine(to: CGPoint(x: size.width, y: value))
+                }
+            }
+        }
         if subdivisionGap >= 4 {
             context.setLineDash(phase: 0, lengths: [1 / max(scale, 0.0001), 2 / max(scale, 0.0001)])
             let path = CGMutablePath()
-            for x in grid.lines(along: size.width) where !grid.isMajor(x) {
-                path.move(to: CGPoint(x: x, y: 0))
-                path.addLine(to: CGPoint(x: x, y: size.height))
-            }
-            for y in grid.lines(along: size.height) where !grid.isMajor(y) {
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
-            }
+            add(path, vertical: true, low: visible.minX - pad, high: visible.maxX + pad, major: false)
+            add(path, vertical: false, low: visible.minY - pad, high: visible.maxY + pad, major: false)
             context.addPath(path)
             context.strokePath()
         }
         context.setLineDash(phase: 0, lengths: appearance.style.dashes.map { $0 / max(scale, 0.0001) })
         context.setStrokeColor(color.withAlphaComponent(appearance.majorAlpha).cgColor)
         let majors = CGMutablePath()
-        for x in grid.lines(along: size.width) where grid.isMajor(x) {
-            majors.move(to: CGPoint(x: x, y: 0))
-            majors.addLine(to: CGPoint(x: x, y: size.height))
-        }
-        for y in grid.lines(along: size.height) where grid.isMajor(y) {
-            majors.move(to: CGPoint(x: 0, y: y))
-            majors.addLine(to: CGPoint(x: size.width, y: y))
-        }
+        add(majors, vertical: true, low: visible.minX - pad, high: visible.maxX + pad, major: true)
+        add(majors, vertical: false, low: visible.minY - pad, high: visible.maxY + pad, major: true)
         context.addPath(majors)
         context.strokePath()
         context.restoreGState()

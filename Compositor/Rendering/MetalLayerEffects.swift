@@ -61,13 +61,9 @@ nonisolated final class MetalLayerEffects: Sendable {
         let count = width * height
         guard count > 0, count <= 80_000_000 else { throw ExportError.tooLarge }
         // The pixels as bytes the GPU can read, premultiplied as everything else here is.
-        let source = try BrushRaster.context(width: width, height: height, mask: false)
-        // Through BrushRaster, which turns the image the right way up for this context's top-left coordinates.
-        BrushRaster.draw(pixels, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: source)
-        guard let bytes = source.data else { throw ExportError.render }
+        let input = try upload(pixels, count: count)
         let stride = MemoryLayout<Float>.stride
-        guard let input = device.makeBuffer(bytes: bytes, length: count * 4, options: .storageModeShared),
-              let output = device.makeBuffer(length: count * 4, options: .storageModeShared),
+        guard let output = device.makeBuffer(length: count * 4, options: .storageModeShared),
               let first = device.makeBuffer(length: count * stride, options: .storageModeShared),
               let second = device.makeBuffer(length: count * stride, options: .storageModeShared),
               let third = device.makeBuffer(length: count * stride, options: .storageModeShared),
@@ -205,6 +201,42 @@ nonisolated final class MetalLayerEffects: Sendable {
                                   provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
         else { throw ExportError.render }
         return image
+    }
+
+    /// An image already in `BrushRaster`'s layout — the bitmap a preview was just drawn into — holds
+    /// the bytes the GPU reads. Kept alive for the copy into the buffer.
+    private struct StoredBytes {
+        let data: CFData
+        let base: UnsafeRawPointer
+    }
+
+    /// Bytes of an image already packed in the layout `BrushRaster` draws, or nil when drawing is
+    /// what puts it into that layout.
+    private static func storedBytes(_ image: CGImage) -> StoredBytes? {
+        guard image.width > 0, image.height > 0, image.bitsPerPixel == 32, image.bitsPerComponent == 8,
+              image.bytesPerRow == image.width * 4,
+              image.bitmapInfo.rawValue == CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue,
+              image.colorSpace == CGColorSpace(name: CGColorSpace.sRGB),
+              let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data),
+              CFDataGetLength(data) >= image.bytesPerRow * (image.height - 1) + image.width * 4 else { return nil }
+        return StoredBytes(data: data, base: UnsafeRawPointer(bytes))
+    }
+
+    /// The full image as a shared buffer. A preview's pixels are already in layout, so this copies
+    /// those bytes. Allocating a second full-size context and drawing the image into it repeated
+    /// that copy on every slider tick. An image in any other layout is still drawn, which is what
+    /// makes its pixels match the ones the GPU has always read.
+    private func upload(_ pixels: CGImage, count: Int) throws -> MTLBuffer {
+        if let stored = Self.storedBytes(pixels),
+           let buffer = device.makeBuffer(bytes: stored.base, length: count * 4, options: .storageModeShared) {
+            return buffer
+        }
+        let source = try BrushRaster.context(width: pixels.width, height: pixels.height, mask: false)
+        // Through BrushRaster, which turns the image the right way up for this context's top-left coordinates.
+        BrushRaster.draw(pixels, in: CGRect(x: 0, y: 0, width: pixels.width, height: pixels.height), mask: false, context: source)
+        guard let bytes = source.data,
+              let buffer = device.makeBuffer(bytes: bytes, length: count * 4, options: .storageModeShared) else { throw ExportError.render }
+        return buffer
     }
 
     private static let source = """
