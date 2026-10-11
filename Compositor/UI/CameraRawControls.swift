@@ -13,6 +13,7 @@ struct CameraRawControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            CameraRawPresetMenu(session: session)
             histogram
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
