@@ -16,6 +16,7 @@ nonisolated enum BlurToolMode: String, CaseIterable, Sendable {
 /// A Smudge or Liquify stroke in progress. It works on the active layer as the canvas shows it, at document size,
 /// changing it dab by dab; the canvas shows that working copy in place of the layer. When the stroke ends, the result
 /// is painted into the layer's own pixels along the stroke's path (see `EditorSession.finishWarp`).
+@MainActor
 final class WarpStroke {
     let layer: ImageLayer
     let mode: BlurToolMode

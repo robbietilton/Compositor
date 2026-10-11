@@ -207,6 +207,7 @@ struct ProjectTabStrip: View {
     }
 }
 
+@MainActor
 private func projectTabLabelWidth(_ tab: ProjectTab, active: Bool) -> CGFloat {
     let font = NSFont.systemFont(ofSize: 12, weight: active ? .semibold : .medium)
     let titleWidth = (tab.title as NSString).size(withAttributes: [.font: font]).width
@@ -214,6 +215,7 @@ private func projectTabLabelWidth(_ tab: ProjectTab, active: Bool) -> CGFloat {
     return min(155, max(35, ceil(titleWidth) + dotWidth))
 }
 
+@MainActor
 private func projectTabPillWidth(_ tab: ProjectTab, active: Bool, closable: Bool) -> CGFloat {
     // 11 px leading, 8 px trailing, 16 px close button, 5 px after close; with no close button, 11 px each side.
     projectTabLabelWidth(tab, active: active) + (closable ? 40 : 22)

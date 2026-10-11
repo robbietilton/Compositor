@@ -172,6 +172,7 @@ extension CommandPaletteEntry {
     /// The tools, run by choosing them. With no document open there is nothing to use them on, so they're disabled.
     /// Commands that live on buttons rather than in the menu bar, so the palette finds them too: adding a layer mask,
     /// as the Layers panel's mask button does (Option for the black one).
+    @MainActor
     static func layerCommands(for session: EditorSession) -> [CommandPaletteEntry] {
         let canAdd = session.canEditMask && session.activeLayer?.mask == nil
         let selected = session.selection != nil
@@ -188,8 +189,9 @@ extension CommandPaletteEntry {
     /// Every tool, and each of a tool's modes on its own, by the name someone would search for: Liquify is a mode of
     /// the Smear tool, Polygonal Lasso a mode of the Lasso, and neither is in a menu. The tool's key shows where a
     /// command's shortcut would.
+    @MainActor
     static func tools(for session: EditorSession) -> [CommandPaletteEntry] {
-        typealias Setup = (EditorSession) -> Void
+        typealias Setup = @MainActor (EditorSession) -> Void
         let tools: [(String, String, NavigationTool, Setup?)] = [
             ("Move / Transform", "V", .move, nil),
             ("Rectangular Marquee", "M", .marquee, { $0.marqueeKind = .rectangle }),

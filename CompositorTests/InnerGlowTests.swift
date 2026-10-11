@@ -138,6 +138,7 @@ import Testing
         #expect(centerColor.redComponent < 0.2 && centerColor.greenComponent < 0.2)
     }
 
+    @MainActor
     @Test func innerGlowRendersAroundTextGlyphs() throws {
         var style = LayerTextStyle()
         style.content = "O"

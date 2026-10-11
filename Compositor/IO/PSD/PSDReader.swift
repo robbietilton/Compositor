@@ -442,8 +442,16 @@ nonisolated private struct PSDCursor: Sendable {
     mutating func u64() throws -> UInt64 {
         try need(8)
         defer { offset += 8 }
-        return UInt64(data[offset]) << 56 | UInt64(data[offset + 1]) << 48 | UInt64(data[offset + 2]) << 40 | UInt64(data[offset + 3]) << 32 |
-            UInt64(data[offset + 4]) << 24 | UInt64(data[offset + 5]) << 16 | UInt64(data[offset + 6]) << 8 | UInt64(data[offset + 7])
+        // Split so Swift 6.1 can type-check it. Same shifts and the same OR as the single expression.
+        let b0 = UInt64(data[offset]) << 56
+        let b1 = UInt64(data[offset + 1]) << 48
+        let b2 = UInt64(data[offset + 2]) << 40
+        let b3 = UInt64(data[offset + 3]) << 32
+        let b4 = UInt64(data[offset + 4]) << 24
+        let b5 = UInt64(data[offset + 5]) << 16
+        let b6 = UInt64(data[offset + 6]) << 8
+        let b7 = UInt64(data[offset + 7])
+        return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
     }
 
     mutating func i32() throws -> Int32 { Int32(bitPattern: try u32()) }
