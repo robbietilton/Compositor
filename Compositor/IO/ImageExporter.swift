@@ -169,6 +169,18 @@ actor ImageExporter {
         try pngData(render(snapshot))
     }
 
+    /// The flattened canvas as a TIFF, compressed losslessly: transparency kept in RGB, or with `cmyk`, in that profile's
+    /// inks over `matte`, the profile embedded, as print shops take it.
+    func tiffData(_ raster: ExportRaster, cmyk: CMYKProfile? = nil, matte: CGColor = CGColor(gray: 1, alpha: 1)) throws -> (data: Data, preview: CGImage) {
+        try Task.checkCancellation()
+        let image = try cmyk.map { try CMYK.convert(raster.image, to: $0, over: matte) } ?? raster.image
+        let data = try encode(image, type: .tiff, properties: [
+            kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution,
+            kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5], // LZW
+        ] as CFDictionary)
+        return (data, image)
+    }
+
     /// An HDR flattening (`render(_:sixteenBit:hdr:)`) as OpenEXR, highlights kept.
     func exrData(_ raster: ExportRaster) throws -> Data {
         try encode(raster.image, type: .openEXR, properties: [
@@ -215,7 +227,8 @@ actor ImageExporter {
         return data as Data
     }
 
-    func jpeg(_ raster: ExportRaster, options: JPEGOptions) throws -> JPEGResult {
+    /// `cmyk`: in that profile's inks, for print, the profile embedded.
+    func jpeg(_ raster: ExportRaster, options: JPEGOptions, cmyk: CMYKProfile? = nil) throws -> JPEGResult {
         try Task.checkCancellation()
         return try autoreleasepool {
             let image = raster.image
@@ -223,12 +236,13 @@ actor ImageExporter {
                 bitsPerComponent: 8, bytesPerRow: image.width * 4,
                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { throw ExportError.render }
-            context.setFillColor(CGColor(colorSpace: context.colorSpace!,
-                components: [options.red, options.green, options.blue, 1])!)
+            let matte = CGColor(colorSpace: context.colorSpace!, components: [options.red, options.green, options.blue, 1])!
+            context.setFillColor(matte)
             let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
             context.fill(bounds)
             context.draw(image, in: bounds)
-            guard let flattened = context.makeImage() else { throw ExportError.render }
+            guard var flattened = context.makeImage() else { throw ExportError.render }
+            if let cmyk { flattened = try CMYK.convert(flattened, to: cmyk, over: matte) }
             try Task.checkCancellation()
             let data = try encode(flattened, type: .jpeg,
                 properties: [kCGImageDestinationLossyCompressionQuality: min(1, max(0, options.quality)),
@@ -273,7 +287,8 @@ actor ImageExporter {
     }
 
     /// `background` fills the page under the picture; nil leaves it clear, as a viewer then shows its own paper.
-    func pdfData(_ raster: ExportRaster, background: CGColor? = nil) throws -> Data {
+    /// `cmyk`: the picture in that profile's inks, over `background` (or white paper), for print.
+    func pdfData(_ raster: ExportRaster, background: CGColor? = nil, cmyk: CMYKProfile? = nil) throws -> Data {
         let pointsPerPixel = 72 / (raster.resolution > 0 ? raster.resolution : 72)
         var page = CGRect(x: 0, y: 0, width: CGFloat(raster.image.width) * pointsPerPixel,
                           height: CGFloat(raster.image.height) * pointsPerPixel)
@@ -285,7 +300,11 @@ actor ImageExporter {
             context.setFillColor(background)
             context.fill(page)
         }
-        context.draw(raster.image, in: page)
+        if let cmyk {
+            context.draw(try CMYK.convert(raster.image, to: cmyk, over: background ?? CGColor(gray: 1, alpha: 1)), in: page)
+        } else {
+            context.draw(raster.image, in: page)
+        }
         context.endPDFPage()
         context.closePDF()
         return data as Data

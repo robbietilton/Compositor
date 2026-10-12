@@ -99,7 +99,7 @@ struct MaskAloneBadgeHitTests {
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         host.layoutSubtreeIfNeeded()
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
-        let badge = try #require(all(host).first { $0 is MaskAloneBadgeView })
+        let badge = try #require(all(host).first { $0 is CanvasPillView })
         let center = badge.convert(CGPoint(x: badge.bounds.midX, y: badge.bounds.midY), to: nil)
         let hit = try #require(window.contentView?.hitTest(center))
         #expect(hit.isDescendant(of: badge), "hit \(type(of: hit)); order \(host.subviews.map { "\(type(of: $0))" }); badge \(badge.frame)")

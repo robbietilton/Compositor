@@ -2889,7 +2889,19 @@ extension CanvasView {
         let layerClip = crisp ? full.applying(mapping.inverted()).intersection(pixels) : full
         guard var layers = gpuLayers(document, placement: placement, clip: layerClip) else { return nil }
         if crisp { layers = layers.cropped(to: pixels).samplingNearest().transformed(by: mapping) }
-        frame = layers.cropped(to: rect).composited(over: frame)
+        var picture = layers.cropped(to: rect)
+        // Proof Colors: on white paper, through the CMYK profile and back, as printing would give it; Gamut Warning: what
+        // it can't print as it is, gray, over the proof or the document's own colors (`CMYK`).
+        if session.proofsColors || session.showsGamutWarning, let profile = session.proofProfile,
+           let lookups = CMYK.proofLookups(profile) {
+            let lookup = session.proofsColors ? session.showsGamutWarning ? lookups.warning : lookups.proof : lookups.marked
+            picture = picture.composited(over: gray(1).cropped(to: rect)).applyingFilter("CIColorCubeWithColorSpace", parameters: [
+                "inputCubeDimension": CMYK.dimension,
+                "inputCubeData": lookup,
+                "inputColorSpace": CGColorSpace(name: CGColorSpace.sRGB)!,
+            ])
+        }
+        frame = picture.composited(over: frame)
         // The document's edge: a one-pixel line centered on it.
         let edge = gray(1, alpha: 0.13)
         for line in [CGRect(x: rect.minX - 0.5, y: rect.minY - 0.5, width: rect.width + 1, height: 1),

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import Sparkle
 
 @main
@@ -145,6 +146,36 @@ struct CompositorApp: App {
                         Toggle(L10n.string("Show Transform Controls"), isOn: Binding(get: { session.showsTransformControls },
                                                                           set: { session.showsTransformControls = $0 }))
                             .configuredKeyboardShortcut("h").disabled(session.tool != .move || session.document == nil)
+                        Menu(L10n.string("Channel")) {
+                            Button(L10n.string("RGB")) { session.canvasChannel = .rgb }
+                                .configuredKeyboardShortcut("2")
+                            Button(L10n.string("Red")) { session.canvasChannel = .red }
+                                .configuredKeyboardShortcut("3")
+                            Button(L10n.string("Green")) { session.canvasChannel = .green }
+                                .configuredKeyboardShortcut("4")
+                            Button(L10n.string("Blue")) { session.canvasChannel = .blue }
+                                .configuredKeyboardShortcut("5")
+                        }.disabled(session.document == nil)
+                        Divider()
+                        // Print: the canvas as the chosen CMYK profile will print it, tucked in a submenu as few need it. No
+                        // shortcuts (Photoshop's ⌘Y sits by ⌘U and would be hit by mistake); Search Commands finds them.
+                        Menu(L10n.string("CMYK")) {
+                            Toggle(L10n.string("Proof Colors"), isOn: Binding(get: { session.proofsColors }, set: { session.proofsColors = $0 }))
+                                .disabled(session.document == nil)
+                            Toggle(L10n.string("Gamut Warning"), isOn: Binding(get: { session.showsGamutWarning },
+                                                                               set: { session.showsGamutWarning = $0 }))
+                                .disabled(session.document == nil)
+                            Divider()
+                            Menu(L10n.string("Profile")) {
+                                let current = session.proofProfile ?? CMYK.chosen
+                                ForEach(CMYK.installed()) { profile in
+                                    Toggle(profile.name, isOn: Binding(get: { current?.name == profile.name },
+                                                                       set: { if $0 { session.proofProfile = profile } }))
+                                }
+                                Divider()
+                                Button(L10n.string("Load Profile…")) { loadCMYKProfile() }
+                            }
+                        }
                         Group {
                             Divider()
                             Menu(L10n.string("Show")) {
@@ -419,5 +450,15 @@ struct CompositorApp: App {
                 }
                 }
             }
+    }
+
+    /// View › CMYK › Profile › Load Profile: a CMYK ICC profile picked from anywhere, kept and chosen.
+    private func loadCMYKProfile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "icc") ?? .data, UTType(filenameExtension: "icm") ?? .data]
+        panel.message = L10n.string("Choose a CMYK ICC profile, such as the one your printer gave you")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { session.proofProfile = try CMYK.load(url) }
+        catch { session.importError = error.localizedDescription }
     }
 }

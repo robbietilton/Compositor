@@ -14383,6 +14383,139 @@
         }
       }
     },
+    "CMYK": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK" } }
+      }
+    },
+    "Proof Colors": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "校样颜色" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "校樣色彩" } }
+      }
+    },
+    "Gamut Warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "色域警告" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "色域警告" } }
+      }
+    },
+    "Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "配置文件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "描述檔" } }
+      }
+    },
+    "Load Profile…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "加载配置文件…" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "載入描述檔…" } }
+      }
+    },
+    "Choose a CMYK ICC profile, such as the one your printer gave you": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择 CMYK ICC 配置文件，例如打印机提供的配置文件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇 CMYK ICC 描述檔，例如印表機提供的描述檔" } }
+      }
+    },
+    "CMYK writes the printer's inks through the profile beside it, for print": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用旁边的配置文件将图像转换为打印机的 CMYK 油墨颜色，以便印刷" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用旁邊的描述檔將影像轉換為印表機的 CMYK 油墨色彩，以便印刷" } }
+      }
+    },
+    "Choose Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "选择配置文件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "選擇描述檔" } }
+      }
+    },
+    "The CMYK profile your printer uses; View › CMYK › Proof Colors shows it on the canvas": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "打印机使用的 CMYK 配置文件；通过“视图 › CMYK › 校样颜色”可在画布上预览" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "印表機使用的 CMYK 描述檔；透過「顯示方式 › CMYK › 校樣色彩」可在畫布上預覽" } }
+      }
+    },
+    "CMYK · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK · %@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK · %@" } }
+      }
+    },
+    "No profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无配置文件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無描述檔" } }
+      }
+    },
+    "Other formats: TIFF and PDF": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "其他格式：TIFF 和 PDF" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "其他格式：TIFF 和 PDF" } }
+      }
+    },
+    "Other formats: TIFF and PDF, and EXR to keep light brighter than white": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "其他格式：TIFF、PDF，以及可保留超白亮度的 EXR" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "其他格式：TIFF、PDF，以及可保留超白亮度的 EXR" } }
+      }
+    },
+    "CMYK Gamut Warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK 色域警告" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK 色域警告" } }
+      }
+    },
+    "CMYK Proof": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK 校样" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK 校樣" } }
+      }
+    },
+    "Hide the gamut warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "隐藏色域警告" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "隱藏色域警告" } }
+      }
+    },
+    "Stop marking colors the profile can't print": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停止标记配置文件无法打印的颜色" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停止標記描述檔無法列印的色彩" } }
+      }
+    },
+    "Stop proofing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "停止校样" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停止校樣" } }
+      }
+    },
+    "Show the document's own colors again": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新显示文档本身的颜色" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "重新顯示文件本身的色彩" } }
+      }
+    },
     "Language Download Failed": {
       "extractionState": "manual",
       "localizations": {
