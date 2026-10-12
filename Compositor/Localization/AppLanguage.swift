@@ -13,7 +13,9 @@ struct AppLanguage: Codable, Hashable, Identifiable, Sendable {
     static let english = AppLanguage(code: "en", displayName: "English", file: nil, sha256: nil, revision: 0)
     static let simplifiedChinese = AppLanguage(code: "zh-Hans", displayName: "简体中文",
                                                 file: "zh-Hans.json", sha256: nil, revision: 1)
-    static let initialChoices = [english, simplifiedChinese]
+    static let traditionalChinese = AppLanguage(code: "zh-Hant", displayName: "繁體中文",
+                                                 file: "zh-Hant.json", sha256: nil, revision: 1)
+    static let initialChoices = [english, simplifiedChinese, traditionalChinese]
 
     var id: String { code }
     var rawValue: String { code }

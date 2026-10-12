@@ -7,6 +7,13 @@
       "file": "zh-Hans.json",
       "sha256": "e80202c9fb5896e81cdcd67a0a9520443d1db4310886e1412e1211d1d409623e",
       "revision": 1
+    },
+    {
+      "code": "zh-Hant",
+      "displayName": "繁體中文",
+      "file": "zh-Hant.json",
+      "sha256": "1ebbaedc5add6fab05a77cae388e2c6ecf573c5026a1c95ceb1006c4c2540b47",
+      "revision": 1
     }
   ]
 }

@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-private struct MCPToolFailure: LocalizedError {
+struct MCPToolFailure: LocalizedError {
     let message: String
     var errorDescription: String? { message }
 }
@@ -10,7 +10,7 @@ private struct MCPToolFailure: LocalizedError {
 /// main actor so an MCP edit and a pointer edit can never mutate a document at the same time.
 @MainActor
 final class MCPToolRouter {
-    private let workspace: ProjectWorkspace
+    let workspace: ProjectWorkspace
 
     init(workspace: ProjectWorkspace) { self.workspace = workspace }
 
@@ -25,6 +25,28 @@ final class MCPToolRouter {
                     "resolution": number("Resolution in pixels per inch. Defaults to 72.", minimum: 1, maximum: 9_600),
                     "background": string("Optional #RRGGBB background color, or transparent.")
                 ], required: ["width", "height"]), destructive: false),
+            tool("compositor_add_shape", "Use Compositor's Shape tool to add an editable rectangle, ellipse, or line. Coordinates are document pixels.", schema(
+                properties: [
+                    "kind": enumString("Shape type.", ["rectangle", "ellipse", "line"]),
+                    "start_x": number("First corner or line endpoint x."), "start_y": number("First corner or line endpoint y."),
+                    "end_x": number("Opposite corner or line endpoint x."), "end_y": number("Opposite corner or line endpoint y."),
+                    "color": string("Fill or stroke color as #RRGGBB. Defaults to the foreground color."),
+                    "corner_radius": number("Rectangle corner radius in document pixels.", minimum: 0, maximum: 150_000),
+                    "line_width": number("Line thickness in document pixels.", minimum: 1, maximum: 5_000)
+                ], required: ["kind", "start_x", "start_y", "end_x", "end_y"]), destructive: false),
+            tool("compositor_add_text", "Use Compositor's Type tool to add an editable text layer. The x and y values are the text box's top-left document coordinates.", schema(
+                properties: [
+                    "content": string("Text content, including line breaks."),
+                    "x": number("Text box x coordinate."), "y": number("Text box y coordinate."),
+                    "font_name": string("Installed PostScript font name. Defaults to Helvetica."),
+                    "font_size": number("Font size in layer pixels.", minimum: 1, maximum: 2_000),
+                    "color": string("Text color as #RRGGBB."),
+                    "alignment": enumString("Paragraph alignment.", ["left", "center", "right"]),
+                    "tracking": number("Character spacing from -100 through 1000.", minimum: -100, maximum: 1_000),
+                    "leading": number("Line height in pixels; 0 uses automatic leading.", minimum: 0, maximum: 5_000),
+                    "box_width": number("Optional fixed paragraph-box width.", minimum: 16, maximum: 300_000),
+                    "box_height": number("Optional fixed paragraph-box height.", minimum: 16, maximum: 300_000)
+                ], required: ["content", "x", "y"]), destructive: false),
             tool("compositor_add_vector_path", "Add an editable Pen shape or line to the current canvas. Coordinates are document pixels.", schema(
                 properties: [
                     "mode": enumString("A shape is filled and closed; a line is stroked.", ["shape", "line"]),
@@ -41,6 +63,73 @@ final class MCPToolRouter {
                     "line_width": number("Line width in document pixels. Used for line mode.", minimum: 1, maximum: 5_000),
                     "closed": ["type": "boolean", "description": "Close a line back to its first node. Shapes are always closed."]
                 ], required: ["mode", "nodes"]), destructive: false),
+            tool("compositor_set_selection", "Use Marquee, Lasso, Magic Wand, or Object Selection, or modify the current selection. Coordinates are document pixels.", schema(
+                properties: [
+                    "action": enumString("Selection operation.", ["rectangle", "ellipse", "polygon", "wand", "object", "all", "none", "invert"]),
+                    "mode": enumString("How a new region combines with the current selection.", ["replace", "add", "subtract"]),
+                    "x": number("Rectangle origin or Wand/Object sample x."), "y": number("Rectangle origin or Wand/Object sample y."),
+                    "width": number("Rectangle or ellipse width.", minimum: 0.5, maximum: 300_000),
+                    "height": number("Rectangle or ellipse height.", minimum: 0.5, maximum: 300_000),
+                    "points": ["type": "array", "minItems": 3, "maxItems": 10_000,
+                               "description": "Polygonal Lasso vertices.",
+                               "items": schema(properties: ["x": number("Vertex x."), "y": number("Vertex y.")], required: ["x", "y"])],
+                    "tolerance": integer("Magic Wand per-channel tolerance.", minimum: 0, maximum: 255),
+                    "contiguous": ["type": "boolean"], "sample_all_layers": ["type": "boolean"],
+                    "sample_size": enumString("Magic Wand sample averaging.", ["point", "3x3", "5x5"]),
+                    "edge_offset": integer("Object Selection edge contraction (positive) or expansion (negative).", minimum: -10, maximum: 10),
+                    "antialiased": ["type": "boolean"],
+                    "feather": integer("Optional feather radius applied after selection.", minimum: 0, maximum: 250),
+                    "layer_id": string("Optional active layer UUID for Wand/Object sampling.")
+                ], required: ["action"]), destructive: true),
+            tool("compositor_paint_stroke", "Use Brush, Eraser, Spot Healing, Clone Stamp, Blur, Smudge, or Liquify with a document-space point path.", schema(
+                properties: [
+                    "mode": enumString("Painting or retouching mode.", ["paint", "erase", "spot_healing", "clone_stamp", "blur", "smudge", "liquify"]),
+                    "points": ["type": "array", "minItems": 1, "maxItems": 10_000,
+                               "description": "Stroke points in document pixels, in order.",
+                               "items": schema(properties: ["x": number("Point x."), "y": number("Point y.")], required: ["x", "y"])],
+                    "layer_id": string("Target layer UUID; defaults to the active layer."),
+                    "target": enumString("Paint pixels or the layer mask.", ["layer", "mask"]),
+                    "color": string("Paint color as #RRGGBB. On masks, light colors reveal and dark colors hide."),
+                    "size": number("Brush diameter in document pixels.", minimum: 1, maximum: 2_000),
+                    "hardness": number("Brush hardness from 0 through 1.", minimum: 0, maximum: 1),
+                    "opacity": number("Stroke opacity or retouching strength from 0 through 1.", minimum: 0.01, maximum: 1),
+                    "blur_radius": number("Blur radius in pixels for Blur mode.", minimum: 0.1, maximum: 250),
+                    "source_x": number("Clone Stamp source x coordinate."), "source_y": number("Clone Stamp source y coordinate."),
+                    "aligned": ["type": "boolean"], "sample_all_layers": ["type": "boolean"]
+                ], required: ["mode", "points"]), destructive: true),
+            tool("compositor_apply_gradient", "Use Compositor's Gradient tool on a layer or mask between two document-space points.", schema(
+                properties: [
+                    "start_x": number("Gradient start x."), "start_y": number("Gradient start y."),
+                    "end_x": number("Gradient end x."), "end_y": number("Gradient end y."),
+                    "shape": enumString("Gradient geometry.", ["linear", "radial"]),
+                    "style": enumString("Use two colors or fade the foreground to transparent.", ["color_to_color", "color_to_transparent"]),
+                    "foreground": string("Start color as #RRGGBB."), "background": string("End color as #RRGGBB."),
+                    "opacity": number("Gradient opacity from 0 through 1.", minimum: 0, maximum: 1),
+                    "reversed": ["type": "boolean"], "layer_id": string("Target layer UUID."),
+                    "target": enumString("Fill layer pixels or its mask.", ["layer", "mask"])
+                ], required: ["start_x", "start_y", "end_x", "end_y"]), destructive: true),
+            tool("compositor_crop", "Use Compositor's Crop tool to replace the canvas with a document-space rectangle.", schema(
+                properties: ["x": number("Crop origin x."), "y": number("Crop origin y."),
+                             "width": number("Crop width.", minimum: 1, maximum: 300_000),
+                             "height": number("Crop height.", minimum: 1, maximum: 300_000)],
+                required: ["x", "y", "width", "height"]), destructive: true),
+            tool("compositor_sample_color", "Use Compositor's Eyedropper to sample the visible composite at a document pixel.", schema(
+                properties: ["x": number("Sample x."), "y": number("Sample y.")], required: ["x", "y"]),
+                readOnly: true, destructive: false, idempotent: true),
+            tool("compositor_set_view", "Use the Hand or Zoom behavior to fit, zoom, or pan the current canvas view. Pan values are screen points.", schema(
+                properties: ["action": enumString("View operation.", ["fit", "zoom", "pan"]),
+                             "zoom": number("Zoom factor; 1 is actual pixels.", minimum: 0.001, maximum: 32),
+                             "dx": number("Horizontal pan delta in screen points."), "dy": number("Vertical pan delta in screen points.")],
+                required: ["action"]), destructive: false),
+            tool("compositor_manage_layer", "Create, duplicate, rename, delete, mask, or place layers and folders.", schema(
+                properties: [
+                    "action": enumString("Layer operation.", ["add_blank", "add_group", "duplicate", "rename", "delete", "add_mask", "remove_mask", "place"]),
+                    "layer_id": string("Layer UUID for operations on an existing layer."),
+                    "name": string("Name for a created or renamed layer."),
+                    "reveal": ["type": "boolean", "description": "For add_mask, true makes a reveal-all mask and false a hide-all mask."],
+                    "parent_id": string("For place, destination folder UUID. Omit to move to the document root."),
+                    "above_layer_id": string("For place, sibling layer that the moved layer should sit above.")
+                ], required: ["action"]), destructive: true),
             tool("compositor_update_layer", "Update the name, visibility, appearance, or transform of one layer.", schema(
                 properties: [
                     "layer_id": string("Layer UUID from compositor_get_document."),
@@ -73,7 +162,16 @@ final class MCPToolRouter {
             switch name {
             case "compositor_get_document": return try result(documentSummary())
             case "compositor_create_document": return try createDocument(arguments)
+            case "compositor_add_shape": return try addShape(arguments)
+            case "compositor_add_text": return try addText(arguments)
             case "compositor_add_vector_path": return try addVectorPath(arguments)
+            case "compositor_set_selection": return try await setSelection(arguments)
+            case "compositor_paint_stroke": return try paintStroke(arguments)
+            case "compositor_apply_gradient": return try await applyGradient(arguments)
+            case "compositor_crop": return try await crop(arguments)
+            case "compositor_sample_color": return try sampleColor(arguments)
+            case "compositor_set_view": return try setView(arguments)
+            case "compositor_manage_layer": return try manageLayer(arguments)
             case "compositor_update_layer": return try updateLayer(arguments)
             case "compositor_select_layer": return try selectLayer(arguments)
             case "compositor_history": return try history(arguments)
@@ -258,15 +356,34 @@ final class MCPToolRouter {
             "height": document.height,
             "resolution": document.resolution,
             "modified": tab.session.isModified,
+            "active_tool": tab.session.tool.rawValue,
             "active_layer_id": tab.session.activeLayerID?.uuidString ?? NSNull(),
             "layer_order": "bottom_to_top",
-            "layers": document.layers.map(layerSummary)
+            "layers": document.layers.map(layerSummary),
+            "viewport": [
+                "zoom": tab.session.viewport.zoom,
+                "pan_x": tab.session.viewport.pan.width,
+                "pan_y": tab.session.viewport.pan.height,
+                "follows_fit": tab.session.viewport.followsFit
+            ]
         ]
+        if let selection = document.selection {
+            if selection.isEmpty {
+                summary["selection"] = ["empty": true, "antialiased": selection.antialiased,
+                                        "feather": selection.feather] as [String: Any]
+            } else {
+                let bounds = selection.path.boundingBoxOfPath
+                summary["selection"] = ["empty": false, "x": bounds.minX, "y": bounds.minY,
+                                        "width": bounds.width, "height": bounds.height,
+                                        "antialiased": selection.antialiased,
+                                        "feather": selection.feather] as [String: Any]
+            }
+        } else { summary["selection"] = NSNull() }
         if let url = tab.session.projectURL { summary["project_path"] = url.path }
         return summary
     }
 
-    private func layerSummary(_ layer: ImageLayer) -> [String: Any] {
+    func layerSummary(_ layer: ImageLayer) -> [String: Any] {
         var summary: [String: Any] = [
             "id": layer.id.uuidString,
             "name": layer.name,
@@ -275,6 +392,8 @@ final class MCPToolRouter {
             "opacity": layer.opacity,
             "blend_mode": layer.blendMode.rawValue,
             "parent_id": layer.parentID?.uuidString ?? NSNull(),
+            "has_mask": layer.mask != nil,
+            "mask_enabled": layer.mask?.isEnabled ?? NSNull(),
             "transform": [
                 "x": layer.transform.origin.x, "y": layer.transform.origin.y,
                 "width": layer.transform.size.width, "height": layer.transform.size.height,
@@ -294,6 +413,22 @@ final class MCPToolRouter {
                 ] }
             ]
         }
+        if let shape = layer.liveShape?.style {
+            summary["shape"] = [
+                "kind": shape.kind.rawValue.lowercased(), "color": "#" + shape.color.hex,
+                "corner_radius": shape.cornerRadius,
+                "line_width": shape.lineWidth.map { $0 as Any } ?? NSNull()
+            ]
+        }
+        if let text = layer.liveText?.style {
+            summary["text"] = [
+                "content": text.content, "font_name": text.fontName, "font_size": text.fontSize,
+                "color": "#" + PaletteColor(red: text.red, green: text.green, blue: text.blue).hex,
+                "alignment": text.alignment.rawValue.lowercased(), "tracking": text.tracking,
+                "leading": text.leading,
+                "box_width": text.boxSize?.width ?? NSNull(), "box_height": text.boxSize?.height ?? NSNull()
+            ]
+        }
         return summary
     }
 
@@ -306,7 +441,7 @@ final class MCPToolRouter {
         return layer.asset == nil ? "empty" : "raster"
     }
 
-    private func result(_ structured: [String: Any]) throws -> [String: Any] {
+    func result(_ structured: [String: Any]) throws -> [String: Any] {
         let data = try JSONSerialization.data(withJSONObject: structured, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         return [
             "content": [["type": "text", "text": String(decoding: data, as: UTF8.self)]],
@@ -349,7 +484,7 @@ final class MCPToolRouter {
     }
 }
 
-private extension Dictionary where Key == String, Value == Any {
+extension Dictionary where Key == String, Value == Any {
     func requiredString(_ key: String) throws -> String {
         guard let value = self[key] as? String else { throw MCPToolFailure(message: "\(key) must be a string.") }
         return value

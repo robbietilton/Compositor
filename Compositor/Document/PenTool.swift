@@ -107,13 +107,153 @@ extension ImageLayer {
 struct PenDraft: Equatable {
     let mode: PenMode
     let color: PaletteColor
-    let lineWidth: CGFloat
+    var lineWidth: CGFloat
     var nodes: [VectorPathNode]
     /// The rubber-band point shown before the next anchor is placed.
     var hoverPoint: CGPoint?
 }
 
+struct PenNodeSelection: Equatable {
+    let layerID: UUID
+    var index: Int
+}
+
+struct EditablePenLine {
+    let index: Int
+    let layer: ImageLayer
+    let vector: LayerVectorPath
+}
+
 extension EditorSession {
+    /// The selected live Pen line. Its saved nodes stay normalized to the layer, while editing maps them through the
+    /// layer transform so a moved, scaled, flipped or rotated line can still be edited in place.
+    var editablePenLine: EditablePenLine? {
+        guard tool == .pen, penDraft == nil, canEditLayers, selectedLayerIDs.count == 1,
+              let id = activeLayerID, let document,
+              document.effectiveVisibleIDs.contains(id),
+              let index = document.layers.firstIndex(where: { $0.id == id }),
+              let vector = document.layers[index].liveVectorPath, vector.style.mode == .line else { return nil }
+        return EditablePenLine(index: index, layer: document.layers[index], vector: vector)
+    }
+
+    var selectedPenNodeIndex: Int? {
+        guard let line = editablePenLine, let selection = penNodeSelection,
+              selection.layerID == line.layer.id, line.vector.style.nodes.indices.contains(selection.index) else { return nil }
+        return selection.index
+    }
+
+    var currentPenLineWidth: Double {
+        editablePenLine.map { Double($0.vector.style.lineWidth) } ?? penLineWidth
+    }
+
+    var canDeleteSelectedPenNode: Bool {
+        selectedPenNodeIndex != nil && (editablePenLine?.vector.style.nodes.count ?? 0) > 2
+    }
+
+    /// Selects an existing anchor, or splits the path at a click on one of its segments. The transaction stays open
+    /// until mouse-up so inserting and immediately dragging the new anchor is one undo step.
+    func beginPenLineNodeGesture(at point: CGPoint, tolerance: CGFloat) -> Int? {
+        guard tolerance.isFinite, tolerance > 0, let line = editablePenLine else { return nil }
+        let transform = line.layer.transform.unitToDocument
+        let documentNodes = line.vector.style.nodes.map { node in
+            VectorPathNode(anchor: node.anchor.applying(transform),
+                           inHandle: node.inHandle.applying(transform),
+                           outHandle: node.outHandle.applying(transform))
+        }
+        if let index = documentNodes.indices.min(by: {
+            Self.penDistance(documentNodes[$0].anchor, point) < Self.penDistance(documentNodes[$1].anchor, point)
+        }), Self.penDistance(documentNodes[index].anchor, point) <= tolerance {
+            penNodeSelection = PenNodeSelection(layerID: line.layer.id, index: index)
+            beginEdit("Move Pen Anchor")
+            penNodeGestureEditing = true
+            return index
+        }
+        guard let split = Self.closestPenSegment(to: point, nodes: documentNodes), split.distance <= tolerance else {
+            penNodeSelection = nil
+            return nil
+        }
+        beginEdit("Add Pen Anchor")
+        penNodeGestureEditing = true
+        var style = line.vector.style
+        Self.splitPenSegment(before: split.index, at: split.t, nodes: &style.nodes)
+        guard replaceActivePenLine(with: style) else {
+            penNodeGestureEditing = false
+            endEdit()
+            return nil
+        }
+        penNodeSelection = PenNodeSelection(layerID: line.layer.id, index: split.index)
+        return split.index
+    }
+
+    /// Moves an anchor and its handles together. Reframing after each change lets it travel beyond the old layer box,
+    /// gives a thicker stroke enough transparent padding and prevents it being clipped.
+    func movePenLineNode(_ index: Int, to documentPoint: CGPoint) {
+        guard penNodeGestureEditing, let line = editablePenLine,
+              line.vector.style.nodes.indices.contains(index), documentPoint.x.isFinite, documentPoint.y.isFinite else { return }
+        var style = line.vector.style
+        var node = style.nodes[index]
+        let proposed = documentPoint.applying(line.layer.transform.unitToDocument.inverted())
+        guard proposed.x.isFinite, proposed.y.isFinite else { return }
+        let dx = proposed.x - node.anchor.x, dy = proposed.y - node.anchor.y
+        for key in [\VectorPathNode.anchor, \VectorPathNode.inHandle, \VectorPathNode.outHandle] {
+            node[keyPath: key].x += dx
+            node[keyPath: key].y += dy
+        }
+        style.nodes[index] = node
+        _ = replaceActivePenLine(with: style)
+    }
+
+    func endPenLineNodeGesture() {
+        guard penNodeGestureEditing else { return }
+        penNodeGestureEditing = false
+        endEdit()
+    }
+
+    /// Delete belongs to the selected anchor while a live line is being edited. A two-anchor line cannot lose another
+    /// point; the key is still consumed so it never unexpectedly deletes the whole layer instead.
+    @discardableResult
+    func deleteSelectedPenNode() -> Bool {
+        guard let line = editablePenLine, let index = selectedPenNodeIndex else { return false }
+        guard line.vector.style.nodes.count > 2 else { return true }
+        beginEdit("Delete Pen Anchor")
+        var style = line.vector.style
+        style.nodes.remove(at: index)
+        if replaceActivePenLine(with: style) {
+            penNodeSelection = PenNodeSelection(layerID: line.layer.id, index: min(index, style.nodes.count - 1))
+        }
+        endEdit()
+        return true
+    }
+
+    func beginPenLineWidthEdit() {
+        guard !penLineWidthEditing, editablePenLine != nil else { return }
+        beginEdit("Pen Line Width")
+        penLineWidthEditing = true
+    }
+
+    func finishPenLineWidthEdit() {
+        guard penLineWidthEditing else { return }
+        penLineWidthEditing = false
+        endEdit()
+    }
+
+    func setPenLineWidth(_ proposed: Double) {
+        let width = proposed.isFinite ? min(5_000, max(1, proposed)) : 4
+        penLineWidth = width
+        if var draft = penDraft, draft.mode == .line {
+            draft.lineWidth = CGFloat(width)
+            penDraft = draft
+            return
+        }
+        guard let line = editablePenLine, line.vector.style.lineWidth != CGFloat(width) else { return }
+        let ownsTransaction = !penLineWidthEditing
+        if ownsTransaction { beginEdit("Pen Line Width") }
+        var style = line.vector.style
+        style.lineWidth = CGFloat(width)
+        _ = replaceActivePenLine(with: style)
+        if ownsTransaction { endEdit() }
+    }
+
     /// Begins a new anchor, or closes the path when the pointer is close to its first anchor. Returns true when the
     /// path closed and committed, so the canvas does not treat the same gesture as a new point.
     @discardableResult
@@ -167,7 +307,12 @@ extension EditorSession {
         else { draft.hoverPoint = nil; penDraft = draft }
     }
 
-    func cancelPen() { penDraft = nil }
+    func cancelPen() {
+        finishPenLineWidthEdit()
+        endPenLineNodeGesture()
+        penDraft = nil
+        penNodeSelection = nil
+    }
 
     /// Commits an open line, or a closed filled shape. Shape mode closes automatically on Return or double-click.
     @discardableResult
@@ -278,5 +423,101 @@ extension EditorSession {
         let angle = (atan2(dy, dx) / (.pi / 4)).rounded() * (.pi / 4)
         let length = hypot(dx, dy)
         return CGPoint(x: anchor.x + cos(angle) * length, y: anchor.y + sin(angle) * length)
+    }
+
+    private func replaceActivePenLine(with proposed: LayerVectorPathStyle) -> Bool {
+        guard proposed.mode == .line, proposed.nodes.count >= 2, let line = editablePenLine,
+              let asset = line.layer.asset else { return false }
+        let oldTransform = line.layer.transform
+        let localNodes = proposed.nodes.map { node in
+            func point(_ value: CGPoint) -> CGPoint {
+                CGPoint(x: value.x * oldTransform.size.width, y: value.y * oldTransform.size.height)
+            }
+            return VectorPathNode(anchor: point(node.anchor), inHandle: point(node.inHandle), outHandle: point(node.outHandle))
+        }
+        let draft = PenDraft(mode: .line, color: proposed.color, lineWidth: proposed.lineWidth,
+                             nodes: localNodes, hoverPoint: nil)
+        guard let committed = Self.committedPenStyle(draft, closed: false) else { return false }
+        do {
+            let image = try Self.vectorPathImage(committed.style, size: committed.box.size)
+            let thumbnail = try PixelInvert.thumbnail(of: image)
+            let centerUnit = CGPoint(x: committed.box.midX / oldTransform.size.width,
+                                     y: committed.box.midY / oldTransform.size.height)
+            let center = centerUnit.applying(oldTransform.unitToDocument)
+            var transform = oldTransform
+            transform.size = committed.box.size
+            transform.origin = CGPoint(x: center.x - transform.size.width / 2,
+                                       y: center.y - transform.size.height / 2)
+            if let mask = line.layer.mask, mask.placement == nil {
+                document?.layers[line.index].mask?.placement = line.layer.maskTransform
+            }
+            document?.layers[line.index].transform = transform
+            document?.layers[line.index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
+            document?.layers[line.index].vectorPath = LayerVectorPath(style: committed.style, image: image)
+            return true
+        } catch {
+            brushError = error.localizedDescription
+            return false
+        }
+    }
+
+    private nonisolated static func penDistance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        hypot(a.x - b.x, a.y - b.y)
+    }
+
+    private nonisolated static func penLerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+    }
+
+    private nonisolated static func penCurve(_ first: VectorPathNode, _ second: VectorPathNode, _ t: CGFloat) -> CGPoint {
+        let a = penLerp(first.anchor, first.outHandle, t)
+        let b = penLerp(first.outHandle, second.inHandle, t)
+        let c = penLerp(second.inHandle, second.anchor, t)
+        return penLerp(penLerp(a, b, t), penLerp(b, c, t), t)
+    }
+
+    /// Index is the segment's second node, which is also where its new split node is inserted.
+    private nonisolated static func closestPenSegment(to point: CGPoint, nodes: [VectorPathNode])
+        -> (index: Int, t: CGFloat, distance: CGFloat)? {
+        guard nodes.count >= 2 else { return nil }
+        var best: (index: Int, t: CGFloat, distance: CGFloat)?
+        let steps = 32
+        for index in nodes.indices.dropFirst() {
+            var start = penCurve(nodes[index - 1], nodes[index], 0)
+            for step in 1...steps {
+                let endT = CGFloat(step) / CGFloat(steps)
+                let end = penCurve(nodes[index - 1], nodes[index], endT)
+                let vx = end.x - start.x, vy = end.y - start.y
+                let lengthSquared = vx * vx + vy * vy
+                let projected = lengthSquared > 0
+                    ? min(1, max(0, ((point.x - start.x) * vx + (point.y - start.y) * vy) / lengthSquared)) : 0
+                let nearest = CGPoint(x: start.x + vx * projected, y: start.y + vy * projected)
+                let distance = penDistance(nearest, point)
+                let t = (CGFloat(step - 1) + projected) / CGFloat(steps)
+                if best == nil || distance < best!.distance { best = (index, t, distance) }
+                start = end
+            }
+        }
+        return best
+    }
+
+    private nonisolated static func splitPenSegment(before index: Int, at t: CGFloat,
+                                                     nodes: inout [VectorPathNode]) {
+        guard index > 0, nodes.indices.contains(index) else { return }
+        var first = nodes[index - 1], second = nodes[index]
+        if first.outHandle == first.anchor && second.inHandle == second.anchor {
+            nodes.insert(VectorPathNode(anchor: penLerp(first.anchor, second.anchor, t)), at: index)
+            return
+        }
+        let a = penLerp(first.anchor, first.outHandle, t)
+        let b = penLerp(first.outHandle, second.inHandle, t)
+        let c = penLerp(second.inHandle, second.anchor, t)
+        let d = penLerp(a, b, t), e = penLerp(b, c, t)
+        let anchor = penLerp(d, e, t)
+        first.outHandle = a
+        second.inHandle = c
+        nodes[index - 1] = first
+        nodes[index] = second
+        nodes.insert(VectorPathNode(anchor: anchor, inHandle: d, outHandle: e), at: index)
     }
 }

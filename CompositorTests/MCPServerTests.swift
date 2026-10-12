@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 @testable import Compositor
 
@@ -39,8 +40,10 @@ struct MCPServerTests {
         let object = try #require(try JSONSerialization.jsonObject(with: listResponse.body) as? [String: Any])
         let result = try #require(object["result"] as? [String: Any])
         let tools = try #require(result["tools"] as? [[String: Any]])
-        #expect(tools.count == 8)
+        #expect(tools.count == 17)
         #expect(tools.contains { $0["name"] as? String == "compositor_add_vector_path" })
+        #expect(tools.contains { $0["name"] as? String == "compositor_paint_stroke" })
+        #expect(tools.contains { $0["name"] as? String == "compositor_add_text" })
     }
 
     @Test func createsAndEditsALiveVectorPathThroughTools() async throws {
@@ -73,6 +76,95 @@ struct MCPServerTests {
         let undone = await router.call(name: "compositor_history", arguments: ["action": "undo"])
         #expect(undone["isError"] as? Bool == false)
         #expect(workspace.current.session.activeLayer?.name != "AI curve")
+    }
+
+    @Test func createsEditableShapeThroughTool() async throws {
+        let workspace = ProjectWorkspace()
+        let router = MCPToolRouter(workspace: workspace)
+        _ = await router.call(name: "compositor_create_document", arguments: [
+            "width": 200, "height": 120, "background": "#FFFFFF"
+        ])
+
+        let shape = await router.call(name: "compositor_add_shape", arguments: [
+            "kind": "rectangle", "start_x": 10, "start_y": 10, "end_x": 70, "end_y": 60,
+            "color": "#FF0000", "corner_radius": 8
+        ])
+        #expect(shape["isError"] as? Bool == false)
+        let shapeLayer = try #require(workspace.current.session.activeLayer)
+        #expect(shapeLayer.liveShape?.style.kind == .rectangle)
+        #expect(shapeLayer.liveShape?.style.cornerRadius == 8)
+    }
+
+    @Test func createsEditableTextThroughTool() async throws {
+        let workspace = ProjectWorkspace()
+        let router = MCPToolRouter(workspace: workspace)
+        _ = await router.call(name: "compositor_create_document", arguments: ["width": 200, "height": 120])
+        let text = await router.call(name: "compositor_add_text", arguments: [
+            "content": "Made through MCP", "x": 85, "y": 20, "font_size": 18,
+            "color": "#003366", "alignment": "left"
+        ])
+        #expect(text["isError"] as? Bool == false)
+        #expect(workspace.current.session.activeLayer?.liveText?.style.content == "Made through MCP")
+    }
+
+    @Test func selectsAndSamplesThroughTools() async throws {
+        let workspace = ProjectWorkspace()
+        let router = MCPToolRouter(workspace: workspace)
+        _ = await router.call(name: "compositor_create_document", arguments: [
+            "width": 200, "height": 120, "background": "#FF0000"
+        ])
+        let selection = await router.call(name: "compositor_set_selection", arguments: [
+            "action": "rectangle", "x": 5, "y": 5, "width": 80, "height": 70, "feather": 2
+        ])
+        #expect(selection["isError"] as? Bool == false)
+        #expect(workspace.current.session.selection?.path.boundingBoxOfPath == CGRect(x: 5, y: 5, width: 80, height: 70))
+        #expect(workspace.current.session.selection?.feather == 2)
+
+        let sampled = await router.call(name: "compositor_sample_color", arguments: ["x": 20, "y": 20])
+        #expect(sampled["isError"] as? Bool == false)
+        #expect((sampled["structuredContent"] as? [String: Any])?["hex"] as? String == "#FF0000")
+    }
+
+    @Test func paintsGradientsMasksCropsAndControlsTheViewThroughTools() async throws {
+        let workspace = ProjectWorkspace()
+        let router = MCPToolRouter(workspace: workspace)
+        _ = await router.call(name: "compositor_create_document", arguments: [
+            "width": 96, "height": 72, "background": "#FFFFFF"
+        ])
+        let layerID = try #require(workspace.current.session.activeLayerID)
+
+        let painted = await router.call(name: "compositor_paint_stroke", arguments: [
+            "mode": "paint", "layer_id": layerID.uuidString, "color": "#0066FF",
+            "size": 12, "hardness": 1, "points": [["x": 10, "y": 12], ["x": 70, "y": 12]]
+        ])
+        #expect(painted["isError"] as? Bool == false)
+
+        let masked = await router.call(name: "compositor_manage_layer", arguments: [
+            "action": "add_mask", "layer_id": layerID.uuidString, "reveal": true
+        ])
+        #expect(masked["isError"] as? Bool == false)
+        let maskPaint = await router.call(name: "compositor_paint_stroke", arguments: [
+            "mode": "paint", "layer_id": layerID.uuidString, "target": "mask", "color": "#000000",
+            "size": 10, "points": [["x": 30, "y": 30]]
+        ])
+        #expect(maskPaint["isError"] as? Bool == false)
+
+        let gradient = await router.call(name: "compositor_apply_gradient", arguments: [
+            "layer_id": layerID.uuidString, "target": "layer",
+            "start_x": 0, "start_y": 50, "end_x": 90, "end_y": 50,
+            "style": "color_to_color", "foreground": "#000000", "background": "#FFFFFF"
+        ])
+        #expect(gradient["isError"] as? Bool == false)
+
+        let view = await router.call(name: "compositor_set_view", arguments: ["action": "zoom", "zoom": 2])
+        #expect(view["isError"] as? Bool == false)
+        #expect(workspace.current.session.viewport.zoom == 2)
+
+        let cropped = await router.call(name: "compositor_crop", arguments: [
+            "x": 8, "y": 6, "width": 64, "height": 48
+        ])
+        #expect(cropped["isError"] as? Bool == false)
+        #expect(workspace.current.session.document?.size == CGSize(width: 64, height: 48))
     }
 
     private func sessionHeaders(_ sessionID: String) -> [String: String] {

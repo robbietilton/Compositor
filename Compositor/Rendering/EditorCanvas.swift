@@ -103,6 +103,8 @@ final class CanvasView: NSView {
     private var samplingColor = false
     private enum GradientHandle { case start, end }
     private var gradientDrag: GradientHandle?
+    /// The committed Pen line anchor being dragged; its undo transaction lives in the session until mouse-up.
+    private var penNodeDrag: Int?
     private var antsTimer: Timer?
     private var modifierMonitor: Any?
     private var sampleClickMonitor: Any?
@@ -542,6 +544,9 @@ final class CanvasView: NSView {
         /// The text being typed, which the canvas draws as pixels.
         let textStyle: LayerTextStyle?
         let textTransform: LayerTransform?
+        let penDraft: PenDraft?
+        let penEditingLayerID: UUID?
+        let penNodeSelection: PenNodeSelection?
         /// The mask shown by itself, which may be one the composite doesn't draw (disabled, or a folder's).
         let maskAlone: ObjectIdentifier?
     }
@@ -577,6 +582,9 @@ final class CanvasView: NSView {
                 DisplayState.FolderMask(id: $0.id, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) },
                                         transform: session.displayedTransform(for: $0))
             }, textStyle: session.textDraft?.style, textTransform: session.textDraft == nil ? nil : inlineTextEditor?.shownTransform,
+            penDraft: session.penDraft,
+            penEditingLayerID: session.editablePenLine?.layer.id,
+            penNodeSelection: session.penNodeSelection,
             maskAlone: session.maskAloneLayer?.mask.map { ObjectIdentifier($0.asset.image) })
         var changed = false
         if displayedState != state {
@@ -599,6 +607,7 @@ final class CanvasView: NSView {
         }
         if displayedTool != session.tool {
             displayedTool = session.tool
+            needsDisplay = true
             updateTrackingAreas()
             window?.invalidateCursorRects(for: self)
         }
@@ -1210,6 +1219,7 @@ final class CanvasView: NSView {
         drawNewText(context)
         // Anchors and direction handles are editing chrome: keep them visible above every layer.
         drawPenDraft(path: false, controls: true, scale: scale, center: center, in: context)
+        drawPenLineControls(scale: scale, center: center, in: context)
     }
 
     /// Text being edited, as it shows among the layers: as it will be committed, with its effects around it. They stay
@@ -1315,6 +1325,48 @@ final class CanvasView: NSView {
                 context.fillEllipse(in: box)
                 context.strokeEllipse(in: box)
             }
+        }
+        context.restoreGState()
+    }
+
+    /// Editing chrome for a committed Pen line. A faint accent trace makes the clickable segments clear without
+    /// replacing the line's own color, and the selected anchor stays filled after the click.
+    private func drawPenLineControls(scale: CGFloat, center: (CGPoint) -> CGPoint, in context: CGContext) {
+        guard let line = session.editablePenLine else { return }
+        let transform = line.layer.transform.unitToDocument
+        let mapped = line.vector.style.nodes.map { node in
+            VectorPathNode(anchor: center(node.anchor.applying(transform)),
+                           inHandle: center(node.inHandle.applying(transform)),
+                           outHandle: center(node.outHandle.applying(transform)))
+        }
+        guard mapped.count >= 2 else { return }
+        context.saveGState()
+        let accent = NSColor.controlAccentColor.cgColor
+        context.addPath(LayerVectorPathStyle.path(nodes: mapped, closed: false))
+        context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.75).cgColor)
+        context.setLineWidth(1.5)
+        context.strokePath()
+        context.setStrokeColor(accent)
+        context.setLineWidth(1)
+        for node in mapped where node.inHandle != node.anchor || node.outHandle != node.anchor {
+            context.move(to: node.inHandle)
+            context.addLine(to: node.outHandle)
+            context.strokePath()
+            for handle in [node.inHandle, node.outHandle] {
+                let box = CGRect(x: handle.x - 2.5, y: handle.y - 2.5, width: 5, height: 5)
+                context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+                context.fillEllipse(in: box)
+                context.strokeEllipse(in: box)
+            }
+        }
+        for (index, node) in mapped.enumerated() {
+            let selected = session.selectedPenNodeIndex == index
+            let side: CGFloat = selected ? 10 : 7
+            let box = CGRect(x: node.anchor.x - side / 2, y: node.anchor.y - side / 2,
+                             width: side, height: side)
+            context.setFillColor(selected ? accent : NSColor.windowBackgroundColor.cgColor)
+            context.fillEllipse(in: box)
+            context.strokeEllipse(in: box)
         }
         context.restoreGState()
     }
@@ -1898,11 +1950,18 @@ final class CanvasView: NSView {
         } else if session.tool == .type {
             beginTextGesture(at: point, event: event)
         } else if session.tool == .pen, let document = session.document {
-            if event.clickCount >= 2, session.finishPen() {
+            if session.penDraft != nil, event.clickCount >= 2, session.finishPen() {
                 synchronizeDisplay()
                 return
             }
             let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+            if session.penDraft == nil,
+               let index = session.beginPenLineNodeGesture(at: pixel,
+                   tolerance: max(2, 8 / session.viewport.pointsPerPixel)) {
+                penNodeDrag = index
+                synchronizeDisplay()
+                return
+            }
             let closed = session.beginPenAnchor(at: pixel,
                 closeDistance: max(2, 8 / session.viewport.pointsPerPixel),
                 constrain: event.modifierFlags.contains(.shift))
@@ -1977,6 +2036,12 @@ final class CanvasView: NSView {
                 dragMarqueeDraft(to: pixel, flags: event.modifierFlags)
                 updateMarqueeAutoscroll(at: point)
             }
+            synchronizeDisplay()
+            return
+        }
+        if session.tool == .pen, let index = penNodeDrag, lastDragPoint == nil, let document = session.document {
+            session.movePenLineNode(index,
+                to: session.viewport.documentPoint(from: point, documentSize: document.size))
             synchronizeDisplay()
             return
         }
@@ -2129,6 +2194,11 @@ final class CanvasView: NSView {
             session.commitCameraRawGeometryGuide()
         }
         session.filterEdit?.cameraRawDrag = nil
+        if penNodeDrag != nil {
+            penNodeDrag = nil
+            session.endPenLineNodeGesture()
+            synchronizeDisplay()
+        }
         if textBoxAnchor != nil { finishTextGesture(); return }
         stopMarqueeAutoscroll()
         if let drag = zoomDrag {
@@ -2263,6 +2333,8 @@ final class CanvasView: NSView {
             if event.keyCode == 53 { session.cancelPen() }
             else if [36, 76].contains(event.keyCode) { _ = session.finishPen() }
             else { session.removeLastPenAnchor() }
+            synchronizeDisplay()
+        } else if session.tool == .pen, [51, 117].contains(event.keyCode), session.deleteSelectedPenNode() {
             synchronizeDisplay()
         } else if session.shapeDraft != nil, event.keyCode == 53 {
             session.cancelShape()
@@ -2766,6 +2838,25 @@ extension CanvasView {
         return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
     }
 
+    private func penLineControlsImage(placement: GPUPlacement) -> CIImage? {
+        guard let line = session.editablePenLine, let renderer = GPUCanvasRenderer.shared else { return nil }
+        let transform = line.layer.transform.unitToDocument
+        let documentPoints = line.vector.style.nodes.flatMap { node in
+            [node.anchor.applying(transform), node.inHandle.applying(transform), node.outHandle.applying(transform)]
+        }
+        let points = documentPoints.map { $0.applying(placement.mapping) }
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
+        let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            .insetBy(dx: -12, dy: -12).integral
+        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
+              let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
+        context.translateBy(x: -box.minX, y: -box.minY)
+        drawPenLineControls(scale: placement.scale, center: { $0.applying(placement.mapping) }, in: context)
+        guard let image = context.makeImage(), let drawn = renderer.image(image, transient: true) else { return nil }
+        return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
+    }
+
     /// The whole view as `draw(_:)` draws it — the backdrop, the document's shadow and checkerboard, the layers and the
     /// document's edge — in screen pixels, `size` across. Nil when the Core Graphics canvas has to draw it.
     private func gpuFrame(_ document: CanvasDocument, renderer: GPUCanvasRenderer, size: CGSize) -> CIImage? {
@@ -3263,6 +3354,9 @@ extension CanvasView {
             result = placed.composited(over: result)
         }
         if let controls = penDraftImage(placement: placement, path: false, controls: true) {
+            result = controls.composited(over: result)
+        }
+        if let controls = penLineControlsImage(placement: placement) {
             result = controls.composited(over: result)
         }
         return result

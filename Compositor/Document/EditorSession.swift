@@ -255,6 +255,10 @@ final class EditorSession {
     var penLineWidth: Double = 4
     /// Anchors being placed before a Pen path becomes a layer.
     var penDraft: PenDraft?
+    /// The anchor selected on an already committed Pen line.
+    var penNodeSelection: PenNodeSelection?
+    @ObservationIgnored var penNodeGestureEditing = false
+    @ObservationIgnored var penLineWidthEditing = false
     var selectionModeChoice = SelectionMode.replace
     /// Mode implied by the Shift/Option keys currently held, nil when neither is.
     var heldSelectionMode: SelectionMode?
@@ -646,7 +650,10 @@ final class EditorSession {
     var selectedLayerIDs: Set<UUID> = []
     var activeLayerID: UUID? {
         didSet {
-            if activeLayerID != oldValue { isMaskSelected = false }
+            if activeLayerID != oldValue {
+                isMaskSelected = false
+                penNodeSelection = nil
+            }
             selectedLayerIDs = activeLayerID.map { [$0] } ?? []
         }
     }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RyuProject/Compositor/main/Languages/language-pack.schema.json",
+  "title": "Compositor language pack",
+  "description": "A downloadable Compositor localization. The strings object maps immutable English source keys to translated values.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "language",
+    "revision",
+    "strings"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "The language-pack file format version."
+    },
+    "language": {
+      "type": "string",
+      "description": "The target language as a BCP 47 language code.",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$"
+    },
+    "revision": {
+      "type": "integer",
+      "description": "A monotonically increasing version for this language.",
+      "minimum": 1
+    },
+    "strings": {
+      "type": "object",
+      "description": "English source keys mapped to translations. Missing keys fall back to English.",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

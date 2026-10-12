@@ -6,11 +6,13 @@ import Testing
 @MainActor
 struct LocalizationTests {
     @Test func bootstrapLanguagesHaveStableCodesAndNames() {
-        #expect(AppLanguage.initialChoices == [.english, .simplifiedChinese])
+        #expect(AppLanguage.initialChoices == [.english, .simplifiedChinese, .traditionalChinese])
         #expect(AppLanguage.english.rawValue == "en")
         #expect(AppLanguage.english.displayName == "English")
         #expect(AppLanguage.simplifiedChinese.rawValue == "zh-Hans")
         #expect(AppLanguage.simplifiedChinese.displayName == "简体中文")
+        #expect(AppLanguage.traditionalChinese.rawValue == "zh-Hant")
+        #expect(AppLanguage.traditionalChinese.displayName == "繁體中文")
     }
 
     @Test func unknownLanguageFallsBackToEnglish() {

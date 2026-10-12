@@ -85,6 +85,54 @@ struct PenToolTests {
         #expect(session.document?.layers.count == 1)
     }
 
+    @Test func committedLineAddsMovesAndDeletesAnchorsWithUndo() throws {
+        let session = makeSession()
+        add(CGPoint(x: 10, y: 50), to: session)
+        add(CGPoint(x: 100, y: 50), to: session)
+        #expect(session.finishPen())
+        let before = session.history.undoCount
+
+        let inserted = session.beginPenLineNodeGesture(at: CGPoint(x: 55, y: 50), tolerance: 3)
+        #expect(inserted == 1)
+        session.movePenLineNode(1, to: CGPoint(x: 55, y: 70))
+        session.endPenLineNodeGesture()
+        let edited = try #require(session.editablePenLine)
+        #expect(edited.vector.style.nodes.count == 3)
+        let moved = edited.vector.style.nodes[1].anchor.applying(edited.layer.transform.unitToDocument)
+        #expect(abs(moved.x - 55) < 0.01 && abs(moved.y - 70) < 0.01)
+        #expect(session.history.undoCount == before + 1)
+
+        #expect(session.deleteSelectedPenNode())
+        #expect(session.activeLayer?.liveVectorPath?.style.nodes.count == 2)
+        session.undo()
+        #expect(session.activeLayer?.liveVectorPath?.style.nodes.count == 3)
+        session.undo()
+        #expect(session.activeLayer?.liveVectorPath?.style.nodes.count == 2)
+    }
+
+    @Test func committedLineWidthRedrawsWithoutMovingItsAnchors() throws {
+        let session = makeSession()
+        add(CGPoint(x: 10, y: 50), to: session)
+        add(CGPoint(x: 100, y: 50), to: session)
+        #expect(session.finishPen())
+        let original = try #require(session.editablePenLine)
+        let originalHeight = try #require(session.activeLayer?.asset?.image.height)
+        let originalPoints = original.vector.style.nodes.map { $0.anchor.applying(original.layer.transform.unitToDocument) }
+
+        session.beginPenLineWidthEdit()
+        session.setPenLineWidth(30)
+        session.finishPenLineWidthEdit()
+        let changed = try #require(session.editablePenLine)
+        #expect(changed.vector.style.lineWidth == 30)
+        #expect(try #require(session.activeLayer?.asset?.image.height) > originalHeight)
+        let changedPoints = changed.vector.style.nodes.map { $0.anchor.applying(changed.layer.transform.unitToDocument) }
+        #expect(zip(originalPoints, changedPoints).allSatisfy {
+            abs($0.x - $1.x) < 0.01 && abs($0.y - $1.y) < 0.01
+        })
+        session.undo()
+        #expect(session.activeLayer?.liveVectorPath?.style.lineWidth == 4)
+    }
+
     @Test func vectorMetadataRoundTripsAndTransformRedrawsIt() async throws {
         let session = makeSession()
         add(CGPoint(x: 10, y: 20), to: session, handle: CGPoint(x: 30, y: 0))
