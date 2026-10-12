@@ -108,6 +108,14 @@ final class MCPToolRouter {
                     "reversed": ["type": "boolean"], "layer_id": string("Target layer UUID."),
                     "target": enumString("Fill layer pixels or its mask.", ["layer", "mask"])
                 ], required: ["start_x", "start_y", "end_x", "end_y"]), destructive: true),
+            tool("compositor_manage_mask", "Create and manage raster layer masks or assign another layer as a live mask source.", schema(
+                properties: [
+                    "action": enumString("Mask operation.", ["add", "remove", "enable", "disable", "invert", "link", "unlink", "copy", "load_selection", "select", "set_live_source", "remove_live_source"]),
+                    "layer_id": string("Target layer or folder UUID."),
+                    "source_layer_id": string("Source layer UUID for copy or set_live_source."),
+                    "reveal": ["type": "boolean", "description": "For add, reveal all when true and hide all when false. An active selection becomes a reveal- or hide-selection mask."],
+                    "mode": enumString("For load_selection, how the mask's hidden area combines with the current selection.", ["replace", "add", "subtract"])
+                ], required: ["action", "layer_id"]), destructive: true),
             tool("compositor_crop", "Use Compositor's Crop tool to replace the canvas with a document-space rectangle.", schema(
                 properties: ["x": number("Crop origin x."), "y": number("Crop origin y."),
                              "width": number("Crop width.", minimum: 1, maximum: 300_000),
@@ -168,6 +176,7 @@ final class MCPToolRouter {
             case "compositor_set_selection": return try await setSelection(arguments)
             case "compositor_paint_stroke": return try paintStroke(arguments)
             case "compositor_apply_gradient": return try await applyGradient(arguments)
+            case "compositor_manage_mask": return try await manageMask(arguments)
             case "compositor_crop": return try await crop(arguments)
             case "compositor_sample_color": return try sampleColor(arguments)
             case "compositor_set_view": return try setView(arguments)
@@ -394,6 +403,8 @@ final class MCPToolRouter {
             "parent_id": layer.parentID?.uuidString ?? NSNull(),
             "has_mask": layer.mask != nil,
             "mask_enabled": layer.mask?.isEnabled ?? NSNull(),
+            "mask_source_id": layer.maskSourceID?.uuidString ?? NSNull(),
+            "mask": maskSummary(layer),
             "transform": [
                 "x": layer.transform.origin.x, "y": layer.transform.origin.y,
                 "width": layer.transform.size.width, "height": layer.transform.size.height,
@@ -431,6 +442,24 @@ final class MCPToolRouter {
             ]
         }
         return summary
+    }
+
+    private func maskSummary(_ layer: ImageLayer) -> Any {
+        guard let mask = layer.mask else { return NSNull() }
+        let transform = layer.maskTransform
+        return [
+            "enabled": mask.isEnabled,
+            "linked": mask.isLinked,
+            "follows_layer": mask.placement == nil,
+            "pixel_width": mask.asset.image.width,
+            "pixel_height": mask.asset.image.height,
+            "transform": [
+                "x": transform.origin.x, "y": transform.origin.y,
+                "width": transform.size.width, "height": transform.size.height,
+                "rotation": transform.rotation,
+                "flip_x": transform.flipX, "flip_y": transform.flipY
+            ]
+        ] as [String: Any]
     }
 
     private func layerKind(_ layer: ImageLayer) -> String {

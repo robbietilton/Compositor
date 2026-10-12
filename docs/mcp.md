@@ -62,12 +62,14 @@ Tool calls affect the open Compositor tab and appear on the canvas immediately.
 | Clone Stamp | `compositor_paint_stroke` | Source point, aligned mode and path |
 | Blur / Smudge / Liquify | `compositor_paint_stroke` | Retouching mode and path |
 | Gradient | `compositor_apply_gradient` | Linear or radial layer or mask gradient |
+| Layer masks | `compositor_manage_mask` | Add from a selection, remove, enable, disable, invert, link, unlink, copy and load as a selection |
+| Live masks | `compositor_manage_mask` | Assign or remove another layer as a live mask source |
 | Pen | `compositor_add_vector_path` | Editable anchors, cubic handles, fill or stroke |
 | Shape | `compositor_add_shape` | Editable rectangle, ellipse or line |
 | Type | `compositor_add_text` | Editable text, font, color, alignment and text box |
 | Eyedropper | `compositor_sample_color` | Composite color at a document point |
 | Hand / Zoom | `compositor_set_view` | Fit, pan and zoom |
-| Layers and masks | `compositor_manage_layer` | Add, group, duplicate, rename, delete, place and mask |
+| Layers | `compositor_manage_layer` | Add, group, duplicate, rename, delete and place |
 | Layer selection | `compositor_select_layer` | Set the active layer |
 | History | `compositor_history` | Undo and redo |
 | Preview | `compositor_render_document` | Render a PNG for visual inspection |

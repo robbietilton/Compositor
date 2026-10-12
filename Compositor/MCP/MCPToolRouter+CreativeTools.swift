@@ -262,6 +262,95 @@ extension MCPToolRouter {
         return try result(["layer": layerSummary(updated)])
     }
 
+    func manageMask(_ arguments: [String: Any]) async throws -> [String: Any] {
+        let session = try editableSession()
+        let action = try arguments.requiredString("action").lowercased()
+        let layerID = try arguments.requiredUUID("layer_id")
+        try select(layerID, in: session)
+        session.brushError = nil
+
+        switch action {
+        case "add":
+            guard session.activeLayer?.mask == nil else {
+                throw MCPToolFailure(message: "The target layer already has a mask.")
+            }
+            session.addMask(revealing: try arguments.optionalBoolean("reveal") ?? true)
+            guard session.activeLayer?.mask != nil else {
+                throw MCPToolFailure(message: session.brushError ?? "The mask could not be created.")
+            }
+        case "remove":
+            _ = try requireMask(in: session)
+            session.deleteLayerMask()
+            guard session.activeLayer?.mask == nil else { throw MCPToolFailure(message: "The mask could not be removed.") }
+        case "enable", "disable":
+            let mask = try requireMask(in: session)
+            let enabled = action == "enable"
+            if mask.isEnabled != enabled { session.toggleLayerMask() }
+            guard session.activeLayer?.mask?.isEnabled == enabled else {
+                throw MCPToolFailure(message: "The mask could not be \(action)d.")
+            }
+        case "invert":
+            let mask = try requireMask(in: session)
+            guard mask.isEnabled else { throw MCPToolFailure(message: "Enable the mask before inverting it.") }
+            session.selectLayerTarget(layerID, mask: true)
+            guard session.canInvert else { throw MCPToolFailure(message: "The mask cannot be inverted right now.") }
+            await session.invertPixels()
+            if let error = session.brushError { throw MCPToolFailure(message: error) }
+        case "link", "unlink":
+            let mask = try requireMask(in: session)
+            let linked = action == "link"
+            if mask.isLinked != linked { session.toggleMaskLink(layerID) }
+            guard session.activeLayer?.mask?.isLinked == linked else {
+                throw MCPToolFailure(message: "The mask could not be \(action)ed.")
+            }
+        case "copy":
+            let sourceID = try arguments.requiredUUID("source_layer_id")
+            guard session.document?.layers.first(where: { $0.id == sourceID })?.mask != nil else {
+                throw MCPToolFailure(message: "The source layer does not have a mask.")
+            }
+            guard session.canCopyMask(from: sourceID, to: layerID) else {
+                throw MCPToolFailure(message: "The mask cannot be copied to that layer.")
+            }
+            session.copyMask(from: sourceID, to: layerID)
+            guard session.activeLayerID == layerID, session.activeLayer?.mask != nil else {
+                throw MCPToolFailure(message: "The mask could not be copied.")
+            }
+        case "load_selection":
+            let mask = try requireMask(in: session)
+            guard MaskTracing.darkPixels(in: mask.asset.image) != nil else {
+                throw MCPToolFailure(message: "The mask has no hidden pixels to load as a selection.")
+            }
+            session.loadMaskSelection(layerID: layerID, mode: try selectionMode(arguments))
+            guard session.selection != nil else { throw MCPToolFailure(message: "The mask selection could not be loaded.") }
+        case "select":
+            _ = try requireMask(in: session)
+            session.selectLayerTarget(layerID, mask: true)
+            guard session.isMaskSelected else { throw MCPToolFailure(message: "The mask could not be selected.") }
+        case "set_live_source":
+            let sourceID = try arguments.requiredUUID("source_layer_id")
+            guard session.linkMask(source: sourceID, target: layerID) else {
+                throw MCPToolFailure(message: "That layer cannot be used as a live mask source.")
+            }
+        case "remove_live_source":
+            guard session.activeLayer?.maskSourceID != nil else {
+                throw MCPToolFailure(message: "The target layer does not have a live mask source.")
+            }
+            session.removeLiveMask(from: layerID)
+            guard session.activeLayer?.maskSourceID == nil else {
+                throw MCPToolFailure(message: "The live mask source could not be removed.")
+            }
+        default:
+            throw MCPToolFailure(message: "Unknown mask action: \(action).")
+        }
+
+        guard let layer = session.document?.layers.first(where: { $0.id == layerID }) else {
+            throw MCPToolFailure(message: "The target layer is no longer available.")
+        }
+        var response: [String: Any] = ["layer": layerSummary(layer)]
+        if action == "load_selection" { response["selection"] = selectionSummary(session.selection) }
+        return try result(response)
+    }
+
     func crop(_ arguments: [String: Any]) async throws -> [String: Any] {
         let session = try editableSession()
         let rect = try arguments.rect()
@@ -393,6 +482,13 @@ extension MCPToolRouter {
     private func parseColor(_ value: String, key: String) throws -> PaletteColor {
         guard let color = PaletteColor(hex: value) else { throw MCPToolFailure(message: "\(key) must look like #3366FF.") }
         return color
+    }
+
+    private func requireMask(in session: EditorSession) throws -> LayerMask {
+        guard let mask = session.activeLayer?.mask else {
+            throw MCPToolFailure(message: "The target layer does not have a mask.")
+        }
+        return mask
     }
 
     private func selectionMode(_ arguments: [String: Any]) throws -> SelectionMode {

@@ -40,10 +40,11 @@ struct MCPServerTests {
         let object = try #require(try JSONSerialization.jsonObject(with: listResponse.body) as? [String: Any])
         let result = try #require(object["result"] as? [String: Any])
         let tools = try #require(result["tools"] as? [[String: Any]])
-        #expect(tools.count == 17)
+        #expect(tools.count == 18)
         #expect(tools.contains { $0["name"] as? String == "compositor_add_vector_path" })
         #expect(tools.contains { $0["name"] as? String == "compositor_paint_stroke" })
         #expect(tools.contains { $0["name"] as? String == "compositor_add_text" })
+        #expect(tools.contains { $0["name"] as? String == "compositor_manage_mask" })
     }
 
     @Test func createsAndEditsALiveVectorPathThroughTools() async throws {
@@ -165,6 +166,76 @@ struct MCPServerTests {
         ])
         #expect(cropped["isError"] as? Bool == false)
         #expect(workspace.current.session.document?.size == CGSize(width: 64, height: 48))
+    }
+
+    @Test func managesRasterAndLiveMasksThroughTool() async throws {
+        let workspace = ProjectWorkspace()
+        let router = MCPToolRouter(workspace: workspace)
+        _ = await router.call(name: "compositor_create_document", arguments: [
+            "width": 64, "height": 48, "background": "#FFFFFF"
+        ])
+        let sourceID = try #require(workspace.current.session.activeLayerID)
+        _ = await router.call(name: "compositor_set_selection", arguments: [
+            "action": "rectangle", "x": 8, "y": 6, "width": 32, "height": 24
+        ])
+
+        let added = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "add", "layer_id": sourceID.uuidString, "reveal": true
+        ])
+        #expect(added["isError"] as? Bool == false)
+        #expect(workspace.current.session.activeLayer?.mask?.asset.image.width == 64)
+        #expect(workspace.current.session.selection == nil)
+
+        _ = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "disable", "layer_id": sourceID.uuidString
+        ])
+        #expect(workspace.current.session.activeLayer?.mask?.isEnabled == false)
+        _ = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "enable", "layer_id": sourceID.uuidString
+        ])
+        _ = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "unlink", "layer_id": sourceID.uuidString
+        ])
+        #expect(workspace.current.session.activeLayer?.mask?.isLinked == false)
+        _ = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "link", "layer_id": sourceID.uuidString
+        ])
+
+        let inverted = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "invert", "layer_id": sourceID.uuidString
+        ])
+        #expect(inverted["isError"] as? Bool == false)
+        let loaded = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "load_selection", "layer_id": sourceID.uuidString, "mode": "replace"
+        ])
+        #expect(loaded["isError"] as? Bool == false)
+        #expect(workspace.current.session.selection != nil)
+
+        _ = await router.call(name: "compositor_manage_layer", arguments: [
+            "action": "add_blank", "name": "Mask target"
+        ])
+        let targetID = try #require(workspace.current.session.activeLayerID)
+        let copied = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "copy", "layer_id": targetID.uuidString, "source_layer_id": sourceID.uuidString
+        ])
+        #expect(copied["isError"] as? Bool == false)
+        #expect(workspace.current.session.activeLayer?.mask != nil)
+
+        let live = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "set_live_source", "layer_id": targetID.uuidString, "source_layer_id": sourceID.uuidString
+        ])
+        #expect(live["isError"] as? Bool == false)
+        #expect(workspace.current.session.activeLayer?.maskSourceID == sourceID)
+        _ = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "remove_live_source", "layer_id": targetID.uuidString
+        ])
+        #expect(workspace.current.session.activeLayer?.maskSourceID == nil)
+
+        let removed = await router.call(name: "compositor_manage_mask", arguments: [
+            "action": "remove", "layer_id": targetID.uuidString
+        ])
+        #expect(removed["isError"] as? Bool == false)
+        #expect(workspace.current.session.activeLayer?.mask == nil)
     }
 
     private func sessionHeaders(_ sessionID: String) -> [String: String] {

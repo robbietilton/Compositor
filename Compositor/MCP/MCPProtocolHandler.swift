@@ -110,7 +110,7 @@ final class MCPProtocolHandler {
                 "version": version,
                 "description": "Create and edit the current Compositor canvas."
             ],
-            "instructions": "Use compositor_get_document before editing. Coordinates use document pixels with the origin at the top-left. Prefer editable shape, text, and vector-path tools over painting when possible. Tool calls affect the current Compositor tab and are visible immediately. Render after meaningful edits to inspect the result, use compositor_history to undo, and save only when the user asks."
+            "instructions": "Use compositor_get_document before editing. Coordinates use document pixels with the origin at the top-left. Prefer editable shape, text, and vector-path tools over painting when possible. Use compositor_manage_mask to create or select a layer mask before painting or applying a gradient to the mask target. Tool calls affect the current Compositor tab and are visible immediately. Render after meaningful edits to inspect the result, use compositor_history to undo, and save only when the user asks."
         ]
         return rpcResult(id: id, result: result, headers: [
             "MCP-Session-Id": sessionID,
