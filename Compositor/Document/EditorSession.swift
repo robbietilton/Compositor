@@ -882,6 +882,15 @@ final class EditorSession {
           let point = document == nil ? nil : request.point
           for (url, scoped) in request.files {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            // A CMYK file making a new document: its profile is kept and chosen, for proofing and for CMYK export when
+            // it's asked for.
+            let startsDocument = document == nil
+            var psdProfile: CMYKProfile?
+            defer {
+                if startsDocument, document != nil, let profile = psdProfile ?? CMYK.profile(ofImageAt: url) {
+                    proofProfile = CMYK.adopt(profile)
+                }
+            }
             do {
                 guard url.isFileURL else { throw ImageImportError.unsupported }
                 let usedPixels = document?.layers.reduce(0) { total, layer in
@@ -908,6 +917,7 @@ final class EditorSession {
                     let imported: PSDImport
                     do {
                         let parsed = try await ImageImporter.shared.loadPhotoshop(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                        psdProfile = parsed.cmykProfile
                         // Only a background: Photoshop writes no layer records, just the merged image, so that is
                         // what comes in, as one layer.
                         if parsed.layers.isEmpty {

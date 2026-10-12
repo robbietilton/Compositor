@@ -1,12 +1,14 @@
 {
   "language" : "zh-Hant",
-  "revision" : 4,
+  "revision" : 5,
   "schemaVersion" : 1,
   "strings" : {
     "CMYK" : "CMYK",
     "CMYK Gamut Warning" : "CMYK 色域警告",
     "CMYK Proof" : "CMYK 校樣",
+    "CMYK writes a printer's inks through the profile in View › CMYK › Profile" : "CMYK 會使用「顯示方式 › CMYK › 描述檔」中的描述檔轉換為印表機油墨色彩",
     "CMYK writes the printer's inks through the profile beside it, for print" : "使用旁邊的描述檔將影像轉換為印表機的 CMYK 油墨色彩，以便印刷",
+    "CMYK – %@" : "CMYK – %@",
     "CMYK · %@" : "CMYK · %@",
     "Choose a CMYK ICC profile, such as the one your printer gave you" : "選擇 CMYK ICC 描述檔，例如印表機提供的描述檔",
     "Choose Profile" : "選擇描述檔",
@@ -22,6 +24,7 @@
     "Stop marking colors the profile can't print" : "停止標記描述檔無法列印的色彩",
     "Stop proofing" : "停止校樣",
     "The CMYK profile your printer uses; View › CMYK › Proof Colors shows it on the canvas" : "印表機使用的 CMYK 描述檔；透過「顯示方式 › CMYK › 校樣色彩」可在畫布上預覽",
+    "Use a CMYK ICC profile, such as the one your printer gave you" : "使用 CMYK ICC 描述檔，例如印表機提供的描述檔",
     " · %lld DPI: %lld × %lld pixels" : " · %lld DPI：%lld × %lld 像素",
     "·" : "·",
     "“%@” was changed on disk." : "磁碟上的“%@”已被更改。",

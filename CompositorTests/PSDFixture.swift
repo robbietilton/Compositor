@@ -26,16 +26,18 @@ nonisolated enum PSDFixture {
         file.u32(UInt32(height))
         file.u32(UInt32(width))
         file.u16(8)
-        file.u16(3)
+        // RGB, or CMYK (mode 4) with its layers' inks written through `document.cmykProfile`, embedded.
+        file.u16(document.cmykProfile == nil ? 3 : 4)
         file.u32(0)
-        let resources = resolutionResource(document.resolution)
+        var resources = resolutionResource(document.resolution)
+        if let cmyk = document.cmykProfile { resources.append(iccResource(cmyk.data)) }
         file.u32(UInt32(resources.count))
         file.bytes(resources)
         let layers = try layerSection(document, largeDocument: largeDocument, additionalLayerInfo: additionalLayerInfo, extras: extras)
         if largeDocument { file.u64(UInt64(layers.count)) }
         else { file.u32(UInt32(layers.count)) }
         file.bytes(layers)
-        try appendComposite(&file, composite, width: width, height: height, largeDocument: largeDocument)
+        try appendComposite(&file, composite, width: width, height: height, largeDocument: largeDocument, cmyk: document.cmykProfile)
         return file.data
     }
 
@@ -60,7 +62,8 @@ nonisolated enum PSDFixture {
                     prepared.append(try emptyLayer(name: record.name, blendKey: record.blendKey == "pass" ? "pass" : record.blendKey,
                                                    section: 1, visible: record.isVisible, opacity: record.opacity, parent: record.parentID, id: record.id, mask: record.mask, maskEnabled: record.maskEnabled, largeDocument: largeDocument))
                 } else {
-                    prepared.append(try layer(record, largeDocument: largeDocument, extras: extras[record.id] ?? [:]))
+                    prepared.append(try layer(record, largeDocument: largeDocument, extras: extras[record.id] ?? [:],
+                                              cmyk: document.cmykProfile))
                 }
             }
         }
@@ -91,7 +94,8 @@ nonisolated enum PSDFixture {
         return section.data
     }
 
-    private static func layer(_ record: PSDRecord, largeDocument: Bool, extras: [String: Data] = [:]) throws -> Prepared {
+    private static func layer(_ record: PSDRecord, largeDocument: Bool, extras: [String: Data] = [:],
+                              cmyk: CMYKProfile? = nil) throws -> Prepared {
         let image = record.image
         let width = image?.width ?? 0
         let height = image?.height ?? 0
@@ -100,7 +104,9 @@ nonisolated enum PSDFixture {
         var channels: [(id: Int16, payload: Data)] = []
         if let image, width > 0, height > 0 {
             let planes = try planes(from: image)
-            for (id, plane) in [(-1, planes.alpha), (0, planes.red), (1, planes.green), (2, planes.blue)] as [(Int16, [UInt8])] {
+            var color: [(Int16, [UInt8])] = [(0, planes.red), (1, planes.green), (2, planes.blue)]
+            if let cmyk { color = try inks(planes, width: width, height: height, profile: cmyk) }
+            for (id, plane) in [(-1, planes.alpha)] + color {
                 channels.append((id, channelPayload(plane, width: width, height: height, largeDocument: largeDocument)))
             }
         } else {
@@ -408,7 +414,8 @@ nonisolated enum PSDFixture {
         return resource.data
     }
 
-    private static func appendComposite(_ file: inout PSDBuffer, _ image: CGImage, width: Int, height: Int, largeDocument: Bool) throws {
+    private static func appendComposite(_ file: inout PSDBuffer, _ image: CGImage, width: Int, height: Int, largeDocument: Bool,
+                                        cmyk: CMYKProfile? = nil) throws {
         let context = try BrushRaster.context(width: width, height: height, mask: false)
         BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: context)
         guard let flattened = context.makeImage() else { throw ExportError.render }
@@ -416,7 +423,10 @@ nonisolated enum PSDFixture {
         file.u16(1)
         var counts = Data()
         var packed = Data()
-        for plane in [planes.red, planes.green, planes.blue, planes.alpha] {
+        // A CMYK file's merged image is its four inks.
+        let merged = try cmyk.map { try inks(planes, width: width, height: height, profile: $0).map(\.1) }
+            ?? [planes.red, planes.green, planes.blue, planes.alpha]
+        for plane in merged {
             let encoded = encode(plane, width: width, height: height, largeDocument: largeDocument)
             let countBytes = height * (largeDocument ? 4 : 2)
             counts.append(encoded.data.prefix(countBytes))
@@ -447,6 +457,45 @@ nonisolated enum PSDFixture {
         var data = counts
         data.append(packed)
         return (1, data)
+    }
+
+    /// Image resource 1039: an embedded ICC profile.
+    private static func iccResource(_ profile: Data) -> Data {
+        var resource = PSDBuffer()
+        resource.string("8BIM")
+        resource.u16(1039)
+        resource.u8(0)
+        resource.u8(0)
+        resource.u32(UInt32(profile.count))
+        resource.bytes(profile)
+        if profile.count % 2 == 1 { resource.u8(0) }
+        return resource.data
+    }
+
+    /// Straight RGB planes as a CMYK file's ink channels through `profile`: cyan, magenta, yellow and black, inverted as
+    /// Photoshop stores them (255 is no ink).
+    private static func inks(_ planes: (red: [UInt8], green: [UInt8], blue: [UInt8], alpha: [UInt8]), width: Int, height: Int,
+                             profile: CMYKProfile) throws -> [(Int16, [UInt8])] {
+        let count = width * height
+        var rgb = [UInt8](repeating: 255, count: count * 4)
+        for i in 0..<count { rgb[i * 4] = planes.red[i]; rgb[i * 4 + 1] = planes.green[i]; rgb[i * 4 + 2] = planes.blue[i] }
+        guard let provider = CGDataProvider(data: Data(rgb) as CFData),
+              let colors = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue), provider: provider,
+                                   decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { throw ExportError.render }
+        let printed = try CMYK.convert(colors, to: profile, over: CGColor(gray: 1, alpha: 1))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: profile.space, bitmapInfo: CGImageAlphaInfo.none.rawValue),
+              let data = context.data?.assumingMemoryBound(to: UInt8.self) else { throw ExportError.render }
+        context.draw(printed, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var channels = [[UInt8]](repeating: [UInt8](repeating: 255, count: count), count: 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                for c in 0..<4 { channels[c][y * width + x] = 255 - data[y * context.bytesPerRow + x * 4 + c] }
+            }
+        }
+        return channels.enumerated().map { (Int16($0.offset), $0.element) }
     }
 
     /// Premultiplied RGBA, first row at the top of the image.

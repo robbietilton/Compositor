@@ -67,4 +67,62 @@ struct CMYKTests {
         #expect(entry(lookups.marked, r: 0, g: 0, b: n - 1) == [0.5, 0.5, 0.5])
         #expect(entry(lookups.marked, r: n - 1, g: n - 1, b: n - 1) == [1, 1, 1], "white stays white")
     }
+
+    // MARK: Opening CMYK files
+
+    /// A solid image in `color`, `size` square.
+    private func swatch(_ color: CGColor, size: Int = 4) throws -> CGImage {
+        let context = try BrushRaster.context(width: size, height: size, mask: false)
+        context.setFillColor(color)
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        return try #require(context.makeImage())
+    }
+
+    /// The first pixel of `image`, as sRGB bytes.
+    private func pixel(_ image: CGImage) throws -> [Int] {
+        let context = try BrushRaster.copy(image)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        return (0..<4).map { Int(bytes[$0]) }
+    }
+
+    /// A layered CMYK Photoshop file: two layers, written as inks through Generic CMYK.
+    private func layeredCMYK() throws -> Data {
+        let profile = try profile()
+        var red = PSDRecord(id: UUID(), name: "Red")
+        red.bounds = CGRect(x: 0, y: 0, width: 4, height: 4)
+        red.image = try swatch(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        var gray = PSDRecord(id: UUID(), name: "Gray")
+        gray.bounds = CGRect(x: 4, y: 0, width: 4, height: 4)
+        gray.image = try swatch(CGColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1))
+        let document = PSDDocument(width: 8, height: 4, resolution: 300, cmykProfile: profile, layers: [red, gray])
+        return try PSDFixture.data(document, composite: try swatch(CGColor(gray: 1, alpha: 1), size: 8))
+    }
+
+    /// Its layers come in as RGB through the file's own profile: red as ink prints it (duller than screen red), gray as
+    /// it is; the profile comes with them.
+    @Test func layeredCMYKPhotoshopFilesOpen() throws {
+        let document = try PSDReader.read(try layeredCMYK())
+        #expect(document.cmykProfile?.name == "Generic CMYK Profile")
+        #expect(document.layers.map(\.name) == ["Red", "Gray"])
+        let printedRed = try pixel(try CMYK.convert(try swatch(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)), to: try profile(),
+                                                    over: CGColor(gray: 1, alpha: 1)))
+        let red = try pixel(try #require(document.layers[0].image))
+        #expect(zip(red, printedRed).allSatisfy { abs($0 - $1) <= 3 }, "red as ink prints it: \(red), expected \(printedRed)")
+        #expect(red[0] < 250 || red[1] > 5, "duller than screen red")
+        let gray = try pixel(try #require(document.layers[1].image))
+        #expect(gray[0...2].allSatisfy { abs($0 - 128) <= 4 } && gray[3] == 255, "gray as it is: \(gray)")
+    }
+
+    /// Opening a CMYK file as a new document keeps its profile and chooses it, so proofing and CMYK export go back to
+    /// the inks it was made for.
+    @Test @MainActor func openingACMYKFileChoosesItsProfile() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".psd")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try layeredCMYK().write(to: url)
+        let session = EditorSession()
+        session.confirmConversions = { _ in true }
+        await session.importImages([url])
+        #expect(session.document?.layers.count == 2)
+        #expect(session.proofProfile?.name == "Generic CMYK Profile")
+    }
 }

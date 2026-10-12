@@ -1,4 +1,5 @@
 import AppKit
+import ColorSync
 import UniformTypeIdentifiers
 
 /// A CMYK output profile: how a press or printer turns ink amounts into color, read from an ICC file.
@@ -59,6 +60,43 @@ nonisolated enum CMYK {
         chosen = profile
         return profile
     }
+
+    /// A CMYK profile embedded in a file (a CMYK PSD, JPEG or TIFF), named as it names itself; nil when it isn't one.
+    static func embedded(_ data: Data) -> CMYKProfile? {
+        var name: String?
+        if let profile = ColorSyncProfileCreate(data as CFData, nil)?.takeRetainedValue(),
+           let described = ColorSyncProfileCopyDescriptionString(profile)?.takeRetainedValue() {
+            name = (described as String).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return CMYKProfile(name: name?.isEmpty == false ? name! : "Embedded CMYK Profile", data: data)
+    }
+
+    /// A file came in as CMYK through `profile`: kept, as Load Profile keeps one, and chosen, so proofing and CMYK
+    /// export go back to the inks it was made for.
+    static func adopt(_ profile: CMYKProfile) -> CMYKProfile {
+        if let known = installed().first(where: { $0.data == profile.data }) {
+            chosen = known
+            return known
+        }
+        try? FileManager.default.createDirectory(at: loadedFolder, withIntermediateDirectories: true)
+        let file = profile.name.replacingOccurrences(of: "/", with: "-")
+        try? profile.data.write(to: loadedFolder.appendingPathComponent(file).appendingPathExtension("icc"), options: .atomic)
+        chosen = profile
+        return profile
+    }
+
+    /// The CMYK profile an image file (a CMYK JPEG, TIFF or flattened PSD) was made in: its own, or Generic CMYK when it
+    /// names none; nil for any other file.
+    static func profile(ofImageAt url: URL) -> CMYKProfile? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              properties[kCGImagePropertyColorModel] as? String == kCGImagePropertyColorModelCMYK as String else { return nil }
+        let space = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: false] as CFDictionary)?.colorSpace
+        return space?.copyICCData().flatMap { embedded($0 as Data) } ?? generic
+    }
+
+    /// macOS's own Generic CMYK, for a CMYK file that names no profile.
+    static var generic: CMYKProfile? { installed().first { $0.name == "Generic CMYK Profile" } }
 
     private static let chosenKey = "cmykProfile"
     /// The profile proofing and CMYK export use: the one last chosen, or macOS's own Generic CMYK.

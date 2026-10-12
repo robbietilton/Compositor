@@ -14516,6 +14516,27 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "重新顯示文件本身的色彩" } }
       }
     },
+    "CMYK – %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK – %@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK – %@" } }
+      }
+    },
+    "CMYK writes a printer's inks through the profile in View › CMYK › Profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CMYK 会使用“视图 › CMYK › 配置文件”中的配置文件转换为打印机油墨颜色" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "CMYK 會使用「顯示方式 › CMYK › 描述檔」中的描述檔轉換為印表機油墨色彩" } }
+      }
+    },
+    "Use a CMYK ICC profile, such as the one your printer gave you": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用 CMYK ICC 配置文件，例如打印机提供的配置文件" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "使用 CMYK ICC 描述檔，例如印表機提供的描述檔" } }
+      }
+    },
     "Language Download Failed": {
       "extractionState": "manual",
       "localizations": {

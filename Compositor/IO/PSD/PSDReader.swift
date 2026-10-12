@@ -43,11 +43,13 @@ nonisolated enum PSDReader {
             throw ImageImportError.tooLarge
         }
         guard depth == 8 else { throw PSDError.unsupportedDepth }
-        guard mode == 3 else { throw PSDError.unsupportedColorMode }
+        // RGB, or CMYK, whose layers come in as RGB through the file's own profile (Photoshop's color mode 4).
+        guard mode == 3 || mode == 4 else { throw PSDError.unsupportedColorMode }
         try cursor.skip(Int(try cursor.u32()))
         let resourcesLength = Int(try cursor.u32())
         let resourcesEnd = cursor.offset + resourcesLength
         var resolution = 72.0
+        var iccData: Data?
         while cursor.offset + 12 <= resourcesEnd {
             let signature = try cursor.string(4)
             guard signature == "8BIM" else { break }
@@ -62,14 +64,20 @@ nonisolated enum PSDReader {
                 if !resolution.isFinite || resolution < 1 { resolution = 72 }
                 resolution = min(9600, max(1, resolution))
             }
+            if id == 1039, length > 0 { iccData = try cursor.bytes(length) }
             cursor.offset = dataStart + length
             if length % 2 == 1 { try cursor.skip(1) }
         }
         cursor.offset = resourcesEnd
+        var cmykProfile: CMYKProfile?
+        if mode == 4 {
+            guard let profile = iccData.flatMap(CMYK.embedded) ?? CMYK.generic else { throw PSDError.unsupportedColorMode }
+            cmykProfile = profile
+        }
         let layerSection = try checkedLength(isPSB ? cursor.u64() : UInt64(cursor.u32()))
         let layerSectionEnd = cursor.offset + layerSection
         guard layerSection >= 4 else {
-            return PSDDocument(width: canvasWidth, height: canvasHeight, resolution: resolution, layers: [])
+            return PSDDocument(width: canvasWidth, height: canvasHeight, resolution: resolution, cmykProfile: cmykProfile, layers: [])
         }
         let layerInfoLength = try checkedLength(isPSB ? cursor.u64() : UInt64(cursor.u32()))
         _ = layerInfoLength
@@ -87,11 +95,12 @@ nonisolated enum PSDReader {
         }
         var usedPixels = 0
         for index in raw.indices {
-            try decodeChannels(&cursor, layer: &raw[index], remainingPixels: remainingPixels - usedPixels, isPSB: isPSB)
+            try decodeChannels(&cursor, layer: &raw[index], remainingPixels: remainingPixels - usedPixels, isPSB: isPSB,
+                               cmyk: cmykProfile)
             if let image = raw[index].image { usedPixels += image.width * image.height }
         }
         cursor.offset = layerSectionEnd
-        return PSDDocument(width: canvasWidth, height: canvasHeight, resolution: resolution,
+        return PSDDocument(width: canvasWidth, height: canvasHeight, resolution: resolution, cmykProfile: cmykProfile,
                            layers: try assemble(raw, canvas: CGSize(width: canvasWidth, height: canvasHeight),
                                                 remainingPixels: remainingPixels - usedPixels))
     }
@@ -220,8 +229,10 @@ nonisolated enum PSDReader {
         return String(utf16CodeUnits: units, count: count).trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
     }
 
-    /// Transparency, R, G, B, and the user mask. Spot and other extra IDs are skipped before decode.
+    /// Transparency, R, G, B (C, M, Y and K in a CMYK file), and the user mask. Spot and other extra IDs are skipped
+    /// before decode.
     private static let unpackedChannelIDs: Set<Int> = [-1, 0, 1, 2, -2]
+    private static let unpackedCMYKChannelIDs: Set<Int> = [-1, 0, 1, 2, 3, -2]
 
     private static func fitsBudget(_ layers: [RawLayer], remainingPixels: Int) -> Bool {
         var usedPixels = 0
@@ -280,7 +291,8 @@ nonisolated enum PSDReader {
                        width: croppedRight - croppedLeft, height: croppedBottom - croppedTop)
     }
 
-    private static func decodeChannels(_ cursor: inout PSDCursor, layer: inout RawLayer, remainingPixels: Int, isPSB: Bool) throws {
+    private static func decodeChannels(_ cursor: inout PSDCursor, layer: inout RawLayer, remainingPixels: Int, isPSB: Bool,
+                                       cmyk: CMYKProfile? = nil) throws {
         var planes: [Int: [UInt8]] = [:]
         let width = max(0, layer.right - layer.left)
         let height = max(0, layer.bottom - layer.top)
@@ -295,7 +307,7 @@ nonisolated enum PSDReader {
         for channel in layer.channels {
             let start = cursor.offset
             defer { cursor.offset = start + max(0, channel.length) }
-            guard unpackedChannelIDs.contains(channel.id), channel.length >= 2 else { continue }
+            guard (cmyk == nil ? unpackedChannelIDs : unpackedCMYKChannelIDs).contains(channel.id), channel.length >= 2 else { continue }
             let compression = Int(try cursor.u16())
             let payload = try cursor.bytes(channel.length - 2)
             let isMask = channel.id == -2
@@ -315,10 +327,18 @@ nonisolated enum PSDReader {
         guard width > 0, height > 0 else { return }
         let opaque = [UInt8](repeating: 255, count: width * height)
         let black = [UInt8](repeating: 0, count: width * height)
-        let red = planes[0] ?? black
-        let green = planes[1] ?? black
-        let blue = planes[2] ?? black
+        var red = planes[0] ?? black
+        var green = planes[1] ?? black
+        var blue = planes[2] ?? black
         let alpha = planes[-1] ?? opaque
+        if let cmyk {
+            // Inks are stored inverted: a missing channel is no ink.
+            let none = opaque
+            let cyan = planes[0] ?? none, magenta = planes[1] ?? none, yellow = planes[2] ?? none, key = planes[3] ?? none
+            guard [cyan, magenta, yellow, key].allSatisfy({ $0.count >= width * height }) else { throw PSDError.truncated }
+            (red, green, blue) = try PSDChannelCoder.rgbPlanes(width: width, height: height, cyan: cyan, magenta: magenta,
+                                                               yellow: yellow, black: key, profile: cmyk)
+        }
         guard red.count >= width * height, green.count >= width * height, blue.count >= width * height, alpha.count >= width * height else {
             throw PSDError.truncated
         }

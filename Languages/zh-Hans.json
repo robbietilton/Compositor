@@ -1,12 +1,14 @@
 {
   "schemaVersion": 1,
   "language": "zh-Hans",
-  "revision": 4,
+  "revision": 5,
   "strings": {
     "CMYK": "CMYK",
     "CMYK Gamut Warning": "CMYK 色域警告",
     "CMYK Proof": "CMYK 校样",
+    "CMYK writes a printer's inks through the profile in View › CMYK › Profile": "CMYK 会使用“视图 › CMYK › 配置文件”中的配置文件转换为打印机油墨颜色",
     "CMYK writes the printer's inks through the profile beside it, for print": "使用旁边的配置文件将图像转换为打印机的 CMYK 油墨颜色，以便印刷",
+    "CMYK – %@": "CMYK – %@",
     "CMYK · %@": "CMYK · %@",
     "Choose a CMYK ICC profile, such as the one your printer gave you": "选择 CMYK ICC 配置文件，例如打印机提供的配置文件",
     "Choose Profile": "选择配置文件",
@@ -22,6 +24,7 @@
     "Stop marking colors the profile can't print": "停止标记配置文件无法打印的颜色",
     "Stop proofing": "停止校样",
     "The CMYK profile your printer uses; View › CMYK › Proof Colors shows it on the canvas": "打印机使用的 CMYK 配置文件；通过“视图 › CMYK › 校样颜色”可在画布上预览",
+    "Use a CMYK ICC profile, such as the one your printer gave you": "使用 CMYK ICC 配置文件，例如打印机提供的配置文件",
     " · %lld DPI: %lld × %lld pixels": " · %lld DPI：%lld × %lld 像素",
     "#": "#",
     "%": "%",

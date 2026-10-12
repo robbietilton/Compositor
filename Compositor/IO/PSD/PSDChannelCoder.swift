@@ -55,6 +55,38 @@ nonisolated enum PSDChannelCoder {
         return plane
     }
 
+    /// A CMYK layer's ink channels as RGB ones, through the document's profile. Photoshop stores CMYK channels inverted
+    /// (255 is no ink), and colors as they are, not premultiplied.
+    static func rgbPlanes(width: Int, height: Int, cyan: [UInt8], magenta: [UInt8], yellow: [UInt8], black: [UInt8],
+                          profile: CMYKProfile) throws -> (red: [UInt8], green: [UInt8], blue: [UInt8]) {
+        let count = width * height
+        var inks = [UInt8](repeating: 0, count: count * 4)
+        for i in 0..<count {
+            inks[i * 4] = 255 - cyan[i]; inks[i * 4 + 1] = 255 - magenta[i]
+            inks[i * 4 + 2] = 255 - yellow[i]; inks[i * 4 + 3] = 255 - black[i]
+        }
+        guard let provider = CGDataProvider(data: Data(inks) as CFData),
+              let printed = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                                    space: profile.space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                                    provider: provider, decode: nil, shouldInterpolate: false, intent: .relativeColorimetric),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { throw PSDError.truncated }
+        context.setRenderingIntent(.relativeColorimetric)
+        context.draw(printed, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { throw PSDError.truncated }
+        var red = [UInt8](repeating: 0, count: count), green = red, blue = red
+        // A bitmap context's first row in memory is the top of what's drawn, as the planes are laid out.
+        for y in 0..<height {
+            let row = data + y * context.bytesPerRow
+            for x in 0..<width {
+                let i = y * width + x
+                red[i] = row[x * 4]; green[i] = row[x * 4 + 1]; blue[i] = row[x * 4 + 2]
+            }
+        }
+        return (red, green, blue)
+    }
+
     static func rgbaImage(width: Int, height: Int, red: [UInt8], green: [UInt8], blue: [UInt8], alpha: [UInt8]) throws -> CGImage {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         let count = width * height
