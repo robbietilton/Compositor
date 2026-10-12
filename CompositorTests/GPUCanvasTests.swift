@@ -152,6 +152,41 @@ import Testing
                 "zoom \(zoom): mean \(difference.mean), over 12 levels \(difference.over * 100)%")
     }
 
+    /// A new vector layer can be started with the Layers panel deselected. Its pending stroke still belongs at the top
+    /// of the stack; losing it while leaving only the direction handles visible makes the Pen tool look broken.
+    @Test func pendingPenPathDrawsWithoutAnActiveLayer() throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 160, height: 120), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 120, height: 100, emptyLayer: true,
+                               background: NSColor.white.cgColor)
+        session.selectLayer(nil)
+        session.selectTool(.pen)
+        session.penMode = .line
+        session.penLineWidth = 8
+        session.foregroundColor = PaletteColor(red: 1, green: 0, blue: 0)
+        session.beginPenAnchor(at: CGPoint(x: 20, y: 50), closeDistance: 0, constrain: false)
+        session.beginPenAnchor(at: CGPoint(x: 100, y: 50), closeDistance: 0, constrain: false)
+        session.zoom(to: 1)
+
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 160, height: 120)
+        let context = try BrushRaster.context(width: 160, height: 120, mask: false)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        canvas.allowsGPU = false
+        canvas.draw(canvas.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+        let point = session.viewport.viewPoint(from: CGPoint(x: 60, y: 50), documentSize: session.document!.size)
+        let pixel = Int(point.y.rounded(.down)) * context.bytesPerRow + Int(point.x.rounded(.down)) * 4
+        let bytes = context.data!.assumingMemoryBound(to: UInt8.self)
+        #expect(bytes[pixel] > 220 && bytes[pixel + 1] < 30 && bytes[pixel + 2] < 30)
+
+        let difference = try compare(session, name: "pen-without-active-layer", width: 160, height: 120, backingScale: 1)
+        #expect(difference.mean < 0.2 && difference.over < 0.003,
+                "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+    }
+
     /// Selected pixels being dragged: the GPU draws them from the lifted pixels, the Core Graphics canvas from the
     /// rebuilt tiles.
     @Test(arguments: [false, true])

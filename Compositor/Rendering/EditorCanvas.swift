@@ -1163,11 +1163,14 @@ final class CanvasView: NSView {
                     mask: mask, in: context)
             }
         }
-        // The shape being dragged out previews where its layer will go — above the active layer — rather than over
-        // everything, so the layers above it cover it as they will once it is made.
+        // A new shape or Pen path previews where its layer will go — above the active layer — rather than over
+        // everything, so the layers above it cover it as they will once it is made. With no drawable active layer it
+        // will be inserted at the top, and is drawn there below as well.
+        var drewCanvasDraft = false
         func drawOwnWithDraft(_ id: UUID, _ context: CGContext) {
             drawOwn(id, context)
             guard id == session.activeLayerID else { return }
+            drewCanvasDraft = true
             drawShapeDraft(scale: scale, center: center, in: context)
             drawPenDraft(path: true, controls: false, scale: scale, center: center, in: context)
             drawNewText(context)
@@ -1216,6 +1219,10 @@ final class CanvasView: NSView {
             let origin = center(transform.center)
             return { clip.apply(scale: scale, center: origin, in: $0) }
         }, in: context) { live.drawComposite($0, in: context) }
+        if !drewCanvasDraft {
+            drawShapeDraft(scale: scale, center: center, in: context)
+            drawPenDraft(path: true, controls: false, scale: scale, center: center, in: context)
+        }
         drawNewText(context)
     }
 
@@ -3283,11 +3290,12 @@ extension CanvasView {
             return image.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(),
                                                                              kCIInputMaskImageKey: coverage])
         }
-        // A shape being dragged out and new text go where their layers will: just above the active layer, or new text on
-        // top when that isn't drawn (see `drawLayers`).
-        var drewNewText = false
+        // A shape or Pen path being drawn and new text go where their layers will: just above the active layer, or on
+        // top when that layer isn't drawn (see `drawLayers`).
+        var drewCanvasDraft = false, drewNewText = false
         func drafts(after id: UUID, over image: CIImage) -> CIImage {
             guard id == session.activeLayerID else { return image }
+            drewCanvasDraft = true
             var result = image
             if let shape = shapeDraftImage(placement: placement, clip: clip) { result = shape.composited(over: result) }
             if let pen = penDraftImage(placement: placement, clip: clip) {
@@ -3338,6 +3346,10 @@ extension CanvasView {
                 result = GPUBlend.blend(clippedByFolders(id, image), over: result, mode: mode)
             } else if unsupported { return nil }
             result = drafts(after: id, over: result)
+        }
+        if !drewCanvasDraft {
+            if let shape = shapeDraftImage(placement: placement, clip: clip) { result = shape.composited(over: result) }
+            if let pen = penDraftImage(placement: placement, clip: clip) { result = pen.composited(over: result) }
         }
         if !drewNewText, session.textDraft?.layerID == nil, let text = draftText,
            let placed = placement.place(text.image, transform: text.transform) {
