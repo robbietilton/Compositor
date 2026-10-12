@@ -115,13 +115,24 @@ final class MCPServerController {
     }
 
     func showSettings() {
+        // A menu action still runs inside AppKit's menu-tracking pass. Building a SwiftUI hosting controller there can
+        // make its preferred-size update re-enter AppKit layout and raise an exception. Let the menu finish first.
+        DispatchQueue.main.async { [weak self] in self?.presentSettings() }
+    }
+
+    private func presentSettings() {
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 390),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = L10n.string("MCP Server")
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: MCPServerSettingsView(controller: self)
-                .environment(\.locale, AppLanguage.current.locale))
+            // Keep AppKit in charge of this fixed-size window. NSHostingController publishes preferredContentSize
+            // during layout, which can make AppKit measure the SwiftUI hierarchy re-entrantly and terminate the app.
+            let host = NSHostingView(rootView: AnyView(MCPServerSettingsView(controller: self)
+                .environment(\.locale, AppLanguage.current.locale)))
+            host.sizingOptions = []
+            host.autoresizingMask = [.width, .height]
+            window.contentView = host
             window.center()
             self.window = window
         }

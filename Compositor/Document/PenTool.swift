@@ -151,7 +151,7 @@ extension EditorSession {
     }
 
     /// The current draft takes precedence over the selected layer's saved path. Both are mapped into document
-    /// pixels and closed only for the selection, leaving an open Pen path open and fully editable.
+    /// pixels and closed only for the selection; a saved open path itself remains unchanged.
     private var penPathForSelection: CGPath? {
         guard tool == .pen else { return nil }
         if let draft = penDraft {
@@ -176,12 +176,17 @@ extension EditorSession {
 
     var canLoadPenPathAsSelection: Bool { canEditSelection && penPathForSelection != nil }
 
-    /// Replaces the current selection with the area enclosed by the Pen path. Open paths are closed for this
-    /// operation without committing the draft or changing the saved path.
+    /// Replaces the current selection with the area enclosed by the Pen path. A pending draft is consumed directly
+    /// instead of becoming a colored layer; an existing saved path is only read and is not changed.
     @discardableResult
     func loadPenPathAsSelection() -> Bool {
         guard canEditSelection, let path = penPathForSelection else { return false }
+        let consumesDraft = penDraft != nil
         applySelection(path, mode: .replace, name: "Load Path as Selection")
+        if consumesDraft {
+            penDraft = nil
+            penNodeSelection = nil
+        }
         return true
     }
 

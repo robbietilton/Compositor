@@ -69,14 +69,13 @@ struct PenToolTests {
         #expect(bytes[(45 * image.width + 60) * 4 + 3] > 240)
     }
 
-    @Test func commandReturnLoadsAnOpenDraftAsSelectionWithoutCommittingIt() throws {
+    @Test func commandReturnConvertsAnOpenDraftDirectlyToSelectionWithoutAColoredLayer() throws {
         let session = makeSession()
         let layerCount = try #require(session.document?.layers.count)
         add(CGPoint(x: 20, y: 20), to: session)
         add(CGPoint(x: 100, y: 20), to: session)
         #expect(!session.canLoadPenPathAsSelection, "two anchors cannot enclose a selection")
         add(CGPoint(x: 60, y: 80), to: session)
-        let draft = try #require(session.penDraft)
         let undoCount = session.history.undoCount
         let view = CanvasView(session: session)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
@@ -88,12 +87,12 @@ struct PenToolTests {
         let selection = try #require(session.selection)
         #expect(selection.path.contains(CGPoint(x: 60, y: 40), using: .winding))
         #expect(!selection.path.contains(CGPoint(x: 10, y: 10), using: .winding))
-        #expect(session.penDraft == draft, "loading a selection must not close or commit the draft")
+        #expect(session.penDraft == nil, "the draft is consumed instead of remaining as a colored path preview")
         #expect(session.document?.layers.count == layerCount)
         #expect(session.history.undoCount == undoCount + 1)
         session.undo()
         #expect(session.selection == nil)
-        #expect(session.penDraft == draft)
+        #expect(session.penDraft == nil)
     }
 
     @Test func transformedSavedOpenPathLoadsAsSelectionAndStaysOpen() throws {
