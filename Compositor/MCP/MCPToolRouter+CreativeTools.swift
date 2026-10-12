@@ -265,9 +265,10 @@ extension MCPToolRouter {
     func crop(_ arguments: [String: Any]) async throws -> [String: Any] {
         let session = try editableSession()
         let rect = try arguments.rect()
-        guard CropGeometry.valid(rect), Int(rect.width) <= DocumentLimits.maxSide,
+        guard [rect.minX, rect.minY, rect.width, rect.height].allSatisfy({ $0.rounded() == $0 }),
+              CropGeometry.valid(rect), Int(rect.width) <= DocumentLimits.maxSide,
               Int(rect.height) <= DocumentLimits.maxSide else {
-            throw MCPToolFailure(message: "The crop rectangle is outside Compositor's limits.")
+            throw MCPToolFailure(message: "Crop coordinates and dimensions must be whole pixels inside Compositor's limits.")
         }
         session.cropError = nil
         session.selectTool(.crop)

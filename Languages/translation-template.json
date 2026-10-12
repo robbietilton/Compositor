@@ -1,4 +1,5 @@
 {
+  "$schema" : "./language-pack.schema.json",
   "language" : "und",
   "revision" : 1,
   "schemaVersion" : 1,

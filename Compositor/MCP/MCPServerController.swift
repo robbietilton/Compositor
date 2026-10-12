@@ -97,6 +97,7 @@ final class MCPServerController {
     }
     func copyConnectionJSON() {
         let object: [String: Any] = [
+            "type": "http",
             "url": endpoint,
             "headers": ["Authorization": "Bearer \(token)"]
         ]

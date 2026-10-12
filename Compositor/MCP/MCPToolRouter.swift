@@ -426,7 +426,8 @@ final class MCPToolRouter {
                 "color": "#" + PaletteColor(red: text.red, green: text.green, blue: text.blue).hex,
                 "alignment": text.alignment.rawValue.lowercased(), "tracking": text.tracking,
                 "leading": text.leading,
-                "box_width": text.boxSize?.width ?? NSNull(), "box_height": text.boxSize?.height ?? NSNull()
+                "box_width": text.boxSize.map { $0.width as Any } ?? NSNull(),
+                "box_height": text.boxSize.map { $0.height as Any } ?? NSNull()
             ]
         }
         return summary

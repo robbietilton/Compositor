@@ -12,6 +12,10 @@
     "strings"
   ],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "An optional JSON Schema reference for editor and tooling support."
+    },
     "schemaVersion": {
       "const": 1,
       "description": "The language-pack file format version."

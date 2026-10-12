@@ -80,8 +80,9 @@ brew install --cask robbietilton-compositor
 
 ### Works with AI agents
 - AI agents and scripts can build and edit projects directly: a `.comp` is a folder of PNG layers and a manifest, and an open project updates live as it's written. See [Writing Compositor projects](docs/writing-comp-files.md)
-- Compositor can also serve the canvas that is open in the app over MCP Streamable HTTP. Open **Compositor › MCP Server…**, enable the local server, and copy its connection JSON into an MCP client.
-- The MCP server can inspect and render the current document, create a canvas, add editable Pen paths, select or update layers, undo and redo, and save an existing project. It binds only to `127.0.0.1` and requires the generated Bearer token.
+- Compositor can also serve the canvas that is open in the app over MCP Streamable HTTP. Open **Compositor › MCP Server…**, enable the local server, and copy its connection JSON into an MCP client. See [Using Compositor with Codex and Claude](docs/mcp.md).
+- The MCP server covers every tool in the tool rail through model-friendly document-coordinate APIs: Move / Transform, Marquee, Lasso, Magic Wand and Object Selection, Crop, Brush and Eraser, Spot Healing, Clone Stamp, Blur, Smudge, Liquify, Gradient, Pen, Shape, Type, Eyedropper, Hand and Zoom. It can also create, inspect, organize, render and save documents.
+- The server binds only to `127.0.0.1` and requires the generated Bearer token.
 
 ## Requirements
 
