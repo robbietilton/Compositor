@@ -7413,6 +7413,23 @@
         }
       }
     },
+    "Load Path as Selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按路径作为选区载入"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將路徑載入為選取範圍"
+          }
+        }
+      }
+    },
     "Loading histogram…": {
       "extractionState": "manual",
       "localizations": {
@@ -8667,6 +8684,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "打開專案"
+          }
+        }
+      }
+    },
+    "Open paths close automatically when loaded as a selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开放路径在作为选区载入时会自动闭合"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開放路徑在載入為選取範圍時會自動閉合"
           }
         }
       }

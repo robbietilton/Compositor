@@ -1,6 +1,6 @@
 {
   "language" : "zh-Hant",
-  "revision" : 2,
+  "revision" : 3,
   "schemaVersion" : 1,
   "strings" : {
     " · %lld DPI: %lld × %lld pixels" : " · %lld DPI：%lld × %lld 像素",
@@ -465,6 +465,7 @@
     "Linked" : "已連結",
     "Liquify" : "液化",
     "Liquify pushes pixels · Blur softens · Smudge drags color along" : "液化推動像素 · 模糊進行柔化 · 塗抹拖動顏色",
+    "Load Path as Selection" : "將路徑載入為選取範圍",
     "Loading histogram…" : "正在載入直方圖…",
     "Lock aspect ratio" : "鎖定長寬比",
     "Lock aspect ratio. Hold Shift while dragging a handle to turn it the other way." : "鎖定長寬比。拖移控制點時按住 Shift 可暫時反轉此設定。",
@@ -546,6 +547,7 @@
     "Opacity percent" : "不透明度百分比",
     "Open in a new project tab" : "在新專案標籤頁中打開",
     "Open project" : "打開專案",
+    "Open paths close automatically when loaded as a selection" : "開放路徑在載入為選取範圍時會自動閉合",
     "Open Project" : "打開專案",
     "Open Project…" : "打開專案…",
     "Open Recent" : "最近打開",

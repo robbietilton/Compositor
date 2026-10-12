@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "language": "zh-Hans",
-  "revision": 2,
+  "revision": 3,
   "strings": {
     " · %lld DPI: %lld × %lld pixels": " · %lld DPI：%lld × %lld 像素",
     "#": "#",
@@ -462,6 +462,7 @@
     "Linked": "已链接",
     "Liquify": "液化",
     "Liquify pushes pixels · Blur softens · Smudge drags color along": "液化推动像素 · 模糊进行柔化 · 涂抹拖动颜色",
+    "Load Path as Selection": "按路径作为选区载入",
     "Loading histogram…": "正在载入直方图…",
     "Lock Guides": "锁定参考线",
     "Lock aspect ratio": "锁定长宽比",
@@ -546,6 +547,7 @@
     "Open Recent": "最近打开",
     "Open in a new project tab": "在新项目标签页中打开",
     "Open project": "打开项目",
+    "Open paths close automatically when loaded as a selection": "开放路径在作为选区载入时会自动闭合",
     "Optics": "光学",
     "Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed.": "在绘画工具中，Option 可临时选择吸管。Shift 可约束形状或移动，或添加到选区；Option 可从选区减去或从中心绘制。Command 拖移可移动选中像素；Command-Option 拖移可拷贝它们。Option 拖移可复制图层、文件夹或效果；Option 点按图层边界可切换剪贴。Command 点按缩略图可载入其选区。Control 可暂时绕过吸附。右键拖移可调整画笔大小。修饰键与鼠标手势不可更改。",
     "Option-click to set the source": "按住 Option 点按以设置源",

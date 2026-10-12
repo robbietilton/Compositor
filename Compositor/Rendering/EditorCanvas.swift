@@ -2317,6 +2317,11 @@ final class CanvasView: NSView {
         // A drag session swallows the flagsChanged that says Option was let go, which left the canvas thinking it
         // was still held — and with it the Eyedropper standing in for the Brush. Every key press re-reads it.
         optionHeld = event.modifierFlags.contains(.option)
+        if session.tool == .pen, [36, 76].contains(event.keyCode),
+           event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command {
+            if session.loadPenPathAsSelection() { synchronizeDisplay() }
+            return
+        }
         if [51, 117].contains(event.keyCode), event.modifierFlags.intersection([.command, .control, .option, .shift]) == .shift {
             if session.canContentAwareFill { session.beginFilter(.contentAwareFill) }
             return

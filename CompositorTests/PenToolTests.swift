@@ -69,6 +69,56 @@ struct PenToolTests {
         #expect(bytes[(45 * image.width + 60) * 4 + 3] > 240)
     }
 
+    @Test func commandReturnLoadsAnOpenDraftAsSelectionWithoutCommittingIt() throws {
+        let session = makeSession()
+        let layerCount = try #require(session.document?.layers.count)
+        add(CGPoint(x: 20, y: 20), to: session)
+        add(CGPoint(x: 100, y: 20), to: session)
+        #expect(!session.canLoadPenPathAsSelection, "two anchors cannot enclose a selection")
+        add(CGPoint(x: 60, y: 80), to: session)
+        let draft = try #require(session.penDraft)
+        let undoCount = session.history.undoCount
+        let view = CanvasView(session: session)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: .command, timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+
+        view.keyDown(with: event)
+
+        let selection = try #require(session.selection)
+        #expect(selection.path.contains(CGPoint(x: 60, y: 40), using: .winding))
+        #expect(!selection.path.contains(CGPoint(x: 10, y: 10), using: .winding))
+        #expect(session.penDraft == draft, "loading a selection must not close or commit the draft")
+        #expect(session.document?.layers.count == layerCount)
+        #expect(session.history.undoCount == undoCount + 1)
+        session.undo()
+        #expect(session.selection == nil)
+        #expect(session.penDraft == draft)
+    }
+
+    @Test func transformedSavedOpenPathLoadsAsSelectionAndStaysOpen() throws {
+        let session = makeSession()
+        add(CGPoint(x: 20, y: 20), to: session)
+        add(CGPoint(x: 100, y: 20), to: session)
+        add(CGPoint(x: 60, y: 80), to: session)
+        #expect(session.finishPen())
+        let id = try #require(session.activeLayerID)
+        let index = try #require(session.document?.layers.firstIndex { $0.id == id })
+        session.document?.layers[index].transform.rotation = 12
+        session.document?.layers[index].transform.flipX = true
+        let layer = try #require(session.activeLayer)
+        let vector = try #require(layer.liveVectorPath)
+        let center = vector.style.nodes.map { $0.anchor.applying(layer.transform.unitToDocument) }
+            .reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x / 3, y: $0.y + $1.y / 3) }
+
+        #expect(session.loadPenPathAsSelection())
+
+        let selection = try #require(session.selection)
+        #expect(selection.path.contains(center, using: .winding))
+        #expect(session.activeLayer?.liveVectorPath?.style.closed == false,
+                "automatic closure is only for the selection outline")
+    }
+
     @Test func deleteCancelAndToolSwitchLeaveNoPartialLayer() {
         let session = makeSession()
         let count = session.history.undoCount

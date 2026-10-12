@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import CoreGraphics
 import Testing
@@ -5,6 +6,14 @@ import Testing
 
 @MainActor
 struct MCPServerTests {
+    @Test func opensAndClosesServerSettings() async {
+        let controller = MCPServerController(workspace: ProjectWorkspace())
+        controller.showSettings()
+        await Task.yield()
+        #expect(NSApp.windows.contains { $0.title == L10n.string("MCP Server") && $0.isVisible })
+        controller.closeSettings()
+    }
+
     @Test func parsesOneStreamableHTTPRequest() throws {
         let body = Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}".utf8)
         let bytes = Data(("POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:49678\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\n\r\n").utf8) + body

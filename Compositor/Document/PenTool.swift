@@ -150,6 +150,41 @@ extension EditorSession {
         selectedPenNodeIndex != nil && (editablePenLine?.vector.style.nodes.count ?? 0) > 2
     }
 
+    /// The current draft takes precedence over the selected layer's saved path. Both are mapped into document
+    /// pixels and closed only for the selection, leaving an open Pen path open and fully editable.
+    private var penPathForSelection: CGPath? {
+        guard tool == .pen else { return nil }
+        if let draft = penDraft {
+            guard draft.nodes.count >= 3, draft.nodes.allSatisfy(\.isFinite) else { return nil }
+            let path = LayerVectorPathStyle.path(nodes: draft.nodes, closed: true)
+            let bounds = path.boundingBoxOfPath
+            return bounds.width > 0 && bounds.height > 0 ? path : nil
+        }
+        guard selectedLayerIDs.count == 1, let layer = activeLayer, let vector = layer.liveVectorPath,
+              vector.style.nodes.count >= 3 else { return nil }
+        let transform = layer.transform.unitToDocument
+        let nodes = vector.style.nodes.map { node in
+            VectorPathNode(anchor: node.anchor.applying(transform),
+                           inHandle: node.inHandle.applying(transform),
+                           outHandle: node.outHandle.applying(transform))
+        }
+        guard nodes.allSatisfy(\.isFinite) else { return nil }
+        let path = LayerVectorPathStyle.path(nodes: nodes, closed: true)
+        let bounds = path.boundingBoxOfPath
+        return bounds.width > 0 && bounds.height > 0 ? path : nil
+    }
+
+    var canLoadPenPathAsSelection: Bool { canEditSelection && penPathForSelection != nil }
+
+    /// Replaces the current selection with the area enclosed by the Pen path. Open paths are closed for this
+    /// operation without committing the draft or changing the saved path.
+    @discardableResult
+    func loadPenPathAsSelection() -> Bool {
+        guard canEditSelection, let path = penPathForSelection else { return false }
+        applySelection(path, mode: .replace, name: "Load Path as Selection")
+        return true
+    }
+
     /// Selects an existing anchor, or splits the path at a click on one of its segments. The transaction stays open
     /// until mouse-up so inserting and immediately dragging the new anchor is one undo step.
     func beginPenLineNodeGesture(at point: CGPoint, tolerance: CGFloat) -> Int? {

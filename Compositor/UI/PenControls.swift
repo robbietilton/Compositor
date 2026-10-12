@@ -48,6 +48,11 @@ struct PenControls: View {
                 .disabled(!session.canDeleteSelectedPenNode)
                 .help(Text(L10n.string("Select an anchor on the canvas, then remove it")))
             }
+            Button { session.loadPenPathAsSelection() } label: {
+                Label(L10n.string("Load Path as Selection"), systemImage: "selection.pin.in.out")
+            }
+            .disabled(!session.canLoadPenPathAsSelection)
+            .help(Text(L10n.string("Open paths close automatically when loaded as a selection") + " (⌘↩)"))
             Text(L10n.string(session.editablePenLine == nil
                 ? "Click for a corner · Drag for a curve"
                 : "Click the line to add an anchor · Drag an anchor to move · Delete removes it"))
