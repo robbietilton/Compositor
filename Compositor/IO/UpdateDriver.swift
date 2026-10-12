@@ -21,18 +21,18 @@ import Sparkle
         let downloaded = state.stage != .notDownloaded
         let alert = NSAlert()
         alert.icon = NSApp.applicationIconImage
-        alert.messageText = "A new version of \(name) is available!"
+        alert.messageText = L10n.format("A new version of %@ is available!", name)
         alert.informativeText = downloaded
-            ? "\(name) \(appcastItem.displayVersionString) is ready to install — you have \(current)."
-            : "\(name) \(appcastItem.displayVersionString) is now available — you have \(current). Would you like to download it now?"
+            ? L10n.format("%@ %@ is ready to install — you have %@.", name, appcastItem.displayVersionString, current)
+            : L10n.format("%@ %@ is now available — you have %@. Would you like to download it now?", name, appcastItem.displayVersionString, current)
         let changes = Self.changes(in: appcastItem)
         if !changes.isEmpty { alert.accessoryView = Self.list(changes) }
-        alert.addButton(withTitle: downloaded ? "Install and Relaunch" : "Install Update")
-        alert.addButton(withTitle: "Remind Me Later")
-        alert.addButton(withTitle: "Skip This Version")
+        alert.addButton(withTitle: L10n.string(downloaded ? "Install and Relaunch" : "Install Update"))
+        alert.addButton(withTitle: L10n.string("Remind Me Later"))
+        alert.addButton(withTitle: L10n.string("Skip This Version"))
         if let updater, updater.allowsAutomaticUpdates {
             alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = "Automatically download and install updates in the future"
+            alert.suppressionButton?.title = L10n.string("Automatically download and install updates in the future")
             alert.suppressionButton?.state = updater.automaticallyDownloadsUpdates ? .on : .off
         }
         alert.layout()

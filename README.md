@@ -88,7 +88,7 @@ brew install --cask robbietilton-compositor
 
 ## Translations
 
-Compositor is English only for now, and translation pull requests aren't being accepted. It's maintained by one person, every new string would need translating from then on, and translations in languages I don't read can't be reviewed. I'll revisit this once the app settles; until then, please don't open localization PRs.
+Compositor includes English and Simplified Chinese. Choose **Help › Language** to switch; the choice is remembered across launches. Translatable UI text lives in `Compositor/Localizable.xcstrings`.
 
 ## Building
 

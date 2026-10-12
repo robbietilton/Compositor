@@ -74,10 +74,10 @@ struct ExportAsSheet: View {
                     .help("Show the whole image (⌘0)")
                 Button { zoomBy(1) } label: { Image(systemName: "plus.magnifyingglass") }
                     .disabled(JPEGPreview.step(from: shownZoom, in: 1) == nil)
-                    .help("Zoom in (⌘+), now \(percent). At 100% each pixel of the export is one pixel of the screen")
+                    .help(Text(L10n.format("Zoom in (⌘+), now %@. At 100%% each pixel of the export is one pixel of the screen", percent)))
                 Button { zoomBy(-1) } label: { Image(systemName: "minus.magnifyingglass") }
                     .disabled(JPEGPreview.step(from: shownZoom, in: -1) == nil)
-                    .help("Zoom out (⌘−), now \(percent)")
+                    .help(Text(L10n.format("Zoom out (⌘−), now %@", percent)))
             }
             .padding(.bottom, -8)
             ZStack {
@@ -150,8 +150,8 @@ struct ExportAsSheet: View {
                 }
             }
             HStack(spacing: 12) {
-                Text(format == .exr ? "Brighter than white kept · Transparency kept"
-                     : format == .png ? "Transparency kept · sRGB" : "sRGB")
+                Text(L10n.string(format == .exr ? "Brighter than white kept · Transparency kept"
+                                 : format == .png ? "Transparency kept · sRGB" : "sRGB"))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if let error { Text(error).foregroundStyle(.red) }
@@ -222,7 +222,8 @@ struct ExportAsSheet: View {
             .pickerStyle(.inline).labelsHidden()
         }
         .menuStyle(.button).fixedSize()
-        .help("Other formats: PDF\(others.contains(.exr) ? ", and EXR to keep light brighter than white" : "")")
+        .help(Text(L10n.string(others.contains(.exr) ? "Other formats: PDF, and EXR to keep light brighter than white"
+                                                     : "Other formats: PDF")))
         if chosen { menu.buttonStyle(.borderedProminent) } else { menu.buttonStyle(.bordered) }
     }
 

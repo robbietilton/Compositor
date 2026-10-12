@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.isVisible == rhs.isVisible && lhs.transform == rhs.transform
-            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.text == rhs.text && lhs.effects == rhs.effects
+            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.vectorPath == rhs.vectorPath && lhs.text == rhs.text && lhs.effects == rhs.effects
     }
     let id: UUID
     var asset: ImportedImage?
@@ -21,6 +21,8 @@ struct ImageLayer: Identifiable, Equatable {
     var adjustment: LayerAdjustment?
     /// Set on layers the Shape tool made; see `liveShape`.
     var shape: LayerShape?
+    /// Set on layers the Pen tool made; see `liveVectorPath`.
+    var vectorPath: LayerVectorPath?
     /// A stroke and drop shadow drawn around the layer, kept apart from its pixels.
     var effects: LayerEffects?
     var text: LayerText?
@@ -40,7 +42,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.name = name
     }
 
-    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, effects: LayerEffects? = nil, text: LayerText? = nil) {
+    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, vectorPath: LayerVectorPath? = nil, effects: LayerEffects? = nil, text: LayerText? = nil) {
         self.id = id
         self.asset = asset
         self.name = name
@@ -54,6 +56,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.maskSourceID = maskSourceID
         self.adjustment = adjustment
         self.shape = shape
+        self.vectorPath = vectorPath
         self.effects = effects
         self.text = text
     }
@@ -88,15 +91,22 @@ struct CanvasDocument: Equatable {
 }
 
 enum NavigationTool: String, CaseIterable {
-    case move, marquee, lasso, wand, crop, brush, spotHealing, cloneStamp, blur, gradient, shape, type, eyedropper, hand, zoom
+    case move, marquee, lasso, wand, crop, brush, spotHealing, cloneStamp, blur, gradient, pen, shape, type, eyedropper, hand, zoom
     /// No tool (A): nothing in the tool rail is selected and canvas clicks do nothing.
     case idle
     /// Tools that paint with the brush tip, sharing its size, hardness, opacity, and keys.
     var isBrushTool: Bool { self == .brush || self == .spotHealing || self == .cloneStamp || self == .blur }
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
-    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .pen ? "point.bottomleft.forward.to.point.topright.scurvepath" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
+    var label: String {
+        L10n.string(self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)"
+            : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object"
+            : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)"
+            : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)"
+            : self == .gradient ? "Gradient (G)" : self == .pen ? "Pen (P) · Tab switches Shape and Line" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse"
+            : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)")
+    }
 }
 
 @Observable
@@ -240,6 +250,11 @@ final class EditorSession {
     var shapeLineWidth: Double = 4
     /// The shape being dragged out with the Shape tool, before it becomes a layer.
     var shapeDraft: ShapeDraft?
+    var penMode = PenMode.shape
+    /// A Pen line's thickness in document pixels.
+    var penLineWidth: Double = 4
+    /// Anchors being placed before a Pen path becomes a layer.
+    var penDraft: PenDraft?
     var selectionModeChoice = SelectionMode.replace
     /// Mode implied by the Shift/Option keys currently held, nil when neither is.
     var heldSelectionMode: SelectionMode?
@@ -307,7 +322,7 @@ final class EditorSession {
     /// fullscreen it leaves fullscreen instead.
     var escapeHasNothingToCancel: Bool {
         textDraft == nil && levels == nil && brushStroke == nil && warpStroke == nil && lassoDraft == nil
-            && shapeDraft == nil && gradientEdit == nil && cropRect == nil && guideDrag == nil && transformEdit == nil
+            && shapeDraft == nil && penDraft == nil && gradientEdit == nil && cropRect == nil && guideDrag == nil && transformEdit == nil
             && pixelMove == nil
     }
     /// Canvas Only can be switched: there's a canvas, and no text layer being typed or dialog open (Hue/Saturation,
@@ -387,7 +402,7 @@ final class EditorSession {
     func selectTool(_ value: NavigationTool) {
         if tool != value, !finishText() { return }
         guard !isProjectBusy, brushStroke == nil, warpStroke == nil, levels == nil else { return }
-        if tool != value { commitTransform(); cancelCrop(); resolveGradient(); cancelLasso(); cancelShape() }
+        if tool != value { commitTransform(); cancelCrop(); resolveGradient(); cancelLasso(); cancelShape(); cancelPen() }
         let from = Self.tipFamily(tool), to = Self.tipFamily(value)
         if from != to, let parked = parkedBrushTips[to] {
             parkedBrushTips[from] = (brushSettings.diameter, brushSettings.hardness, brushSettings.opacity)
@@ -425,6 +440,7 @@ final class EditorSession {
         case .wand: wandMode = next(wandMode)
         case .lasso: toggleLassoKind()
         case .shape: toggleShapeKind()
+        case .pen: penMode = next(penMode); cancelPen()
         case .brush: brushMode = next(brushMode)
         case .blur: blurMode = next(blurMode)
         case .spotHealing: spotHealingMode = next(spotHealingMode)
@@ -502,6 +518,7 @@ final class EditorSession {
                 }
                 document?.layers[index].transform = moved
                 redrawShape(at: index)
+                redrawVectorPath(at: index)
             }
             endEdit()
             return
@@ -513,6 +530,7 @@ final class EditorSession {
         }
         document?.layers[index].transform = edit.draft
         redrawShape(at: index)
+        redrawVectorPath(at: index)
         endEdit()
     }
     func cancelTransform() {

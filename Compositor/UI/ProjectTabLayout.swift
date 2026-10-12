@@ -30,6 +30,10 @@ func projectTabOverflowLabel(for hiddenCount: Int) -> String {
     hiddenCount == 1 ? "1 more tab" : "\(hiddenCount) more tabs"
 }
 
+func localizedProjectTabOverflowLabel(for hiddenCount: Int) -> String {
+    hiddenCount == 1 ? L10n.string("1 more tab") : L10n.format("%lld more tabs", Int64(hiddenCount))
+}
+
 /// Lays out the strip left to right: everything shows when it all fits. Otherwise tabs are dropped from the
 /// front of `order` — oldest overflow first — until the rest fit alongside an overflow pill at x = 0. The
 /// selected tab is never dropped: if it would be, it takes the first visible slot (right after the pill) and

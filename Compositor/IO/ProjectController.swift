@@ -70,7 +70,7 @@ final class ProjectController {
             let chosen: (data: Data, format: ExportFormat)? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export As"
+                sheet.title = L10n.string("Export As")
                 sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
                     raster: raster, deepRaster: deepRaster, hdrRaster: hdrRaster, session: session,
                     format: start ?? lastExportFormat) { chosen in
@@ -79,7 +79,7 @@ final class ProjectController {
                     // Release the hosted view and its closure after dismissal.
                     sheet.contentViewController = nil
                     continuation.resume(returning: chosen)
-                })
+                }.environment(\.locale, AppLanguage.current.locale))
                 window.beginSheet(sheet)
             }
             guard let chosen else { return }
@@ -100,8 +100,8 @@ final class ProjectController {
         panel.allowedContentTypes = [format.type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export " + format.rawValue
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+        panel.title = L10n.format("Export %@", format.rawValue)
+        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? L10n.string("Untitled"))
             + "." + (format.type.preferredFilenameExtension ?? format.rawValue.lowercased())
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
@@ -114,13 +114,13 @@ final class ProjectController {
         let options: CanvasSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Canvas Size"
+            sheet.title = L10n.string("Canvas Size")
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, session: session) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
                 sheet.contentViewController = nil
                 continuation.resume(returning: options)
-            })
+            }.environment(\.locale, AppLanguage.current.locale))
             window.beginSheet(sheet)
         }
         guard let options, let snapshot = session.projectSnapshot() else { return }
@@ -136,13 +136,13 @@ final class ProjectController {
         let options: ImageSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Image Size"
+            sheet.title = L10n.string("Image Size")
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
                 sheet.contentViewController = nil
                 continuation.resume(returning: options)
-            })
+            }.environment(\.locale, AppLanguage.current.locale))
             window.beginSheet(sheet)
         }
         guard let options, let snapshot = session.projectSnapshot() else { return }
@@ -158,13 +158,13 @@ final class ProjectController {
         let options: TrimOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Trim"
+            sheet.title = L10n.string("Trim")
             sheet.contentViewController = NSHostingController(rootView: TrimSheet { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
                 sheet.contentViewController = nil
                 continuation.resume(returning: options)
-            })
+            }.environment(\.locale, AppLanguage.current.locale))
             window.beginSheet(sheet)
         }
         guard let options, let snapshot = session.projectSnapshot() else { return }
@@ -185,7 +185,7 @@ final class ProjectController {
         let settings: (LayoutGrid, GridAppearance)? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Grid"
+            sheet.title = L10n.string("Grid")
             sheet.contentViewController = NSHostingController(rootView: GridSettingsSheet(
                 session: session, grid: original.grid, appearance: original.appearance,
                 preview: { [session] grid, appearance in
@@ -196,7 +196,7 @@ final class ProjectController {
                     sheet.orderOut(nil)
                     sheet.contentViewController = nil
                     continuation.resume(returning: settings)
-                })
+                }.environment(\.locale, AppLanguage.current.locale))
             window.beginSheet(sheet)
         }
         session.showsGrid = original.shown
@@ -220,8 +220,8 @@ final class ProjectController {
             panel.allowedContentTypes = [.compositorProject]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
-            panel.title = asNew ? "Save Project As" : "Save Project"
+            panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? L10n.string("Untitled") + ".comp"
+            panel.title = L10n.string(asNew ? "Save Project As" : "Save Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -273,7 +273,7 @@ final class ProjectController {
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
+            panel.title = L10n.string("Open Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -343,11 +343,11 @@ final class ProjectController {
         await finishWriting()
         guard session.isModified, session.document != nil else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? "Untitled")?"
-        alert.informativeText = "Your changes will be lost if you don’t save them."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Don’t Save")
+        alert.messageText = L10n.format("Save changes to %@?", session.projectURL?.lastPathComponent ?? L10n.string("Untitled"))
+        alert.informativeText = L10n.string("Your changes will be lost if you don’t save them.")
+        alert.addButton(withTitle: L10n.string("Save"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
+        alert.addButton(withTitle: L10n.string("Don’t Save"))
         let response = await show(alert)
         if response == .alertFirstButtonReturn { return await saveCurrent() }
         return response == .alertThirdButtonReturn
@@ -356,9 +356,9 @@ final class ProjectController {
     private func showError(_ title: String, error: Error) async {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = title
+        alert.messageText = L10n.string(title)
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.string("OK"))
         _ = await show(alert)
     }
 

@@ -15,13 +15,13 @@ struct ColorRangeSheet: View {
                         .background(edit?.effectiveMode == mode ? Color.accentColor.opacity(0.25) : .clear,
                                     in: RoundedRectangle(cornerRadius: 4))
                         .help(help(mode))
-                        .accessibilityLabel("\(mode.rawValue) color")
+                        .accessibilityLabel(Text(L10n.format("%@ color", L10n.string(mode.rawValue))))
                 }
                 Spacer()
             }
             preview
-            Text(edit?.hasColors == true ? "Shift-click adds a color, Option-click takes one away."
-                                         : "Click the image to pick the color to select.")
+            Text(L10n.string(edit?.hasColors == true ? "Shift-click adds a color, Option-click takes one away."
+                                                     : "Click the image to pick the color to select."))
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Text("Fuzziness").fixedSize()

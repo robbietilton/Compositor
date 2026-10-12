@@ -132,7 +132,7 @@ final class CanvasView: NSView {
     static let hiddenCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
     static let movePixelsCursor: NSCursor = {
         let base = NSCursor.arrow
-        let symbol = NSImage(systemSymbolName: "scissors", accessibilityDescription: "Move pixels")!
+        let symbol = NSImage(systemSymbolName: "scissors", accessibilityDescription: L10n.string("Move pixels"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let image = NSImage(size: NSSize(width: 36, height: 36), flipped: true) { _ in
@@ -408,7 +408,7 @@ final class CanvasView: NSView {
     private var displayedTransformGeometry: TransformOverlayGeometry?
     private var hoverTrackingArea: NSTrackingArea?
     private static let rotationCursor: NSCursor = {
-        let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Rotate")!
+        let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: L10n.string("Rotate"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let image = NSImage(size: NSSize(width: 24, height: 24), flipped: false) { _ in
@@ -428,7 +428,7 @@ final class CanvasView: NSView {
     private static let eyedropperAddCursor = makeEyedropperCursor(badge: "plus")
     private static let eyedropperRemoveCursor = makeEyedropperCursor(badge: "minus")
     private static func makeEyedropperCursor(badge: String?) -> NSCursor {
-        let symbol = NSImage(systemSymbolName: "eyedropper", accessibilityDescription: "Sample color")!
+        let symbol = NSImage(systemSymbolName: "eyedropper", accessibilityDescription: L10n.string("Sample color"))!
         let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
         let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
         let mark = badge.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
@@ -665,7 +665,7 @@ final class CanvasView: NSView {
         clipsToBounds = true
         setAccessibilityElement(true)
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Canvas")
+        setAccessibilityLabel(L10n.string("Canvas"))
         setAccessibilityIdentifier("editorCanvas")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1076,7 +1076,8 @@ final class CanvasView: NSView {
                     opacity: opacity, blendMode: blendMode(of: layer), mask: nil, in: context)
                 return
             }
-            if stroke == nil, let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
+            if stroke == nil, let shaped = session.vectorTransformPreview(for: layer, transform: transform)
+                ?? session.shapeTransformPreview(for: layer, transform: transform) {
                 LayerRenderer.draw(shaped, transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), mask: mask, in: context)
             } else if let stroke, !stroke.isMask {
@@ -1159,6 +1160,7 @@ final class CanvasView: NSView {
             drawOwn(id, context)
             guard id == session.activeLayerID else { return }
             drawShapeDraft(scale: scale, center: center, in: context)
+            drawPenDraft(path: true, controls: false, scale: scale, center: center, in: context)
             drawNewText(context)
         }
         // New text goes where its layer will: just above the active layer, or on top when that isn't drawn (a
@@ -1206,6 +1208,8 @@ final class CanvasView: NSView {
             return { clip.apply(scale: scale, center: origin, in: $0) }
         }, in: context) { live.drawComposite($0, in: context) }
         drawNewText(context)
+        // Anchors and direction handles are editing chrome: keep them visible above every layer.
+        drawPenDraft(path: false, controls: true, scale: scale, center: center, in: context)
     }
 
     /// Text being edited, as it shows among the layers: as it will be committed, with its effects around it. They stay
@@ -1264,6 +1268,53 @@ final class CanvasView: NSView {
         } else {
             context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale))
             context.fillPath()
+        }
+        context.restoreGState()
+    }
+
+    /// Draws the pending Pen path at its future layer position, and its editing controls above the composite.
+    private func drawPenDraft(path drawsPath: Bool, controls drawsControls: Bool, scale: CGFloat,
+                              center: (CGPoint) -> CGPoint, in context: CGContext) {
+        guard let draft = session.penDraft, !draft.nodes.isEmpty else { return }
+        let mapped = draft.nodes.map { node in
+            VectorPathNode(anchor: center(node.anchor), inHandle: center(node.inHandle), outHandle: center(node.outHandle))
+        }
+        context.saveGState()
+        if drawsPath {
+            var preview = mapped
+            if let hover = draft.hoverPoint { preview.append(VectorPathNode(anchor: center(hover))) }
+            if preview.count >= 2 {
+                context.addPath(LayerVectorPathStyle.path(nodes: preview, closed: false))
+                context.setStrokeColor(draft.color.nsColor.cgColor)
+                context.setLineWidth(draft.mode == .line ? max(1, draft.lineWidth * scale) : 1.5)
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                context.strokePath()
+            }
+        }
+        if drawsControls {
+            let accent = NSColor.controlAccentColor.cgColor
+            context.setStrokeColor(accent)
+            context.setLineWidth(1)
+            for node in mapped where node.inHandle != node.anchor || node.outHandle != node.anchor {
+                context.move(to: node.inHandle)
+                context.addLine(to: node.outHandle)
+                context.strokePath()
+                for handle in [node.inHandle, node.outHandle] {
+                    let box = CGRect(x: handle.x - 2.5, y: handle.y - 2.5, width: 5, height: 5)
+                    context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+                    context.fillEllipse(in: box)
+                    context.strokeEllipse(in: box)
+                }
+            }
+            for (index, node) in mapped.enumerated() {
+                let side: CGFloat = index == 0 && mapped.count >= (draft.mode == .shape ? 3 : 2) ? 9 : 7
+                let box = CGRect(x: node.anchor.x - side / 2, y: node.anchor.y - side / 2, width: side, height: side)
+                context.setFillColor(index == mapped.count - 1 ? NSColor.controlAccentColor.cgColor
+                                                              : NSColor.windowBackgroundColor.cgColor)
+                context.fillEllipse(in: box)
+                context.strokeEllipse(in: box)
+            }
         }
         context.restoreGState()
     }
@@ -1494,7 +1545,7 @@ final class CanvasView: NSView {
         // only tools whose cursor depends on where the pointer is also track movement.
         // The picker panel stays key, so sampling must track while this window is not.
         var options: NSTrackingArea.Options = [.mouseEnteredAndExited, picking ? .activeAlways : .activeInKeyWindow, .inVisibleRect]
-        if picking || session.tool == .move || session.tool.isBrushTool || session.tool.isSelectionTool {
+        if picking || session.tool == .move || session.tool == .pen || session.tool.isBrushTool || session.tool.isSelectionTool {
             options.formUnion([.mouseMoved, .cursorUpdate])
         }
         let area = NSTrackingArea(rect: .zero, options: options, owner: self)
@@ -1587,6 +1638,10 @@ final class CanvasView: NSView {
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) {
         session.filterEdit?.cameraRawReadout = nil
+        if session.penDraft != nil {
+            session.clearPenCursor()
+            synchronizeDisplay()
+        }
         brushPointer = nil
         updateBrushCursor()
         // Tools set their cursor directly while over the canvas, so put the arrow back on the
@@ -1613,6 +1668,12 @@ final class CanvasView: NSView {
                 synchronizeDisplay()
             }
             return
+        }
+        if session.tool == .pen, let document = session.document, session.penDraft != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            session.movePenCursor(to: session.viewport.documentPoint(from: point, documentSize: document.size),
+                                  constrain: event.modifierFlags.contains(.shift))
+            synchronizeDisplay()
         }
         // An eyedropper left over from a picker that closed while the pointer was elsewhere, such as over its own panel.
         if [Self.eyedropperCursor, Self.eyedropperAddCursor, Self.eyedropperRemoveCursor].contains(NSCursor.current) { restoreToolCursor() }
@@ -1836,6 +1897,16 @@ final class CanvasView: NSView {
             beginGradientDrag(at: point)
         } else if session.tool == .type {
             beginTextGesture(at: point, event: event)
+        } else if session.tool == .pen, let document = session.document {
+            if event.clickCount >= 2, session.finishPen() {
+                synchronizeDisplay()
+                return
+            }
+            let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
+            let closed = session.beginPenAnchor(at: pixel,
+                closeDistance: max(2, 8 / session.viewport.pointsPerPixel),
+                constrain: event.modifierFlags.contains(.shift))
+            if closed { synchronizeDisplay() }
         } else if session.tool == .shape, let document = session.document {
             session.beginShape(at: snappedCorner(session.viewport.documentPoint(from: point, documentSize: document.size),
                                                  flags: event.modifierFlags))
@@ -1906,6 +1977,12 @@ final class CanvasView: NSView {
                 dragMarqueeDraft(to: pixel, flags: event.modifierFlags)
                 updateMarqueeAutoscroll(at: point)
             }
+            synchronizeDisplay()
+            return
+        }
+        if session.tool == .pen, session.penDraft != nil, lastDragPoint == nil, let document = session.document {
+            session.dragPenHandle(to: session.viewport.documentPoint(from: point, documentSize: document.size),
+                                  constrain: event.modifierFlags.contains(.shift))
             synchronizeDisplay()
             return
         }
@@ -2182,6 +2259,11 @@ final class CanvasView: NSView {
             else { session.removeLastLassoPoint() }
             synchronizeDisplay()
             refreshLassoCursor()
+        } else if session.penDraft != nil, [53, 36, 76, 51, 117].contains(event.keyCode) {
+            if event.keyCode == 53 { session.cancelPen() }
+            else if [36, 76].contains(event.keyCode) { _ = session.finishPen() }
+            else { session.removeLastPenAnchor() }
+            synchronizeDisplay()
         } else if session.shapeDraft != nil, event.keyCode == 53 {
             session.cancelShape()
             synchronizeDisplay()
@@ -2247,6 +2329,7 @@ final class CanvasView: NSView {
             case "s": session.selectTool(.cloneStamp)
             case "t": session.selectTool(.type)
             case "g": session.selectTool(.gradient)
+            case "p": session.selectTool(.pen)
             case "u":
                 if event.modifierFlags.contains(.shift), session.tool == .shape { session.toggleShapeKind() }
                 else { session.selectTool(.shape) }
@@ -2664,6 +2747,25 @@ extension CanvasView {
         return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
     }
 
+    private func penDraftImage(placement: GPUPlacement, path: Bool, controls: Bool) -> CIImage? {
+        guard let draft = session.penDraft, let renderer = GPUCanvasRenderer.shared, !draft.nodes.isEmpty else { return nil }
+        let documentPoints = draft.nodes.flatMap { [$0.anchor, $0.inHandle, $0.outHandle] }
+            + (draft.hoverPoint.map { [$0] } ?? [])
+        let points = documentPoints.map { $0.applying(placement.mapping) }
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
+        let reach = max(12, draft.lineWidth * placement.scale / 2 + 4)
+        let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            .insetBy(dx: -reach, dy: -reach).integral
+        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
+              let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
+        context.translateBy(x: -box.minX, y: -box.minY)
+        drawPenDraft(path: path, controls: controls, scale: placement.scale,
+            center: { $0.applying(placement.mapping) }, in: context)
+        guard let image = context.makeImage(), let drawn = renderer.image(image, transient: true) else { return nil }
+        return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
+    }
+
     /// The whole view as `draw(_:)` draws it — the backdrop, the document's shadow and checkerboard, the layers and the
     /// document's edge — in screen pixels, `size` across. Nil when the Core Graphics canvas has to draw it.
     private func gpuFrame(_ document: CanvasDocument, renderer: GPUCanvasRenderer, size: CGSize) -> CIImage? {
@@ -3019,7 +3121,8 @@ extension CanvasView {
                 return GPUBlend.faded(image, opacity)
             }
             let placed: CIImage?
-            if let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
+            if let shaped = session.vectorTransformPreview(for: layer, transform: transform)
+                ?? session.shapeTransformPreview(for: layer, transform: transform) {
                 placed = placement.place(shaped, transform: transform)
             } else if let asset = layer.asset, session.hueSaturation?.previewImage(for: layer.id) == nil,
                       session.levels?.previewImage(for: layer.id) == nil, session.filterEdit?.previewImage(for: layer.id) == nil,
@@ -3106,6 +3209,9 @@ extension CanvasView {
             guard id == session.activeLayerID else { return image }
             var result = image
             if let shape = shapeDraftImage(placement: placement) { result = shape.composited(over: result) }
+            if let pen = penDraftImage(placement: placement, path: true, controls: false) {
+                result = pen.composited(over: result)
+            }
             if session.textDraft?.layerID == nil, let text = draftText, let placed = placement.place(text.image, transform: text.transform) {
                 result = placed.composited(over: result)
                 drewNewText = true
@@ -3155,6 +3261,9 @@ extension CanvasView {
         if !drewNewText, session.textDraft?.layerID == nil, let text = draftText,
            let placed = placement.place(text.image, transform: text.transform) {
             result = placed.composited(over: result)
+        }
+        if let controls = penDraftImage(placement: placement, path: false, controls: true) {
+            result = controls.composited(over: result)
         }
         return result
     }

@@ -89,7 +89,8 @@ final class CommandPaletteController {
         let model = CommandPaletteModel(entries: entries)
         let panel = self.panel ?? makePanel()
         let host = NSHostingView(rootView: CommandPaletteView(model: model, run: { [weak self] in self?.run($0) },
-                                                             close: { [weak self] in self?.close() }))
+                                                             close: { [weak self] in self?.close() })
+            .environment(\.locale, AppLanguage.current.locale))
         // The panel keeps the size given below rather than growing to what SwiftUI would like.
         host.sizingOptions = []
         host.frame = NSRect(x: 0, y: 0, width: 460, height: 290)

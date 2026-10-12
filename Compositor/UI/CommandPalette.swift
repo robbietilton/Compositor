@@ -207,6 +207,7 @@ extension CommandPaletteEntry {
             ("Blur", "R", .blur, { $0.blurMode = .blur }),
             ("Smudge", "R", .blur, { $0.blurMode = .smudge }),
             ("Gradient", "G", .gradient, nil),
+            ("Pen", "P", .pen, nil),
             ("Rectangle", "U", .shape, { $0.shapeKind = .rectangle }),
             ("Ellipse", "U", .shape, { $0.shapeKind = .ellipse }),
             ("Line", "U", .shape, { $0.shapeKind = .line }),

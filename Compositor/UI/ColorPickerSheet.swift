@@ -140,7 +140,7 @@ struct ColorPickerSheet: View {
                                 rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue.rounded()))) / 255
                                 hsb.setRGB(rgb)
                             })
-                .accessibilityLabel(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")
+                .accessibilityLabel(Text(L10n.string(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")))
         }
     }
 
@@ -207,7 +207,7 @@ struct DialogColorSwatch: View {
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(Text(L10n.string(title)))
         .onChange(of: session.colorPicker?.color) { _, _ in session.previewDialogColor() }
         .onDisappear { Self.closePicker(session) }
     }
@@ -215,4 +215,3 @@ struct DialogColorSwatch: View {
         if session.pickingForDialog { session.closeColorPicker(commit: true) }
     }
 }
-
