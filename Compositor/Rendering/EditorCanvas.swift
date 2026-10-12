@@ -937,6 +937,9 @@ final class CanvasView: NSView {
     /// document pixels, as Photoshop does; the pixel grid appears from 800%.
     static let crispZoom: CGFloat = 2
     static let pixelGridZoom: CGFloat = 8
+    /// A CPU color-channel preview is post-processed after compositing. Bound that temporary surface to 64 MB;
+    /// an 8K/Retina window is rendered in a few tiles instead of risking one several-hundred-megabyte allocation.
+    static let channelPreviewTilePixels = 4096
 
     /// A copy of a layer image sized for how large it lands in `context` (`drawnWidth` in the context's units),
     /// from the shared cache of sharp halvings. Core Graphics resamples the whole source on every draw — a
@@ -1517,19 +1520,37 @@ final class CanvasView: NSView {
     private func drawChannelPreview(covering view: CGRect, document: CanvasDocument, in context: CGContext) {
         let bounds = view.integral
         guard !bounds.isNull, bounds.width >= 1, bounds.height >= 1 else { return }
-        let device = LayerRenderer.deviceScale(of: context)
-        let scale = bounds.width * bounds.height * device * device <= DocumentLimits.maxSurfaceExtent ? device : 1
-        let width = Int((bounds.width * scale).rounded()), height = Int((bounds.height * scale).rounded())
-        guard width >= 1, height >= 1, CGFloat(width * height) <= DocumentLimits.maxSurfaceExtent,
+        let device = max(1, LayerRenderer.deviceScale(of: context))
+        let tilePoints = max(1, floor(CGFloat(Self.channelPreviewTilePixels) / device))
+        var y = bounds.minY
+        while y < bounds.maxY {
+            let height = min(tilePoints, bounds.maxY - y)
+            var x = bounds.minX
+            while x < bounds.maxX {
+                let width = min(tilePoints, bounds.maxX - x)
+                drawChannelPreviewTile(CGRect(x: x, y: y, width: width, height: height), device: device,
+                                       document: document, in: context)
+                x += width
+            }
+            y += height
+        }
+    }
+
+    private func drawChannelPreviewTile(_ bounds: CGRect, device: CGFloat, document: CanvasDocument,
+                                        in context: CGContext) {
+        let width = Int((bounds.width * device).rounded()), height = Int((bounds.height * device).rounded())
+        guard width >= 1, height >= 1, width <= Self.channelPreviewTilePixels,
+              height <= Self.channelPreviewTilePixels,
               let surface = try? BrushRaster.context(width: width, height: height, mask: false) else { return }
-        surface.scaleBy(x: scale, y: scale)
+        let scaleX = CGFloat(width) / bounds.width, scaleY = CGFloat(height) / bounds.height
+        surface.scaleBy(x: scaleX, y: scaleY)
         surface.translateBy(x: -bounds.minX, y: -bounds.minY)
         drawLayers(document, scale: session.viewport.pointsPerPixel,
                    center: { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }, in: surface)
         session.canvasChannel.isolate(in: surface)
         guard let image = surface.makeImage() else { return }
         context.saveGState()
-        context.interpolationQuality = scale == device ? .none : .high
+        context.interpolationQuality = .none
         context.translateBy(x: bounds.minX, y: bounds.maxY)
         context.scaleBy(x: 1, y: -1)
         context.draw(image, in: CGRect(origin: .zero, size: bounds.size))

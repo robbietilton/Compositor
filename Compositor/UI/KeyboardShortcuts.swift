@@ -137,8 +137,15 @@ final class ShortcutSettings {
     private static let storageKey = "keyboardShortcuts.v1"
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.storageKey),
-           let saved = try? JSONDecoder().decode([String: ShortcutChord].self, from: data),
-           Self.problem(in: saved) == nil { overrides = saved }
+           let saved = try? JSONDecoder().decode([String: ShortcutChord].self, from: data) {
+            let repaired = Self.sanitized(saved)
+            overrides = repaired
+            // A release can add a new default shortcut which collides with one old custom assignment. Keep every
+            // unrelated assignment instead of rejecting the complete saved set on every subsequent launch.
+            if repaired != saved, let repairedData = try? JSONEncoder().encode(repaired) {
+                UserDefaults.standard.set(repairedData, forKey: Self.storageKey)
+            }
+        }
     }
     func chord(_ definition: ShortcutDefinition) -> ShortcutChord { overrides[definition.id] ?? definition.original }
     func menu(_ key: KeyEquivalent, modifiers: EventModifiers) -> ShortcutChord {
@@ -180,6 +187,34 @@ final class ShortcutSettings {
             assigned[chord] = definition.title
         }
         return nil
+    }
+
+    /// Keeps the valid, non-conflicting part of an older shortcut file. Defaults win a collision introduced by a
+    /// newer release; when two saved assignments conflict, the first command in the stable definitions list wins.
+    static func sanitized(_ values: [String: ShortcutChord]) -> [String: ShortcutChord] {
+        let definitions = Dictionary(uniqueKeysWithValues: ShortcutDefinition.all.map { ($0.id, $0) })
+        let reserved = [ShortcutChord("q", 1), ShortcutChord(",", 1), ShortcutChord("m", 3)]
+        var result = values.filter { id, chord in
+            guard let definition = definitions[id], chord.key.count == 1, (0...15).contains(chord.modifiers),
+                  !reserved.contains(chord) else { return false }
+            return definition.group != "Text Editing" || chord.modifiers & 7 != 0
+        }
+        while true {
+            var assigned: [ShortcutChord: [ShortcutDefinition]] = [:]
+            for definition in ShortcutDefinition.all {
+                assigned[result[definition.id] ?? definition.original, default: []].append(definition)
+            }
+            let conflicts = assigned.values.filter { $0.count > 1 }
+            guard !conflicts.isEmpty else { return result }
+            var removed = false
+            for conflict in conflicts {
+                let customized = conflict.filter { result[$0.id] != nil }
+                // A default assignment is authoritative. Otherwise retain one custom assignment deterministically.
+                let losers = conflict.contains { result[$0.id] == nil } ? customized : Array(customized.dropFirst())
+                for definition in losers where result.removeValue(forKey: definition.id) != nil { removed = true }
+            }
+            guard removed else { return [:] } // The built-in definitions themselves should never conflict.
+        }
     }
 
     /// Translate only at the existing canvas/layer responder boundary. Native text

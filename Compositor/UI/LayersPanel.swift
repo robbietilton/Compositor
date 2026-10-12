@@ -109,6 +109,7 @@ struct LayersPanel: View {
 private struct ChannelsPanel: View {
     @Bindable var session: EditorSession
     @State private var thumbnails: [CanvasChannel: CGImage] = [:]
+    @State private var thumbnailDocumentID: UUID?
 
     var body: some View {
         VStack(spacing: 1) {
@@ -137,10 +138,18 @@ private struct ChannelsPanel: View {
             Spacer(minLength: 0)
         }
         .task(id: NavigatorMinimap.RenderKey(document: session.document, revision: session.brushRevision)) {
+            // Painting, dragging a transform and adjustment sliders can change the render key dozens of times a
+            // second. Keep those events cheap: a later task cancels this delay, so only the settled frame rebuilds
+            // the four previews. A newly opened document still gets its first thumbnails immediately.
+            if thumbnailDocumentID == session.document?.id {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+            }
             guard let image = session.navigatorImage(maxSide: 96) else { thumbnails = [:]; return }
             thumbnails = Dictionary(uniqueKeysWithValues: CanvasChannel.allCases.compactMap { channel in
                 channel.thumbnail(from: image).map { (channel, $0) }
             })
+            thumbnailDocumentID = session.document?.id
         }
     }
 
