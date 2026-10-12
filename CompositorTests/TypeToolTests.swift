@@ -187,6 +187,59 @@ struct TypeToolTests {
         } catch ProjectError.invalid {}
     }
 
+    @Test func verticalParagraphOverflowMatchesTheOnCanvasEditor() throws {
+        let session = makeSession()
+        session.textDefaults.orientation = .vertical
+        session.textDefaults.fontSize = 48
+        session.beginText(in: CGRect(x: 40, y: 60, width: 120, height: 120))
+        session.textDraft?.style.content = String(repeating: "天地玄黄", count: 30)
+
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        canvas.synchronizeDisplay()
+        let textView = try #require(canvas.inlineTextEditor?.textView)
+        let container = try #require(textView.textContainer)
+        let layout = try #require(textView.layoutManager)
+        layout.ensureLayout(for: container)
+        let visibleGlyphs = layout.glyphRange(for: container)
+        #expect(NSMaxRange(visibleGlyphs) < layout.numberOfGlyphs)
+        let visibleCharacters = layout.characterRange(forGlyphRange: visibleGlyphs, actualGlyphRange: nil)
+
+        let style = try #require(session.textDraft?.style)
+        var visibleStyle = style
+        visibleStyle.content = (style.content as NSString).substring(with: visibleCharacters)
+        let full = try EditorSession.textImage(style)
+        let visible = try EditorSession.textImage(visibleStyle)
+        #expect(full.width == 120 && full.height == 120)
+        let fullData = try #require(full.dataProvider?.data) as Data
+        let visibleData = try #require(visible.dataProvider?.data) as Data
+        #expect(fullData == visibleData)
+    }
+
+    @Test func changingTextOrientationKeepsTheLayerAnchorAndCanRoundTrip() throws {
+        let session = makeSession()
+        session.beginText(at: CGPoint(x: 200, y: 140))
+        session.textDraft?.style.content = "天地玄黄"
+        #expect(session.finishText())
+        let anchor = try #require(session.activeLayer?.transform.point(.zero))
+
+        session.changeTextStyle { $0.orientation = .vertical }
+        #expect(session.textDraft?.style.resolvedOrientation == .vertical)
+        #expect(session.finishText())
+        let vertical = try #require(session.activeLayer)
+        #expect(abs(vertical.transform.point(.zero).x - anchor.x) < 0.001)
+        #expect(abs(vertical.transform.point(.zero).y - anchor.y) < 0.001)
+        #expect(vertical.asset!.image.height > vertical.asset!.image.width)
+
+        session.changeTextStyle { $0.orientation = nil }
+        #expect(session.finishText())
+        let horizontal = try #require(session.activeLayer)
+        #expect(horizontal.liveText?.style.resolvedOrientation == .horizontal)
+        #expect(abs(horizontal.transform.point(.zero).x - anchor.x) < 0.001)
+        #expect(abs(horizontal.transform.point(.zero).y - anchor.y) < 0.001)
+        #expect(horizontal.asset!.image.width > horizontal.asset!.image.height)
+    }
+
     @Test func clippingToTextExportsColoredGlyphsOnTransparency() async throws {
         let session = makeSession()
         session.beginText(at: .zero)

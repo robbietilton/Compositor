@@ -3,6 +3,61 @@ import Foundation
 import Testing
 @testable import Compositor
 
+private actor LanguageRefreshRace {
+    private let manifestURL: URL
+    private let oldManifest: Data
+    private let newManifest: Data
+    private let oldPack: Data
+    private let newPack: Data
+    private var manifestRequests = 0
+    private var packRequests = 0
+    private var firstManifestStarted = false
+    private var firstManifestObserver: CheckedContinuation<Void, Never>?
+    private var firstManifestRelease: CheckedContinuation<Void, Never>?
+
+    init(manifestURL: URL, oldManifest: Data, newManifest: Data, oldPack: Data, newPack: Data) {
+        self.manifestURL = manifestURL
+        self.oldManifest = oldManifest
+        self.newManifest = newManifest
+        self.oldPack = oldPack
+        self.newPack = newPack
+    }
+
+    func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url else { throw URLError(.badURL) }
+        let data: Data
+        if url == manifestURL {
+            manifestRequests += 1
+            if manifestRequests == 1 {
+                firstManifestStarted = true
+                firstManifestObserver?.resume()
+                firstManifestObserver = nil
+                await withCheckedContinuation { firstManifestRelease = $0 }
+                data = oldManifest
+            } else {
+                data = newManifest
+            }
+        } else {
+            packRequests += 1
+            data = packRequests == 1 ? newPack : oldPack
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (data, response)
+    }
+
+    func waitForFirstManifest() async {
+        if firstManifestStarted { return }
+        await withCheckedContinuation { firstManifestObserver = $0 }
+    }
+
+    func releaseFirstManifest() {
+        firstManifestRelease?.resume()
+        firstManifestRelease = nil
+    }
+
+    var packRequestCount: Int { packRequests }
+}
+
 @MainActor
 struct LocalizationTests {
     @Test func bootstrapLanguagesHaveStableCodesAndNames() {
@@ -51,7 +106,11 @@ struct LocalizationTests {
             "schemaVersion": 1,
             "language": "zh-Hans",
             "revision": 3,
-            "strings": ["Language": "语言", "Gaussian Blur": "高斯模糊"],
+            "strings": [
+                "Language": "语言",
+                "Gaussian Blur": "高斯模糊",
+                "Zoom in to %@. At 100%% pixels match.": "放大到 %@。在 100%% 时像素一致。",
+            ],
         ], options: [.sortedKeys])
         try pack.write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
         let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
@@ -62,8 +121,141 @@ struct LocalizationTests {
         #expect(manager.availableLanguages.map(\.code) == ["en", "zh-Hans"])
         #expect(manager.activeLanguage.code == "zh-Hans")
         #expect(manager.string("Gaussian Blur") == "高斯模糊")
+        #expect(manager.string("Zoom in to %@. At 100%% pixels match.") == "放大到 %@。在 100%% 时像素一致。")
         await manager.prepare()
         #expect(manager.activeLanguage.code == "zh-Hans")
+    }
+
+    @Test func cachedFileSizeLimitsPreventOversizedStartupReads() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(repeating: 0, count: 1_000_001)
+            .write(to: root.appending(path: "manifest.json"), options: .atomic)
+        try Data(repeating: 0, count: 5_000_001)
+            .write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
+        let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
+
+        let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
+
+        #expect(manager.availableLanguages == [.english])
+        #expect(manager.activeLanguage == .english)
+    }
+
+    @Test func replacingAnActivePacksRevisionActuallyLoadsItsNewStrings() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        func pack(revision: Int, value: String) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 1, "language": "zh-Hans", "revision": revision,
+                "strings": ["Language": value],
+            ], options: [.sortedKeys])
+        }
+        func manifest(revision: Int, pack: Data) throws -> Data {
+            let checksum = SHA256.hash(data: pack).map { String(format: "%02x", $0) }.joined()
+            return try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 1,
+                "languages": [[
+                    "code": "zh-Hans", "displayName": "简体中文", "file": "zh-Hans.json",
+                    "sha256": checksum, "revision": revision,
+                ]],
+            ], options: [.sortedKeys])
+        }
+        let oldPack = try pack(revision: 1, value: "旧语言")
+        let oldManifest = try manifest(revision: 1, pack: oldPack)
+        try oldPack.write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
+        try oldManifest.write(to: root.appending(path: "manifest.json"), options: .atomic)
+        defaults.set("zh-Hans", forKey: AppLanguage.storageKey)
+
+        let newPack = try pack(revision: 2, value: "新语言")
+        let newManifest = try manifest(revision: 2, pack: newPack)
+        let manifestURL = try #require(URL(string: "https://languages.example/manifest.json"))
+        let packURL = manifestURL.deletingLastPathComponent().appending(path: "zh-Hans.json")
+        let responses = [manifestURL: newManifest, packURL: newPack]
+        let loader: LanguageManager.Loader = { request, _ in
+            let url = try #require(request.url)
+            let data = try #require(responses[url])
+            let response = try #require(HTTPURLResponse(url: url, statusCode: 200,
+                                                        httpVersion: nil, headerFields: nil))
+            return (data, response)
+        }
+        let manager = LanguageManager(manifestURL: manifestURL, directory: root,
+                                      defaults: defaults, loader: loader)
+        #expect(manager.activeLanguage.revision == 1)
+        #expect(manager.string("Language") == "旧语言")
+        try Data("damaged".utf8).write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
+        let chinese = try #require(manager.availableLanguages.first { $0.code == "zh-Hans" })
+
+        await manager.select(chinese)
+
+        #expect(manager.selectedLanguage.revision == 2)
+        #expect(manager.activeLanguage.revision == 2)
+        #expect(manager.string("Language") == "新语言")
+    }
+
+    @Test func slowerOldRefreshCannotOverwriteANewerLanguageRevision() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        func pack(revision: Int, value: String) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 1, "language": "zh-Hans", "revision": revision,
+                "strings": ["Language": value],
+            ], options: [.sortedKeys])
+        }
+        func manifest(revision: Int, pack: Data) throws -> Data {
+            let checksum = SHA256.hash(data: pack).map { String(format: "%02x", $0) }.joined()
+            return try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 1,
+                "languages": [[
+                    "code": "zh-Hans", "displayName": "简体中文", "file": "zh-Hans.json",
+                    "sha256": checksum, "revision": revision,
+                ]],
+            ], options: [.sortedKeys])
+        }
+        let oldPack = try pack(revision: 1, value: "旧语言")
+        let newPack = try pack(revision: 2, value: "新语言")
+        let oldManifest = try manifest(revision: 1, pack: oldPack)
+        let newManifest = try manifest(revision: 2, pack: newPack)
+        let manifestURL = try #require(URL(string: "https://languages.example/manifest.json"))
+        let race = LanguageRefreshRace(manifestURL: manifestURL, oldManifest: oldManifest,
+                                       newManifest: newManifest, oldPack: oldPack, newPack: newPack)
+        let loader: LanguageManager.Loader = { request, _ in try await race.load(request) }
+        let manager = LanguageManager(manifestURL: manifestURL, directory: root,
+                                      defaults: defaults, loader: loader)
+
+        let oldRefresh = Task { await manager.prepare() }
+        await race.waitForFirstManifest()
+        let newRefresh = Task { await manager.prepare() }
+        await newRefresh.value
+        await race.releaseFirstManifest()
+        await oldRefresh.value
+
+        let chinese = try #require(manager.availableLanguages.first { $0.code == "zh-Hans" })
+        #expect(chinese.revision == 2)
+        #expect(await race.packRequestCount == 0)
+        await manager.select(chinese)
+        #expect(await race.packRequestCount == 1)
+        #expect(manager.activeLanguage.revision == 2)
+        #expect(manager.string("Language") == "新语言")
     }
 
     @Test func successfulRemoteRefreshKeepsStandaloneLocalPacks() async throws {
@@ -131,7 +323,7 @@ struct LocalizationTests {
         #expect(manager.availableLanguages == [.english])
     }
 
-    @Test func unavailableRemotePackIsNotAdvertised() async throws {
+    @Test func unavailableRemotePackIsAdvertisedButDoesNotActivate() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
         let suite = "CompositorLanguages-\(UUID())"
@@ -161,8 +353,8 @@ struct LocalizationTests {
 
         await manager.prepare()
 
-        #expect(manager.availableLanguages == [.english])
-        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "manifest.json").path))
+        #expect(manager.availableLanguages.contains { $0.code == "zh-Hans" })
+        #expect(FileManager.default.fileExists(atPath: root.appending(path: "manifest.json").path))
         await manager.select(.simplifiedChinese)
         #expect(defaults.string(forKey: AppLanguage.storageKey) == AppLanguage.english.code)
         #expect(manager.activeLanguage == .english)

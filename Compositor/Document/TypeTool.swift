@@ -519,8 +519,15 @@ extension EditorSession {
         view.drawsBackground = false
         view.isEditable = false
         view.isSelectable = false
+        // Keep both dimensions finite. NSTextView otherwise gives its text container an effectively unlimited
+        // cross-axis, so overflow columns participate in the committed raster even though the on-canvas editor
+        // correctly clips them to the paragraph box.
+        view.isHorizontallyResizable = false
+        view.isVerticallyResizable = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = true
+        view.textContainer?.heightTracksTextView = true
         view.setLayoutOrientation(.vertical)
         view.textStorage?.setAttributedString(string)
         return view
