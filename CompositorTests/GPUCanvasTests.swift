@@ -152,6 +152,16 @@ import Testing
                 "zoom \(zoom): mean \(difference.mean), over 12 levels \(difference.over * 100)%")
     }
 
+    @Test(arguments: [CanvasChannel.red, .green, .blue])
+    func channelPreviewMatchesCoreGraphicsCanvas(channel: CanvasChannel) throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = try session(zoom: 2.0 / 3.0)
+        session.canvasChannel = channel
+        let difference = try compare(session, name: "channel-\(channel.rawValue)")
+        #expect(difference.mean < 1.5 && difference.over < 0.03,
+                "\(channel.rawValue): mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+    }
+
     /// A new vector layer can be started with the Layers panel deselected. Its pending stroke still belongs at the top
     /// of the stack; losing it while leaving only the direction handles visible makes the Pen tool look broken.
     @Test func pendingPenPathDrawsWithoutAnActiveLayer() throws {

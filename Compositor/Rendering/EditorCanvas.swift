@@ -529,6 +529,7 @@ final class CanvasView: NSView {
         }
         let brushRevision: Int
         let pixelGrid: Bool
+        let canvasChannel: CanvasChannel
         let documentID: UUID?
         let size: CGSize?
         let renderBounds: CGRect?
@@ -572,7 +573,8 @@ final class CanvasView: NSView {
         // Worked out once: each asks for the whole layer hierarchy, which on a document of hundreds of layers is too much
         // to redo for every layer on every event.
         let visible = document?.effectiveVisibleIDs ?? []
-        let state = DisplayState(brushRevision: session.brushRevision, pixelGrid: session.showsPixelGrid, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
+        let state = DisplayState(brushRevision: session.brushRevision, pixelGrid: session.showsPixelGrid,
+            canvasChannel: session.canvasChannel, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
             layers: (document.map { $0.layers.contains(where: { $0.maskSourceID != nil }) ? $0.layers : $0.renderLayers } ?? []).filter { $0.asset != nil || $0.adjustment != nil }.map {
                 DisplayState.Layer(id: $0.id, transform: session.displayedTransform(for: $0),
                                    imageID: $0.asset.map { ObjectIdentifier($0.image) }, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: visible.contains($0.id), opacity: opacities[$0.id] ?? $0.opacity, blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment, effects: $0.effects,
@@ -591,6 +593,7 @@ final class CanvasView: NSView {
             if let previous = displayedState, previous.documentID == state.documentID,
                previous.size == state.size, previous.viewport == state.viewport,
                previous.renderBounds == state.renderBounds, previous.layers == state.layers,
+               previous.canvasChannel == state.canvasChannel,
                previous.folderMasks == state.folderMasks,
                let stroke = session.brushStroke, let document,
                let dirty = stroke.dirtyDocumentRect {
@@ -914,6 +917,8 @@ final class CanvasView: NSView {
         }
         if session.viewport.zoom >= Self.crispZoom, !visible.isNull, !visible.isEmpty {
             drawDocumentPixels(covering: visible, clippedTo: pixels, document: document, in: context)
+        } else if session.canvasChannel != .rgb, !visible.isNull, !visible.isEmpty {
+            drawChannelPreview(covering: visible, document: document, in: context)
         } else {
             // Draw native-resolution assets into the same document/view mapping as navigation.
             // The AppKit view is flipped; flip each image locally so its top stays at the top.
@@ -1494,6 +1499,7 @@ final class CanvasView: NSView {
         guard !region.isNull, region.width >= 1, region.height >= 1,
               let raster = try? BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: false) else { return }
         drawLayers(document, scale: 1, center: { CGPoint(x: $0.x - region.minX, y: $0.y - region.minY) }, in: raster)
+        session.canvasChannel.isolate(in: raster)
         guard let image = raster.makeImage() else { return }
         let origin = viewport.viewPoint(from: region.origin, documentSize: document.size)
         let target = CGRect(origin: origin, size: CGSize(width: region.width * viewport.pointsPerPixel,
@@ -1503,6 +1509,30 @@ final class CanvasView: NSView {
         context.translateBy(x: target.minX, y: target.maxY)
         context.scaleBy(x: 1, y: -1)
         context.draw(image, in: CGRect(origin: .zero, size: target.size))
+        context.restoreGState()
+    }
+
+    /// A solo color channel at ordinary zoom. It is rendered only for the dirty screen region, at Retina resolution,
+    /// then isolated after compositing so blend modes and adjustments contribute exactly as they do to RGB.
+    private func drawChannelPreview(covering view: CGRect, document: CanvasDocument, in context: CGContext) {
+        let bounds = view.integral
+        guard !bounds.isNull, bounds.width >= 1, bounds.height >= 1 else { return }
+        let device = LayerRenderer.deviceScale(of: context)
+        let scale = bounds.width * bounds.height * device * device <= DocumentLimits.maxSurfaceExtent ? device : 1
+        let width = Int((bounds.width * scale).rounded()), height = Int((bounds.height * scale).rounded())
+        guard width >= 1, height >= 1, CGFloat(width * height) <= DocumentLimits.maxSurfaceExtent,
+              let surface = try? BrushRaster.context(width: width, height: height, mask: false) else { return }
+        surface.scaleBy(x: scale, y: scale)
+        surface.translateBy(x: -bounds.minX, y: -bounds.minY)
+        drawLayers(document, scale: session.viewport.pointsPerPixel,
+                   center: { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }, in: surface)
+        session.canvasChannel.isolate(in: surface)
+        guard let image = surface.makeImage() else { return }
+        context.saveGState()
+        context.interpolationQuality = scale == device ? .none : .high
+        context.translateBy(x: bounds.minX, y: bounds.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(image, in: CGRect(origin: .zero, size: bounds.size))
         context.restoreGState()
     }
 
@@ -2901,6 +2931,7 @@ extension CanvasView {
                 "inputColorSpace": CGColorSpace(name: CGColorSpace.sRGB)!,
             ])
         }
+        picture = session.canvasChannel.isolate(picture)
         frame = picture.composited(over: frame)
         // The document's edge: a one-pixel line centered on it.
         let edge = gray(1, alpha: 0.13)

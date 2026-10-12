@@ -344,6 +344,10 @@ final class EditorSession {
             && selectionAmountOperation == nil
     }
     var showsRulers = ToolDefaults.bool("rulers", false) { didSet { ToolDefaults.set(showsRulers, "rulers") } }
+    /// The RGB composite or one color channel shown on the canvas. A display choice, never part of document history.
+    var canvasChannel = CanvasChannel.rgb {
+        didSet { if canvasChannel != oldValue { refreshCanvasPreview?() } }
+    }
     /// Master snap switch (View > Snap). On so today's layer/canvas snap keeps working.
     var snapEnabled = ToolDefaults.bool("snap", true) {
         didSet {
