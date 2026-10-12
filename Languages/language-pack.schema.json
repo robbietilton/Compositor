@@ -39,7 +39,8 @@
         "minLength": 1
       },
       "additionalProperties": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       }
     }
   }

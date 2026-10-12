@@ -45,8 +45,8 @@ private struct LanguagePack: Codable, Sendable {
 
 enum LanguagePackFailure: LocalizedError {
     case invalidManifest
-    case invalidLanguageCode
     case invalidResponse
+    case unavailableLanguages
     case packTooLarge
     case checksum
     case wrongLanguage
@@ -54,8 +54,8 @@ enum LanguagePackFailure: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidManifest: "The language list is not compatible with this version of Compositor."
-        case .invalidLanguageCode: "The language code is invalid."
         case .invalidResponse: "The language server returned an invalid response."
+        case .unavailableLanguages: "No verified language files are currently available."
         case .packTooLarge: "The language file is larger than Compositor allows."
         case .checksum: "The downloaded language file failed its integrity check."
         case .wrongLanguage: "The downloaded file contains a different language."
@@ -68,10 +68,11 @@ enum LanguagePackFailure: LocalizedError {
 /// file persists on disk and is reused until the remote manifest advertises a different checksum.
 @MainActor @Observable
 final class LanguageManager {
-    typealias Loader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    typealias Loader = @Sendable (URLRequest, Int) async throws -> (Data, URLResponse)
     static let shared = LanguageManager()
     nonisolated static let defaultManifestURL = URL(string:
         "https://raw.githubusercontent.com/RyuProject/Compositor/main/Languages/manifest.json")!
+    private static let maximumRemoteLanguages = 32
 
     private(set) var availableLanguages: [AppLanguage]
     private(set) var selectedLanguage: AppLanguage
@@ -86,24 +87,41 @@ final class LanguageManager {
     private let directory: URL
     private let defaults: UserDefaults
     private var translations: [String: String] = [:]
+    private var selectionGeneration = 0
 
     init(manifestURL: URL? = nil, session: URLSession? = nil,
          directory: URL? = nil, defaults: UserDefaults = .standard, loader: Loader? = nil) {
         let resolvedDirectory = directory ?? Self.languageDirectory()
-        let initialLanguages = Self.initialLanguages(from: resolvedDirectory)
-        let hasCachedLanguages = Self.cachedManifest(from: resolvedDirectory)
-            .map { !$0.languages.filter(Self.isValidRemoteLanguage).isEmpty } ?? false
+        let cachedManifest = Self.cachedManifest(from: resolvedDirectory)
+        let cachedLanguages = Self.usableCachedLanguages(from: cachedManifest, in: resolvedDirectory)
+        let knownLanguages = cachedManifest.map(Self.validLanguages(in:)) ?? AppLanguage.initialChoices
         let initialSelection = AppLanguage.resolved(defaults.string(forKey: AppLanguage.storageKey),
-                                                    from: initialLanguages)
+                                                    from: [.english] + knownLanguages)
 
         self.manifestURL = manifestURL ?? Self.defaultManifestURL
         let downloadSession = session ?? Self.downloadSession()
-        self.loader = loader ?? { try await downloadSession.data(for: $0) }
+        self.loader = loader ?? { request, maximumBytes in
+            let (bytes, response) = try await downloadSession.bytes(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw LanguagePackFailure.invalidResponse
+            }
+            let expectedLength = response.expectedContentLength
+            guard expectedLength <= 0 || expectedLength <= maximumBytes else {
+                throw LanguagePackFailure.packTooLarge
+            }
+            var data = Data()
+            if expectedLength > 0 { data.reserveCapacity(Int(expectedLength)) }
+            for try await byte in bytes {
+                guard data.count < maximumBytes else { throw LanguagePackFailure.packTooLarge }
+                data.append(byte)
+            }
+            return (data, response)
+        }
         self.directory = resolvedDirectory
         self.defaults = defaults
-        availableLanguages = initialLanguages
+        availableLanguages = [.english] + cachedLanguages
         selectedLanguage = initialSelection
-        isLanguageMenuAvailable = hasCachedLanguages
+        isLanguageMenuAvailable = !cachedLanguages.isEmpty
         try? FileManager.default.createDirectory(at: resolvedDirectory, withIntermediateDirectories: true)
         if initialSelection != .english,
            let pack = try? Self.readPack(for: initialSelection, from: resolvedDirectory) {
@@ -115,48 +133,67 @@ final class LanguageManager {
     var locale: Locale { activeLanguage.locale }
 
     func prepare() async {
+        lastError = nil
         do {
-            try await refreshManifest()
+            let refreshedLanguages = try await refreshAvailableLanguages()
             if selectedLanguage != .english {
-                guard let refreshedLanguage = availableLanguages.first(where: { $0.code == selectedLanguage.code }) else {
-                    translations = [:]
-                    activeLanguage = .english
-                    revision += 1
+                guard let refreshedLanguage = refreshedLanguages.first(where: {
+                    $0.code == selectedLanguage.code
+                }) else {
+                    activateEnglish(persistSelection: true)
                     return
                 }
                 selectedLanguage = refreshedLanguage
-                if !activateCached(refreshedLanguage) { await downloadAndActivate(refreshedLanguage) }
+                guard activateCached(refreshedLanguage) else { throw LanguagePackFailure.wrongLanguage }
             }
+        } catch is CancellationError {
+            return
         } catch {
             lastError = error.localizedDescription
             if selectedLanguage != .english, activeLanguage == .english {
-                _ = activateCached(selectedLanguage)
+                if let cachedLanguage = availableLanguages.first(where: { $0.code == selectedLanguage.code }) {
+                    selectedLanguage = cachedLanguage
+                    _ = activateCached(cachedLanguage)
+                }
             }
         }
     }
 
     func select(_ language: AppLanguage) async {
-        defaults.set(language.code, forKey: AppLanguage.storageKey)
+        selectionGeneration &+= 1
+        let generation = selectionGeneration
         lastError = nil
         if language.isBuiltIn {
-            selectedLanguage = .english
-            translations = [:]
-            activeLanguage = .english
-            downloadingLanguageCode = nil
-            revision += 1
+            activateEnglish(persistSelection: true)
             return
         }
         do {
-            if !Self.isValidRemoteLanguage(language) { try await refreshManifest() }
-            guard let verifiedLanguage = availableLanguages.first(where: { $0.code == language.code }),
-                  Self.isValidRemoteLanguage(verifiedLanguage) else {
-                throw LanguagePackFailure.invalidManifest
+            var verifiedLanguage = availableLanguages.first(where: { $0.code == language.code })
+            let needsRefresh: Bool
+            if let verifiedLanguage {
+                needsRefresh = !activateCached(verifiedLanguage)
+            } else {
+                needsRefresh = true
+            }
+            if needsRefresh {
+                downloadingLanguageCode = language.code
+                defer {
+                    if selectionGeneration == generation { downloadingLanguageCode = nil }
+                }
+                let refreshedLanguages = try await refreshAvailableLanguages()
+                guard selectionGeneration == generation else { return }
+                verifiedLanguage = refreshedLanguages.first(where: { $0.code == language.code })
+            }
+            guard let verifiedLanguage, Self.isValidRemoteLanguage(verifiedLanguage),
+                  activeLanguage.code == verifiedLanguage.code || activateCached(verifiedLanguage) else {
+                throw LanguagePackFailure.unavailableLanguages
             }
             selectedLanguage = verifiedLanguage
-            if activateCached(verifiedLanguage) { return }
-            await downloadAndActivate(verifiedLanguage)
+            defaults.set(verifiedLanguage.code, forKey: AppLanguage.storageKey)
+        } catch is CancellationError {
+            return
         } catch {
-            lastError = error.localizedDescription
+            if selectionGeneration == generation { lastError = error.localizedDescription }
         }
     }
 
@@ -164,62 +201,113 @@ final class LanguageManager {
         activeLanguage == .english ? key : translations[key] ?? key
     }
 
-    private func apply(_ manifest: LanguageManifest) {
-        guard manifest.schemaVersion == 1 else { return }
-        let valid = manifest.languages.filter(Self.isValidRemoteLanguage)
-        availableLanguages = [.english] + valid
-        isLanguageMenuAvailable = !valid.isEmpty
+    private func apply(_ languages: [AppLanguage]) {
+        availableLanguages = [.english] + languages
+        isLanguageMenuAvailable = !languages.isEmpty
     }
 
-    private func refreshManifest() async throws {
+    /// Publishes only languages whose complete files are checksum-verified and stored locally. A manifest by itself is
+    /// not enough to expose the menu because it could otherwise advertise options that can never be activated.
+    private func refreshAvailableLanguages() async throws -> [AppLanguage] {
         let manifest = try await downloadManifest()
-        try Self.write(manifest.data, to: directory.appending(path: "manifest.json"))
-        apply(manifest.value)
+        try Task.checkCancellation()
+        let candidates = Self.validLanguages(in: manifest)
+        var usableCodes: Set<String> = []
+        var pending: [AppLanguage] = []
+        for language in candidates {
+            if (try? Self.readPack(for: language, from: directory)) != nil {
+                usableCodes.insert(language.code)
+            } else {
+                pending.append(language)
+            }
+        }
+
+        // Bound concurrency so a larger community manifest does not make launch wait on every file serially or start
+        // an unbounded number of network requests at once.
+        for batchStart in stride(from: 0, to: pending.count, by: 4) {
+            let batchEnd = min(batchStart + 4, pending.count)
+            let batch = Array(pending[batchStart..<batchEnd])
+            let baseURL = manifestURL.deletingLastPathComponent()
+            let loader = loader
+            let downloads = await withTaskGroup(of: (AppLanguage, Data?).self) { group in
+                for language in batch {
+                    group.addTask {
+                        guard let file = language.file,
+                              let url = URL(string: file, relativeTo: baseURL)?.absoluteURL else {
+                            return (language, nil)
+                        }
+                        return (language, try? await Self.download(url, maximumBytes: 5_000_000, loader: loader))
+                    }
+                }
+                var results: [(AppLanguage, Data?)] = []
+                for await result in group { results.append(result) }
+                return results
+            }
+            try Task.checkCancellation()
+            for (language, data) in downloads {
+                guard let data else { continue }
+                do {
+                    _ = try Self.decodePack(data, for: language)
+                    try Self.write(data, to: Self.packURL(for: language.code, in: directory))
+                    usableCodes.insert(language.code)
+                } catch {
+                    continue
+                }
+            }
+        }
+        let previousLanguages = Dictionary(uniqueKeysWithValues:
+            availableLanguages.dropFirst().map { ($0.code, $0) })
+        let usable = candidates.compactMap { language -> AppLanguage? in
+            if usableCodes.contains(language.code) { return language }
+            // Do not force an active language back to English just because its newly advertised revision is
+            // temporarily unavailable. The previously checksum-verified revision remains safe and usable offline.
+            guard let previous = previousLanguages[language.code],
+                  (try? Self.readPack(for: previous, from: directory)) != nil else { return nil }
+            return previous
+        }
+        guard !usable.isEmpty else { throw LanguagePackFailure.unavailableLanguages }
+
+        // The local manifest is intentionally filtered. Its entries therefore describe files that are already present
+        // and verified, which keeps offline launches from showing a dead Language menu.
+        let cachedManifest = LanguageManifest(schemaVersion: 1, languages: usable)
+        let data = try JSONEncoder().encode(cachedManifest)
+        try Task.checkCancellation()
+        try Self.write(data, to: directory.appending(path: "manifest.json"))
+        apply(usable)
+        return usable
     }
 
     private func activateCached(_ language: AppLanguage) -> Bool {
         guard let pack = try? Self.readPack(for: language, from: directory) else { return false }
+        let changed = activeLanguage != language || translations != pack.strings
         translations = pack.strings
         activeLanguage = language
-        revision += 1
+        if changed { revision += 1 }
         return true
     }
 
-    private func downloadAndActivate(_ language: AppLanguage) async {
-        guard Self.isValidLanguageCode(language.code), let file = language.file,
-              let url = URL(string: file, relativeTo: manifestURL.deletingLastPathComponent())?.absoluteURL else {
-            lastError = LanguagePackFailure.invalidLanguageCode.localizedDescription
-            return
-        }
-        downloadingLanguageCode = language.code
-        defer { downloadingLanguageCode = nil }
-        do {
-            let data = try await download(url, maximumBytes: 5_000_000)
-            try Self.validate(data, for: language)
-            try Self.write(data, to: Self.packURL(for: language.code, in: directory))
-            guard activateCached(language) else { throw LanguagePackFailure.wrongLanguage }
-        } catch {
-            lastError = error.localizedDescription
-            if activeLanguage.code != language.code {
-                translations = [:]
-                activeLanguage = .english
-                revision += 1
-            }
-        }
+    private func activateEnglish(persistSelection: Bool) {
+        let changed = activeLanguage != .english || !translations.isEmpty
+        selectedLanguage = .english
+        translations = [:]
+        activeLanguage = .english
+        downloadingLanguageCode = nil
+        if persistSelection { defaults.set(AppLanguage.english.code, forKey: AppLanguage.storageKey) }
+        if changed { revision += 1 }
     }
 
-    private func downloadManifest() async throws -> (value: LanguageManifest, data: Data) {
-        let data = try await download(manifestURL, maximumBytes: 1_000_000)
+    private func downloadManifest() async throws -> LanguageManifest {
+        let data = try await Self.download(manifestURL, maximumBytes: 1_000_000, loader: loader)
         let manifest = try JSONDecoder().decode(LanguageManifest.self, from: data)
         guard manifest.schemaVersion == 1 else { throw LanguagePackFailure.invalidManifest }
-        return (manifest, data)
+        return manifest
     }
 
-    private func download(_ url: URL, maximumBytes: Int) async throws -> Data {
+    nonisolated private static func download(_ url: URL, maximumBytes: Int, loader: Loader) async throws -> Data {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 20
-        let (data, response) = try await loader(request)
+        let (data, response) = try await loader(request, maximumBytes)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw LanguagePackFailure.invalidResponse
         }
@@ -229,23 +317,63 @@ final class LanguageManager {
 
     private static func readPack(for language: AppLanguage, from directory: URL) throws -> LanguagePack {
         let data = try Data(contentsOf: packURL(for: language.code, in: directory), options: [.mappedIfSafe])
-        try validate(data, for: language)
-        return try JSONDecoder().decode(LanguagePack.self, from: data)
+        return try decodePack(data, for: language)
     }
 
-    private static func validate(_ data: Data, for language: AppLanguage) throws {
+    private static func decodePack(_ data: Data, for language: AppLanguage) throws -> LanguagePack {
         guard let checksum = language.sha256, !checksum.isEmpty else { throw LanguagePackFailure.invalidManifest }
         let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard actual == checksum.lowercased() else { throw LanguagePackFailure.checksum }
         let pack = try JSONDecoder().decode(LanguagePack.self, from: data)
         guard pack.schemaVersion == 1, pack.language == language.code,
               pack.revision == language.revision else { throw LanguagePackFailure.wrongLanguage }
+        let strings = sanitizedStrings(pack.strings)
+        guard !strings.isEmpty else { throw LanguagePackFailure.wrongLanguage }
+        return LanguagePack(schemaVersion: pack.schemaVersion, language: pack.language,
+                            revision: pack.revision, strings: strings)
     }
 
-    private static func initialLanguages(from directory: URL) -> [AppLanguage] {
-        guard let manifest = cachedManifest(from: directory) else { return AppLanguage.initialChoices }
-        let valid = manifest.languages.filter(isValidRemoteLanguage)
-        return [.english] + valid
+    /// Empty translations and unsafe printf-style substitutions fall back to the English key. This prevents a typo in
+    /// a community pack from making a control blank or passing incompatible arguments to String(format:).
+    private static func sanitizedStrings(_ strings: [String: String]) -> [String: String] {
+        let expression = try? NSRegularExpression(pattern:
+            #"%(?:\d+\$)?[-+0#]*(?:\d+|\*)?(?:\.\d+|\.\*)?(?:hh|h|ll|l|q|L|z|t|j)?[@diuoxXfFeEgGaAcCsSpn%]"#)
+        func formatSignature(in value: String) -> (specifiers: [String], hasInvalidPercent: Bool) {
+            guard let expression else { return ([], true) }
+            let range = NSRange(value.startIndex..., in: value)
+            let matches = expression.matches(in: value, range: range)
+            let starts = Set(matches.map(\.range.location))
+            let invalidPercent = value.indices.contains { index in
+                value[index] == "%" && !starts.contains(NSRange(index..<value.index(after: index), in: value).location)
+            }
+            let specifiers = matches.compactMap { match in
+                Range(match.range, in: value).map { String(value[$0]) }
+            }
+            return (specifiers, invalidPercent)
+        }
+        return strings.filter { key, value in
+            let source = formatSignature(in: key)
+            let translation = formatSignature(in: value)
+            return !key.isEmpty && !value.isEmpty && source.specifiers == translation.specifiers
+                && (source.specifiers.isEmpty || !translation.hasInvalidPercent)
+        }
+    }
+
+    private static func validLanguages(in manifest: LanguageManifest) -> [AppLanguage] {
+        guard manifest.schemaVersion == 1 else { return [] }
+        var codes: Set<String> = []
+        var valid: [AppLanguage] = []
+        for language in manifest.languages where valid.count < maximumRemoteLanguages {
+            let normalizedCode = language.code.lowercased()
+            guard isValidRemoteLanguage(language), codes.insert(normalizedCode).inserted else { continue }
+            valid.append(language)
+        }
+        return valid
+    }
+
+    private static func usableCachedLanguages(from manifest: LanguageManifest?, in directory: URL) -> [AppLanguage] {
+        guard let manifest else { return [] }
+        return validLanguages(in: manifest).filter { (try? readPack(for: $0, from: directory)) != nil }
     }
 
     private static func cachedManifest(from directory: URL) -> LanguageManifest? {
@@ -268,13 +396,29 @@ final class LanguageManager {
     }
 
     private static func isValidLanguageCode(_ code: String) -> Bool {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        return !code.isEmpty && code.count <= 32 && code.unicodeScalars.allSatisfy { allowed.contains($0) }
+        let alphanumeric = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+        guard !code.isEmpty, code.count <= 32 else { return false }
+        var previousWasSeparator = true
+        for scalar in code.unicodeScalars {
+            if alphanumeric.contains(scalar) {
+                previousWasSeparator = false
+            } else if scalar == "-" || scalar == "_" {
+                guard !previousWasSeparator else { return false }
+                previousWasSeparator = true
+            } else {
+                return false
+            }
+        }
+        return !previousWasSeparator
     }
 
     private static func isValidRemoteLanguage(_ language: AppLanguage) -> Bool {
-        guard !language.isBuiltIn, isValidLanguageCode(language.code), language.revision > 0,
-              let file = language.file, !file.isEmpty, file == URL(fileURLWithPath: file).lastPathComponent,
+        guard language.code.lowercased() != AppLanguage.english.code,
+              isValidLanguageCode(language.code), language.revision > 0,
+              !language.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              language.displayName.count <= 100,
+              let file = language.file, !file.isEmpty, file.count <= 255,
+              file == language.code + ".json", file == URL(fileURLWithPath: file).lastPathComponent,
               let checksum = language.sha256, checksum.count == 64 else { return false }
         let hexadecimal = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
         return checksum.unicodeScalars.allSatisfy { hexadecimal.contains($0) }

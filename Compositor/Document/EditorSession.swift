@@ -399,7 +399,7 @@ final class EditorSession {
         effectSelection = nil
         if id != activeLayerID, !finishText() { return }
         guard brushStroke == nil, warpStroke == nil, levels == nil else { return }
-        if id != activeLayerID { commitTransform(); resolveGradient() }
+        if id != activeLayerID { commitTransform(); resolveGradient(); cancelPen() }
         activeLayerID = id
         revealActiveLayer()
     }

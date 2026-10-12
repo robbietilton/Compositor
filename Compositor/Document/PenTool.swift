@@ -176,7 +176,7 @@ extension EditorSession {
         penNodeGestureEditing = true
         var style = line.vector.style
         Self.splitPenSegment(before: split.index, at: split.t, nodes: &style.nodes)
-        guard replaceActivePenLine(with: style) else {
+        guard replaceActivePenLine(with: style, preview: true) else {
             penNodeGestureEditing = false
             endEdit()
             return nil
@@ -200,11 +200,12 @@ extension EditorSession {
             node[keyPath: key].y += dy
         }
         style.nodes[index] = node
-        _ = replaceActivePenLine(with: style)
+        _ = replaceActivePenLine(with: style, preview: true)
     }
 
     func endPenLineNodeGesture() {
         guard penNodeGestureEditing else { return }
+        if let line = editablePenLine { _ = replaceActivePenLine(with: line.vector.style) }
         penNodeGestureEditing = false
         endEdit()
     }
@@ -233,6 +234,7 @@ extension EditorSession {
 
     func finishPenLineWidthEdit() {
         guard penLineWidthEditing else { return }
+        if let line = editablePenLine { _ = replaceActivePenLine(with: line.vector.style) }
         penLineWidthEditing = false
         endEdit()
     }
@@ -250,7 +252,7 @@ extension EditorSession {
         if ownsTransaction { beginEdit("Pen Line Width") }
         var style = line.vector.style
         style.lineWidth = CGFloat(width)
-        _ = replaceActivePenLine(with: style)
+        _ = replaceActivePenLine(with: style, preview: penLineWidthEditing)
         if ownsTransaction { endEdit() }
     }
 
@@ -371,7 +373,11 @@ extension EditorSession {
 
     nonisolated static func vectorPathImage(_ style: LayerVectorPathStyle, size: CGSize,
                                             lineWidthScale: CGFloat = 1) throws -> CGImage {
-        guard style.isValid, lineWidthScale.isFinite, lineWidthScale > 0 else { throw ExportError.render }
+        guard style.isValid, size.width.isFinite, size.height.isFinite,
+              size.width >= 1, size.height >= 1,
+              size.width <= CGFloat(DocumentLimits.maxSide), size.height <= CGFloat(DocumentLimits.maxSide),
+              size.width * size.height <= CGFloat(maxShapePixels),
+              lineWidthScale.isFinite, lineWidthScale > 0 else { throw ExportError.render }
         let width = max(1, Int(size.width.rounded())), height = max(1, Int(size.height.rounded()))
         let context = try BrushRaster.context(width: width, height: height, mask: false)
         context.addPath(style.path(in: CGRect(x: 0, y: 0, width: width, height: height)))
@@ -425,7 +431,9 @@ extension EditorSession {
         return CGPoint(x: anchor.x + cos(angle) * length, y: anchor.y + sin(angle) * length)
     }
 
-    private func replaceActivePenLine(with proposed: LayerVectorPathStyle) -> Bool {
+    /// During a drag, keep the changing bitmap bounded. Its transform still covers the path's full document box, so
+    /// the GPU scales this temporary raster into place; mouse-up replaces it once with the full-resolution result.
+    private func replaceActivePenLine(with proposed: LayerVectorPathStyle, preview: Bool = false) -> Bool {
         guard proposed.mode == .line, proposed.nodes.count >= 2, let line = editablePenLine,
               let asset = line.layer.asset else { return false }
         let oldTransform = line.layer.transform
@@ -439,8 +447,11 @@ extension EditorSession {
                              nodes: localNodes, hoverPoint: nil)
         guard let committed = Self.committedPenStyle(draft, closed: false) else { return false }
         do {
-            let image = try Self.vectorPathImage(committed.style, size: committed.box.size)
-            let thumbnail = try PixelInvert.thumbnail(of: image)
+            let factor = preview ? min(1, Self.maxInteractivePenSide / max(committed.box.width, committed.box.height)) : 1
+            let drawn = CGSize(width: max(1, (committed.box.width * factor).rounded()),
+                               height: max(1, (committed.box.height * factor).rounded()))
+            let image = try Self.vectorPathImage(committed.style, size: drawn, lineWidthScale: factor)
+            let thumbnail = preview ? asset.thumbnail : try PixelInvert.thumbnail(of: image)
             let centerUnit = CGPoint(x: committed.box.midX / oldTransform.size.width,
                                      y: committed.box.midY / oldTransform.size.height)
             let center = centerUnit.applying(oldTransform.unitToDocument)
@@ -464,6 +475,8 @@ extension EditorSession {
     private nonisolated static func penDistance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
     }
+
+    nonisolated static let maxInteractivePenSide: CGFloat = 2_048
 
     private nonisolated static func penLerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
         CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)

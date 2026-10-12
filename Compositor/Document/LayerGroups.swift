@@ -146,7 +146,7 @@ extension EditorSession {
         if ids != selectedLayerIDs, !finishText() { return }
         guard brushStroke == nil else { return }
         let valid = ids.intersection(Set(document?.layers.map(\.id) ?? []))
-        if valid != selectedLayerIDs { commitTransform(); resolveGradient() }
+        if valid != selectedLayerIDs { commitTransform(); resolveGradient(); cancelPen() }
         activeLayerID = primary.flatMap { valid.contains($0) ? $0 : nil } ?? valid.first
         selectedLayerIDs = valid
         revealActiveLayer()

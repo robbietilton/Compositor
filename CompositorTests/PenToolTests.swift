@@ -133,6 +133,60 @@ struct PenToolTests {
         #expect(session.activeLayer?.liveVectorPath?.style.lineWidth == 4)
     }
 
+    @Test func committedLineUsesBoundedRasterWhileAnAnchorGestureIsLive() throws {
+        let session = EditorSession()
+        session.createDocument(width: 5_000, height: 1_200, emptyLayer: true)
+        session.selectTool(.pen)
+        session.penMode = .line
+        add(CGPoint(x: 10, y: 10), to: session)
+        add(CGPoint(x: 4_990, y: 1_190), to: session)
+        #expect(session.finishPen())
+        #expect(try #require(session.activeLayer?.asset?.image.width) > Int(EditorSession.maxInteractivePenSide))
+
+        #expect(session.beginPenLineNodeGesture(at: CGPoint(x: 2_500, y: 600), tolerance: 3) == 1)
+        let preview = try #require(session.activeLayer?.asset?.image)
+        #expect(max(preview.width, preview.height) <= Int(EditorSession.maxInteractivePenSide))
+        session.endPenLineNodeGesture()
+        let committed = try #require(session.activeLayer?.asset?.image)
+        #expect(max(committed.width, committed.height) > Int(EditorSession.maxInteractivePenSide))
+    }
+
+    @Test func switchingLayersFinalizesAnInteractivePenRaster() throws {
+        let session = EditorSession()
+        session.createDocument(width: 5_000, height: 1_200, emptyLayer: true)
+        let background = try #require(session.activeLayerID)
+        session.selectTool(.pen)
+        session.penMode = .line
+        add(CGPoint(x: 10, y: 10), to: session)
+        add(CGPoint(x: 4_990, y: 1_190), to: session)
+        #expect(session.finishPen())
+        let lineID = try #require(session.activeLayerID)
+
+        session.beginPenLineWidthEdit()
+        session.setPenLineWidth(20)
+        let preview = try #require(session.activeLayer?.asset?.image)
+        #expect(max(preview.width, preview.height) <= Int(EditorSession.maxInteractivePenSide))
+        session.selectLayer(background)
+
+        let line = try #require(session.document?.layers.first { $0.id == lineID })
+        #expect(max(try #require(line.asset?.image.width), try #require(line.asset?.image.height))
+            > Int(EditorSession.maxInteractivePenSide))
+        #expect(!session.penLineWidthEditing)
+    }
+
+    @Test func vectorRasterRejectsNonFiniteOrOversizedSurfaces() {
+        let style = LayerVectorPathStyle(mode: .line,
+            nodes: [VectorPathNode(anchor: .zero), VectorPathNode(anchor: CGPoint(x: 1, y: 1))],
+            closed: false, red: 1, green: 0, blue: 0, lineWidth: 4)
+        #expect(throws: (any Error).self) {
+            try EditorSession.vectorPathImage(style, size: CGSize(width: CGFloat.infinity, height: 10))
+        }
+        #expect(throws: (any Error).self) {
+            try EditorSession.vectorPathImage(style,
+                size: CGSize(width: CGFloat(DocumentLimits.maxSide + 1), height: 10))
+        }
+    }
+
     @Test func vectorMetadataRoundTripsAndTransformRedrawsIt() async throws {
         let session = makeSession()
         add(CGPoint(x: 10, y: 20), to: session, handle: CGPoint(x: 30, y: 0))

@@ -1217,9 +1217,6 @@ final class CanvasView: NSView {
             return { clip.apply(scale: scale, center: origin, in: $0) }
         }, in: context) { live.drawComposite($0, in: context) }
         drawNewText(context)
-        // Anchors and direction handles are editing chrome: keep them visible above every layer.
-        drawPenDraft(path: false, controls: true, scale: scale, center: center, in: context)
-        drawPenLineControls(scale: scale, center: center, in: context)
     }
 
     /// Text being edited, as it shows among the layers: as it will be committed, with its effects around it. They stay
@@ -1331,7 +1328,7 @@ final class CanvasView: NSView {
 
     /// Editing chrome for a committed Pen line. A faint accent trace makes the clickable segments clear without
     /// replacing the line's own color, and the selected anchor stays filled after the click.
-    private func drawPenLineControls(scale: CGFloat, center: (CGPoint) -> CGPoint, in context: CGContext) {
+    private func drawPenLineControls(center: (CGPoint) -> CGPoint, in context: CGContext) {
         guard let line = session.editablePenLine else { return }
         let transform = line.layer.transform.unitToDocument
         let mapped = line.vector.style.nodes.map { node in
@@ -1513,6 +1510,12 @@ final class CanvasView: NSView {
             let visible = rect.intersection(bounds).intersection(dirtyRect)
             if !visible.isNull, !visible.isEmpty { drawPixelGrid(in: visible, document: document, context: context) }
         }
+        // Pen anchors are screen-space editing chrome. Keeping them in this overlay prevents Retina and high-zoom
+        // canvas scaling from making them tiny, blocky or several times their intended size.
+        let center = { self.session.viewport.viewPoint(from: $0, documentSize: document.size) }
+        drawPenDraft(path: false, controls: true, scale: session.viewport.pointsPerPixel,
+                     center: center, in: context)
+        drawPenLineControls(center: center, in: context)
         drawTextBoxDraft()
     }
 
@@ -2807,11 +2810,12 @@ extension CanvasView {
     }
 
     /// The shape being dragged out, drawn by `drawShapeDraft` into a bitmap just big enough for it, in frame pixels.
-    private func shapeDraftImage(placement: GPUPlacement) -> CIImage? {
+    private func shapeDraftImage(placement: GPUPlacement, clip: CGRect) -> CIImage? {
         guard let draft = session.shapeDraft, let renderer = GPUCanvasRenderer.shared else { return nil }
         let reach = CGFloat(session.shapeLineWidth) * placement.scale + 4
-        let box = draft.rect.applying(placement.mapping).insetBy(dx: -reach, dy: -reach).integral
-        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
+        let box = draft.rect.applying(placement.mapping).insetBy(dx: -reach, dy: -reach)
+            .intersection(clip).integral
+        guard !box.isNull, !box.isEmpty, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
               let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
         context.translateBy(x: -box.minX, y: -box.minY)
         drawShapeDraft(scale: placement.scale, center: { $0.applying(placement.mapping) }, in: context)
@@ -2819,7 +2823,7 @@ extension CanvasView {
         return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
     }
 
-    private func penDraftImage(placement: GPUPlacement, path: Bool, controls: Bool) -> CIImage? {
+    private func penDraftImage(placement: GPUPlacement, clip: CGRect) -> CIImage? {
         guard let draft = session.penDraft, let renderer = GPUCanvasRenderer.shared, !draft.nodes.isEmpty else { return nil }
         let documentPoints = draft.nodes.flatMap { [$0.anchor, $0.inHandle, $0.outHandle] }
             + (draft.hoverPoint.map { [$0] } ?? [])
@@ -2828,31 +2832,12 @@ extension CanvasView {
               let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
         let reach = max(12, draft.lineWidth * placement.scale / 2 + 4)
         let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-            .insetBy(dx: -reach, dy: -reach).integral
-        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
+            .insetBy(dx: -reach, dy: -reach).intersection(clip).integral
+        guard !box.isNull, !box.isEmpty, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
               let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
         context.translateBy(x: -box.minX, y: -box.minY)
-        drawPenDraft(path: path, controls: controls, scale: placement.scale,
+        drawPenDraft(path: true, controls: false, scale: placement.scale,
             center: { $0.applying(placement.mapping) }, in: context)
-        guard let image = context.makeImage(), let drawn = renderer.image(image, transient: true) else { return nil }
-        return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
-    }
-
-    private func penLineControlsImage(placement: GPUPlacement) -> CIImage? {
-        guard let line = session.editablePenLine, let renderer = GPUCanvasRenderer.shared else { return nil }
-        let transform = line.layer.transform.unitToDocument
-        let documentPoints = line.vector.style.nodes.flatMap { node in
-            [node.anchor.applying(transform), node.inHandle.applying(transform), node.outHandle.applying(transform)]
-        }
-        let points = documentPoints.map { $0.applying(placement.mapping) }
-        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
-              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
-        let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-            .insetBy(dx: -12, dy: -12).integral
-        guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
-              let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }
-        context.translateBy(x: -box.minX, y: -box.minY)
-        drawPenLineControls(scale: placement.scale, center: { $0.applying(placement.mapping) }, in: context)
         guard let image = context.makeImage(), let drawn = renderer.image(image, transient: true) else { return nil }
         return drawn.transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY))
     }
@@ -2889,7 +2874,8 @@ extension CanvasView {
         // From 200% the document's own pixels are composited one to one and enlarged as crisp squares.
         let crisp = viewport.zoom >= Self.crispZoom
         let placement = GPUPlacement(mapping: crisp ? .identity : mapping, scale: crisp ? 1 : perPixel, renderer: renderer)
-        guard var layers = gpuLayers(document, placement: placement) else { return nil }
+        let layerClip = crisp ? full.applying(mapping.inverted()).intersection(pixels) : full
+        guard var layers = gpuLayers(document, placement: placement, clip: layerClip) else { return nil }
         if crisp { layers = layers.cropped(to: pixels).samplingNearest().transformed(by: mapping) }
         frame = layers.cropped(to: rect).composited(over: frame)
         // The document's edge: a one-pixel line centered on it.
@@ -2905,7 +2891,7 @@ extension CanvasView {
 
     /// The layers composited as `drawLayers` composites them, over nothing. Nil when a layer needs the Core Graphics
     /// canvas.
-    private func gpuLayers(_ document: CanvasDocument, placement: GPUPlacement) -> CIImage? {
+    private func gpuLayers(_ document: CanvasDocument, placement: GPUPlacement, clip: CGRect) -> CIImage? {
         handOffTextEffects(document)
         session.effectsPreviews.prepare(layers: document.layers)
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
@@ -3202,7 +3188,9 @@ extension CanvasView {
                     height: layer.asset?.image.height ?? Int(transform.size.height.rounded()),
                     limit: session.transformEdit != nil ? min(2048, steady) : steady)
             }()
-            if layer.asset != nil,
+            let changingPen = layer.id == session.activeLayerID && layer.liveVectorPath != nil
+                && (session.penNodeGestureEditing || session.penLineWidthEditing)
+            if layer.asset != nil, !changingPen,
                let effects = session.effectsPreviews.preview(for: layer, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsDisplay = true
@@ -3226,7 +3214,9 @@ extension CanvasView {
                 placed = placement.place(raster, transform: transform)
             } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
                         ?? session.hueSaturation?.previewImage(for: layer.id) ?? layer.asset?.image {
-                placed = placement.place(image, transform: transform)
+                let transientPen = changingPen && layer.asset.map { $0.image === image } == true
+                placed = transientPen ? placement.place(transient: image, transform: transform)
+                                     : placement.place(image, transform: transform)
             } else { return nil }
             guard var image = placed else { unsupported = true; return nil }
             if let mask {
@@ -3299,8 +3289,8 @@ extension CanvasView {
         func drafts(after id: UUID, over image: CIImage) -> CIImage {
             guard id == session.activeLayerID else { return image }
             var result = image
-            if let shape = shapeDraftImage(placement: placement) { result = shape.composited(over: result) }
-            if let pen = penDraftImage(placement: placement, path: true, controls: false) {
+            if let shape = shapeDraftImage(placement: placement, clip: clip) { result = shape.composited(over: result) }
+            if let pen = penDraftImage(placement: placement, clip: clip) {
                 result = pen.composited(over: result)
             }
             if session.textDraft?.layerID == nil, let text = draftText, let placed = placement.place(text.image, transform: text.transform) {
@@ -3352,12 +3342,6 @@ extension CanvasView {
         if !drewNewText, session.textDraft?.layerID == nil, let text = draftText,
            let placed = placement.place(text.image, transform: text.transform) {
             result = placed.composited(over: result)
-        }
-        if let controls = penDraftImage(placement: placement, path: false, controls: true) {
-            result = controls.composited(over: result)
-        }
-        if let controls = penLineControlsImage(placement: placement) {
-            result = controls.composited(over: result)
         }
         return result
     }

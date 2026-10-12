@@ -4,6 +4,9 @@ Compositor keeps English in the application and downloads every other language f
 raw-file endpoint. A downloaded pack is verified with the SHA-256 value in `manifest.json`, then stored under
 `Application Support/Compositor/Languages` so it remains available offline.
 
+The **Help → Language** menu contains only packs that have been downloaded and verified successfully. If neither a
+verified cached pack nor a downloadable pack is available, Compositor omits the menu and continues in English.
+
 Each pack is JSON with a schema version, BCP 47 language code, revision, and `strings` dictionary. To publish a change:
 
 1. Update the translation source in `Compositor/Localizable.xcstrings`.
