@@ -263,7 +263,7 @@ struct CompositorApp: App {
                     Button(L10n.string("Subject")) { Task { await session.selectSubject() } }
                         .configuredKeyboardShortcut("a", modifiers: [.command, .option])
                         .disabled(!session.canSelectSubject)
-                    Button(L10n.string("Color Range…")) { session.beginColorRange() }
+                    Button(L10n.string("Color Range…")) { Task { await session.beginColorRange() } }
                         .disabled(!session.canSelectColorRange)
                     Button(L10n.string("Mask's Black Areas")) {
                         if let id = session.activeLayerID { session.loadMaskSelection(layerID: id) }
@@ -382,36 +382,38 @@ struct CompositorApp: App {
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                 }
                 CommandGroup(after: .help) {
-                    Divider()
-                    Menu(L10n.string("Language")) {
-                        ForEach(languageManager.availableLanguages) { option in
-                            Button {
-                                Task {
-                                    await languageManager.select(option)
-                                    if let message = languageManager.lastError {
-                                        let alert = NSAlert()
-                                        alert.messageText = L10n.string("Language Download Failed")
-                                        alert.informativeText = message
-                                        alert.alertStyle = .warning
-                                        alert.addButton(withTitle: L10n.string("OK"))
-                                        alert.runModal()
+                    if languageManager.isLanguageMenuAvailable {
+                        Divider()
+                        Menu(L10n.string("Language")) {
+                            ForEach(languageManager.availableLanguages) { option in
+                                Button {
+                                    Task {
+                                        await languageManager.select(option)
+                                        if let message = languageManager.lastError {
+                                            let alert = NSAlert()
+                                            alert.messageText = L10n.string("Language Download Failed")
+                                            alert.informativeText = message
+                                            alert.alertStyle = .warning
+                                            alert.addButton(withTitle: L10n.string("OK"))
+                                            alert.runModal()
+                                        }
                                     }
-                                }
-                            } label: {
-                                if languageManager.downloadingLanguageCode == option.code {
-                                    Label {
+                                } label: {
+                                    if languageManager.downloadingLanguageCode == option.code {
+                                        Label {
+                                            Text(verbatim: option.displayName)
+                                        } icon: {
+                                            ProgressView().controlSize(.small)
+                                        }
+                                    } else if option.code == languageManager.activeLanguage.code {
+                                        Label {
+                                            Text(verbatim: option.displayName)
+                                        } icon: {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    } else {
                                         Text(verbatim: option.displayName)
-                                    } icon: {
-                                        ProgressView().controlSize(.small)
                                     }
-                                } else if option.code == languageManager.activeLanguage.code {
-                                    Label {
-                                        Text(verbatim: option.displayName)
-                                    } icon: {
-                                        Image(systemName: "checkmark")
-                                    }
-                                } else {
-                                    Text(verbatim: option.displayName)
                                 }
                             }
                         }

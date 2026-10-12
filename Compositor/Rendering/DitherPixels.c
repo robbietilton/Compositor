@@ -257,6 +257,7 @@ int dither_apply(uint8_t *rgba, size_t width, size_t height, size_t stride, cons
                     amount = (p->lightOnDark ? t : 1 - t) > spot(style, u, v) ? 1 : 0;
                 }
                 if (p->originalColors) {
+                    if (!source) continue;
                     const float *s = source + at * 3;
                     write_pixel(row + x * 4, paperOriginal + (s[0] - paperOriginal) * amount,
                                 paperOriginal + (s[1] - paperOriginal) * amount, paperOriginal + (s[2] - paperOriginal) * amount);

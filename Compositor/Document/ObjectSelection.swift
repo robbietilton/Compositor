@@ -12,6 +12,12 @@ nonisolated struct ObjectSelectionSettings: Equatable, Sendable {
 /// Selects the foreground object under a clicked point using Vision's instance mask,
 /// then traces that mask into the document's normal path-based selection.
 nonisolated enum ObjectSelection {
+    /// Vision does not gain useful edge detail from enormous source images, while its full-resolution guide and
+    /// masks can otherwise occupy several copies of a 200-megapixel canvas. Analysis stays bounded and its outline
+    /// is mapped back to document pixels.
+    static let maximumAnalysisSide = 4_096
+    static let maximumAnalysisPixels = 16_000_000
+
     enum Failure: LocalizedError {
         case unsupported
         case render
@@ -31,7 +37,36 @@ nonisolated enum ObjectSelection {
         let x = Int(point.x.rounded(.down)), y = Int(point.y.rounded(.down))
         guard point.x.isFinite, point.y.isFinite, (0..<width).contains(x), (0..<height).contains(y) else { return nil }
         guard #available(macOS 14.0, *) else { throw Failure.unsupported }
-        return try selectAvailable(in: image, at: point, edgeOffset: edgeOffset, smoothEdges: smoothEdges)
+        let analysis = analysisSize(width: width, height: height)
+        guard analysis.width != width || analysis.height != height else {
+            return try selectAvailable(in: image, at: point, edgeOffset: edgeOffset, smoothEdges: smoothEdges)
+        }
+        let context = try BrushRaster.context(width: analysis.width, height: analysis.height, mask: false)
+        context.interpolationQuality = .high
+        BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: analysis.width, height: analysis.height), mask: false, context: context)
+        guard let reduced = context.makeImage() else { throw Failure.render }
+        let scaleX = CGFloat(analysis.width) / CGFloat(width), scaleY = CGFloat(analysis.height) / CGFloat(height)
+        let scaledPoint = CGPoint(x: point.x * scaleX, y: point.y * scaleY)
+        let scaledOffset: Int
+        if edgeOffset == 0 { scaledOffset = 0 }
+        else {
+            let magnitude = max(1, Int((CGFloat(abs(edgeOffset)) * min(scaleX, scaleY)).rounded()))
+            scaledOffset = edgeOffset < 0 ? -magnitude : magnitude
+        }
+        guard let path = try selectAvailable(in: reduced, at: scaledPoint, edgeOffset: scaledOffset,
+                                             smoothEdges: smoothEdges) else { return nil }
+        var toDocument = CGAffineTransform(scaleX: CGFloat(width) / CGFloat(analysis.width),
+                                           y: CGFloat(height) / CGFloat(analysis.height))
+        return path.copy(using: &toDocument)
+    }
+
+    static func analysisSize(width: Int, height: Int) -> (width: Int, height: Int) {
+        guard width > 0, height > 0 else { return (max(0, width), max(0, height)) }
+        let sideScale = min(1, Double(maximumAnalysisSide) / Double(max(width, height)))
+        let areaScale = min(1, sqrt(Double(maximumAnalysisPixels) / (Double(width) * Double(height))))
+        let scale = min(sideScale, areaScale)
+        return (max(1, Int((Double(width) * scale).rounded())),
+                max(1, Int((Double(height) * scale).rounded())))
     }
 
     @available(macOS 14.0, *)
@@ -272,12 +307,16 @@ extension EditorSession {
     /// the active layer or every visible layer, combined with the current selection by `mode`.
     func selectObject(at point: CGPoint, mode: SelectionMode) async {
         guard canEditSelection, !isProjectBusy, selectionMoveOrigin == nil, let document,
-              point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height,
-              let sample = selectionSample(document, sampleAllLayers: objectSelectionSettings.sampleAllLayers) else { return }
+              point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height else { return }
+        isProjectBusy = true
+        guard let sample = await selectionSample(document, sampleAllLayers: objectSelectionSettings.sampleAllLayers) else {
+            isProjectBusy = false
+            brushError = ObjectSelection.Failure.render.localizedDescription
+            return
+        }
         let job = ObjectSelectionJob(image: sample, point: point,
                                      edgeOffset: min(10, max(-10, objectSelectionSettings.edgeOffset)),
                                      smoothEdges: selectionAntialiased)
-        isProjectBusy = true
         let result = await Task.detached(priority: .userInitiated) { () -> ObjectSelectionResult in
             do { return ObjectSelectionResult(path: try ObjectSelection.select(in: job.image, at: job.point, edgeOffset: job.edgeOffset, smoothEdges: job.smoothEdges), error: nil) }
             catch { return ObjectSelectionResult(path: nil, error: error) }

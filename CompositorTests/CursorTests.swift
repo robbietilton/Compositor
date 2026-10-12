@@ -227,8 +227,10 @@ struct CursorTests {
         table.mouseMoved(with: mouse(at: name, flags: .option, in: window))
         #expect(NSCursor.current === CanvasView.duplicateCursor, "Option over a layer's name offers to duplicate it")
         let row = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: false))
+        let selectImagePrefix = L10n.format("Select image: %@", "")
         let thumbnail = try #require(descendants(row).first {
-            $0 is NSButton && !$0.isHiddenOrHasHiddenAncestor && $0.accessibilityLabel()?.hasPrefix("Select image") == true
+            $0 is NSButton && !$0.isHiddenOrHasHiddenAncestor
+                && $0.accessibilityLabel()?.hasPrefix(selectImagePrefix) == true
         })
         row.layoutSubtreeIfNeeded()
         #expect(thumbnail.frame.size == CGSize(width: 36, height: 27), "the thumbnail takes the 400 × 300 canvas's shape")

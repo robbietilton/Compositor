@@ -7,12 +7,12 @@ extension UTType {
     static let compositorProject = UTType(exportedAs: "com.compositor.project", conformingTo: .package)
     nonisolated static let photoshopImage = UTType(importedAs: "com.adobe.photoshop-image")
     nonisolated static let photoshopLargeImage = UTType(importedAs: "com.adobe.photoshop-large-image")
-    static let importableImages: [UTType] = [.jpeg, .png, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR, .photoshopImage,
-                                             .photoshopLargeImage, .rawImage, .svg]
+    nonisolated static let importableImages: [UTType] = [.jpeg, .png, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR, .photoshopImage,
+                                                         .photoshopLargeImage, .rawImage, .svg]
     /// OpenEXR, the format renders (Blender's among them) keep light brighter than white in.
-    static let openEXR = UTType("com.ilm.openexr-image") ?? .image
+    nonisolated static let openEXR = UTType("com.ilm.openexr-image") ?? .image
     /// Radiance HDR (.hdr), the usual format for HDRI panoramas.
-    static let radianceHDR = UTType("public.radiance") ?? .image
+    nonisolated static let radianceHDR = UTType("public.radiance") ?? .image
 }
 
 nonisolated struct ProjectManifest: Codable, Sendable {

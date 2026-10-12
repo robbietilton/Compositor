@@ -158,7 +158,7 @@ struct GroupTests {
         session.linkMask(source: base, target: clipped)
         session.selectLayers([base, clipped], primary: base)
         session.groupSelectedLayers()
-        let group = try #require(session.activeLayerID)
+        _ = try #require(session.activeLayerID)
 
         session.ungroupLayers()
         // Spliced in together at the folder's old spot, so the pair stays adjacent.

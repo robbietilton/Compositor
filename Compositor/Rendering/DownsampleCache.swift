@@ -12,8 +12,8 @@ import Foundation
 /// piece of an image reduced on its own lines up with the whole image reduced (see `TiledLayerRenderer`).
 nonisolated final class DownsampleCache: @unchecked Sendable {
     static let shared = DownsampleCache()
-    /// Pixels of halved copies kept at once (about 400 MB of RGBA).
-    static let pixelBudget = DocumentLimits.maxSurfacePixels
+    /// Half of the shared CPU-raster budget goes to reductions, the cache used most often while navigating.
+    static let pixelBudget = DocumentLimits.rasterCachePixels / 2
     /// Most halvings ever used; past this Core Graphics does the rest.
     static let maxLevel = 6
 
@@ -26,6 +26,16 @@ nonisolated final class DownsampleCache: @unchecked Sendable {
     private var entries: [ObjectIdentifier: Entry] = [:]
     private var clock: UInt64 = 0
     private let lock = NSLock()
+    private let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global(qos: .utility))
+
+    private init() {
+        pressure.setEventHandler { [weak self] in self?.removeAll() }
+        pressure.resume()
+    }
+
+    private func removeAll() {
+        lock.withLock { entries.removeAll() }
+    }
 
     /// Halvings to draw from when an image lands `factor` output pixels per image pixel: the most that still
     /// leave the copy at least that large (0 from half size up).

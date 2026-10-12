@@ -129,6 +129,7 @@ nonisolated struct LayerMask: Equatable, @unchecked Sendable {
 /// go beyond a few entries or a pixel budget.
 nonisolated final class MaskPlacementCache: @unchecked Sendable {
     static let shared = MaskPlacementCache()
+    static let pixelBudget = DocumentLimits.rasterCachePixels / 5
     private struct Entry {
         let mask: CGImage
         let placement: LayerTransform
@@ -141,6 +142,16 @@ nonisolated final class MaskPlacementCache: @unchecked Sendable {
     private var entries: [Entry] = []
     private var clock: UInt64 = 0
     private let lock = NSLock()
+    private let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global(qos: .utility))
+
+    private init() {
+        pressure.setEventHandler { [weak self] in self?.removeAll() }
+        pressure.resume()
+    }
+
+    private func removeAll() {
+        lock.withLock { entries.removeAll() }
+    }
 
     func image(mask: CGImage, placement: LayerTransform, layer: LayerTransform, width: Int, height: Int, build: () -> CGImage?) -> CGImage? {
         lock.lock()
@@ -153,10 +164,10 @@ nonisolated final class MaskPlacementCache: @unchecked Sendable {
         }
         lock.unlock()
         guard let image = build() else { return nil }
-        guard width * height <= 64_000_000 else { return image }
+        guard width * height <= Self.pixelBudget else { return image }
         lock.lock()
         entries.append(Entry(mask: mask, placement: placement, layer: layer, width: width, height: height, image: image, lastUse: clock))
-        while entries.count > 8 || entries.reduce(0, { $0 + $1.width * $1.height }) > 64_000_000,
+        while entries.count > 8 || entries.reduce(0, { $0 + $1.width * $1.height }) > Self.pixelBudget,
               let oldest = entries.indices.min(by: { entries[$0].lastUse < entries[$1].lastUse }) {
             entries.remove(at: oldest)
         }
@@ -423,4 +434,3 @@ extension BrushStroke {
         }
     }
 }
-

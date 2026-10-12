@@ -16,7 +16,7 @@ static inline int wand_matches(const uint8_t *p, const int reference[4], int tol
 
 long wand_mask(const uint8_t *rgba, size_t width, size_t height, size_t stride,
                size_t seedX, size_t seedY, size_t radius, int tolerance, int contiguous, uint8_t *mask) {
-    if (!width || !height) return 0;
+    if (!rgba || !mask || !width || !height) return 0;
     memset(mask, 0, width * height);
     if (seedX >= width || seedY >= height) return 0;
     size_t x0 = seedX > radius ? seedX - radius : 0, x1 = seedX + radius < width ? seedX + radius : width - 1;
@@ -25,6 +25,7 @@ long wand_mask(const uint8_t *rgba, size_t width, size_t height, size_t stride,
     for (size_t y = y0; y <= y1; ++y)
         for (size_t x = x0; x <= x1; ++x, ++samples)
             for (int c = 0; c < 4; ++c) sums[c] += rgba[y * stride + x * 4 + c];
+    if (!samples) return 0;
     int reference[4];
     for (int c = 0; c < 4; ++c) reference[c] = (int)((sums[c] + samples / 2) / samples);
 

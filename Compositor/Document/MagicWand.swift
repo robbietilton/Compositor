@@ -91,16 +91,35 @@ private nonisolated struct WandResult: @unchecked Sendable {
     let error: Error?
 }
 
+private nonisolated struct SelectionLayerSample: @unchecked Sendable {
+    let width: Int
+    let height: Int
+    let image: CGImage?
+    let transform: LayerTransform?
+
+    func render() -> CGImage? {
+        guard let context = try? BrushRaster.context(width: width, height: height, mask: false) else { return nil }
+        if let image, let transform {
+            LayerRenderer.draw(image, transform: transform, center: transform.center, in: context)
+        }
+        return context.makeImage()
+    }
+}
+
 extension EditorSession {
     /// The Magic Wand: selects pixels similar to the one at `point` (document pixels), read from
     /// the active layer or every visible layer, combined with the current selection by `mode`.
     /// Matching and tracing run off the main thread; the result is one undo step.
     func magicWand(at point: CGPoint, mode: SelectionMode) async {
         guard canEditSelection, !isProjectBusy, selectionMoveOrigin == nil, let document,
-              point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height,
-              let sample = selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else { return }
-        let job = WandJob(image: sample, point: point, settings: wandSettings)
+              point.x >= 0, point.y >= 0, point.x < document.size.width, point.y < document.size.height else { return }
         isProjectBusy = true
+        guard let sample = await selectionSample(document, sampleAllLayers: wandSettings.sampleAllLayers) else {
+            isProjectBusy = false
+            brushError = ExportError.render.localizedDescription
+            return
+        }
+        let job = WandJob(image: sample, point: point, settings: wandSettings)
         let result = await Task.detached(priority: .userInitiated) { () -> WandResult in
             do { return WandResult(path: try MagicWand.select(in: job.image, at: job.point, settings: job.settings), error: nil) }
             catch { return WandResult(path: nil, error: error) }
@@ -125,14 +144,16 @@ extension EditorSession {
     /// What selection-from-image tools read, at document size: every visible layer as shown on the canvas,
     /// or just the active layer's own pixels (without its mask, as Cmd-click selection reads them).
     /// A folder or blank layer reads as transparent.
-    func selectionSample(_ document: CanvasDocument, sampleAllLayers: Bool) -> CGImage? {
-        guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return nil }
+    func selectionSample(_ document: CanvasDocument, sampleAllLayers: Bool) async -> CGImage? {
         if sampleAllLayers {
-            drawLiveComposite(document, in: context)
-        } else if let layer = activeLayer, !layer.isGroup, let image = layer.asset?.image {
-            let transform = displayedTransform(for: layer)
-            LayerRenderer.draw(image, transform: transform, center: transform.center, in: context)
+            guard let snapshot = projectSnapshot(),
+                  let raster = try? await ImageExporter.shared.render(snapshot) else { return nil }
+            return raster.image
         }
-        return context.makeImage()
+        let layer = activeLayer
+        let sample = SelectionLayerSample(width: document.width, height: document.height,
+            image: layer?.isGroup == false ? layer?.asset?.image : nil,
+            transform: layer?.isGroup == false ? layer.map { displayedTransform(for: $0) } : nil)
+        return await Task.detached(priority: .userInitiated) { sample.render() }.value
     }
 }

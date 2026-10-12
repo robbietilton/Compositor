@@ -36,6 +36,13 @@ nonisolated enum DocumentLimits {
     static let documentPixelBudget = min(800_000_000,
         max(maxSurfacePixels, Int(clamping: ProcessInfo.processInfo.physicalMemory / 16)))
 
+    /// CPU raster caches share this many RGBA-sized pixels. Keeping the budget proportional to installed memory
+    /// avoids several independent caches quietly retaining more than a gigabyte on an 8 GB Mac. The total is about
+    /// one thirty-second of physical memory in bytes, bounded so small documents still keep useful reductions and a
+    /// large machine never gives throw-away previews an unlimited claim on RAM.
+    static let rasterCachePixels = min(128_000_000,
+        max(32_000_000, Int(clamping: ProcessInfo.processInfo.physicalMemory / 128)))
+
     /// The two ceilings as megapixels, for the messages that quote them back to the reader.
     static var maxSurfaceMegapixels: Int { maxSurfacePixels / 1_000_000 }
     static var documentBudgetMegapixels: Int { documentPixelBudget / 1_000_000 }

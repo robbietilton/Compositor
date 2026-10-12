@@ -374,7 +374,7 @@ static int downsample(const Level *F, Level *C) {
 // neighbors around it, and whatever no edge reaches the average of the known image.
 static void fill_inward(Level *L) {
     int w = L->w, h = L->h, n = w * h;
-    uint8_t *done = malloc((size_t)n), *next = malloc((size_t)n);
+    uint8_t *done = calloc((size_t)n, 1), *next = calloc((size_t)n, 1);
     if (!done || !next) { free(done); free(next); return; }
     double mean[CH] = {0};
     long known = 0;

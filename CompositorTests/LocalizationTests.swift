@@ -20,6 +20,23 @@ struct LocalizationTests {
         #expect(AppLanguage.resolved("unsupported") == .english)
     }
 
+    @Test func languageMenuStaysHiddenWhenManifestIsUnavailable() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let offline: LanguageManager.Loader = { _ in throw URLError(.notConnectedToInternet) }
+        let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
+
+        #expect(!manager.isLanguageMenuAvailable)
+        await manager.prepare()
+        #expect(!manager.isLanguageMenuAvailable)
+    }
+
     @Test func downloadedPackIsVerifiedStoredAndAvailableOffline() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
@@ -53,7 +70,9 @@ struct LocalizationTests {
             return (data, response)
         }
         let manager = LanguageManager(manifestURL: manifestURL, directory: root, defaults: defaults, loader: loader)
+        #expect(!manager.isLanguageMenuAvailable)
         await manager.prepare()
+        #expect(manager.isLanguageMenuAvailable)
         let chinese = try #require(manager.availableLanguages.first { $0.code == "zh-Hans" })
         await manager.select(chinese)
         #expect(manager.string("Language") == "语言")
@@ -62,6 +81,7 @@ struct LocalizationTests {
 
         let offline: LanguageManager.Loader = { _ in throw URLError(.notConnectedToInternet) }
         let relaunched = LanguageManager(manifestURL: manifestURL, directory: root, defaults: defaults, loader: offline)
+        #expect(relaunched.isLanguageMenuAvailable)
         #expect(relaunched.activeLanguage.code == "zh-Hans")
         #expect(relaunched.string("Language") == "语言")
         await relaunched.prepare()

@@ -76,6 +76,7 @@ final class LanguageManager {
     private(set) var availableLanguages: [AppLanguage]
     private(set) var selectedLanguage: AppLanguage
     private(set) var activeLanguage: AppLanguage = .english
+    private(set) var isLanguageMenuAvailable: Bool
     private(set) var downloadingLanguageCode: String?
     private(set) var lastError: String?
     private(set) var revision = 0
@@ -90,6 +91,8 @@ final class LanguageManager {
          directory: URL? = nil, defaults: UserDefaults = .standard, loader: Loader? = nil) {
         let resolvedDirectory = directory ?? Self.languageDirectory()
         let initialLanguages = Self.initialLanguages(from: resolvedDirectory)
+        let hasCachedLanguages = Self.cachedManifest(from: resolvedDirectory)
+            .map { !$0.languages.filter(Self.isValidRemoteLanguage).isEmpty } ?? false
         let initialSelection = AppLanguage.resolved(defaults.string(forKey: AppLanguage.storageKey),
                                                     from: initialLanguages)
 
@@ -100,6 +103,7 @@ final class LanguageManager {
         self.defaults = defaults
         availableLanguages = initialLanguages
         selectedLanguage = initialSelection
+        isLanguageMenuAvailable = hasCachedLanguages
         try? FileManager.default.createDirectory(at: resolvedDirectory, withIntermediateDirectories: true)
         if initialSelection != .english,
            let pack = try? Self.readPack(for: initialSelection, from: resolvedDirectory) {
@@ -164,6 +168,7 @@ final class LanguageManager {
         guard manifest.schemaVersion == 1 else { return }
         let valid = manifest.languages.filter(Self.isValidRemoteLanguage)
         availableLanguages = [.english] + valid
+        isLanguageMenuAvailable = !valid.isEmpty
     }
 
     private func refreshManifest() async throws {
@@ -238,11 +243,16 @@ final class LanguageManager {
     }
 
     private static func initialLanguages(from directory: URL) -> [AppLanguage] {
-        guard let data = try? Data(contentsOf: directory.appending(path: "manifest.json")),
-              let manifest = try? JSONDecoder().decode(LanguageManifest.self, from: data),
-              manifest.schemaVersion == 1 else { return AppLanguage.initialChoices }
+        guard let manifest = cachedManifest(from: directory) else { return AppLanguage.initialChoices }
         let valid = manifest.languages.filter(isValidRemoteLanguage)
         return [.english] + valid
+    }
+
+    private static func cachedManifest(from directory: URL) -> LanguageManifest? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "manifest.json")),
+              let manifest = try? JSONDecoder().decode(LanguageManifest.self, from: data),
+              manifest.schemaVersion == 1 else { return nil }
+        return manifest
     }
 
     private static func downloadSession() -> URLSession {

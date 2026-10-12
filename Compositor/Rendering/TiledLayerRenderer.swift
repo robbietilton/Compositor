@@ -372,7 +372,7 @@ nonisolated enum TiledLayerRenderer {
 /// used are dropped beyond a pixel budget.
 nonisolated final class TiledPieceCache: @unchecked Sendable {
     static let shared = TiledPieceCache()
-    static let pixelBudget = 150_000_000
+    static let pixelBudget = DocumentLimits.rasterCachePixels * 3 / 10
     private struct Key: Hashable {
         let raster: ObjectIdentifier
         let level: Int
@@ -386,6 +386,16 @@ nonisolated final class TiledPieceCache: @unchecked Sendable {
     private var entries: [Key: Entry] = [:]
     private var clock: UInt64 = 0
     private let lock = NSLock()
+    private let pressure = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global(qos: .utility))
+
+    private init() {
+        pressure.setEventHandler { [weak self] in self?.removeAll() }
+        pressure.resume()
+    }
+
+    private func removeAll() {
+        lock.withLock { entries.removeAll() }
+    }
 
     func pieces(for raster: RasterSnapshot, level: Int) -> [TiledLayerRenderer.Piece] {
         let key = Key(raster: ObjectIdentifier(raster), level: level)

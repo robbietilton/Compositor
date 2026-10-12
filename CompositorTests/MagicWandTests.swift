@@ -40,6 +40,14 @@ struct MagicWandTests {
         Set(rows.flatMap { y in columns.map { y * width + $0 } })
     }
 
+    @Test func objectSelectionBoundsLargeAnalysisSurfaces() {
+        #expect(ObjectSelection.analysisSize(width: 800, height: 600) == (800, 600))
+        let large = ObjectSelection.analysisSize(width: 30_000, height: 20_000)
+        #expect(max(large.width, large.height) <= ObjectSelection.maximumAnalysisSide)
+        #expect(large.width * large.height <= ObjectSelection.maximumAnalysisPixels)
+        #expect(abs(Double(large.width) / Double(large.height) - 1.5) < 0.01)
+    }
+
     @Test func contiguousStopsAtOtherColorsWhileNonContiguousFindsEveryMatch() throws {
         let stripes = try image(width: 10, height: 4) { x, _ in x < 3 || x >= 6 ? red : blue }
         let left = block(columns: 0..<3, rows: 0..<4, width: 10)

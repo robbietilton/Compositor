@@ -43,8 +43,16 @@ private nonisolated struct ColorRangeResult: @unchecked Sendable {
 extension EditorSession {
     var canSelectColorRange: Bool { document != nil && colorRange == nil && canEditSelection }
 
-    func beginColorRange() {
-        guard canSelectColorRange, let document, let image = selectionSample(document, sampleAllLayers: true) else { return }
+    func beginColorRange() async {
+        guard canSelectColorRange, let document else { return }
+        isProjectBusy = true
+        guard let image = await selectionSample(document, sampleAllLayers: true) else {
+            isProjectBusy = false
+            brushError = ExportError.render.localizedDescription
+            return
+        }
+        isProjectBusy = false
+        guard self.document?.id == document.id else { return }
         colorRange = ColorRangeEdit(image: image, original: selection)
     }
 
