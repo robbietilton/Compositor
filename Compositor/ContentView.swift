@@ -9,6 +9,9 @@ struct ContentView: View {
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
     @State private var canvasFrame: CGRect = .zero
+    @State private var toolHeadersHeight: CGFloat = .zero
+    @State private var toolRailFullWidth: CGFloat = .zero
+    @State private var layersPanelFullWidth: CGFloat = .zero
     @State private var levelsPanel = FloatingPanelController(name: "levelsPanel")
     @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel")
     @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel")
@@ -28,27 +31,21 @@ struct ContentView: View {
         Group {
             if session.tool == .move {
                 TransformInspector(session: session).id(session.activeLayerID)
-                Divider()
             }
             if session.tool.isBrushTool {
                 BrushControls(session: session)
-                Divider()
             }
             if session.tool.isSelectionTool {
                 LassoControls(session: session)
-                Divider()
             }
             if session.tool == .gradient {
                 GradientControls(session: session)
-                Divider()
             }
             if session.tool == .type {
                 TypeControls(session: session)
-                Divider()
             }
             if session.tool == .shape {
                 ShapeControls(session: session)
-                Divider()
             }
             if session.tool == .eyedropper {
                 HStack(spacing: 16) {
@@ -56,15 +53,12 @@ struct ContentView: View {
                     Toggle("Sample Ring", isOn: $session.showsSampleRing).toggleStyle(.checkbox)
                     Spacer()
                 }.padding(.horizontal, 18).toolHeaderBar()
-                Divider()
             }
             if session.tool == .hand || session.tool == .zoom {
                 NavigationToolHeader(session: session)
-                Divider()
             }
             if session.tool == .crop {
                 CropControls(session: session)
-                Divider()
             }
             // No tool (A) keeps the header, so the canvas doesn't jump.
             if session.tool == .idle {
@@ -72,56 +66,101 @@ struct ContentView: View {
                     Text("Select a tool").font(ToolHeaderStyle.titleFont)
                     Spacer()
                 }.padding(.horizontal, 18).toolHeaderBar()
-                Divider()
             }
         }
     }
 
+    /// The canvas area the glass header, rulers and side panels leave clear, in canvas-view
+    /// coordinates — where the document is fitted and centered (see `CanvasViewport.safeArea`).
+    private var canvasSafeArea: CGRect {
+        // Canvas Only (F): every panel and bar is gone, so the whole canvas is clear.
+        if session.canvasOnly { return CGRect(origin: .zero, size: canvasFrame.size) }
+        let rulerThickness = session.showsRulers && session.document != nil ? CanvasRuler.thickness : 0
+        return CGRect(
+            x: toolRailFullWidth + rulerThickness,
+            y: toolHeadersHeight + rulerThickness,
+            width: max(0, canvasFrame.width - toolRailFullWidth - layersPanelFullWidth - rulerThickness),
+            height: max(0, canvasFrame.height - toolHeadersHeight - rulerThickness)
+        )
+    }
+
     @ViewBuilder private var editorStack: some View {
         VStack(spacing: 0) {
-            if !session.canvasOnly { toolHeaders }
-            HStack(spacing: 0) {
-                if !session.canvasOnly {
-                    toolRail
-                    Divider()
+            ZStack {
+                EditorCanvas(session: session)
+                if session.document == nil {
+                    welcome
+                        .position(x: canvasSafeArea.midX, y: canvasSafeArea.midY)
                 }
-                VStack(spacing: 0) {
-                    if session.showsRulers, session.document != nil, !session.canvasOnly {
-                        HStack(spacing: 0) {
-                            CanvasRulerCorner()
-                            CanvasRulerView(session: session, axis: .horizontal)
-                                .frame(height: CanvasRuler.thickness)
+                if let layer = session.maskAloneLayer {
+                    // At the foot of the canvas, clear of the transform box's rotation handle.
+                    MaskAloneBadge(session: session, layer: layer).fixedSize()
+                        .padding(.bottom, 14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+                if showsNavigator, !session.canvasOnly, session.viewport.zoom >= NavigatorMinimap.zoomShown {
+                    // Top right of the clear canvas area, clear of the glass header, rulers and Layers panel.
+                    NavigatorMinimap(session: session)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(.top, canvasSafeArea.minY)
+                        .padding(.trailing, canvasFrame.width - canvasSafeArea.maxX)
+                }
+                // Canvas Only (F): the glass header, rulers and side panels all go away.
+                if !session.canvasOnly {
+                    // One container so the header and ruler glass render as a single seamless shape.
+                    GlassEffectContainer {
+                        VStack(spacing: 0) {
+                            toolHeaders
+                                .glassEffect(.regular, in: .rect)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { toolHeadersHeight = $0 }
+                            if session.showsRulers, session.document != nil {
+                                HStack(alignment: .top, spacing: 0) {
+                                    Color.clear
+                                        .frame(width: toolRailFullWidth)
+                                        .glassEffect(.regular, in: .rect)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        HStack(spacing: 0) {
+                                            CanvasRulerCorner()
+                                                .glassEffect(.regular, in: .rect)
+                                            CanvasRulerView(session: session, axis: .horizontal)
+                                                .frame(height: CanvasRuler.thickness)
+                                                .glassEffect(.regular, in: .rect)
+                                        }
+
+                                        HStack(spacing: 0) {
+                                            CanvasRulerView(session: session, axis: .vertical)
+                                                .frame(width: CanvasRuler.thickness)
+                                                .glassEffect(.regular, in: .rect)
+                                            Spacer()
+                                        }
+                                    }
+                                }
+                            } else {
+                                Spacer()
+                            }
                         }
                     }
                     HStack(spacing: 0) {
-                        if session.showsRulers, session.document != nil, !session.canvasOnly {
-                            CanvasRulerView(session: session, axis: .vertical)
-                                .frame(width: CanvasRuler.thickness)
-                        }
-                        ZStack {
-                            EditorCanvas(session: session)
-                            if session.document == nil { welcome }
-                            if let layer = session.maskAloneLayer {
-                                // At the foot of the canvas, clear of the transform box's rotation handle.
-                                MaskAloneBadge(session: session, layer: layer).fixedSize()
-                                    .padding(.bottom, 14)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        toolRail
+                            .padding([.vertical, .leading], 6)
+                            .padding(.top, toolHeadersHeight)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { toolRailFullWidth = $0 }
+                        Spacer()
+                        // Clamped: a width saved when the panel could go narrower is brought into range.
+                        LayersPanel(session: session, width: min(LayersPanel.widths.upperBound, max(LayersPanel.widths.lowerBound, layersPanelWidth)))
+                            .overlay(alignment: .leading) {
+                                PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
                             }
-                            if showsNavigator, !session.canvasOnly, session.viewport.zoom >= NavigatorMinimap.zoomShown {
-                                NavigatorMinimap(session: session)
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            }
-                        }
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
+                            .padding([.vertical, .trailing], 6)
+                            .padding(.top, session.showsRulers && session.document != nil ? toolHeadersHeight + CanvasRuler.thickness : toolHeadersHeight)
+                            .animation(.default.speed(2.0), value: session.showsRulers)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { layersPanelFullWidth = $0 }
                     }
                 }
-                if !session.canvasOnly {
-                    PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                    // Clamped: a width saved when the panel could go narrower is brought into range.
-                    LayersPanel(session: session, width: min(LayersPanel.widths.upperBound, max(LayersPanel.widths.lowerBound, layersPanelWidth)))
-                }
             }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
+            .onChange(of: canvasSafeArea) { _, area in session.canvasSafeArea = area }
             if !session.canvasOnly {
                 Divider()
                 // Keeps its own height however short the window gets; the tools scroll instead.
@@ -134,7 +173,6 @@ struct ContentView: View {
     // Split again for 1.1: the chain outgrew the type checker once more.
     @ViewBuilder private var editorChrome: some View {
         editorStack
-        .background(Color(white: 0.14))
         .background {
             if let applicationDelegate, applicationDelegate.projects.workspace == nil {
                 ProjectWindowBridge(controller: applicationDelegate.projects).frame(width: 0, height: 0)
@@ -306,41 +344,22 @@ struct ContentView: View {
     private var toolRail: some View {
         // Scrolls when the window is too short for every tool, rather than pushing the bars above and below away.
         IndicatorlessScrollView {
-        VStack(spacing: 10) {
-            ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
-                Button { session.selectTool(tool) } label: {
-                    Group {
-                        if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .wand, session.wandMode == .object { ObjectSelectionToolIcon().frame(width: 18, height: 18) }
-                        // The Marquee's icon follows its shape: a dashed circle in Ellipse mode.
-                        else { Image(systemName: tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)).font(.system(size: 17)) }
-                    }
-                    .frame(width: 36, height: 36)
-                        .background(session.tool == tool ? Color.white.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 7))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
-                        }
-                        .contentShape(Rectangle())
+            VStack(spacing: 10) {
+                ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
+                    ToolButton(tool: tool, session: session)
                 }
-                .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
-                .foregroundStyle(.primary)
-                .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
+                ColorPaletteControls(session: session).padding(.top, 8)
             }
-            ColorPaletteControls(session: session).padding(.top, 8)
-        }
         .padding(.top, 16).padding(.bottom, 12)
-        .frame(width: 56)
+            .frame(width: 56)
         }
         .frame(width: 56)
+        .glassEffect(.regular, in: .rect(corners: .concentric(minimum: 10)))
     }
     private var welcome: some View {
         NewCanvasSheet(session: session,
-            onCreate: { session.createNewProject(width: $0, height: $1, resolution: $2, background: $3) },
-            onOpen: { Task { await applicationDelegate?.projects.open() } })
+                       onCreate: { session.createNewProject(width: $0, height: $1, resolution: $2, background: $3) },
+                       onOpen: { Task { await applicationDelegate?.projects.open() } })
     }
     private var statusBar: some View {
         HStack(spacing: 16) {
@@ -367,6 +386,48 @@ struct ContentView: View {
     }
 }
 
+private struct ToolButton: View {
+    let tool: NavigationTool
+    @Bindable var session: EditorSession
+    @State private var isHovering = false
+
+    var body: some View {
+        Button { session.selectTool(tool) } label: {
+            Group {
+                if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
+                else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
+                else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
+                else if tool == .wand, session.wandMode == .object { ObjectSelectionToolIcon().frame(width: 18, height: 18) }
+                // The Marquee's icon follows its shape: a dashed circle in Ellipse mode.
+                else { Image(systemName: tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)).font(.system(size: 17)) }
+            }
+            .frame(width: 36, height: 36)
+            .background(backgroundStyle, in: RoundedRectangle(cornerRadius: 7))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
+            }
+            .onHover { isHovering in
+                self.isHovering = isHovering
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
+        .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
+    }
+
+    private var backgroundStyle: some ShapeStyle {
+        if session.tool == tool {
+            return Color.white.opacity(0.12)
+        }
+        if isHovering {
+            return Color.white.opacity(0.08)
+        }
+        return Color.clear
+    }
+
+}
+
 /// A panel's divider that resizes the panel to its right: drag left to widen, right to narrow, within `range`.
 private struct PanelResizeEdge: View {
     @Binding var width: Double
@@ -374,18 +435,19 @@ private struct PanelResizeEdge: View {
     @State private var startWidth: Double?
 
     var body: some View {
-        Divider().overlay {
-            Color.clear.frame(width: 8).contentShape(Rectangle())
-                .pointerStyle(.columnResize)
-                .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        let start = startWidth ?? width
-                        startWidth = start
-                        width = min(range.upperBound, max(range.lowerBound, (start - value.translation.width).rounded()))
-                    }
-                    .onEnded { _ in startWidth = nil })
-                .help("Drag to resize the panel")
-        }
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 5)
+            .contentShape(Rectangle())
+            .pointerStyle(.columnResize)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let start = startWidth ?? width
+                    startWidth = start
+                    width = min(range.upperBound, max(range.lowerBound, (start - value.translation.width).rounded()))
+                }
+                .onEnded { _ in startWidth = nil })
+            .help("Drag to resize the panel")
     }
 }
 

@@ -8,7 +8,7 @@ enum CanvasRuler {
 struct CanvasRulerCorner: View {
     var body: some View {
         Rectangle()
-            .fill(Color(white: 0.2))
+            .fill(.clear)
             .overlay(alignment: .bottomTrailing) {
                 Path { path in
                     path.move(to: CGPoint(x: 5, y: CanvasRuler.thickness - 4))
@@ -53,11 +53,16 @@ final class CanvasRulerNSView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override var isFlipped: Bool { true }
-    override var isOpaque: Bool { true }
+    override var isOpaque: Bool { false }
+
+    /// The ruler's origin in canvas-view coordinates, where the viewport measures document points.
+    /// The rulers once sat flush with the canvas's top-left corner; now they float over it, inset
+    /// by the tool header, tool rail and corner square, so their local coordinates no longer match.
+    private var canvasOrigin: CGPoint {
+        canvasView().map { convert(.zero, to: $0) } ?? .zero
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.2, alpha: 1).setFill()
-        bounds.fill()
         guard let document = session.document else { return }
         let size = document.size
         let scale = session.viewport.pointsPerPixel
@@ -70,15 +75,16 @@ final class CanvasRulerNSView: NSView {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular),
             .foregroundColor: labels
         ]
+        let origin = canvasOrigin
 
         let start: CGFloat
         let end: CGFloat
         if axis == .horizontal {
-            start = session.viewport.documentPoint(from: CGPoint(x: 0, y: 0), documentSize: size).x
-            end = session.viewport.documentPoint(from: CGPoint(x: bounds.width, y: 0), documentSize: size).x
+            start = session.viewport.documentPoint(from: CGPoint(x: origin.x, y: origin.y), documentSize: size).x
+            end = session.viewport.documentPoint(from: CGPoint(x: origin.x + bounds.width, y: origin.y), documentSize: size).x
         } else {
-            start = session.viewport.documentPoint(from: CGPoint(x: 0, y: 0), documentSize: size).y
-            end = session.viewport.documentPoint(from: CGPoint(x: 0, y: bounds.height), documentSize: size).y
+            start = session.viewport.documentPoint(from: CGPoint(x: origin.x, y: origin.y), documentSize: size).y
+            end = session.viewport.documentPoint(from: CGPoint(x: origin.x, y: origin.y + bounds.height), documentSize: size).y
         }
         let first = floor(min(start, end) / minor) * minor
         let last = ceil(max(start, end) / minor) * minor
@@ -88,9 +94,9 @@ final class CanvasRulerNSView: NSView {
         while value <= last + 0.001 {
             let view: CGFloat
             if axis == .horizontal {
-                view = session.viewport.viewPoint(from: CGPoint(x: value, y: 0), documentSize: size).x
+                view = session.viewport.viewPoint(from: CGPoint(x: value, y: 0), documentSize: size).x - origin.x
             } else {
-                view = session.viewport.viewPoint(from: CGPoint(x: 0, y: value), documentSize: size).y
+                view = session.viewport.viewPoint(from: CGPoint(x: 0, y: value), documentSize: size).y - origin.y
             }
             let remainder = abs(value.remainder(dividingBy: step))
             let isMajor = remainder < 0.001 || abs(remainder - step) < 0.001

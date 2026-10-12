@@ -66,6 +66,7 @@ struct LayersPanel: View {
 
         }
         .frame(width: width)
+        .glassEffect(.regular, in: .rect(corners: .concentric(minimum: 10)))
         .task(id: session.adjustmentEditingID) {
             if let id = session.adjustmentEditingID { await session.beginAdjustmentEditing(id) }
         }

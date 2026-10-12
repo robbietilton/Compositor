@@ -4,6 +4,9 @@ import CoreGraphics
 /// Document: pixels with top-left origin. View: AppKit points. Zoom 1 means actual display pixels.
 struct CanvasViewport: Equatable {
     var viewSize: CGSize = .zero
+    /// The part of the view the glass header, rulers and side panels leave clear, in view coordinates.
+    /// The document is fitted and centered within it; nil until the layout reports it.
+    var safeArea: CGRect? = nil
     var backingScale: CGFloat = 1
     private(set) var zoom: CGFloat = 1
     var pan: CGSize = .zero
@@ -13,7 +16,7 @@ struct CanvasViewport: Equatable {
                                               0.5, 2.0 / 3.0, 1, 1.25, 1.5, 2,
                                               3, 4, 5, 6, 8, 12, 16]
     var pointsPerPixel: CGFloat { zoom / backingScale }
-    var center: CGPoint { CGPoint(x: viewSize.width / 2, y: viewSize.height / 2) }
+    var center: CGPoint { safeArea.map { CGPoint(x: $0.midX, y: $0.midY) } ?? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2) }
 
     func documentRect(_ size: CGSize) -> CGRect {
         let scaled = CGSize(width: size.width * pointsPerPixel, height: size.height * pointsPerPixel)
@@ -33,17 +36,19 @@ struct CanvasViewport: Equatable {
     }
 
     mutating func fit(documentSize: CGSize) {
-        guard viewSize.width > 0, viewSize.height > 0 else { followsFit = true; return }
-        zoom = clamp(min(max(1, viewSize.width - 96) / documentSize.width,
-                         max(1, viewSize.height - 96) / documentSize.height) * backingScale)
+        let area = safeArea ?? CGRect(origin: .zero, size: viewSize)
+        guard area.width > 0, area.height > 0 else { followsFit = true; return }
+        zoom = clamp(min(max(1, area.width - 96) / documentSize.width,
+                         max(1, area.height - 96) / documentSize.height) * backingScale)
         pan = .zero
         followsFit = true
     }
 
-    mutating func resize(to size: CGSize, backingScale newScale: CGFloat, documentSize: CGSize?) {
+    mutating func resize(to size: CGSize, backingScale newScale: CGFloat, documentSize: CGSize?, safeArea: CGRect? = nil) {
         // Preserve the center document point when moving between displays.
         let oldScale = pointsPerPixel
         viewSize = size
+        self.safeArea = safeArea
         backingScale = max(1, newScale)
         if followsFit, let documentSize {
             fit(documentSize: documentSize)
@@ -51,6 +56,13 @@ struct CanvasViewport: Equatable {
             let ratio = pointsPerPixel / oldScale
             pan = CGSize(width: pan.width * ratio, height: pan.height * ratio)
         }
+    }
+
+    /// Whether a point sits on the ruler strips at the top and left of the safe area, where a guide
+    /// being dragged is let go to delete it. Before any safe area is reported, the whole view is clear.
+    func isOverRuler(_ point: CGPoint) -> Bool {
+        guard let safeArea else { return point.x < 0 || point.y < 0 }
+        return point.x < safeArea.minX || point.y < safeArea.minY
     }
 
     mutating func setZoom(_ value: CGFloat, anchoredAt anchor: CGPoint, documentSize: CGSize) {
