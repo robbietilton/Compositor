@@ -526,7 +526,12 @@ extension Dictionary where Key == String, Value == Any {
     }
 
     func point(x: String, y: String) throws -> CGPoint {
-        CGPoint(x: try requiredNumber(x), y: try requiredNumber(y))
+        let point = CGPoint(x: try requiredNumber(x), y: try requiredNumber(y))
+        guard abs(point.x) <= MCPToolRouter.maximumCoordinate,
+              abs(point.y) <= MCPToolRouter.maximumCoordinate else {
+            throw MCPToolFailure(message: "Coordinates must be between -\(DocumentLimits.maxSide) and \(DocumentLimits.maxSide).")
+        }
+        return point
     }
 
     func rect() throws -> CGRect {

@@ -382,38 +382,36 @@ struct CompositorApp: App {
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                 }
                 CommandGroup(after: .help) {
-                    if languageManager.isLanguageMenuAvailable {
-                        Divider()
-                        Menu(L10n.string("Language")) {
-                            ForEach(languageManager.availableLanguages) { option in
-                                Button {
-                                    Task {
-                                        await languageManager.select(option)
-                                        if let message = languageManager.lastError {
-                                            let alert = NSAlert()
-                                            alert.messageText = L10n.string("Language Download Failed")
-                                            alert.informativeText = message
-                                            alert.alertStyle = .warning
-                                            alert.addButton(withTitle: L10n.string("OK"))
-                                            alert.runModal()
-                                        }
+                    Divider()
+                    Menu(L10n.string("Language")) {
+                        ForEach(languageManager.availableLanguages) { option in
+                            Button {
+                                Task {
+                                    await languageManager.select(option)
+                                    if let message = languageManager.lastError {
+                                        let alert = NSAlert()
+                                        alert.messageText = L10n.string("Language Download Failed")
+                                        alert.informativeText = message
+                                        alert.alertStyle = .warning
+                                        alert.addButton(withTitle: L10n.string("OK"))
+                                        alert.runModal()
                                     }
-                                } label: {
-                                    if languageManager.downloadingLanguageCode == option.code {
-                                        Label {
-                                            Text(verbatim: option.displayName)
-                                        } icon: {
-                                            ProgressView().controlSize(.small)
-                                        }
-                                    } else if option.code == languageManager.activeLanguage.code {
-                                        Label {
-                                            Text(verbatim: option.displayName)
-                                        } icon: {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    } else {
+                                }
+                            } label: {
+                                if languageManager.downloadingLanguageCode == option.code {
+                                    Label {
                                         Text(verbatim: option.displayName)
+                                    } icon: {
+                                        ProgressView().controlSize(.small)
                                     }
+                                } else if option.code == languageManager.activeLanguage.code {
+                                    Label {
+                                        Text(verbatim: option.displayName)
+                                    } icon: {
+                                        Image(systemName: "checkmark")
+                                    }
+                                } else {
+                                    Text(verbatim: option.displayName)
                                 }
                             }
                         }

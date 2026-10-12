@@ -198,7 +198,7 @@ struct PenToolTests {
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)
         let loaded = try await ProjectStore.shared.load(from: url)
-        #expect(loaded.manifest.version == 14)
+        #expect(loaded.manifest.version == ProjectManifest.current)
         #expect(loaded.documentLayers.last?.liveVectorPath?.style == session.activeLayer?.liveVectorPath?.style)
 
         session.beginTransform()

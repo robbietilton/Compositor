@@ -1,11 +1,17 @@
 import Foundation
 
+nonisolated private final class MCPDecodedJSON: @unchecked Sendable {
+    let value: Any
+    init(_ value: Any) { self.value = value }
+}
+
 /// MCP's JSON-RPC lifecycle and Streamable HTTP session rules. The server intentionally offers tools only: the
 /// current document changes too frequently to be a stable resource, and tools let clients refresh it explicitly.
 @MainActor
 final class MCPProtocolHandler {
     static let currentProtocolVersion = "2025-11-25"
     static let supportedProtocolVersions = [currentProtocolVersion, "2025-06-18", "2025-03-26"]
+    static let maximumSessions = 32
 
     private struct Session {
         var initialized = false
@@ -14,16 +20,24 @@ final class MCPProtocolHandler {
     }
 
     private let token: String
-    private let router: MCPToolRouter
+    private let callTool: @MainActor (String, [String: Any]) async -> [String: Any]
     private var sessions: [String: Session] = [:]
+    private var toolCallActive = false
 
     init(workspace: ProjectWorkspace, token: String) {
         self.token = token
-        router = MCPToolRouter(workspace: workspace)
+        let router = MCPToolRouter(workspace: workspace)
+        callTool = { name, arguments in await router.call(name: name, arguments: arguments) }
+    }
+
+    init(token: String, callTool: @escaping @MainActor (String, [String: Any]) async -> [String: Any]) {
+        self.token = token
+        self.callTool = callTool
     }
 
     func handle(_ request: MCPHTTPRequest) async -> MCPHTTPResponse {
         guard request.path == "/mcp" else { return MCPHTTPResponse(status: 404) }
+        guard validHost(request.headers["host"]) else { return MCPHTTPResponse(status: 403) }
         guard validOrigin(request.headers["origin"]) else { return MCPHTTPResponse(status: 403) }
         guard request.headers["authorization"] == "Bearer \(token)" else {
             return MCPHTTPResponse(status: 401, headers: ["WWW-Authenticate": "Bearer"])
@@ -44,7 +58,11 @@ final class MCPProtocolHandler {
         }
         let object: [String: Any]
         do {
-            guard let decoded = try JSONSerialization.jsonObject(with: request.body) as? [String: Any] else {
+            let data = request.body
+            let decoded = try await Task.detached(priority: .userInitiated) {
+                MCPDecodedJSON(try JSONSerialization.jsonObject(with: data))
+            }.value
+            guard let decoded = decoded.value as? [String: Any] else {
                 return rpcError(id: NSNull(), code: -32_600, message: "Invalid Request", status: 400)
             }
             object = decoded
@@ -81,13 +99,19 @@ final class MCPProtocolHandler {
             return rpcError(id: id, code: -32_000, message: "Send notifications/initialized before using tools.")
         }
         switch method {
-        case "tools/list": return rpcResult(id: id, result: ["tools": MCPToolRouter.tools])
+        case "tools/list": return await rpcResultOffMain(id: id, result: ["tools": MCPToolRouter.tools])
         case "tools/call":
             guard let params = object["params"] as? [String: Any], let name = params["name"] as? String else {
                 return rpcError(id: id, code: -32_602, message: "tools/call requires a tool name.")
             }
+            guard !toolCallActive else {
+                return rpcResult(id: id, result: toolFailure("Another MCP tool is still running. Try again when it finishes."))
+            }
             let arguments = params["arguments"] as? [String: Any] ?? [:]
-            return rpcResult(id: id, result: await router.call(name: name, arguments: arguments))
+            toolCallActive = true
+            let result = await callTool(name, arguments)
+            toolCallActive = false
+            return await rpcResultOffMain(id: id, result: result)
         default: return rpcError(id: id, code: -32_601, message: "Method not found: \(method)")
         }
     }
@@ -98,6 +122,10 @@ final class MCPProtocolHandler {
             return rpcError(id: object["id"] ?? NSNull(), code: -32_602, message: "initialize requires protocolVersion.")
         }
         let negotiated = Self.supportedProtocolVersions.contains(requested) ? requested : Self.currentProtocolVersion
+        if sessions.count >= Self.maximumSessions,
+           let oldest = sessions.min(by: { $0.value.lastUsed < $1.value.lastUsed })?.key {
+            sessions.removeValue(forKey: oldest)
+        }
         let sessionID = UUID().uuidString.lowercased()
         sessions[sessionID] = Session(protocolVersion: negotiated)
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -129,9 +157,20 @@ final class MCPProtocolHandler {
         return Self.supportedProtocolVersions.contains(version)
     }
 
+    private func validHost(_ value: String?) -> Bool {
+        guard let value, !value.contains(","),
+              let url = URL(string: "http://\(value)"), let host = url.host?.lowercased(),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/" else { return false }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+
     private func validOrigin(_ origin: String?) -> Bool {
         guard let origin else { return true }
-        guard let url = URL(string: origin), let host = url.host?.lowercased() else { return false }
+        guard let url = URL(string: origin), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", let host = url.host?.lowercased(),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/" else { return false }
         return host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 
@@ -144,7 +183,15 @@ final class MCPProtocolHandler {
         MCPHTTPResponse.json(["jsonrpc": "2.0", "id": id, "result": result], headers: headers)
     }
 
+    private func rpcResultOffMain(id: Any, result: [String: Any]) async -> MCPHTTPResponse {
+        await MCPHTTPResponse.jsonOffMain(["jsonrpc": "2.0", "id": id, "result": result])
+    }
+
     private func rpcError(id: Any, code: Int, message: String, status: Int = 200) -> MCPHTTPResponse {
         MCPHTTPResponse.json(["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": message]], status: status)
+    }
+
+    private func toolFailure(_ message: String) -> [String: Any] {
+        ["content": [["type": "text", "text": message]], "isError": true]
     }
 }

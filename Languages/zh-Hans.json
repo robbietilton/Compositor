@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "language": "zh-Hans",
-  "revision": 1,
+  "revision": 2,
   "strings": {
     " · %lld DPI: %lld × %lld pixels": " · %lld DPI：%lld × %lld 像素",
     "#": "#",
@@ -378,6 +378,7 @@
     "Histogram": "直方图",
     "Hold Shift to add or Option to subtract for one outline": "按住 Shift 添加轮廓，按住 Option 减去轮廓",
     "Horizontal ruler": "水平标尺",
+    "Horizontal text": "横排文本",
     "How bright the lines are where the picture is black, so they show even over black": "图像为黑色时线条的亮度，使线条在黑色区域仍可见",
     "How far a color may be from the picked ones and still be selected": "颜色与所选颜色相差多远仍可被选中",
     "How far apart the screen's lines are": "屏幕线条之间的距离",
@@ -812,6 +813,7 @@
     "Version 5": "版本 5",
     "Version 6": "版本 6",
     "Vertical ruler": "垂直标尺",
+    "Vertical text": "直排文本",
     "Vibrance": "自然饱和度",
     "Vignette": "晕影",
     "Visualize Range": "显示范围",

@@ -4,8 +4,11 @@ Compositor keeps English in the application and downloads every other language f
 raw-file endpoint. A downloaded pack is verified with the SHA-256 value in `manifest.json`, then stored under
 `Application Support/Compositor/Languages` so it remains available offline.
 
-The **Help → Language** menu contains only packs that have been downloaded and verified successfully. If neither a
-verified cached pack nor a downloadable pack is available, Compositor omits the menu and continues in English.
+The **Help → Language** menu contains packs that have been downloaded and verified successfully, plus valid local packs.
+For an offline installation, copy `<language-code>.json` into
+`~/Library/Application Support/Compositor/Languages`; a manifest is optional for manually installed files. Compositor
+checks the file name, language code, revision, size, contents, and formatting placeholders before offering it. If no
+local or downloadable language is available, the menu remains visible with English as its only option.
 
 Each pack is JSON with a schema version, BCP 47 language code, revision, and `strings` dictionary. To publish a change:
 

@@ -977,7 +977,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         if layerID != layer.id || thumbnailKey != key {
             thumbnail.image = layer.adjustment.map { Self.adjustmentIcon($0.kind.symbol, description: $0.kind.rawValue, quarterTurnClockwise: $0.kind == .curves) }
                 ?? (layer.isGroup ? Self.folderIcon
-                    : editableText ? Self.adjustmentIcon("textformat", description: "Editable text")
+                    : editableText ? Self.editableTextIcon
                     : CanvasThumbnail.layer(layer.asset?.thumbnail, transform: layer.transform, canvas: canvas, box: 36))
             thumbnailKey = key
         }
@@ -1134,6 +1134,22 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     /// 15.5 pt instead of 18). Drawn into a 36 pt template image (the thumbnail's size), which the button
     /// shows 1:1 and still tints; 1.21× the symbol's natural size lands the glyph there.
     private static var adjustmentIcons: [String: NSImage] = [:]
+    /// A fixed mark avoids the localized `textformat` symbol, which turns into words such as “格式”.
+    private static let editableTextIcon: NSImage? = {
+        let mark = NSAttributedString(string: "Aa", attributes: [
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+            .foregroundColor: NSColor.black
+        ])
+        let markSize = mark.size()
+        let icon = NSImage(size: NSSize(width: 36, height: 36), flipped: false) { bounds in
+            mark.draw(at: NSPoint(x: (bounds.midX - markSize.width / 2).rounded(),
+                                  y: (bounds.midY - markSize.height / 2).rounded()))
+            return true
+        }
+        icon.isTemplate = true
+        icon.accessibilityDescription = L10n.string("Editable text")
+        return icon
+    }()
     /// The folder symbol at 80% of the size it would fill the thumbnail slot with.
     private static let folderIcon: NSImage? = {
         guard let symbol = NSImage(systemSymbolName: "folder", accessibilityDescription: L10n.string("Folder")) else { return nil }

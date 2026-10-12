@@ -6002,6 +6002,23 @@
         }
       }
     },
+    "Horizontal text": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "横排文本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "橫排文字"
+          }
+        }
+      }
+    },
     "How bright the lines are where the picture is black, so they show even over black": {
       "extractionState": "manual",
       "localizations": {
@@ -12883,6 +12900,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "垂直標尺"
+          }
+        }
+      }
+    },
+    "Vertical text": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直排文本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直排文字"
           }
         }
       }

@@ -5,15 +5,15 @@
       "code": "zh-Hans",
       "displayName": "简体中文",
       "file": "zh-Hans.json",
-      "sha256": "e80202c9fb5896e81cdcd67a0a9520443d1db4310886e1412e1211d1d409623e",
-      "revision": 1
+      "sha256": "9cc04dd239346bce45a3724e9843136bd6dcd3ce6f5c6d4dd3cda04bb30b1e95",
+      "revision": 2
     },
     {
       "code": "zh-Hant",
       "displayName": "繁體中文",
       "file": "zh-Hant.json",
-      "sha256": "1ebbaedc5add6fab05a77cae388e2c6ecf573c5026a1c95ceb1006c4c2540b47",
-      "revision": 1
+      "sha256": "5f4038d51567c164b8661991b6b8c31f0c42683069dd78ff18800694769649d8",
+      "revision": 2
     }
   ]
 }

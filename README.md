@@ -93,7 +93,9 @@ brew install --cask robbietilton-compositor
 
 English is built in. Other languages are downloaded on demand from the versioned files in `Languages`, verified, and
 stored in Application Support for offline use. Choose **Help › Language** to switch; the choice is remembered across
-launches. `Compositor/Localizable.xcstrings` is the editable translation source and is excluded from the app bundle.
+launches. A valid standalone language JSON can also be installed without a manifest by copying it to
+`~/Library/Application Support/Compositor/Languages`. `Compositor/Localizable.xcstrings` is the editable translation
+source and is excluded from the app bundle.
 
 ## Building
 

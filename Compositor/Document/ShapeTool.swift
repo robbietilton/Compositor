@@ -126,8 +126,11 @@ extension EditorSession {
                           width: abs(to.x - from.x), height: abs(to.y - from.y)).insetBy(dx: -thickness / 2, dy: -thickness / 2)
             ends = (from, to)
         }
-        guard canEditLayers, document != nil, rect.width >= 1, rect.height >= 1 else { return }
-        guard Int(rect.width) * Int(rect.height) <= Self.maxShapePixels else {
+        guard canEditLayers, document != nil else { return }
+        guard [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite),
+              rect.width >= 1, rect.height >= 1,
+              rect.width <= DocumentLimits.maxSideExtent, rect.height <= DocumentLimits.maxSideExtent,
+              rect.width <= CGFloat(Self.maxShapePixels) / rect.height else {
             brushError = "That shape is too large. A shape can cover up to \(DocumentLimits.maxSurfaceMegapixels) megapixels."
             return
         }

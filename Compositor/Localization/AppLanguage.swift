@@ -77,7 +77,6 @@ final class LanguageManager {
     private(set) var availableLanguages: [AppLanguage]
     private(set) var selectedLanguage: AppLanguage
     private(set) var activeLanguage: AppLanguage = .english
-    private(set) var isLanguageMenuAvailable: Bool
     private(set) var downloadingLanguageCode: String?
     private(set) var lastError: String?
     private(set) var revision = 0
@@ -94,9 +93,11 @@ final class LanguageManager {
         let resolvedDirectory = directory ?? Self.languageDirectory()
         let cachedManifest = Self.cachedManifest(from: resolvedDirectory)
         let cachedLanguages = Self.usableCachedLanguages(from: cachedManifest, in: resolvedDirectory)
-        let knownLanguages = cachedManifest.map(Self.validLanguages(in:)) ?? AppLanguage.initialChoices
+        let localLanguages = Self.standaloneLanguages(in: resolvedDirectory,
+                                                      excluding: Set(cachedLanguages.map { $0.code.lowercased() }))
+        let initialLanguages = Self.merging(cachedLanguages, localLanguages)
         let initialSelection = AppLanguage.resolved(defaults.string(forKey: AppLanguage.storageKey),
-                                                    from: [.english] + knownLanguages)
+                                                    from: [.english] + initialLanguages)
 
         self.manifestURL = manifestURL ?? Self.defaultManifestURL
         let downloadSession = session ?? Self.downloadSession()
@@ -119,9 +120,8 @@ final class LanguageManager {
         }
         self.directory = resolvedDirectory
         self.defaults = defaults
-        availableLanguages = [.english] + cachedLanguages
+        availableLanguages = [.english] + initialLanguages
         selectedLanguage = initialSelection
-        isLanguageMenuAvailable = !cachedLanguages.isEmpty
         try? FileManager.default.createDirectory(at: resolvedDirectory, withIntermediateDirectories: true)
         if initialSelection != .english,
            let pack = try? Self.readPack(for: initialSelection, from: resolvedDirectory) {
@@ -203,11 +203,11 @@ final class LanguageManager {
 
     private func apply(_ languages: [AppLanguage]) {
         availableLanguages = [.english] + languages
-        isLanguageMenuAvailable = !languages.isEmpty
     }
 
-    /// Publishes only languages whose complete files are checksum-verified and stored locally. A manifest by itself is
-    /// not enough to expose the menu because it could otherwise advertise options that can never be activated.
+    /// Publishes only languages whose complete files are stored locally. Remote files must match their advertised
+    /// checksums; standalone packs copied into the Languages directory are validated directly from their contents.
+    /// A manifest by itself is not enough to expose an option that can never be activated.
     private func refreshAvailableLanguages() async throws -> [AppLanguage] {
         let manifest = try await downloadManifest()
         try Task.checkCancellation()
@@ -265,16 +265,21 @@ final class LanguageManager {
                   (try? Self.readPack(for: previous, from: directory)) != nil else { return nil }
             return previous
         }
-        guard !usable.isEmpty else { throw LanguagePackFailure.unavailableLanguages }
+        let local = Self.standaloneLanguages(in: directory,
+                                             excluding: Set(usable.map { $0.code.lowercased() }))
+        let available = Self.merging(usable, local)
+        guard !available.isEmpty else { throw LanguagePackFailure.unavailableLanguages }
 
-        // The local manifest is intentionally filtered. Its entries therefore describe files that are already present
-        // and verified, which keeps offline launches from showing a dead Language menu.
-        let cachedManifest = LanguageManifest(schemaVersion: 1, languages: usable)
-        let data = try JSONEncoder().encode(cachedManifest)
-        try Task.checkCancellation()
-        try Self.write(data, to: directory.appending(path: "manifest.json"))
-        apply(usable)
-        return usable
+        if !usable.isEmpty {
+            // The cached manifest contains only verified remote files. Standalone packs are rediscovered from disk,
+            // so editing or removing one takes effect on the next launch without rewriting this manifest.
+            let cachedManifest = LanguageManifest(schemaVersion: 1, languages: usable)
+            let data = try JSONEncoder().encode(cachedManifest)
+            try Task.checkCancellation()
+            try Self.write(data, to: directory.appending(path: "manifest.json"))
+        }
+        apply(available)
+        return available
     }
 
     private func activateCached(_ language: AppLanguage) -> Bool {
@@ -374,6 +379,43 @@ final class LanguageManager {
     private static func usableCachedLanguages(from manifest: LanguageManifest?, in directory: URL) -> [AppLanguage] {
         guard let manifest else { return [] }
         return validLanguages(in: manifest).filter { (try? readPack(for: $0, from: directory)) != nil }
+    }
+
+    /// Valid language packs may be installed manually without a manifest. The file name is the language code, while
+    /// the display name is the language's own localized name (with stable built-in names for the bootstrap languages).
+    private static func standaloneLanguages(in directory: URL, excluding excludedCodes: Set<String>) -> [AppLanguage] {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                       includingPropertiesForKeys: Array(keys),
+                                                                       options: [.skipsHiddenFiles]) else { return [] }
+        var languages: [AppLanguage] = []
+        var codes = excludedCodes
+        for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            where languages.count < maximumRemoteLanguages && file.pathExtension.lowercased() == "json" {
+            guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
+                  values.isSymbolicLink != true, (values.fileSize ?? 5_000_001) <= 5_000_000,
+                  let data = try? Data(contentsOf: file, options: [.mappedIfSafe]), data.count <= 5_000_000,
+                  let pack = try? JSONDecoder().decode(LanguagePack.self, from: data), pack.schemaVersion == 1,
+                  pack.revision > 0, isValidLanguageCode(pack.language),
+                  file.deletingPathExtension().lastPathComponent == pack.language,
+                  pack.language.lowercased() != AppLanguage.english.code,
+                  !sanitizedStrings(pack.strings).isEmpty,
+                  codes.insert(pack.language.lowercased()).inserted else { continue }
+            let displayName = AppLanguage.initialChoices.first { $0.code == pack.language }?.displayName
+                ?? Locale(identifier: pack.language).localizedString(forIdentifier: pack.language)
+                ?? pack.language
+            let checksum = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            let language = AppLanguage(code: pack.language, displayName: displayName,
+                                       file: file.lastPathComponent, sha256: checksum, revision: pack.revision)
+            guard isValidRemoteLanguage(language), (try? decodePack(data, for: language)) != nil else { continue }
+            languages.append(language)
+        }
+        return languages
+    }
+
+    private static func merging(_ primary: [AppLanguage], _ additional: [AppLanguage]) -> [AppLanguage] {
+        var codes: Set<String> = []
+        return (primary + additional).filter { codes.insert($0.code.lowercased()).inserted }
     }
 
     private static func cachedManifest(from directory: URL) -> LanguageManifest? {

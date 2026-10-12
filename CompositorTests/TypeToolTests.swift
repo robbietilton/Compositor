@@ -139,6 +139,54 @@ struct TypeToolTests {
         #expect(ink > 100 && clear > 100)
     }
 
+    @Test func verticalTextRendersEditsAndSurvivesReopening() async throws {
+        var style = LayerTextStyle()
+        style.content = "天地玄黄ABC"
+        style.fontSize = 48
+        style.orientation = .vertical
+        let size = EditorSession.textBoxSize(style)
+        #expect(size.height > size.width)
+        let image = try EditorSession.textImage(style)
+        let bytes = try #require(image.dataProvider?.data) as Data
+        var minX = image.width, minY = image.height, maxX = -1, maxY = -1
+        for y in 0..<image.height { for x in 0..<image.width {
+            if bytes[y * image.bytesPerRow + x * 4 + 3] > 0 {
+                minX = min(minX, x); minY = min(minY, y); maxX = max(maxX, x); maxY = max(maxY, y)
+            }
+        } }
+        #expect(maxX >= minX && maxY >= minY)
+        #expect(maxY - minY > maxX - minX)
+
+        let session = makeSession()
+        session.textDefaults.orientation = .vertical
+        session.beginText(at: CGPoint(x: 120, y: 80))
+        session.textDraft?.style.content = style.content
+        session.textDraft?.style.fontSize = style.fontSize
+        let view = CanvasView(session: session)
+        view.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        view.synchronizeDisplay()
+        #expect(view.inlineTextEditor?.textView.layoutOrientation == .vertical)
+        #expect(session.finishText())
+        #expect(session.activeLayer?.liveText?.style.resolvedOrientation == .vertical)
+
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.version == 15)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("VerticalText-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let reopened = EditorSession()
+        reopened.installProject(try await ProjectStore.shared.load(from: url), from: url)
+        #expect(reopened.activeLayer?.liveText?.style.resolvedOrientation == .vertical)
+
+        var oldManifest = snapshot.manifest
+        oldManifest.version = 14
+        try JSONEncoder().encode(oldManifest).write(to: url.appendingPathComponent("manifest.json"))
+        do {
+            _ = try await ProjectStore.shared.load(from: url)
+            Issue.record("Version 14 with vertical text should be rejected")
+        } catch ProjectError.invalid {}
+    }
+
     @Test func clippingToTextExportsColoredGlyphsOnTransparency() async throws {
         let session = makeSession()
         session.beginText(at: .zero)

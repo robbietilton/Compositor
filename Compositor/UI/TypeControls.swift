@@ -18,6 +18,32 @@ struct TypeControls: View {
             Text(L10n.string("Type")).font(ToolHeaderStyle.titleFont)
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
+                    HStack(spacing: 2) {
+                        ForEach(TextOrientation.allCases, id: \.self) { orientation in
+                            let selected = session.currentTextStyle.resolvedOrientation == orientation
+                            let label = orientation == .horizontal ? "Horizontal text" : "Vertical text"
+                            Button {
+                                session.changeTextStyle { $0.orientation = orientation == .horizontal ? nil : .vertical }
+                            } label: {
+                                Group {
+                                    if orientation == .horizontal {
+                                        HStack(spacing: 0) { Text(verbatim: "A"); Text(verbatim: "a") }
+                                    } else {
+                                        VStack(spacing: -4) { Text(verbatim: "A"); Text(verbatim: "a") }
+                                    }
+                                }
+                                .font(.system(size: 11, weight: .medium))
+                                .frame(width: 30, height: 26)
+                                .background(selected ? Color.white.opacity(0.14) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 4))
+                                .contentShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+                            .help(Text(L10n.string(label)))
+                            .accessibilityLabel(Text(L10n.string(label)))
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }
                     TypeFontPicker(fontName: Binding(get: {
                         guard let draft = session.textDraft else { return session.currentTextStyle.fontName }
                         let selection = draft.selection

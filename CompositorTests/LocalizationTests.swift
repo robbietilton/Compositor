@@ -20,7 +20,7 @@ struct LocalizationTests {
         #expect(AppLanguage.resolved("unsupported") == .english)
     }
 
-    @Test func languageMenuStaysHiddenWhenManifestIsUnavailable() async throws {
+    @Test func offlineWithoutLocalPacksOffersEnglishOnly() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
         let suite = "CompositorLanguages-\(UUID())"
@@ -32,12 +32,106 @@ struct LocalizationTests {
         let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
         let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
 
-        #expect(!manager.isLanguageMenuAvailable)
+        #expect(manager.availableLanguages == [.english])
         await manager.prepare()
-        #expect(!manager.isLanguageMenuAvailable)
+        #expect(manager.availableLanguages == [.english])
     }
 
-    @Test func languageMenuStaysHiddenWhenManifestExistsButPackIsUnavailable() async throws {
+    @Test func standaloneLocalPackWorksWithoutAManifestOrNetwork() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let pack = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": 1,
+            "language": "zh-Hans",
+            "revision": 3,
+            "strings": ["Language": "语言", "Gaussian Blur": "高斯模糊"],
+        ], options: [.sortedKeys])
+        try pack.write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
+        let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
+        defaults.set("zh-Hans", forKey: AppLanguage.storageKey)
+
+        let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
+
+        #expect(manager.availableLanguages.map(\.code) == ["en", "zh-Hans"])
+        #expect(manager.activeLanguage.code == "zh-Hans")
+        #expect(manager.string("Gaussian Blur") == "高斯模糊")
+        await manager.prepare()
+        #expect(manager.activeLanguage.code == "zh-Hans")
+    }
+
+    @Test func successfulRemoteRefreshKeepsStandaloneLocalPacks() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let localPack = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": 1, "language": "fr", "revision": 1,
+            "strings": ["Language": "Langue"],
+        ], options: [.sortedKeys])
+        try localPack.write(to: root.appending(path: "fr.json"), options: .atomic)
+        let manifest = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": 1, "languages": [],
+        ], options: [.sortedKeys])
+        let manifestURL = try #require(URL(string: "https://languages.example/manifest.json"))
+        let loader: LanguageManager.Loader = { request, _ in
+            let url = try #require(request.url)
+            let response = try #require(HTTPURLResponse(url: url, statusCode: 200,
+                                                        httpVersion: nil, headerFields: nil))
+            return (manifest, response)
+        }
+        let manager = LanguageManager(manifestURL: manifestURL, directory: root,
+                                      defaults: defaults, loader: loader)
+
+        await manager.prepare()
+
+        #expect(manager.availableLanguages.contains { $0.code == "fr" })
+        #expect(manager.lastError == nil)
+        let french = try #require(manager.availableLanguages.first { $0.code == "fr" })
+        await manager.select(french)
+        #expect(manager.activeLanguage.code == "fr")
+        #expect(manager.string("Language") == "Langue")
+    }
+
+    @Test func invalidStandalonePacksLeaveOnlyEnglishAvailable() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
+        let suite = "CompositorLanguages-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let wrongName = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": 1, "language": "de", "revision": 1,
+            "strings": ["Language": "Sprache"],
+        ], options: [.sortedKeys])
+        try wrongName.write(to: root.appending(path: "renamed.json"), options: .atomic)
+        let unsafeFormat = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": 1, "language": "es", "revision": 1,
+            "strings": ["Current: %lld pixels": "Actual: %@ píxeles"],
+        ], options: [.sortedKeys])
+        try unsafeFormat.write(to: root.appending(path: "es.json"), options: .atomic)
+        let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
+
+        let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
+
+        #expect(manager.availableLanguages == [.english])
+    }
+
+    @Test func unavailableRemotePackIsNotAdvertised() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
         let suite = "CompositorLanguages-\(UUID())"
@@ -67,7 +161,6 @@ struct LocalizationTests {
 
         await manager.prepare()
 
-        #expect(!manager.isLanguageMenuAvailable)
         #expect(manager.availableLanguages == [.english])
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "manifest.json").path))
         await manager.select(.simplifiedChinese)
@@ -75,7 +168,7 @@ struct LocalizationTests {
         #expect(manager.activeLanguage == .english)
     }
 
-    @Test func cachedManifestWithoutVerifiedPackDoesNotExposeMenu() async throws {
+    @Test func cachedManifestWithoutVerifiedPackOffersEnglishOnly() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "CompositorLanguages-\(UUID())", directoryHint: .isDirectory)
         let suite = "CompositorLanguages-\(UUID())"
@@ -97,10 +190,9 @@ struct LocalizationTests {
 
         let manager = LanguageManager(directory: root, defaults: defaults, loader: offline)
 
-        #expect(!manager.isLanguageMenuAvailable)
         #expect(manager.availableLanguages == [.english])
         await manager.prepare()
-        #expect(!manager.isLanguageMenuAvailable)
+        #expect(manager.availableLanguages == [.english])
     }
 
     @Test func downloadedPackIsVerifiedStoredAndAvailableOffline() async throws {
@@ -141,9 +233,9 @@ struct LocalizationTests {
             return (data, response)
         }
         let manager = LanguageManager(manifestURL: manifestURL, directory: root, defaults: defaults, loader: loader)
-        #expect(!manager.isLanguageMenuAvailable)
+        #expect(manager.availableLanguages == [.english])
         await manager.prepare()
-        #expect(manager.isLanguageMenuAvailable)
+        #expect(manager.availableLanguages.contains { $0.code == "zh-Hans" })
         let chinese = try #require(manager.availableLanguages.first { $0.code == "zh-Hans" })
         await manager.select(chinese)
         #expect(manager.string("Language") == "语言")
@@ -177,13 +269,11 @@ struct LocalizationTests {
         let updateFallback = LanguageManager(manifestURL: manifestURL, directory: root,
                                              defaults: defaults, loader: updateLoader)
         await updateFallback.prepare()
-        #expect(updateFallback.isLanguageMenuAvailable)
         #expect(updateFallback.activeLanguage.revision == 7)
         #expect(updateFallback.string("Language") == "语言")
 
         let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
         let relaunched = LanguageManager(manifestURL: manifestURL, directory: root, defaults: defaults, loader: offline)
-        #expect(relaunched.isLanguageMenuAvailable)
         #expect(relaunched.activeLanguage.code == "zh-Hans")
         #expect(relaunched.string("Language") == "语言")
         await relaunched.prepare()
@@ -192,7 +282,7 @@ struct LocalizationTests {
         try Data("corrupted".utf8).write(to: root.appending(path: "zh-Hans.json"), options: .atomic)
         let corrupted = LanguageManager(manifestURL: manifestURL, directory: root, defaults: defaults,
                                         loader: offline)
-        #expect(!corrupted.isLanguageMenuAvailable)
+        #expect(corrupted.availableLanguages == [.english])
         #expect(corrupted.activeLanguage == .english)
         #expect(corrupted.string("Language") == "Language")
     }
@@ -238,7 +328,6 @@ struct LocalizationTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let offline: LanguageManager.Loader = { _, _ in throw URLError(.notConnectedToInternet) }
         let runtime = LanguageManager(directory: languagesDirectory, defaults: defaults, loader: offline)
-        #expect(runtime.isLanguageMenuAvailable)
         #expect(Set(runtime.availableLanguages.map(\.code)) == Set(["en", "zh-Hans", "zh-Hant"]))
     }
 }

@@ -4,6 +4,11 @@ nonisolated enum TextAlignment: String, Codable, CaseIterable, Sendable {
     case left = "Left", center = "Center", right = "Right"
 }
 
+nonisolated enum TextOrientation: String, Codable, CaseIterable, Sendable {
+    case horizontal = "Horizontal"
+    case vertical = "Vertical"
+}
+
 nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
     var content = "Text"
     var fontName = "Helvetica"
@@ -12,6 +17,9 @@ nonisolated struct LayerTextStyle: Codable, Equatable, Sendable {
     var green: CGFloat = 0
     var blue: CGFloat = 0
     var alignment: TextAlignment = .left
+    /// Missing in older projects and in horizontal text, whose layout predates the orientation field.
+    var orientation: TextOrientation? = nil
+    var resolvedOrientation: TextOrientation { orientation ?? .horizontal }
     var tracking: CGFloat = 0
     /// Baseline to baseline, in layer pixels, as Photoshop's Leading is. 0 is Auto: 120% of the font size.
     var leading: CGFloat = 0
@@ -257,7 +265,10 @@ extension EditorSession {
         // extra room above the letters, so the baseline sits the font's descent up from the bottom of the line.
         let descent = abs((Self.textAttributes(style)[.font] as? NSFont)?.descender ?? 0)
         let baseline = LayerTextStyle.padding + style.lineHeight - descent
-        let origin = target?.origin ?? CGPoint(x: point.x - LayerTextStyle.padding, y: point.y - baseline)
+        let start = style.resolvedOrientation == .vertical
+            ? CGPoint(x: point.x - baseline, y: point.y - LayerTextStyle.padding)
+            : CGPoint(x: point.x - LayerTextStyle.padding, y: point.y - baseline)
+        let origin = target?.origin ?? start
         textDraft = TextDraft(documentID: document.id, layerID: target?.id, origin: origin, transform: target?.transform, style: style)
     }
 
@@ -410,9 +421,14 @@ extension EditorSession {
         paragraph.minimumLineHeight = style.lineHeight
         paragraph.maximumLineHeight = style.lineHeight
         paragraph.lineBreakMode = .byWordWrapping
-        return [.font: NSFont(name: style.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize),
-                .foregroundColor: NSColor(srgbRed: style.red, green: style.green, blue: style.blue, alpha: 1),
-                .paragraphStyle: paragraph, .kern: style.tracking]
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont(name: style.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize),
+            .foregroundColor: NSColor(srgbRed: style.red, green: style.green, blue: style.blue, alpha: 1),
+            .paragraphStyle: paragraph,
+            .kern: style.tracking
+        ]
+        if style.resolvedOrientation == .vertical { attributes[.verticalGlyphForm] = 1 }
+        return attributes
     }
 
     /// How big point text is: what it measures, plus its padding. A caret's worth of width so an empty line still
@@ -421,9 +437,24 @@ extension EditorSession {
         if let boxSize = style.boxSize { return boxSize }
         let string = attributedText(style)
         let padding = LayerTextStyle.padding
-        let measured = string.boundingRect(with: CGSize(width: 100_000, height: 100_000),
-                                           options: [.usesLineFragmentOrigin, .usesFontLeading])
+        let measured: CGSize
+        if style.resolvedOrientation == .vertical {
+            let view = verticalTextView(string, frame: CGRect(x: 0, y: 0, width: 100_000, height: 100_000))
+            if let container = view.textContainer, let layout = view.layoutManager {
+                layout.ensureLayout(for: container)
+                let used = layout.usedRect(for: container)
+                // A vertical text view's layout coordinates are rotated relative to its frame.
+                measured = CGSize(width: used.height, height: used.width)
+            } else { measured = .zero }
+        } else {
+            measured = string.boundingRect(with: CGSize(width: 100_000, height: 100_000),
+                                           options: [.usesLineFragmentOrigin, .usesFontLeading]).size
+        }
         let line = ceil(style.lineHeight)
+        if style.resolvedOrientation == .vertical {
+            return CGSize(width: max(16, ceil(max(measured.width, line) + padding * 2)),
+                          height: max(16, ceil(measured.height + padding * 2 + style.fontSize * 0.1)))
+        }
         return CGSize(width: max(16, ceil(measured.width + padding * 2 + style.fontSize * 0.1)),
                       height: max(16, ceil(max(measured.height, line) + padding * 2)))
     }
@@ -455,6 +486,19 @@ extension EditorSession {
         guard width.isFinite, height.isFinite, width >= 1, height >= 1,
               width <= DocumentLimits.maxSideExtent, height <= DocumentLimits.maxSideExtent, width * height <= DocumentLimits.maxSurfaceExtent else { throw ProjectError.tooLarge }
         let context = try BrushRaster.context(width: Int(width), height: Int(height), mask: false)
+        if style.resolvedOrientation == .vertical {
+            let root = NSView(frame: CGRect(x: 0, y: 0, width: width, height: height))
+            let textFrame = root.bounds.insetBy(dx: padding, dy: padding)
+            let view = verticalTextView(string, frame: textFrame)
+            root.addSubview(view)
+            NSGraphicsContext.saveGraphicsState()
+            defer { NSGraphicsContext.restoreGraphicsState() }
+            let graphics = NSGraphicsContext(cgContext: context, flipped: true)
+            NSGraphicsContext.current = graphics
+            root.displayIgnoringOpacity(root.bounds, in: graphics)
+            guard let image = context.makeImage() else { throw ExportError.render }
+            return image
+        }
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
@@ -468,5 +512,17 @@ extension EditorSession {
         layout.drawGlyphs(forGlyphRange: glyphs, at: CGPoint(x: padding, y: padding))
         guard let image = context.makeImage() else { throw ExportError.render }
         return image
+    }
+
+    private static func verticalTextView(_ string: NSAttributedString, frame: CGRect) -> NSTextView {
+        let view = NSTextView(frame: frame)
+        view.drawsBackground = false
+        view.isEditable = false
+        view.isSelectable = false
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.setLayoutOrientation(.vertical)
+        view.textStorage?.setAttributedString(string)
+        return view
     }
 }

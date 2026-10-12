@@ -10,13 +10,21 @@ struct MCPToolFailure: LocalizedError {
 /// main actor so an MCP edit and a pointer edit can never mutate a document at the same time.
 @MainActor
 final class MCPToolRouter {
+    static let previewPixelLimit = 16_000_000
+    static let maximumCoordinate = Double(DocumentLimits.maxSide)
+    static let documentVectorNodeLimit = 10_000
+    static let documentTextCharacterLimit = 200_000
     let workspace: ProjectWorkspace
 
     init(workspace: ProjectWorkspace) { self.workspace = workspace }
 
-    static var tools: [[String: Any]] {
+    static let tools: [[String: Any]] = {
         [
-            tool("compositor_get_document", "Inspect the current Compositor canvas and its layers.", schema(),
+            tool("compositor_get_document", "Inspect the current Compositor canvas and a page of its layers.", schema(
+                properties: [
+                    "layer_offset": integer("Zero-based first layer in the returned page. Defaults to 0.", minimum: 0, maximum: 10_000),
+                    "layer_limit": integer("Maximum layers to return. Defaults to 500.", minimum: 1, maximum: 2_000)
+                ]),
                  readOnly: true, destructive: false, idempotent: true),
             tool("compositor_create_document", "Create a new canvas in a new tab without replacing the current document.", schema(
                 properties: [
@@ -160,15 +168,15 @@ final class MCPToolRouter {
             tool("compositor_save_document", "Save the current document to its existing .comp project. Unsaved documents require the user to choose a location in Compositor first.", schema(),
                  destructive: false, idempotent: true),
             tool("compositor_render_document", "Render the current canvas as a PNG image for visual inspection.", schema(
-                properties: ["max_size": integer("Maximum width or height of the returned preview. Defaults to 2048.", minimum: 64, maximum: 8_192)]),
+                properties: ["max_size": integer("Maximum width or height of the returned preview. Defaults to 2048; previews are also capped at 16 megapixels.", minimum: 64, maximum: 8_192)]),
                  readOnly: true, destructive: false, idempotent: true)
         ]
-    }
+    }()
 
     func call(name: String, arguments: [String: Any]) async -> [String: Any] {
         do {
             switch name {
-            case "compositor_get_document": return try result(documentSummary())
+            case "compositor_get_document": return try result(documentSummary(arguments))
             case "compositor_create_document": return try createDocument(arguments)
             case "compositor_add_shape": return try addShape(arguments)
             case "compositor_add_text": return try addText(arguments)
@@ -197,6 +205,9 @@ final class MCPToolRouter {
         guard workspace.canSwitch else { throw MCPToolFailure(message: "Compositor is busy with another edit or dialog.") }
         let width = try arguments.requiredInteger("width", range: 1...DocumentLimits.maxSide)
         let height = try arguments.requiredInteger("height", range: 1...DocumentLimits.maxSide)
+        guard width <= DocumentLimits.maxSurfacePixels / height else {
+            throw MCPToolFailure(message: "The canvas can cover at most \(DocumentLimits.maxSurfaceMegapixels) megapixels.")
+        }
         let resolution = try arguments.optionalNumber("resolution") ?? 72
         guard (1...9_600).contains(resolution) else { throw MCPToolFailure(message: "resolution must be between 1 and 9600.") }
         let background: CGColor?
@@ -336,28 +347,36 @@ final class MCPToolRouter {
             throw MCPToolFailure(message: "Create or open a document first.")
         }
         let maxSize = try arguments.optionalInteger("max_size", range: 64...8_192) ?? 2_048
-        var raster = try await ImageExporter.shared.render(snapshot)
-        let longest = max(raster.image.width, raster.image.height)
-        if longest > maxSize {
-            let scale = Double(maxSize) / Double(longest)
-            raster = try await ImageExporter.shared.resized(raster,
-                width: max(1, Int((Double(raster.image.width) * scale).rounded())),
-                height: max(1, Int((Double(raster.image.height) * scale).rounded())))
-        }
-        let data = try await ImageExporter.shared.pngData(raster)
+        let preview = try await ImageExporter.shared.pngPreview(snapshot, maximumDimension: maxSize,
+                                                                 maximumPixels: Self.previewPixelLimit)
         return [
             "content": [
-                ["type": "text", "text": "Rendered \(raster.image.width) × \(raster.image.height) PNG preview."],
-                ["type": "image", "data": data.base64EncodedString(), "mimeType": "image/png"]
+                ["type": "text", "text": "Rendered \(preview.width) × \(preview.height) PNG preview."],
+                ["type": "image", "data": preview.base64, "mimeType": "image/png"]
             ],
-            "structuredContent": ["width": raster.image.width, "height": raster.image.height, "mime_type": "image/png"],
+            "structuredContent": ["width": preview.width, "height": preview.height, "mime_type": "image/png"],
             "isError": false
         ]
     }
 
-    private func documentSummary() throws -> [String: Any] {
+    private func documentSummary(_ arguments: [String: Any] = [:]) throws -> [String: Any] {
         let tab = workspace.current
         guard let document = tab.session.document else { throw MCPToolFailure(message: "No document is open.") }
+        let offset = try arguments.optionalInteger("layer_offset", range: 0...10_000) ?? 0
+        let limit = try arguments.optionalInteger("layer_limit", range: 1...2_000) ?? 500
+        let end = min(document.layers.count, offset + limit)
+        let page = offset < end ? document.layers[offset..<end] : document.layers[0..<0]
+        var remainingNodes = Self.documentVectorNodeLimit
+        var remainingText = Self.documentTextCharacterLimit
+        let layers = page.map { layer in
+            let nodeCount = layer.liveVectorPath?.style.nodes.count ?? 0
+            let nodeLimit = min(remainingNodes, nodeCount)
+            remainingNodes -= nodeLimit
+            let textCount = layer.liveText?.style.content.count ?? 0
+            let textLimit = min(remainingText, textCount)
+            remainingText -= textLimit
+            return layerSummary(layer, vectorNodeLimit: nodeLimit, textCharacterLimit: textLimit)
+        }
         var summary: [String: Any] = [
             "document_id": document.id.uuidString,
             "tab_name": tab.title,
@@ -368,7 +387,10 @@ final class MCPToolRouter {
             "active_tool": tab.session.tool.rawValue,
             "active_layer_id": tab.session.activeLayerID?.uuidString ?? NSNull(),
             "layer_order": "bottom_to_top",
-            "layers": document.layers.map(layerSummary),
+            "layer_count": document.layers.count,
+            "layer_offset": offset,
+            "layers_truncated": offset > 0 || end < document.layers.count,
+            "layers": layers,
             "viewport": [
                 "zoom": tab.session.viewport.zoom,
                 "pan_x": tab.session.viewport.pan.width,
@@ -392,7 +414,8 @@ final class MCPToolRouter {
         return summary
     }
 
-    func layerSummary(_ layer: ImageLayer) -> [String: Any] {
+    func layerSummary(_ layer: ImageLayer, vectorNodeLimit: Int? = nil,
+                      textCharacterLimit: Int? = nil) -> [String: Any] {
         var summary: [String: Any] = [
             "id": layer.id.uuidString,
             "name": layer.name,
@@ -413,16 +436,22 @@ final class MCPToolRouter {
             ]
         ]
         if let vector = layer.liveVectorPath?.style {
-            summary["vector_path"] = [
+            let limit = min(vector.nodes.count, max(0, vectorNodeLimit ?? vector.nodes.count))
+            var vectorSummary: [String: Any] = [
                 "mode": vector.mode.rawValue.lowercased(), "closed": vector.closed,
                 "color": "#" + vector.color.hex, "line_width": vector.lineWidth,
                 "coordinate_space": "normalized_layer_bounds",
-                "nodes": vector.nodes.map { [
+                "nodes": vector.nodes.prefix(limit).map { [
                     "x": $0.anchor.x, "y": $0.anchor.y,
                     "in_x": $0.inHandle.x, "in_y": $0.inHandle.y,
                     "out_x": $0.outHandle.x, "out_y": $0.outHandle.y
                 ] }
             ]
+            if limit < vector.nodes.count {
+                vectorSummary["node_count"] = vector.nodes.count
+                vectorSummary["nodes_truncated"] = true
+            }
+            summary["vector_path"] = vectorSummary
         }
         if let shape = layer.liveShape?.style {
             summary["shape"] = [
@@ -432,14 +461,20 @@ final class MCPToolRouter {
             ]
         }
         if let text = layer.liveText?.style {
-            summary["text"] = [
-                "content": text.content, "font_name": text.fontName, "font_size": text.fontSize,
+            let limit = min(text.content.count, max(0, textCharacterLimit ?? text.content.count))
+            var textSummary: [String: Any] = [
+                "content": String(text.content.prefix(limit)), "font_name": text.fontName, "font_size": text.fontSize,
                 "color": "#" + PaletteColor(red: text.red, green: text.green, blue: text.blue).hex,
                 "alignment": text.alignment.rawValue.lowercased(), "tracking": text.tracking,
                 "leading": text.leading,
                 "box_width": text.boxSize.map { $0.width as Any } ?? NSNull(),
                 "box_height": text.boxSize.map { $0.height as Any } ?? NSNull()
             ]
+            if limit < text.content.count {
+                textSummary["character_count"] = text.content.count
+                textSummary["content_truncated"] = true
+            }
+            summary["text"] = textSummary
         }
         return summary
     }

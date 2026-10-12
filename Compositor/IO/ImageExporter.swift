@@ -23,9 +23,41 @@ actor ImageExporter {
     /// `hdr` (with `sixteenBit`): flattened in half floats instead, keeping HDR layers' light brighter than white, for an
     /// EXR.
     func render(_ snapshot: ProjectSnapshot, sixteenBit: Bool = false, hdr: Bool = false) throws -> ExportRaster {
-        let width = snapshot.manifest.width, height = snapshot.manifest.height
-        guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
-              width * height <= DocumentLimits.maxSurfacePixels else { throw ExportError.tooLarge }
+        try render(snapshot, sixteenBit: sixteenBit, hdr: hdr, maximumDimension: nil, maximumPixels: nil)
+    }
+
+    /// A preview is composited directly at its returned size. Rendering a 200-megapixel canvas first and shrinking it
+    /// afterwards made a small MCP preview need almost a gigabyte of temporary memory.
+    func pngPreview(_ snapshot: ProjectSnapshot, maximumDimension: Int,
+                    maximumPixels: Int) throws -> EncodedImagePreview {
+        let raster = try render(snapshot, sixteenBit: false, hdr: false,
+                                maximumDimension: maximumDimension, maximumPixels: maximumPixels)
+        try Task.checkCancellation()
+        let data = try pngData(raster)
+        try Task.checkCancellation()
+        return EncodedImagePreview(width: raster.image.width, height: raster.image.height,
+                                   base64: data.base64EncodedString())
+    }
+
+    private func render(_ snapshot: ProjectSnapshot, sixteenBit: Bool, hdr: Bool,
+                        maximumDimension: Int?, maximumPixels: Int?) throws -> ExportRaster {
+        let sourceWidth = snapshot.manifest.width, sourceHeight = snapshot.manifest.height
+        guard (1...DocumentLimits.maxSide).contains(sourceWidth), (1...DocumentLimits.maxSide).contains(sourceHeight),
+              sourceWidth <= DocumentLimits.maxSurfacePixels / sourceHeight else { throw ExportError.tooLarge }
+        var scale = 1.0
+        if let maximumDimension {
+            guard maximumDimension > 0 else { throw ExportError.tooLarge }
+            scale = min(scale, Double(maximumDimension) / Double(max(sourceWidth, sourceHeight)))
+        }
+        if let maximumPixels {
+            guard maximumPixels > 0 else { throw ExportError.tooLarge }
+            scale = min(scale, (Double(maximumPixels) / Double(sourceWidth * sourceHeight)).squareRoot())
+        }
+        let width = max(1, Int((Double(sourceWidth) * scale).rounded(.down)))
+        let height = max(1, Int((Double(sourceHeight) * scale).rounded(.down)))
+        let scaleX = CGFloat(width) / CGFloat(sourceWidth), scaleY = CGFloat(height) / CGFloat(sourceHeight)
+        let layers = width == sourceWidth && height == sourceHeight ? snapshot.manifest.layers
+            : snapshot.manifest.layers.map { previewLayer($0, scaleX: scaleX, scaleY: scaleY) }
         return try autoreleasepool {
             let hdr = hdr && sixteenBit
             guard let space = hdr ? DeepLayer.hdrSpace : CGColorSpace(name: CGColorSpace.sRGB),
@@ -39,8 +71,9 @@ actor ImageExporter {
             context.clear(CGRect(x: 0, y: 0, width: width, height: height))
             context.translateBy(x: 0, y: CGFloat(height))
             context.scaleBy(x: 1, y: -1)
-            let records = Dictionary(uniqueKeysWithValues: snapshot.manifest.layers.map { ($0.id, $0) })
-            for layer in snapshot.manifest.layers {
+            let records = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0) })
+            for layer in layers {
+                try Task.checkCancellation()
                 guard layer.imageFile == nil || snapshot.images[layer.id] != nil,
                       layer.maskFile == nil || snapshot.masks[layer.id] != nil else { throw ProjectError.missingImage }
             }
@@ -75,8 +108,9 @@ actor ImageExporter {
                     FolderMaskClip(image: image, transform: layer.transform).apply(center: layer.transform.center, in: ctx)
                 }
             }
-            live.prepareStacks(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
-            FolderMaskClip.draw(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, clip: { id in
+            let visible = LayerHierarchy.visibleLayers(layers).map(\.id)
+            live.prepareStacks(visible, parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
+            FolderMaskClip.draw(visible, parent: { records[$0]?.parentID }, clip: { id in
                 guard let folder = records[id], let image = snapshot.mask(for: folder)?.enabledImage else { return nil }
                 let clip = FolderMaskClip(image: image, transform: folder.transform)
                 return { clip.apply(center: folder.transform.center, in: $0) }
@@ -84,6 +118,25 @@ actor ImageExporter {
             guard let image = context.makeImage() else { throw ExportError.render }
             return ExportRaster(image: image, resolution: snapshot.manifest.resolution ?? 72)
         }
+    }
+
+    private func previewLayer(_ layer: ProjectLayerRecord, scaleX: CGFloat,
+                              scaleY: CGFloat) -> ProjectLayerRecord {
+        func scaled(_ transform: LayerTransform) -> LayerTransform {
+            var result = transform
+            result.origin = CGPoint(x: transform.origin.x * scaleX, y: transform.origin.y * scaleY)
+            result.size = CGSize(width: transform.size.width * scaleX, height: transform.size.height * scaleY)
+            return result
+        }
+        var adjustment = layer.adjustment
+        if let radius = adjustment?.blurRadius { adjustment?.blurRadius = radius * scaleX }
+        if let distance = adjustment?.motionDistance { adjustment?.motionDistance = distance * scaleX }
+        return ProjectLayerRecord(id: layer.id, name: layer.name, isVisible: layer.isVisible,
+            transform: scaled(layer.transform), imageFile: layer.imageFile, parentID: layer.parentID,
+            isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode,
+            maskFile: layer.maskFile, maskEnabled: layer.maskEnabled, maskSourceID: layer.maskSourceID,
+            adjustment: adjustment, maskPlacement: layer.maskPlacement.map(scaled), maskLinked: layer.maskLinked,
+            shape: layer.shape, vectorPath: layer.vectorPath, effects: layer.effects, text: layer.text)
     }
 
     /// The Space-bar preview, saved in the project's QuickLook folder: the flattened image on white, a JPEG up to
@@ -256,6 +309,11 @@ actor ImageExporter {
 
 nonisolated struct QuickLookImages: Sendable {
     let preview: Data
+}
+nonisolated struct EncodedImagePreview: Sendable {
+    let width: Int
+    let height: Int
+    let base64: String
 }
 nonisolated struct ExportRaster: @unchecked Sendable {
     let image: CGImage

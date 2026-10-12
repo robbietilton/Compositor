@@ -135,6 +135,12 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         let fresh = draftID != draft.id
         draftID = draft.id
         let style = draft.style
+        let orientation: NSLayoutManager.TextLayoutOrientation = style.resolvedOrientation == .vertical ? .vertical : .horizontal
+        if textView.layoutOrientation != orientation {
+            textView.setLayoutOrientation(orientation)
+            // Changing orientation rotates the text view's bounds; place it again even when a fixed box stayed the same size.
+            shownGeometry = nil
+        }
         let layer = document.layers.first { $0.id == draft.layerID }
         // Point text has no box: it is as big as what has been typed, growing as it is typed.
         if let boxSize = style.boxSize {
