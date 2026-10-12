@@ -11,6 +11,14 @@ nonisolated enum MaskTracing {
     /// Outline of an image's pixels that are at least 50% opaque.
     static func opaquePixels(in image: CGImage) -> CGPath? { trace(image, alpha: true) { $0 >= 128 } }
 
+    /// Outline from an existing one-byte top-left coverage context, without copying a potentially large mask.
+    static func whitePixels(in context: CGContext) -> CGPath? {
+        guard context.width > 0, context.height > 0, context.bitsPerComponent == 8, context.bitsPerPixel == 8,
+              let data = context.data else { return nil }
+        return trace(width: context.width, height: context.height, stride: context.bytesPerRow, channels: 1,
+                     offset: 0, bytes: data.assumingMemoryBound(to: UInt8.self)) { $0 >= 128 }
+    }
+
     /// Outline, in the image's top-left pixel coordinates, of pixels whose gray value (or
     /// alpha) passes `test`. Outer boundaries run clockwise and holes counterclockwise, so
     /// the winding fill rule reproduces exactly the traced pixels. Nil when none pass.
@@ -26,15 +34,21 @@ nonisolated enum MaskTracing {
               let data = context.data else { return nil }
         context.interpolationQuality = .none
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        let bytes = data.assumingMemoryBound(to: UInt8.self)
-        let offset = channels - 1
+        return trace(width: width, height: height, stride: context.bytesPerRow, channels: channels,
+                     offset: channels - 1, bytes: data.assumingMemoryBound(to: UInt8.self), test)
+    }
+
+    private static func trace(width: Int, height: Int, stride rowStride: Int, channels: Int, offset: Int,
+                              bytes: UnsafePointer<UInt8>, _ test: (UInt8) -> Bool) -> CGPath? {
         func selected(_ x: Int, _ y: Int) -> Bool {
-            x >= 0 && y >= 0 && x < width && y < height && test(bytes[(y * width + x) * channels + offset])
+            x >= 0 && y >= 0 && x < width && y < height && test(bytes[y * rowStride + x * channels + offset])
         }
         // Directed unit edges between selected and unselected pixels, keyed by start vertex.
-        let stride = width + 1
+        let vertexStride = width + 1
         var outgoing: [Int: [Int]] = [:]
-        func edge(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) { outgoing[y0 * stride + x0, default: []].append(y1 * stride + x1) }
+        func edge(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) {
+            outgoing[y0 * vertexStride + x0, default: []].append(y1 * vertexStride + x1)
+        }
         for y in 0..<height {
             for x in 0..<width where selected(x, y) {
                 if !selected(x, y - 1) { edge(x, y, x + 1, y) }
@@ -58,9 +72,13 @@ nonisolated enum MaskTracing {
             var corners: [CGPoint] = []
             for (index, vertex) in loop.enumerated() {
                 let previous = loop[(index + loop.count - 1) % loop.count], following = loop[(index + 1) % loop.count]
-                let inX = vertex % stride - previous % stride, inY = vertex / stride - previous / stride
-                let outX = following % stride - vertex % stride, outY = following / stride - vertex / stride
-                if inX != outX || inY != outY { corners.append(CGPoint(x: vertex % stride, y: vertex / stride)) }
+                let inX = vertex % vertexStride - previous % vertexStride
+                let inY = vertex / vertexStride - previous / vertexStride
+                let outX = following % vertexStride - vertex % vertexStride
+                let outY = following / vertexStride - vertex / vertexStride
+                if inX != outX || inY != outY {
+                    corners.append(CGPoint(x: vertex % vertexStride, y: vertex / vertexStride))
+                }
             }
             guard corners.count >= 3 else { continue }
             path.addLines(between: corners)

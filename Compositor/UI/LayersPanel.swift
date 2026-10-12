@@ -114,7 +114,7 @@ private struct ChannelsPanel: View {
     var body: some View {
         VStack(spacing: 1) {
             ForEach(CanvasChannel.allCases, id: \.self) { channel in
-                Button { session.canvasChannel = channel } label: {
+                Button { activate(channel) } label: {
                     HStack(spacing: 9) {
                         Image(systemName: "eye")
                             .font(.system(size: 13, weight: .medium))
@@ -133,6 +133,8 @@ private struct ChannelsPanel: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(session.document == nil)
+                .help(Text(L10n.string(channel == .rgb ? "Show the full-color composite"
+                    : "Show this channel. Command-click to load it as a selection; add Shift or Option to add or subtract.")))
                 .accessibilityIdentifier("channel.\(channel.rawValue)")
             }
             Spacer(minLength: 0)
@@ -155,6 +157,16 @@ private struct ChannelsPanel: View {
 
     private func isVisible(_ channel: CanvasChannel) -> Bool {
         session.canvasChannel == .rgb || session.canvasChannel == channel
+    }
+
+    private func activate(_ channel: CanvasChannel) {
+        let flags = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+        if channel != .rgb, flags.contains(.command) {
+            let mode: SelectionMode = flags.contains(.option) ? .subtract : flags.contains(.shift) ? .add : .replace
+            session.loadChannelSelection(channel, mode: mode)
+        } else {
+            session.canvasChannel = channel
+        }
     }
 
     private func shortcutLabel(_ channel: CanvasChannel) -> String {

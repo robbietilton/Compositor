@@ -309,6 +309,57 @@ struct SelectionTests {
         #expect(session.selection == before) // An empty layer selects nothing.
     }
 
+    @Test func cmdClickingAChannelLoadsItsBrightCompositePixels() throws {
+        let session = makeSession(width: 4, height: 2)
+        let context = try BrushRaster.context(width: 4, height: 2, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        let colors: [(UInt8, UInt8, UInt8)] = [(200, 40, 40), (40, 200, 40), (40, 40, 200), (200, 200, 200)]
+        for y in 0..<2 { for (x, color) in colors.enumerated() {
+            let pixel = y * context.bytesPerRow + x * 4
+            bytes[pixel] = color.0
+            bytes[pixel + 1] = color.1
+            bytes[pixel + 2] = color.2
+            bytes[pixel + 3] = 255
+        } }
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Channels"))
+
+        #expect(session.loadChannelSelection(.red))
+        #expect(session.history.undoName == "Load Red Channel Selection")
+        #expect(try coverage(session, 0, 0) == 255 && coverage(session, 1, 0) == 0
+            && coverage(session, 2, 0) == 0 && coverage(session, 3, 0) == 255)
+        #expect(session.loadChannelSelection(.green, mode: .add))
+        #expect(try coverage(session, 0, 0) == 255 && coverage(session, 1, 0) == 255
+            && coverage(session, 2, 0) == 0 && coverage(session, 3, 0) == 255)
+        #expect(session.loadChannelSelection(.red, mode: .subtract))
+        #expect(try coverage(session, 0, 0) == 0 && coverage(session, 1, 0) == 255
+            && coverage(session, 2, 0) == 0 && coverage(session, 3, 0) == 0)
+    }
+
+    @Test func channelSelectionStaysAlignedAcrossCompositeTiles() throws {
+        let width = 4100
+        let session = makeSession(width: width, height: 2)
+        let context = try BrushRaster.context(width: width, height: 2, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        for y in 0..<2 { for x in 0..<width {
+            let pixel = y * context.bytesPerRow + x * 4
+            bytes[pixel] = (4094...4098).contains(x) ? 200 : 40
+            bytes[pixel + 1] = 20
+            bytes[pixel + 2] = 20
+            bytes[pixel + 3] = 255
+        } }
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Across Tiles"))
+
+        #expect(session.loadChannelSelection(.red))
+        let bounds = try #require(session.selection).path.boundingBoxOfPath
+        #expect(abs(bounds.minX - 4094) < 0.001 && abs(bounds.width - 5) < 0.001
+            && abs(bounds.minY) < 0.001 && abs(bounds.height - 2) < 0.001)
+        #expect(try coverage(session, 4093, 0) == 0 && coverage(session, 4094, 0) == 255
+            && coverage(session, 4095, 0) == 255 && coverage(session, 4096, 0) == 255
+            && coverage(session, 4098, 0) == 255 && coverage(session, 4099, 0) == 0)
+    }
+
     private func marquee(_ session: EditorSession, from start: CGPoint, to end: CGPoint, mode: SelectionMode = .replace,
                          square: Bool = false, fromCenter: Bool = false) {
         session.beginLasso(at: start, mode: mode)
