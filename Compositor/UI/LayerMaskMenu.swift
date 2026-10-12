@@ -11,7 +11,7 @@ struct LayerMaskMenu: View {
         } label: { FooterIcon(systemName: "rectangle.inset.filled") }
         .help(Text(L10n.string(session.selection == nil ? "Add layer mask (Option-click for a black mask)"
                                 : "Add layer mask revealing the selection (Option-click to hide it)")))
-        .accessibilityLabel("Add layer mask")
+        .accessibilityLabel(Text(L10n.string("Add layer mask")))
         .disabled(!session.layersLookEditable || session.selectedLayerIDs.count != 1 || session.activeLayer == nil
                   || session.activeLayer?.mask != nil)
     }

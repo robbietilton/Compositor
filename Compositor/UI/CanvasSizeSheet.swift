@@ -66,26 +66,26 @@ struct CanvasSizeSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Canvas Size").font(.title2.bold())
+            Text(L10n.string("Canvas Size")).font(.title2.bold())
             Text(L10n.format("Current: %lld × %lld pixels", Int64(draft.originalWidth), Int64(draft.originalHeight)))
             Text(L10n.format("%@ uncompressed RGBA canvas", bytes(draft.originalWidth, draft.originalHeight)))
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
-            Picker("Units", selection: $draft.unit) {
+            Picker(L10n.string("Units"), selection: $draft.unit) {
                 ForEach(CanvasUnit.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }
             HStack {
-                Text("Width").frame(width: 60, alignment: .leading)
+                Text(L10n.string("Width")).frame(width: 60, alignment: .leading)
                     .scrubbable(sensitivity: scrubSensitivity(true), value: dimension(true), range: scrubRange(true), step: 1)
-                TextField("Width", value: dimension(true), format: .number.precision(.fractionLength(0...3)))
+                TextField(L10n.string("Width"), value: dimension(true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
-                Text("Height").frame(width: 60, alignment: .leading)
+                Text(L10n.string("Height")).frame(width: 60, alignment: .leading)
                     .scrubbable(sensitivity: scrubSensitivity(false), value: dimension(false), range: scrubRange(false), step: 1)
-                TextField("Height", value: dimension(false), format: .number.precision(.fractionLength(0...3)))
+                TextField(L10n.string("Height"), value: dimension(false), format: .number.precision(.fractionLength(0...3)))
             }
-            Toggle("Relative to current dimensions", isOn: $draft.relative)
-            Toggle("Lock original aspect ratio", isOn: $draft.locked)
+            Toggle(L10n.string("Relative to current dimensions"), isOn: $draft.relative)
+            Toggle(L10n.string("Lock original aspect ratio"), isOn: $draft.locked)
                 .onChange(of: draft.locked) { _, locked in
                     if locked { draft.set(draft.displayed(widthAxis: true), widthAxis: true) }
                 }
@@ -99,7 +99,7 @@ struct CanvasSizeSheet: View {
             }
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Anchor")
+                    Text(L10n.string("Anchor"))
                     Grid(horizontalSpacing: 3, verticalSpacing: 3) {
                         ForEach(0..<3) { row in
                             GridRow {
@@ -120,26 +120,26 @@ struct CanvasSizeSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L10n.string(anchorNames[anchor])).font(.callout.bold())
-                    Text("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas.")
+                    Text(L10n.string("Keeps this point fixed. Artwork is not scaled; cropped content remains outside the canvas."))
                         .font(.callout).foregroundStyle(.secondary)
                 }.padding(.top, 28)
             }
-            Picker("Canvas extension", selection: $extensionChoice) {
+            Picker(L10n.string("Canvas extension"), selection: $extensionChoice) {
                 ForEach(["Transparent", "Foreground", "Background", "Black", "White", "Custom"], id: \.self) {
                     Text(L10n.string($0))
                 }
             }
             if extensionChoice == "Custom" {
                 HStack(spacing: 8) {
-                    Text("Extension color")
+                    Text(L10n.string("Extension color"))
                     DialogColorSwatch(title: "Extension Color", color: $customColor, session: session)
-                        .help("Color for the added canvas")
+                        .help(Text(L10n.string("Color for the added canvas")))
                 }
             }
             HStack {
-                Button("Cancel") { DialogColorSwatch.closePicker(session); finish(nil) }.configuredNativeShortcut(.escape)
+                Button(L10n.string("Cancel")) { DialogColorSwatch.closePicker(session); finish(nil) }.configuredNativeShortcut(.escape)
                 Spacer()
-                Button("OK") {
+                Button(L10n.string("OK")) {
                     guard draft.valid else { return }
                     DialogColorSwatch.closePicker(session)
                     finish(CanvasSizeOptions(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()), anchor: anchor, fill: fill))

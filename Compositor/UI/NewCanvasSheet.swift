@@ -95,12 +95,12 @@ struct NewCanvasSheet: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(spacing: 14) {
                 HStack {
-                    Text("New canvas").font(.title2.weight(.semibold))
+                    Text(L10n.string("New canvas")).font(.title2.weight(.semibold))
                     Spacer()
                     // Preset sizes, tucked into a More button; the size in use is checked.
                     Menu {
-                        Picker("Size", selection: preset) {
-                            Text("Custom").tag(CanvasPreset?.none)
+                        Picker(L10n.string("Size"), selection: preset) {
+                            Text(L10n.string("Custom")).tag(CanvasPreset?.none)
                             ForEach(CanvasPreset.groups.indices, id: \.self) { group in
                                 Divider()
                                 ForEach(CanvasPreset.groups[group]) { Text($0.title).tag(CanvasPreset?.some($0)) }
@@ -119,8 +119,8 @@ struct NewCanvasSheet: View {
                             .padding(.trailing, -10)
                     }
                     .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                    .help("Preset sizes for screens and common formats")
-                    .accessibilityLabel("Preset sizes")
+                    .help(Text(L10n.string("Preset sizes for screens and common formats")))
+                    .accessibilityLabel(Text(L10n.string("Preset sizes")))
                 }
             }
             HStack(spacing: 16) {
@@ -134,12 +134,12 @@ struct NewCanvasSheet: View {
                     background = background.next
                 }
                 .accessibilityIdentifier("canvasBackground")
-                Text("·")
+                Text(L10n.string("·"))
                 CyclePill(unit.name, help: "Units: pixels, inches, centimeters or millimeters. Click to switch.") {
                     switchUnit(to: unit.next)
                 }
                 .accessibilityIdentifier("canvasUnit")
-                Text("·")
+                Text(L10n.string("·"))
                 // In print units the pixels follow the DPI; in pixels, the DPI is just stored with the file. The pixel
                 // size it makes is in the pill's hover text, out of the way until it's wanted.
                 CyclePill("\(Int(resolution)) DPI", help: resolutionHelp) {
@@ -154,10 +154,10 @@ struct NewCanvasSheet: View {
                     .font(.callout).foregroundStyle(.orange)
             }
             HStack(spacing: 10) {
-                Button("Open project") { onOpen?() }.buttonStyle(.bordered)
-                Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
+                Button(L10n.string("Open project")) { onOpen?() }.buttonStyle(.bordered)
+                Button(L10n.string("Import image")) { session.showsImporter = true }.buttonStyle(.bordered)
                 Spacer()
-                Button("Create canvas") {
+                Button(L10n.string("Create canvas")) {
                     guard let w = pixelWidth, let h = pixelHeight else { return }
                     if let onCreate { onCreate(w, h, resolution, background.color) }
                     else { session.createDocument(width: w, height: h, emptyLayer: true, resolution: resolution, background: background.color) }

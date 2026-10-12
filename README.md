@@ -80,6 +80,8 @@ brew install --cask robbietilton-compositor
 
 ### Works with AI agents
 - AI agents and scripts can build and edit projects directly: a `.comp` is a folder of PNG layers and a manifest, and an open project updates live as it's written. See [Writing Compositor projects](docs/writing-comp-files.md)
+- Compositor can also serve the canvas that is open in the app over MCP Streamable HTTP. Open **Compositor › MCP Server…**, enable the local server, and copy its connection JSON into an MCP client.
+- The MCP server can inspect and render the current document, create a canvas, add editable Pen paths, select or update layers, undo and redo, and save an existing project. It binds only to `127.0.0.1` and requires the generated Bearer token.
 
 ## Requirements
 
@@ -88,7 +90,9 @@ brew install --cask robbietilton-compositor
 
 ## Translations
 
-Compositor includes English and Simplified Chinese. Choose **Help › Language** to switch; the choice is remembered across launches. Translatable UI text lives in `Compositor/Localizable.xcstrings`.
+English is built in. Other languages are downloaded on demand from the versioned files in `Languages`, verified, and
+stored in Application Support for offline use. Choose **Help › Language** to switch; the choice is remembered across
+launches. `Compositor/Localizable.xcstrings` is the editable translation source and is excluded from the app bundle.
 
 ## Building
 

@@ -11,12 +11,12 @@ struct TransformInspector: View {
           Text(L10n.string(session.transformTargetsMask ? "Transform Mask" : "Transform")).font(ToolHeaderStyle.titleFont)
               .padding(.leading, 18)
           // Command flips Auto Select while it's held, and the box shows it flipped (see HeldModifiers).
-          Toggle("Auto Select", isOn: Binding(get: { session.transformAutoSelect != held.contains(.command) },
+          Toggle(L10n.string("Auto Select"), isOn: Binding(get: { session.transformAutoSelect != held.contains(.command) },
                                               set: { session.transformAutoSelect = $0 != held.contains(.command) }))
-              .help("Select layers by clicking the canvas. Hold Command to turn it the other way while you click.")
+              .help(Text(L10n.string("Select layers by clicking the canvas. Hold Command to turn it the other way while you click.")))
               .accessibilityIdentifier("transformAutoSelect")
-          Toggle("Show Controls", isOn: $session.showsTransformControls)
-              .help("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.")
+          Toggle(L10n.string("Show Controls"), isOn: $session.showsTransformControls)
+              .help(Text(L10n.string("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.")))
           ScrollView(.horizontal) {
             HStack(spacing: 12) {
                 field("X", value: value.origin.x) { $0.origin.x = $1 }.frame(width: 85)
@@ -26,21 +26,21 @@ struct TransformInspector: View {
                 // Shift flips the lock while dragging a handle, and the button shows it flipped.
                 Toggle(isOn: Binding(get: { session.locksTransformRatio != held.contains(.shift) },
                                      set: { session.locksTransformRatio = $0 != held.contains(.shift) })) { Image(systemName: "link") }
-                    .toggleStyle(.button).help("Lock aspect ratio. Hold Shift while dragging a handle to turn it the other way.")
+                    .toggleStyle(.button).help(Text(L10n.string("Lock aspect ratio. Hold Shift while dragging a handle to turn it the other way.")))
                 TransformValueField(label: "Scale", suffix: "%", value: value.scalePercent(pixelSize: pixelSize), range: 0.1...30_000, finish: finish) { number in
                     change { value in
                         guard number > 0 else { return }
                         value = value.scaled(toPercent: number, pixelSize: pixelSize)
                     }
-                }.frame(width: 110).help("Scale width and height together, about the center")
+                }.frame(width: 110).help(Text(L10n.string("Scale width and height together, about the center")))
                 field("°", value: value.rotation, range: -360...360) { $0.rotation = $1.truncatingRemainder(dividingBy: 360) }.frame(width: 75)
-                Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
+                Picker(L10n.string("Sampling"), selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
                     ForEach(LayerSampling.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }.frame(width: 170)
-                Button("Flip H") { change { $0.flipX.toggle() } }
-                Button("Flip V") { change { $0.flipY.toggle() } }
+                Button(L10n.string("Flip H")) { change { $0.flipX.toggle() } }
+                Button(L10n.string("Flip V")) { change { $0.flipY.toggle() } }
 
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.
             }.disabled((!session.canTransform && session.transformEdit == nil) || session.transformEdit?.corners != nil)
@@ -51,9 +51,9 @@ struct TransformInspector: View {
           // which they never are. Left in place unseen, so Escape and Return still reach a drag in progress.
           let pending = session.transformEdit?.persistent == true
           HStack(spacing: 12) {
-              Button("Cancel") { session.cancelTransform() }.configuredNativeShortcut(.escape)
+              Button(L10n.string("Cancel")) { session.cancelTransform() }.configuredNativeShortcut(.escape)
                   .disabled(session.transformEdit == nil)
-              Button("Apply") { session.commitTransform() }.configuredNativeShortcut(.return)
+              Button(L10n.string("Apply")) { session.commitTransform() }.configuredNativeShortcut(.return)
                   .disabled(session.transformEdit == nil).accessibilityIdentifier("applyTransform")
           }
           .opacity(pending ? 1 : 0).allowsHitTesting(pending).accessibilityHidden(!pending)

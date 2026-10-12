@@ -10,38 +10,38 @@ struct BrushControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     if session.tool == .brush {
-                        Picker("Mode", selection: $session.brushMode) {
+                        Picker(L10n.string("Mode"), selection: $session.brushMode) {
                             ForEach(BrushToolMode.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
-                        .help("Paint with the foreground color (B), or erase pixels away (E)")
+                        .help(Text(L10n.string("Paint with the foreground color (B), or erase pixels away (E)")))
                     }
                     if session.tool == .blur {
-                        Picker("Mode", selection: $session.blurMode) {
+                        Picker(L10n.string("Mode"), selection: $session.blurMode) {
                             ForEach(BlurToolMode.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
-                        .help("Liquify pushes pixels · Blur softens · Smudge drags color along")
+                        .help(Text(L10n.string("Liquify pushes pixels · Blur softens · Smudge drags color along")))
                     }
                     if session.tool == .spotHealing {
-                        Picker("Type", selection: $session.spotHealingMode) {
+                        Picker(L10n.string("Type"), selection: $session.spotHealingMode) {
                             ForEach(SpotHealingMode.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
                         .accessibilityIdentifier("spotHealingType")
                     }
                     if session.tool == .cloneStamp {
-                        Toggle("Aligned", isOn: $session.cloneSettings.aligned)
-                            .help("Keep the source moving with the brush between strokes; off starts every stroke at the source point")
-                        Picker("Sample", selection: $session.cloneSettings.sampleAllLayers) {
-                            Text("This Layer").tag(false)
-                            Text("All Layers").tag(true)
+                        Toggle(L10n.string("Aligned"), isOn: $session.cloneSettings.aligned)
+                            .help(Text(L10n.string("Keep the source moving with the brush between strokes; off starts every stroke at the source point")))
+                        Picker(L10n.string("Sample"), selection: $session.cloneSettings.sampleAllLayers) {
+                            Text(L10n.string("This Layer")).tag(false)
+                            Text(L10n.string("All Layers")).tag(true)
                         }
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
-                        .help("Copy from the active layer only, or from every visible layer as shown")
+                        .help(Text(L10n.string("Copy from the active layer only, or from every visible layer as shown")))
                     }
-                    Text("Size").scrubbable(sensitivity: 1.0, value: $session.brushSettings.diameter, range: 1...2000)
-                    TextField("Size", value: Binding<Double>(get: { Double(session.brushSettings.diameter) },
+                    Text(L10n.string("Size")).scrubbable(sensitivity: 1.0, value: $session.brushSettings.diameter, range: 1...2000)
+                    TextField(L10n.string("Size"), value: Binding<Double>(get: { Double(session.brushSettings.diameter) },
                                                              set: { session.brushSettings.diameter = $0.isFinite ? CGFloat(min(2000, max(1, $0))) : 40 }),
                               format: .number.precision(.fractionLength(0)))
                     .frame(width: 48).textFieldStyle(.roundedBorder)
@@ -51,9 +51,9 @@ struct BrushControls: View {
                         session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                     }
                     .unitSuffix("px")
-                    Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
+                    Text(L10n.string("Hardness")).scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
                     Slider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
-                    TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
+                    TextField(L10n.string("Hardness"), value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
                                                                  set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
                               format: .number.precision(.fractionLength(0)))
                     .frame(width: 42).textFieldStyle(.roundedBorder)
@@ -63,51 +63,51 @@ struct BrushControls: View {
                     Text(L10n.string(session.tool == .blur ? "Strength" : "Opacity"))
                         .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
                     Slider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
-                    TextField("Opacity", value: Binding<Double>(get: { Double(session.brushSettings.opacity * 100) },
+                    TextField(L10n.string("Opacity"), value: Binding<Double>(get: { Double(session.brushSettings.opacity * 100) },
                                                                 set: { session.brushSettings.opacity = $0.isFinite ? CGFloat(min(100, max(1, $0)) / 100) : 1 }),
                               format: .number.precision(.fractionLength(0)))
                     .frame(width: 42).textFieldStyle(.roundedBorder)
                     .arrowSteps(value: { Double(session.brushSettings.opacity * 100) },
                                 change: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
-                    .help("Press 1–9 for 10–90%, 0 for 100%")
+                    .help(Text(L10n.string("Press 1–9 for 10–90%, 0 for 100%")))
                     .unitSuffix("%")
                     // Blur softens by a radius of its own, apart from how strongly it lays the softening down.
                     if session.tool == .blur, session.blurMode == .blur {
-                        Text("Radius").scrubbable(sensitivity: 0.1, value: $session.brushSettings.blurRadius, range: 0.5...50)
+                        Text(L10n.string("Radius")).scrubbable(sensitivity: 0.1, value: $session.brushSettings.blurRadius, range: 0.5...50)
                         // The slider covers everyday radii; typing or scrubbing reaches up to 50.
                         Slider(value: Binding(get: { min(20, session.brushSettings.blurRadius) },
                                               set: { session.brushSettings.blurRadius = $0 }), in: 0.5...20).frame(width: 100)
-                        TextField("Radius", value: Binding<Double>(get: { Double(session.brushSettings.blurRadius) },
+                        TextField(L10n.string("Radius"), value: Binding<Double>(get: { Double(session.brushSettings.blurRadius) },
                                                                    set: { session.brushSettings.blurRadius = $0.isFinite ? CGFloat(min(50, max(0.5, $0))) : 5 }),
                                   format: .number.precision(.fractionLength(0...1)))
                         .frame(width: 42).textFieldStyle(.roundedBorder)
                         .arrowSteps(value: { Double(session.brushSettings.blurRadius) },
                                     change: { session.brushSettings.blurRadius = CGFloat(min(50, max(0.5, $0))) })
-                        .help("How far the blur softens, in pixels")
+                        .help(Text(L10n.string("How far the blur softens, in pixels")))
                         .unitSuffix("px")
                     }
                     // Paint and Erase only: healing, cloning and smearing have their own feel.
                     if session.tool == .brush {
-                        Text("Smoothing")
+                        Text(L10n.string("Smoothing"))
                             .scrubbable(sensitivity: 1, value: $session.brushSettings.smoothing, range: 0...100)
                         Slider(value: $session.brushSettings.smoothing, in: 0...100).frame(width: 100)
-                        TextField("Smoothing", value: Binding<Double>(get: { Double(session.brushSettings.smoothing) },
+                        TextField(L10n.string("Smoothing"), value: Binding<Double>(get: { Double(session.brushSettings.smoothing) },
                                                                       set: { session.brushSettings.smoothing = $0.isFinite ? CGFloat(min(100, max(0, $0))) : 0 }),
                                   format: .number.precision(.fractionLength(0)))
                         .frame(width: 42).textFieldStyle(.roundedBorder)
                         .arrowSteps(value: { Double(session.brushSettings.smoothing) },
                                     change: { session.brushSettings.smoothing = CGFloat(min(100, max(0, $0))) })
-                        .help("The brush trails the pointer on a string this long, so a shaky hand still draws a smooth line")
+                        .help(Text(L10n.string("The brush trails the pointer on a string this long, so a shaky hand still draws a smooth line")))
                     }
                     if session.isMaskSelected {
-                        Picker("Paint", selection: $session.maskPaintWhite) {
-                            Text("Black · Hide").tag(false)
-                            Text("White · Reveal").tag(true)
+                        Picker(L10n.string("Paint"), selection: $session.maskPaintWhite) {
+                            Text(L10n.string("Black · Hide")).tag(false)
+                            Text(L10n.string("White · Reveal")).tag(true)
                         }.frame(width: 180)
                     } else if session.tool != .cloneStamp, session.tool != .blur {
                         // Same foreground color and Color Picker as the tool-rail swatch.
                         HStack(spacing: 6) {
-                            Text("Color")
+                            Text(L10n.string("Color"))
                             Button { session.openColorPicker(background: false) } label: {
                                 let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
                                 shape.fill(session.foregroundColor.swiftUI)
@@ -118,15 +118,15 @@ struct BrushControls: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(!session.canEditPalette)
-                            .help("Foreground color")
-                            .accessibilityLabel("Foreground color")
+                            .help(Text(L10n.string("Foreground color")))
+                            .accessibilityLabel(Text(L10n.string("Foreground color")))
                         }
                     }
                     Spacer(minLength: 0)
                     if session.tool == .cloneStamp, session.cloneSource == nil {
-                        Text("Option-click to set the source").foregroundStyle(.secondary)
+                        Text(L10n.string("Option-click to set the source")).foregroundStyle(.secondary)
                     }
-                    if session.isMaskSelected { Text("Mask").foregroundStyle(.secondary) }
+                    if session.isMaskSelected { Text(L10n.string("Mask")).foregroundStyle(.secondary) }
                 }
             }
             .scrollIndicators(.never)

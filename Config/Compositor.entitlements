@@ -8,6 +8,9 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- The optional MCP server listens only on 127.0.0.1. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
     <!-- Sparkle installs updates through its helper services, which a sandboxed app reaches by name. -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>

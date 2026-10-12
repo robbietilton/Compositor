@@ -11,7 +11,7 @@ struct LayersPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Layers").font(.system(size: 12, weight: .semibold))
+                Text(L10n.string("Layers")).font(.system(size: 12, weight: .semibold))
                 Spacer()
                 Text("\(session.document?.layers.count ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
                     .accessibilityIdentifier("layerCount")
@@ -24,7 +24,7 @@ struct LayersPanel: View {
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "square.3.layers.3d").font(.system(size: 25, weight: .light))
-                    Text("No layers yet").font(.callout.weight(.medium))
+                    Text(L10n.string("No layers yet")).font(.callout.weight(.medium))
                     Text(L10n.string(session.document == nil ? "Create a canvas or import an image."
                                                              : "Import an image or add a blank layer."))
                         .font(.caption).multilineTextAlignment(.center)
@@ -36,24 +36,24 @@ struct LayersPanel: View {
             // No spacing: each button's hit area supplies it (8 pt either side makes the 16 pt gap).
             HStack(spacing: 0) {
                 Button { session.addBlankLayer() } label: { FooterIcon(systemName: "plus.square") }
-                    .help("New blank layer (⇧⌘N)").accessibilityLabel("New blank layer")
+                    .help(Text(L10n.string("New blank layer (⇧⌘N)"))).accessibilityLabel(Text(L10n.string("New blank layer")))
                     .accessibilityIdentifier("addBlankLayer").disabled(!session.layersLookEditable)
                 Button { session.groupSelectedLayers() } label: { FooterIcon(systemName: "folder.badge.plus") }
-                    .help("Group selected layers (⌘G)").accessibilityLabel("New folder").disabled(!session.layersLookEditable)
+                    .help(Text(L10n.string("Group selected layers (⌘G)"))).accessibilityLabel(Text(L10n.string("New folder"))).disabled(!session.layersLookEditable)
                 LayerMaskMenu(session: session)
                 Menu {
                     ForEach(AdjustmentKind.allCases, id: \.self) { kind in
                         Button(L10n.string(kind.rawValue)) { session.addAdjustment(kind) }
                     }
                 } label: { Image(systemName: "circle.lefthalf.filled").footerHitArea() }
-                    .menuStyle(.borderlessButton).fixedSize().help("New adjustment layer").disabled(!session.layersLookEditable)
+                    .menuStyle(.borderlessButton).fixedSize().help(Text(L10n.string("New adjustment layer"))).disabled(!session.layersLookEditable)
                 Menu {
                     ForEach(LayerEffectKind.allCases, id: \.self) { kind in
                         Button(L10n.string(kind.rawValue) + "…") { session.addEffect(kind) }
                     }
                 } label: { Image(systemName: "sparkles").footerHitArea() }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .help("Add layer effect").accessibilityLabel("Layer effects")
+                    .help(Text(L10n.string("Add layer effect"))).accessibilityLabel(Text(L10n.string("Layer effects")))
                     .accessibilityIdentifier("layerEffects").disabled(!session.layersLookEditable || session.activeLayer?.isGroup != false || session.activeLayer?.asset == nil)
                 Spacer()
                 Button { session.deleteLayerOrMask() } label: { FooterIcon(systemName: "trash") }

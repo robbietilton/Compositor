@@ -234,9 +234,9 @@ private struct KeyboardShortcutsSheet: View {
     init(settings: ShortcutSettings) { self.settings = settings; _draft = State(initialValue: settings.overrides) }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Click a shortcut, then press its new key combination. Changes apply when you save.")
+            Text(L10n.string("Click a shortcut, then press its new key combination. Changes apply when you save."))
                 .foregroundStyle(.secondary)
-            TextField("Search shortcuts", text: $search).textFieldStyle(.roundedBorder)
+            TextField(L10n.string("Search shortcuts"), text: $search).textFieldStyle(.roundedBorder)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(["Menus", "Canvas & Layers", "Text Editing"], id: \.self) { group in
@@ -257,9 +257,9 @@ private struct KeyboardShortcutsSheet: View {
                         }
                     }
                     Divider().padding(.vertical, 8)
-                    Text("Contextual keys & mouse gestures").font(.headline)
-                    Text("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording.")
-                    Text("Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed.")
+                    Text(L10n.string("Contextual keys & mouse gestures")).font(.headline)
+                    Text(L10n.string("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording."))
+                    Text(L10n.string("Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed."))
                 }.padding(.trailing, 8)
             }.frame(height: 465)
             // Only a conflict takes room here; an empty line left a wide gap above the buttons.
@@ -270,10 +270,10 @@ private struct KeyboardShortcutsSheet: View {
             }
             Divider()
             HStack {
-                Button("Restore Defaults") { recording = nil; draft = [:] }
+                Button(L10n.string("Restore Defaults")) { recording = nil; draft = [:] }
                 Spacer()
-                Button("Cancel") { settings.close() }.keyboardShortcut(.cancelAction)
-                Button("Save") { settings.save(draft) }.keyboardShortcut(.defaultAction)
+                Button(L10n.string("Cancel")) { settings.close() }.keyboardShortcut(.cancelAction)
+                Button(L10n.string("Save")) { settings.save(draft) }.keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .disabled(recording != nil || ShortcutSettings.problem(in: draft) != nil)
             }

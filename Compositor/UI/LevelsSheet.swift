@@ -16,13 +16,13 @@ struct LevelsSheet: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Channel", selection: Binding(get: { settings.channel }, set: { channel in update { $0.channel = channel } })) {
+            Picker(L10n.string("Channel"), selection: Binding(get: { settings.channel }, set: { channel in update { $0.channel = channel } })) {
                 ForEach(LevelsChannel.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }.frame(width: 180)
             VStack(spacing: 0) {
                 histogram.frame(height: 150).background(.black.opacity(0.25))
                     .overlay(alignment: .topLeading) {
-                        if edit?.histogramReady != true { Text("Loading histogram…").font(.caption).padding(8) }
+                        if edit?.histogramReady != true { Text(L10n.string("Loading histogram…")).font(.caption).padding(8) }
                     }
                 handles(output: false).frame(height: 20)
             }
@@ -43,7 +43,7 @@ struct LevelsSheet: View {
                 field("Output white", value(\.outputWhite), decimals: 0)
             }
             HStack {
-                Text("Sample").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.string("Sample")).font(.caption).foregroundStyle(.secondary)
                 ForEach(LevelsSample.allCases, id: \.self) { mode in
                     Button {
                         edit?.sampleMode = edit?.sampleMode == mode ? nil : mode
@@ -59,7 +59,7 @@ struct LevelsSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("Auto").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.string("Auto")).font(.caption).foregroundStyle(.secondary)
                 HStack {
                     ForEach(LevelsAuto.allCases, id: \.self) { mode in
                         Button(L10n.string(mode.rawValue)) { session.autoLevels(mode) }
@@ -67,11 +67,11 @@ struct LevelsSheet: View {
                 }.disabled(edit?.histogramReady != true)
             }
             HStack {
-                Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true }, set: {
+                Toggle(L10n.string("Preview"), isOn: Binding(get: { edit?.preview ?? true }, set: {
                     session.updateLevels(settings, preview: $0)
                 })).configuredNativeShortcut("p", modifiers: .option)
                 Spacer()
-                Button("Reset") { edit?.sampleMode = nil; update { $0 = LevelsSettings() } }
+                Button(L10n.string("Reset")) { edit?.sampleMode = nil; update { $0 = LevelsSettings() } }
             }
             Text(L10n.string(session.adjustmentOriginal != nil ? "Underlying pixels · alpha-weighted histogram"
                              : session.selection == nil ? "Original pixels · alpha-weighted histogram"
@@ -79,10 +79,10 @@ struct LevelsSheet: View {
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             HStack {
-                Button("Cancel") { session.cancelLevels() }.configuredNativeShortcut(.escape)
+                Button(L10n.string("Cancel")) { session.cancelLevels() }.configuredNativeShortcut(.escape)
                 Spacer()
                 if edit?.committing == true { ProgressView().controlSize(.small) }
-                Button("OK") { Task { await session.commitLevels() } }
+                Button(L10n.string("OK")) { Task { await session.commitLevels() } }
                     .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
@@ -113,7 +113,7 @@ struct LevelsSheet: View {
             let color: Color = switch settings.channel { case .rgb: .gray; case .red: .red; case .green: .green; case .blue: .blue }
             context.fill(path, with: .color(color))
         }.accessibilityLabel(Text(L10n.format("Original %@ histogram", L10n.string(settings.channel.rawValue))))
-        .help("Linear histogram with automatic vertical scaling. Tall spikes may extend beyond the graph; all tones from 0 to 255 remain included.")
+        .help(Text(L10n.string("Linear histogram with automatic vertical scaling. Tall spikes may extend beyond the graph; all tones from 0 to 255 remain included.")))
     }
     private func handles(output: Bool) -> some View {
         GeometryReader { geometry in

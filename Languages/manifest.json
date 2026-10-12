@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "languages": [
+    {
+      "code": "zh-Hans",
+      "displayName": "简体中文",
+      "file": "zh-Hans.json",
+      "sha256": "e80202c9fb5896e81cdcd67a0a9520443d1db4310886e1412e1211d1d409623e",
+      "revision": 1
+    }
+  ]
+}

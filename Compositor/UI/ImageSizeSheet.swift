@@ -104,31 +104,31 @@ struct ImageSizeSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Image Size").font(.title2.bold())
+            Text(L10n.string("Image Size")).font(.title2.bold())
             Text(L10n.format("Current: %lld × %lld pixels", Int64(document.width), Int64(document.height))).foregroundStyle(.secondary)
-            Picker("Units", selection: $unit) {
+            Picker(L10n.string("Units"), selection: $unit) {
                 ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) {
                     Text(L10n.string($0))
                 }
             }
             HStack {
-                Text("Width").frame(width: 75, alignment: .leading)
+                Text(L10n.string("Width")).frame(width: 75, alignment: .leading)
                     .scrubbable(sensitivity: scrubSensitivity(isWidth: true),
                                 value: dimension(isWidth: true), range: scrubRange(isWidth: true), step: 1)
                     .disabled(!canScrubDimensions)
-                TextField("Width", value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
+                TextField(L10n.string("Width"), value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
-                Text("Height").frame(width: 75, alignment: .leading)
+                Text(L10n.string("Height")).frame(width: 75, alignment: .leading)
                     .scrubbable(sensitivity: scrubSensitivity(isWidth: false),
                                 value: dimension(isWidth: false), range: scrubRange(isWidth: false), step: 1)
                     .disabled(!canScrubDimensions)
-                TextField("Height", value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
+                TextField(L10n.string("Height"), value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
             }
-            Toggle("Lock aspect ratio", isOn: $locked).disabled(!resample)
+            Toggle(L10n.string("Lock aspect ratio"), isOn: $locked).disabled(!resample)
             HStack {
-                Text("Resolution").scrubbable(sensitivity: 1, value: $resolution, range: 1...9600, step: 1)
-                TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
+                Text(L10n.string("Resolution")).scrubbable(sensitivity: 1, value: $resolution, range: 1...9600, step: 1)
+                TextField(L10n.string("Resolution"), value: $resolution, format: .number.precision(.fractionLength(0...3)))
                     .onChange(of: resolution) { _, new in
                         guard new.isFinite, new > 0 else { return }
                         if resample, unit == "Inches" || unit == "Centimeters" {
@@ -137,9 +137,9 @@ struct ImageSizeSheet: View {
                         }
                         lastResolution = new
                     }
-                Text("pixels/inch").foregroundStyle(.secondary)
+                Text(L10n.string("pixels/inch")).foregroundStyle(.secondary)
             }
-            Toggle("Resample", isOn: $resample).onChange(of: resample) { _, enabled in
+            Toggle(L10n.string("Resample"), isOn: $resample).onChange(of: resample) { _, enabled in
                 if !enabled {
                     width = Double(document.width)
                     height = Double(document.height)
@@ -148,13 +148,13 @@ struct ImageSizeSheet: View {
                 }
             }
             if resample {
-                Picker("Sampling", selection: $sampling) {
+                Picker(L10n.string("Sampling"), selection: $sampling) {
                     ForEach(LayerSampling.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
-                Text("Resizes layer pixels and applies existing transforms. Undo restores the originals.")
+                Text(L10n.string("Resizes layer pixels and applies existing transforms. Undo restores the originals."))
                     .font(.callout).foregroundStyle(.secondary)
             } else {
-                Text("Only print dimensions and resolution change. Pixels stay unchanged.")
+                Text(L10n.string("Only print dimensions and resolution change. Pixels stay unchanged."))
                     .font(.callout).foregroundStyle(.secondary)
             }
             Text(valid
@@ -163,9 +163,9 @@ struct ImageSizeSheet: View {
                                DocumentLimits.maxSide.formatted(), Int64(DocumentLimits.maxSurfaceMegapixels)))
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
             HStack {
-                Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)
+                Button(L10n.string("Cancel")) { finish(nil) }.configuredNativeShortcut(.escape)
                 Spacer()
-                Button("Resize") {
+                Button(L10n.string("Resize")) {
                     guard valid else { return }
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))

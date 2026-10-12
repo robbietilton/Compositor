@@ -49,8 +49,8 @@ struct NavigatorMinimap: View {
             })
             .pointerStyle(.default)
             .accessibilityElement()
-            .accessibilityLabel("Navigator")
-            .accessibilityHint("Click or drag to move the view")
+            .accessibilityLabel(Text(L10n.string("Navigator")))
+            .accessibilityHint(Text(L10n.string("Click or drag to move the view")))
             .task(id: RenderKey(document: session.document, revision: session.brushRevision)) {
                 // Edits settle first, so a stroke or a drag redraws the picture once, afterwards.
                 if picture != nil { try? await Task.sleep(for: .milliseconds(250)) }

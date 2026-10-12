@@ -31,7 +31,7 @@ struct RawDevelopSheet: View {
                     // Import pressed: the full frame takes a second or more to develop.
                     VStack(spacing: 8) {
                         ProgressView().controlSize(.regular)
-                        Text("Importing…").foregroundStyle(.secondary)
+                        Text(L10n.string("Importing…")).foregroundStyle(.secondary)
                     }
                     .padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 } else if working { ProgressView().controlSize(.small) }
@@ -48,11 +48,11 @@ struct RawDevelopSheet: View {
                     .help(Text(L10n.string(settings.supportsNoiseReduction ? "Smooths grain, at the cost of fine detail"
                                            : "Not available for this camera")))
                 HStack(spacing: 20) {
-                    Toggle("Lens Correction", isOn: $settings.lensCorrection)
+                    Toggle(L10n.string("Lens Correction"), isOn: $settings.lensCorrection)
                         .disabled(!settings.supportsLensCorrection)
                         .help(Text(L10n.string(settings.supportsLensCorrection ? "Removes the lens's distortion and vignetting"
                                                : "This file has no lens profile")))
-                    Toggle("Highlight Recovery", isOn: $settings.highlightRecovery)
+                    Toggle(L10n.string("Highlight Recovery"), isOn: $settings.highlightRecovery)
                         .disabled(!settings.supportsHighlightRecovery)
                         .help(Text(L10n.string(settings.supportsHighlightRecovery ? "Brings back detail in bright areas the camera partly clipped"
                                                : "Not available for this camera")))
@@ -60,10 +60,10 @@ struct RawDevelopSheet: View {
                 .padding(.leading, 120)
 
                 HStack {
-                    Button("Reset") { settings.reset() }.disabled(settings.isAsShot)
+                    Button(L10n.string("Reset")) { settings.reset() }.disabled(settings.isAsShot)
                     Spacer()
-                    Button("Cancel") { session.finishRawDevelop(nil) }.keyboardShortcut(.cancelAction)
-                    Button("Import") { session.finishRawDevelop(settings) }.keyboardShortcut(.defaultAction)
+                    Button(L10n.string("Cancel")) { session.finishRawDevelop(nil) }.keyboardShortcut(.cancelAction)
+                    Button(L10n.string("Import")) { session.finishRawDevelop(settings) }.keyboardShortcut(.defaultAction)
                 }
             }
             .disabled(session.rawImporting)
