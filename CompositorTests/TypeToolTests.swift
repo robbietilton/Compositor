@@ -139,6 +139,136 @@ struct TypeToolTests {
         #expect(ink > 100 && clear > 100)
     }
 
+    @Test func createsEditsAndReopensTextOnAPenPath() async throws {
+        let session = makeSession()
+        session.selectTool(.pen)
+        session.penMode = .line
+        session.beginPenAnchor(at: CGPoint(x: 100, y: 300), closeDistance: 0, constrain: false)
+        session.beginPenAnchor(at: CGPoint(x: 700, y: 300), closeDistance: 0, constrain: false)
+        #expect(session.finishPen())
+        let sourceID = try #require(session.activeLayerID)
+        let source = try #require(session.activeLayer)
+        let sourceImage = try #require(source.asset?.image)
+
+        session.selectTool(.type)
+        #expect(session.beginTextOnPath(at: CGPoint(x: 300, y: 300), tolerance: 8))
+        var draft = try #require(session.textDraft)
+        #expect(draft.layerID == nil)
+        #expect((draft.style.textPath?.startOffset ?? 0) > 0.25)
+        #expect((draft.style.textPath?.startOffset ?? 1) < 0.45)
+        draft.style.content = "Text on a path"
+        draft.style.fontSize = 32
+        #expect(session.applyText(draft))
+
+        let textLayer = try #require(session.activeLayer)
+        #expect(textLayer.id != sourceID)
+        #expect(textLayer.liveText?.style.textPath != nil)
+        #expect(try #require(textLayer.asset?.image.height) > sourceImage.height + 100,
+                "the text raster must grow beyond a thin Pen stroke instead of clipping every glyph")
+        #expect(abs(textLayer.transform.center.x - source.transform.center.x) < 0.001)
+        #expect(abs(textLayer.transform.center.y - source.transform.center.y) < 0.001)
+        #expect(session.document?.layers.first(where: { $0.id == sourceID })?.liveVectorPath != nil)
+        let image = try #require(textLayer.asset?.image)
+        let bytes = try #require(image.dataProvider?.data) as Data
+        var ink = 0
+        for y in 0..<image.height { for x in 0..<image.width {
+            if bytes[y * image.bytesPerRow + x * 4 + 3] > 0 { ink += 1 }
+        } }
+        #expect(ink > 100)
+
+        session.editActiveText()
+        session.textDraft?.style.content = "Edited along the line"
+        session.changeTextStyle { $0.textPath?.startOffset = 0.1 }
+        #expect(session.finishText())
+        #expect(session.activeLayer?.liveText?.style.content == "Edited along the line")
+        #expect(session.activeLayer?.liveText?.style.textPath?.startOffset == 0.1)
+        session.undo()
+        #expect(session.activeLayer?.liveText?.style.content == "Text on a path")
+
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.version == 16)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("PathText-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let reopened = EditorSession()
+        reopened.installProject(try await ProjectStore.shared.load(from: url), from: url)
+        #expect(reopened.activeLayer?.liveText?.style.textPath == session.activeLayer?.liveText?.style.textPath)
+
+        var legacy = snapshot.manifest
+        legacy.version = 15
+        try JSONEncoder().encode(legacy).write(to: url.appendingPathComponent("manifest.json"))
+        do {
+            _ = try await ProjectStore.shared.load(from: url)
+            Issue.record("Version 15 with path text should be rejected")
+        } catch ProjectError.invalid {}
+    }
+
+    @Test func complexPathMetricsStayCompleteAndDegeneratePathsAreRejected() throws {
+        let nodes = (0..<10_000).map { index in
+            let x = CGFloat(index) * 2
+            let high = index.isMultiple(of: 2) ? CGFloat(120) : -120
+            return VectorPathNode(anchor: CGPoint(x: x, y: 0),
+                                  inHandle: CGPoint(x: x - 0.7, y: -high),
+                                  outHandle: CGPoint(x: x + 0.7, y: high))
+        }
+        let metric = TextPathMetric(nodes: nodes, closed: false)
+        #expect(metric.length > 0)
+        #expect(metric.sampleCount <= TextPathMetric.maximumSampleCount)
+        let end = try #require(metric.location(at: metric.length, wrapping: false)?.point)
+        let expected = try #require(nodes.last?.anchor)
+        #expect(hypot(end.x - expected.x, end.y - expected.y) < 0.001,
+                "the bounded curve flattener must retain the end of a complex path")
+
+        let point = VectorPathNode(anchor: CGPoint(x: 0.5, y: 0.5))
+        let degenerate = LayerTextPath(nodes: [point, point], closed: false,
+                                       canvasSize: CGSize(width: 100, height: 100), startOffset: 0)
+        #expect(!degenerate.isValid)
+
+        var style = LayerTextStyle()
+        style.content = "Click this curved text"
+        style.fontSize = 32
+        style.textPath = LayerTextPath(nodes: [
+            VectorPathNode(anchor: CGPoint(x: 0.1, y: 0.7), outHandle: CGPoint(x: 0.3, y: 0.1)),
+            VectorPathNode(anchor: CGPoint(x: 0.9, y: 0.7), inHandle: CGPoint(x: 0.7, y: 0.1))
+        ], closed: false, canvasSize: CGSize(width: 600, height: 240), startOffset: 0)
+        let layout = try #require(EditorSession.textPathLayout(style))
+        let fourthCharacter = try #require(layout.location(forStringIndex: 4))
+        let hit = try #require(layout.stringIndex(nearest: fourthCharacter.point))
+        #expect(abs(hit - 4) <= 1)
+
+        style.content = String(repeating: "Long centered text ", count: 8)
+        style.alignment = .center
+        let centered = try #require(EditorSession.textPathLayout(style))
+        let rightEdge = try #require(centered.metric.location(at: centered.metric.length, wrapping: false)?.point)
+        let rightIndex = try #require(centered.stringIndex(nearest: rightEdge))
+        let visibleEnd = try #require(centered.pathDistance(forStringIndex: rightIndex))
+        #expect(abs(visibleEnd - centered.metric.length) < 8,
+                "a long centered line must map the path's far edge to the visible text there")
+    }
+
+    @Test func pathTextRejectsAFontChangeThatWouldOverflowItsTransform() throws {
+        let session = makeSession()
+        session.selectTool(.pen)
+        session.penMode = .line
+        session.beginPenAnchor(at: CGPoint(x: 100, y: 300), closeDistance: 0, constrain: false)
+        session.beginPenAnchor(at: CGPoint(x: 700, y: 300), closeDistance: 0, constrain: false)
+        #expect(session.finishPen())
+        session.selectTool(.type)
+        #expect(session.beginTextOnPath(at: CGPoint(x: 300, y: 300), tolerance: 8))
+        session.textDraft?.style.content = "Safe size"
+        session.textDraft?.style.fontSize = 32
+        #expect(session.finishText())
+
+        let id = try #require(session.activeLayerID)
+        let index = try #require(session.document?.layers.firstIndex(where: { $0.id == id }))
+        session.document?.layers[index].transform.size = CGSize(width: 300_000, height: 300_000)
+        session.editActiveText()
+        let original = try #require(session.textDraft?.style.fontSize)
+        session.changeTextStyle { $0.fontSize = 2_000 }
+        #expect(session.textDraft?.style.fontSize == original)
+        #expect(try #require(session.textDraft?.transform).isValid)
+    }
+
     @Test func verticalTextRendersEditsAndSurvivesReopening() async throws {
         var style = LayerTextStyle()
         style.content = "天地玄黄ABC"
@@ -170,7 +300,7 @@ struct TypeToolTests {
         #expect(session.activeLayer?.liveText?.style.resolvedOrientation == .vertical)
 
         let snapshot = try #require(session.projectSnapshot())
-        #expect(snapshot.manifest.version == 15)
+        #expect(snapshot.manifest.version == 16)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("VerticalText-\(UUID()).comp")
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)

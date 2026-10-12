@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "language": "zh-Hans",
-  "revision": 5,
+  "revision": 6,
   "strings": {
     "CMYK": "CMYK",
     "CMYK Gamut Warning": "CMYK 色域警告",
@@ -252,7 +252,7 @@
     "Dots": "点",
     "Drag a color in the picture. Nearby color families move together.": "在图像中拖移一种颜色，邻近的颜色系列会一起变化。",
     "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect": "拖移绘制矩形 · Shift 添加 · Option 减去 · 拖移时再次按 Shift 绘制正方形 · 在内部拖移可移动 · ⌘ 拖移移动像素 · Delete 清除 · ⌘D 取消选择",
-    "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel": "拖移文字框 · 点按文字进行编辑 · 拖移框控制点调整大小 · ⌘Return 完成 · Escape 取消",
+    "Click a Pen path to add text · Drag a text box · Click text to edit · ⌘Return finish · Escape cancel": "点按钢笔路径添加文字 · 拖移文字框 · 点按文字进行编辑 · ⌘Return 完成 · Escape 取消",
     "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect": "拖移绘制椭圆 · Shift 添加 · Option 减去 · 拖移时再次按 Shift 绘制圆形 · 在内部拖移可移动 · Delete 清除 · ⌘D 取消选择",
     "Drag inside the wheel. Angle sets hue, distance sets saturation.": "在色轮内拖移。角度设置色相，距离设置饱和度。",
     "Drag on the layer to place a guide. Draw at least two lines.": "在图层上拖移以放置参考线，至少绘制两条线。",
@@ -775,6 +775,7 @@
     "Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held": "目标调整：在图像上拖移可改变该颜色的饱和度；按住 Command 可改变色相",
     "Temperature": "色温",
     "Text color": "文字颜色",
+    "Text start position on the path": "文字在路径上的起始位置",
     "Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording.": "文本字段保留标准 macOS 编辑按键。对话框共用上方的“应用/取消”快捷键。数字字段使用上/下方向键，按住 Shift 可增大步长。标准 macOS 命令包括 ⌘Q 退出和 ⌃⌘F 全屏。未在录制时，快捷键编辑器始终使用 Return 保存、Esc 取消。",
     "Text · Double-click to edit": "文字 · 双击编辑",
     "Texture": "纹理",

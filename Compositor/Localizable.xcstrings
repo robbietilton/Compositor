@@ -3656,19 +3656,19 @@
         }
       }
     },
-    "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel": {
+    "Click a Pen path to add text · Drag a text box · Click text to edit · ⌘Return finish · Escape cancel": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "拖移文字框 · 点按文字进行编辑 · 拖移框控制点调整大小 · ⌘Return 完成 · Escape 取消"
+            "value": "点按钢笔路径添加文字 · 拖移文字框 · 点按文字进行编辑 · ⌘Return 完成 · Escape 取消"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "拖移文字框 · 點按文字進行編輯 · 拖移框控制點調整大小 · ⌘Return 完成 · Escape 取消"
+            "value": "點按鋼筆路徑加入文字 · 拖移文字框 · 點按文字進行編輯 · ⌘Return 完成 · Escape 取消"
           }
         }
       }
@@ -11948,6 +11948,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字顏色"
+          }
+        }
+      }
+    },
+    "Text start position on the path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字在路径上的起始位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字在路徑上的起始位置"
           }
         }
       }

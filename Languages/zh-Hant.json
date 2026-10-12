@@ -1,6 +1,6 @@
 {
   "language" : "zh-Hant",
-  "revision" : 5,
+  "revision" : 6,
   "schemaVersion" : 1,
   "strings" : {
     "CMYK" : "CMYK",
@@ -255,7 +255,7 @@
     "Dots" : "點",
     "Drag a color in the picture. Nearby color families move together." : "在影像中拖移一種顏色，鄰近的顏色系列會一起變化。",
     "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" : "拖移繪製矩形 · Shift 加入 · Option 減去 · 拖移時再次按 Shift 繪製正方形 · 在內部拖移可移動 · ⌘ 拖移移動像素 · Delete 清除 · ⌘D 取消選擇",
-    "Drag a text box · Click text to edit · Drag box handles to resize · ⌘Return finish · Escape cancel" : "拖移文字框 · 點按文字進行編輯 · 拖移框控制點調整大小 · ⌘Return 完成 · Escape 取消",
+    "Click a Pen path to add text · Drag a text box · Click text to edit · ⌘Return finish · Escape cancel" : "點按鋼筆路徑加入文字 · 拖移文字框 · 點按文字進行編輯 · ⌘Return 完成 · Escape 取消",
     "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect" : "拖移繪製橢圓 · Shift 加入 · Option 減去 · 拖移時再次按 Shift 繪製圓形 · 在內部拖移可移動 · Delete 清除 · ⌘D 取消選擇",
     "Drag inside the wheel. Angle sets hue, distance sets saturation." : "在色輪內拖移。角度設定色相，距離設定飽和度。",
     "Drag on the layer to place a guide. Draw at least two lines." : "在圖層上拖移以放置參考線，至少繪製兩條線。",
@@ -784,6 +784,7 @@
     "Temperature" : "色溫",
     "Text · Double-click to edit" : "文字 · 連按兩下編輯",
     "Text color" : "文字顏色",
+    "Text start position on the path" : "文字在路徑上的起始位置",
     "Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording." : "文字欄位保留標準 macOS 編輯按鍵。對話框共用上方的“套用/取消”快速鍵。數字欄位使用上/下方向鍵，按住 Shift 可增大步長。標準 macOS 命令包括 ⌘Q 退出和 ⌃⌘F 全螢幕。未在錄製時，快速鍵編輯器始終使用 Return 儲存、Esc 取消。",
     "Texture" : "紋理",
     "The 2012 response. Calibration reaches most of the strength used by Version 6." : "2012 年的回應方式。校正強度已接近版本 6。",

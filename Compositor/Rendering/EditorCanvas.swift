@@ -22,6 +22,17 @@ final class CanvasView: NSView {
     var inlineTextEditor: InlineTextEditor?
     /// The text being typed, rendered as the layer will hold it, remade only when its style changes.
     private var draftTextCache: (style: LayerTextStyle, image: CGImage)?
+    /// The flattened path and Core Text line are also expensive on a pathological path. They are shared by the
+    /// overlay and mouse hit testing and rebuilt only when layout-affecting text style actually changes.
+    private var textPathLayoutCache: (style: LayerTextStyle, layout: TextPathLayout)?
+    func textPathLayout(for style: LayerTextStyle) -> TextPathLayout? {
+        guard style.textPath != nil else { textPathLayoutCache = nil; return nil }
+        if textPathLayoutCache?.style != style {
+            guard let layout = EditorSession.textPathLayout(style) else { textPathLayoutCache = nil; return nil }
+            textPathLayoutCache = (style, layout)
+        }
+        return textPathLayoutCache?.layout
+    }
     /// The effects rendered for the text being edited, and what they were rendered from.
     private var draftEffects: (image: CGImage, effects: LayerEffects, transform: LayerTransform, rendered: CGImage, inset: CGFloat)?
     /// Which layer and text `draftEffects` were made for, so they can stand in once the edit is committed.
@@ -37,6 +48,8 @@ final class CanvasView: NSView {
     }
     var textBoxAnchor: CGPoint?
     var textBoxRect: CGRect?
+    /// A path-text drag that began on the canvas while its inline editor was being installed.
+    var pathTextSelectionAnchor: Int?
     private var lastFocusRequest = 0
     func consumeFocusRequest(_ request: Int) {
         guard request != lastFocusRequest else { return }
@@ -1383,6 +1396,71 @@ final class CanvasView: NSView {
         context.restoreGState()
     }
 
+    /// The baseline remains visible while path text is edited. Its start marker shows where left-aligned text begins;
+    /// alignment can place the text before that marker without changing the saved path.
+    private func drawTextPathControls(center: (CGPoint) -> CGPoint, in context: CGContext) {
+        guard session.tool == .type, let draft = session.textDraft, let textPath = draft.style.textPath else { return }
+        let transform = inlineTextEditor?.shownTransform
+            ?? draft.transform
+            ?? LayerTransform(origin: draft.origin, size: textPath.canvasSize)
+        let canvasSize = EditorSession.textBoxSize(draft.style)
+        let local = textPath.nodes(in: draft.style.textPathRect
+            ?? CGRect(origin: .zero, size: textPath.canvasSize))
+        func viewPoint(_ value: CGPoint) -> CGPoint {
+            let unit = CGPoint(x: value.x / canvasSize.width, y: value.y / canvasSize.height)
+            return center(unit.applying(transform.unitToDocument))
+        }
+        let mapped = local.map { node in
+            VectorPathNode(anchor: viewPoint(node.anchor), inHandle: viewPoint(node.inHandle),
+                           outHandle: viewPoint(node.outHandle))
+        }
+        guard mapped.count >= 2 else { return }
+        context.saveGState()
+        let layout = textPathLayout(for: draft.style)
+        if let layout, draft.selection.length > 0,
+           let first = layout.pathDistance(forStringIndex: draft.selection.location),
+           let last = layout.pathDistance(forStringIndex: NSMaxRange(draft.selection)) {
+            let distance = abs(last - first)
+            let steps = min(2_048, max(1, Int(ceil(distance / 4))))
+            let selected = CGMutablePath()
+            for step in 0...steps {
+                let along = first + (last - first) * CGFloat(step) / CGFloat(steps)
+                guard let location = layout.metric.location(at: along, wrapping: textPath.closed) else { continue }
+                let point = viewPoint(location.point)
+                if selected.isEmpty { selected.move(to: point) } else { selected.addLine(to: point) }
+            }
+            context.addPath(selected)
+            context.setStrokeColor(NSColor.selectedTextBackgroundColor.withAlphaComponent(0.38).cgColor)
+            let pathScale = session.viewport.pointsPerPixel * transform.size.height / canvasSize.height
+            context.setLineWidth(max(3, draft.style.fontSize * pathScale * 1.1))
+            context.setLineCap(.butt)
+            context.strokePath()
+        }
+        context.addPath(LayerVectorPathStyle.path(nodes: mapped, closed: textPath.closed))
+        context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor)
+        context.setLineWidth(1.25)
+        context.strokePath()
+        let metric = layout?.metric ?? TextPathMetric(nodes: local, closed: textPath.closed)
+        if let start = metric.location(at: textPath.startOffset * metric.length, wrapping: textPath.closed) {
+            let marker = viewPoint(start.point)
+            context.setFillColor(NSColor.controlAccentColor.cgColor)
+            context.fillEllipse(in: CGRect(x: marker.x - 3.5, y: marker.y - 3.5, width: 7, height: 7))
+        }
+        if draft.selection.length == 0, let caret = layout?.location(forStringIndex: draft.selection.location) {
+            let normal = CGPoint(x: -sin(caret.angle), y: cos(caret.angle))
+            let upper = CGPoint(x: caret.point.x - normal.x * draft.style.fontSize * 0.9,
+                                y: caret.point.y - normal.y * draft.style.fontSize * 0.9)
+            let lower = CGPoint(x: caret.point.x + normal.x * draft.style.fontSize * 0.25,
+                                y: caret.point.y + normal.y * draft.style.fontSize * 0.25)
+            context.move(to: viewPoint(upper))
+            context.addLine(to: viewPoint(lower))
+            context.setStrokeColor(NSColor.textColor.cgColor)
+            context.setLineWidth(1.5)
+            context.strokePath()
+        }
+        context.restoreGState()
+    }
+
     /// The effects surface for the layer being painted, made when the stroke starts and updated as it goes.
     private var strokeSurface: LayerEffectsSurface?
     /// Where the GPU draws the canvas, under the overlays (see `drawOnGPU`).
@@ -1574,6 +1652,7 @@ final class CanvasView: NSView {
         drawPenDraft(path: false, controls: true, scale: session.viewport.pointsPerPixel,
                      center: center, in: context)
         drawPenLineControls(center: center, in: context)
+        drawTextPathControls(center: center, in: context)
         drawTextBoxDraft()
     }
 
@@ -2044,6 +2123,11 @@ final class CanvasView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard session.document != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
+        if let pathTextSelectionAnchor {
+            inlineTextEditor?.extendPathSelection(from: pathTextSelectionAnchor, with: event)
+            needsDisplay = true
+            return
+        }
         if session.filterEdit?.drawingCameraRawGeometryGuide == true, session.filterEdit?.cameraRawGuideDraft != nil,
            let document = session.document {
             session.continueCameraRawGeometryGuide(to: session.viewport.documentPoint(from: point, documentSize: document.size))
@@ -2251,6 +2335,10 @@ final class CanvasView: NSView {
         window?.invalidateCursorRects(for: self)
     }
     override func mouseUp(with event: NSEvent) {
+        if pathTextSelectionAnchor != nil {
+            pathTextSelectionAnchor = nil
+            return
+        }
         if session.filterEdit?.cameraRawGuideDraft != nil {
             session.commitCameraRawGeometryGuide()
         }

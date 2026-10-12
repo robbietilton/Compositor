@@ -294,10 +294,13 @@ extension EditorSession {
 
     /// Inserts pixels as a new layer above the active one (inside its folder), all in one undo
     /// step. Pasting drops the selection, as in Photoshop; a drawn shape keeps it.
+    @discardableResult
     func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true,
-                       shape: LayerShape? = nil, vectorPath: LayerVectorPath? = nil, text: LayerText? = nil) {
-        guard let document, let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
+                       shape: LayerShape? = nil, vectorPath: LayerVectorPath? = nil, text: LayerText? = nil,
+                       transform: LayerTransform? = nil) -> Bool {
+        guard let document, let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
         var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: thumbnail, name: name), origin: origin)
+        if let transform { layer.transform = transform }
         layer.name = name
         layer.shape = shape
         layer.vectorPath = vectorPath
@@ -310,6 +313,7 @@ extension EditorSession {
         if dropsSelection { self.document?.selection = nil }
         activeLayerID = layer.id
         endEdit()
+        return true
     }
 
     func nextLayerName() -> String {

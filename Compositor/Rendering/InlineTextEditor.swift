@@ -18,6 +18,7 @@ final class CanvasTextView: NSTextView {
     private let textUndo = UndoManager()
     /// Set when the font menu takes the focus, so a collapsed caret does not replace the letters that were selected.
     var holdsSelection = false
+    private var pathSelectionAnchor: Int?
     override var undoManager: UndoManager? { textUndo }
     // Undo and Redo reach the window, whose history isn't this one, so the text answers them itself: ⌘Z takes back
     // what was typed since the text box opened, in one step, as in Figma.
@@ -36,7 +37,20 @@ final class CanvasTextView: NSTextView {
     }
     override func mouseDown(with event: NSEvent) {
         holdsSelection = false
+        if let anchor = editor?.beginPathSelection(with: event) {
+            pathSelectionAnchor = anchor
+            return
+        }
+        pathSelectionAnchor = nil
         super.mouseDown(with: event)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let pathSelectionAnchor else { super.mouseDragged(with: event); return }
+        editor?.extendPathSelection(from: pathSelectionAnchor, with: event)
+    }
+    override func mouseUp(with event: NSEvent) {
+        if pathSelectionAnchor != nil { pathSelectionAnchor = nil }
+        else { super.mouseUp(with: event) }
     }
     override func keyDown(with event: NSEvent) {
         guard let event = ShortcutSettings.shared.textEvent(event) else { return }
@@ -142,8 +156,10 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
             shownGeometry = nil
         }
         let layer = document.layers.first { $0.id == draft.layerID }
-        // Point text has no box: it is as big as what has been typed, growing as it is typed.
-        if let boxSize = style.boxSize {
+        // Path text keeps the path's raster box. Point text has no box and grows as it is typed.
+        if style.textPath != nil {
+            logicalSize = EditorSession.textBoxSize(style)
+        } else if let boxSize = style.boxSize {
             logicalSize = boxSize
         } else {
             if measuredStyle != style {
@@ -153,8 +169,17 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
             logicalSize = measuredSize
         }
         var transform = draft.transform ?? LayerTransform(origin: draft.origin, size: logicalSize)
+        if let path = style.textPath, let source = draft.transform {
+            if let asset = layer?.asset {
+                transform = EditorSession.resizedTextPathTransform(source,
+                    from: CGSize(width: asset.image.width, height: asset.image.height), to: logicalSize)
+            } else {
+                transform = EditorSession.resizedTextPathTransform(source, from: path.canvasSize, to: logicalSize)
+            }
+        }
         // Point text already on a layer grows as it is typed too, keeping whatever scale the layer was given.
-        if style.boxSize == nil, draft.transform != nil, let asset = layer?.asset, asset.image.width > 0 {
+        if style.boxSize == nil, style.textPath == nil, draft.transform != nil,
+           let asset = layer?.asset, asset.image.width > 0 {
             let factor = transform.size.width / CGFloat(asset.image.width)
             // A rotated layer turns about its center, so growing it swings its corner away and the text drifts as it
             // is typed. The top-left corner is put back where it was, which is where the commit leaves it too.
@@ -275,9 +300,45 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         if session.textDraft?.selection != range { session.textDraft?.selection = range }
     }
     private func updateInsertionPointColor(_ style: LayerTextStyle) {
+        if style.textPath != nil {
+            // The native text system remains responsible for input and IME, but its rectangular caret is unrelated
+            // to the curved layout. EditorCanvas draws the real path caret instead.
+            textView.insertionPointColor = .clear
+            textView.selectedTextAttributes = [.backgroundColor: NSColor.clear]
+            return
+        }
+        textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor.withAlphaComponent(0.45)]
         let location = textView.selectedRange().location
         let color = style.color(at: location > 0 ? location - 1 : 0)
         textView.insertionPointColor = NSColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1)
+    }
+
+    private func pathTextIndex(with event: NSEvent) -> Int? {
+        guard let canvas, let draft = canvas.session.textDraft, draft.id == draftID,
+              draft.style.textPath != nil, let layout = canvas.textPathLayout(for: draft.style) else { return nil }
+        var point = convert(event.locationInWindow, from: nil)
+        if shownTransform?.flipX == true { point.x = bounds.width - point.x }
+        if shownTransform?.flipY == true { point.y = bounds.height - point.y }
+        return layout.stringIndex(nearest: point)
+    }
+
+    /// Makes clicking and dragging the visible curved text select the corresponding characters. Letting NSTextView
+    /// perform this hit test would use its hidden rectangular line and put the caret somewhere unrelated.
+    func beginPathSelection(with event: NSEvent) -> Int? {
+        guard let index = pathTextIndex(with: event) else { return nil }
+        window?.makeFirstResponder(textView)
+        let previous = textView.selectedRange()
+        let anchor: Int
+        if event.modifierFlags.contains(.shift) {
+            anchor = previous.length > 0 && index < previous.location ? NSMaxRange(previous) : previous.location
+        } else { anchor = index }
+        textView.setSelectedRange(NSRange(location: min(anchor, index), length: abs(index - anchor)))
+        return anchor
+    }
+
+    func extendPathSelection(from anchor: Int, with event: NSEvent) {
+        guard let index = pathTextIndex(with: event) else { return }
+        textView.setSelectedRange(NSRange(location: min(anchor, index), length: abs(index - anchor)))
     }
 
     private var handleTracking: NSTrackingArea?
@@ -395,6 +456,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
     /// The edge or corner at a point, in handle order: a band along each edge, as the Move tool's box has, rather
     /// than only the handle squares. Nil anywhere else, which is the text.
     private func handle(at point: CGPoint) -> Int? {
+        guard canvas?.session.textDraft?.style.textPath == nil else { return nil }
         let reach = edgeReach
         let left = point.x <= reach, right = point.x >= bounds.width - reach
         let top = point.y <= reach, bottom = point.y >= bounds.height - reach
@@ -419,6 +481,7 @@ final class InlineTextEditor: NSView, NSTextViewDelegate {
         return super.hitTest(point)
     }
     override func draw(_ dirtyRect: NSRect) {
+        guard canvas?.session.textDraft?.style.textPath == nil else { return }
         NSColor.controlAccentColor.setStroke()
         let box = NSBezierPath(rect: bounds.insetBy(dx: handleSize / 12, dy: handleSize / 12))
         box.lineWidth = handleSize / 6
@@ -527,7 +590,13 @@ extension CanvasView {
             session.selectLayer(layer.id)
             session.editActiveText()
             synchronizeInlineText()
-            inlineTextEditor?.textView.mouseDown(with: event)
+            if session.textDraft?.style.textPath != nil {
+                pathTextSelectionAnchor = inlineTextEditor?.beginPathSelection(with: event)
+            } else {
+                inlineTextEditor?.textView.mouseDown(with: event)
+            }
+        } else if session.beginTextOnPath(at: pixel, tolerance: max(2, 8 / session.viewport.pointsPerPixel)) {
+            synchronizeInlineText()
         } else {
             textBoxAnchor = pixel
             textBoxRect = CGRect(origin: pixel, size: .zero)

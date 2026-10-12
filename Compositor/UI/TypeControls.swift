@@ -42,6 +42,7 @@ struct TypeControls: View {
                             .help(Text(L10n.string(label)))
                             .accessibilityLabel(Text(L10n.string(label)))
                             .accessibilityAddTraits(selected ? .isSelected : [])
+                            .disabled(session.currentTextStyle.textPath != nil && orientation == .vertical)
                         }
                     }
                     TypeFontPicker(fontName: Binding(get: {
@@ -111,6 +112,16 @@ struct TypeControls: View {
                         .arrowSteps(value: { Double(session.currentTextStyle.lineHeight) },
                                     change: { stepped in session.changeTextStyle { $0.leading = CGFloat(max(0, stepped)) } })
                         .help(Text(L10n.string("Line height, baseline to baseline. Empty or 0 is Auto: 120% of the font size.")))
+                    if session.currentTextStyle.textPath != nil {
+                        Text(L10n.string("Position"))
+                        Slider(value: Binding(get: {
+                            Double(session.currentTextStyle.textPath?.startOffset ?? 0)
+                        }, set: { value in
+                            session.changeTextStyle { $0.textPath?.startOffset = CGFloat(value) }
+                        }), in: 0...1)
+                        .frame(width: 110)
+                        .help(Text(L10n.string("Text start position on the path")))
+                    }
                 }
             }.scrollIndicators(.never)
             if session.textDraft != nil {
