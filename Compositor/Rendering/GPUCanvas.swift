@@ -84,6 +84,19 @@ import QuartzCore
         strokes = keepingLastFrame ? strokes.filter { $0.value.used >= last } : [:]
     }
 
+    /// Flushes a managed texture's CPU-written bytes to the GPU, or a GPU pass's result back to the CPU copy, so the
+    /// two sides read the same pixels. On Apple Silicon's shared memory this is a no-op; on a discrete GPU it is what
+    /// makes `replace`'s bytes visible to a later GPU pass and a GPU pass's result visible to `getBytes`.
+    @discardableResult
+    func synchronize(_ texture: MTLTexture, wait: Bool = false) -> MTLCommandBuffer? {
+        guard let buffer = queue.makeCommandBuffer(), let blit = buffer.makeBlitCommandEncoder() else { return nil }
+        blit.synchronize(resource: texture)
+        blit.endEncoding()
+        buffer.commit()
+        if wait { buffer.waitUntilCompleted() }
+        return buffer
+    }
+
     /// `image` as a texture, `level` halvings smaller (sharp reductions for zooming out, as `DownsampleCache` makes on
     /// the CPU). A mask comes back with its values in the red channel. A `transient` image — one that's replaced every
     /// frame, like a Smudge stroke's — is kept only for the frame it's drawn in, and reduced as it's drawn.
@@ -191,7 +204,7 @@ import QuartzCore
             else { return false }
             let w = Int(bounds.width), h = Int(bounds.height)
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: texture.pixelFormat, width: w, height: h, mipmapped: false)
-            descriptor.storageMode = .shared
+            descriptor.storageMode = .managed
             guard let staging = renderer.device.makeTexture(descriptor: descriptor) else { return false }
             let bytes = mask ? 1 : 4
             let offset = Int(bounds.minY - rect.minY.rounded()) * pixels.bytesPerRow + Int(bounds.minX - rect.minX.rounded()) * bytes
@@ -200,6 +213,7 @@ import QuartzCore
                 buffer = renderer.queue.makeCommandBuffer()
                 blit = buffer?.makeBlitCommandEncoder()
             }
+            blit?.synchronize(resource: staging)
             blit?.copy(from: staging, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
                        sourceSize: MTLSize(width: w, height: h, depth: 1), to: texture, destinationSlice: 0, destinationLevel: 0,
                        destinationOrigin: MTLOrigin(x: Int(bounds.minX), y: Int(bounds.minY), z: 0))
@@ -254,7 +268,7 @@ import QuartzCore
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format ?? (mask ? .r8Unorm : .rgba8Unorm),
                                                                   width: width, height: height, mipmapped: false)
         descriptor.usage = [.shaderRead, .shaderWrite]
-        descriptor.storageMode = .shared
+        descriptor.storageMode = .managed
         return device.makeTexture(descriptor: descriptor)
     }
 
@@ -273,6 +287,7 @@ import QuartzCore
               let data = pixels.data else { return nil }
         texture.replace(region: MTLRegionMake2D(0, 0, image.width, image.height), mipmapLevel: 0,
                         withBytes: data, bytesPerRow: pixels.bytesPerRow)
+        synchronize(texture)
         return wrap(texture, mask: mask)
     }
 

@@ -35,11 +35,12 @@ import Metal
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format, width: pixels.width,
                                                                   height: pixels.height, mipmapped: false)
         descriptor.usage = [.shaderRead, .shaderWrite]
-        descriptor.storageMode = .shared
+        descriptor.storageMode = .managed
         guard let texture = renderer.device.makeTexture(descriptor: descriptor) else { return nil }
         // Top-left rows, as the document's: a point's row is its y.
         texture.replace(region: MTLRegionMake2D(0, 0, pixels.width, pixels.height), mipmapLevel: 0,
                         withBytes: data, bytesPerRow: pixels.bytesPerRow)
+        renderer.synchronize(texture)
         self.renderer = renderer
         self.texture = texture
         self.format = format
@@ -56,6 +57,7 @@ import Metal
         commit()
         last?.waitUntilCompleted()
         guard let data = pixels.data else { return }
+        renderer.synchronize(texture, wait: true)
         texture.getBytes(data, bytesPerRow: pixels.bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
     }
 

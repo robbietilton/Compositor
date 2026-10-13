@@ -185,7 +185,11 @@ struct ContentView: View {
                     .disabled(session.isImporting || session.showsBusy || session.levels != nil)
                     .modifier(NewProjectDropTarget(workspace: applicationDelegate?.workspace))
             }
-            ToolbarSpacer(.fixed, placement: .navigation)
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .navigation)
+            } else {
+                ToolbarItem(placement: .navigation) { Spacer().frame(width: 8) }
+            }
             if let workspace = applicationDelegate?.workspace {
                 ToolbarItem(placement: .navigation) {
                     ProjectTabStrip(workspace: workspace)
@@ -194,11 +198,15 @@ struct ContentView: View {
                         // strip scrolls instead.
                         .frame(width: max(200, windowWidth - 352), height: 34, alignment: .center)
                 }
-                .sharedBackgroundVisibility(.hidden)
+                .hidingSharedBackground()
             }
             // Absorb all remaining navigation-toolbar width before the zoom controls.
             // Without this spacer, the growing tab strip pushes the primary actions left.
-            ToolbarSpacer(.flexible, placement: .navigation)
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.flexible, placement: .navigation)
+            } else {
+                ToolbarItem(placement: .navigation) { Spacer() }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Fit") { session.fit() }.help("Fit canvas in window (⌘0)")
                     .accessibilityIdentifier("fitCanvas").disabled(session.document == nil)
@@ -489,5 +497,18 @@ private struct WidthReader: ViewModifier {
     @Binding var width: CGFloat
     func body(content: Content) -> some View {
         content.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
+
+/// Hides a toolbar item's shared background so it blends into the window chrome. On macOS 26 this is the
+/// `sharedBackgroundVisibility` modifier; earlier systems show the item against the toolbar's usual background.
+private extension ToolbarContent {
+    @ToolbarContentBuilder
+    func hidingSharedBackground() -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            self.sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
     }
 }

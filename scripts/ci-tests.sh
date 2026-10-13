@@ -33,7 +33,7 @@ run() {
   local name=$1; shift
   rm -rf "$name.xcresult"
   ( start=$SECONDS
-    xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination 'platform=macOS,arch=arm64' \
+    xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination 'platform=macOS' \
       -resultBundlePath "$name.xcresult" "$@" > "$name.log" 2>&1
     status=$?
     echo "$((SECONDS - start))" > "$name.seconds"

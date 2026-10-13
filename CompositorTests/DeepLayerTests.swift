@@ -625,7 +625,7 @@ struct DeepLayerTests {
         #expect(preview.width == result.width && preview.height == result.height)
         func mean(_ a: CGImage, _ b: CGImage) throws -> Double {
             let x = try row(a), y = try row(b)
-            return zip(x, y).map { abs(Double($0) - Double($1)) }.reduce(0, +) / Double(x.count) / 257
+            return zip(x, y).map { (a: Int, b: Int) -> Double in abs(Double(a) - Double(b)) }.reduce(0, +) / Double(x.count) / 257
         }
         let matched = try mean(preview, result), before = try mean(clipped, result)
         #expect(matched < 1.5 && matched < before / 3, "\(kind): \(matched) steps off the result, \(before) from the clipped copy")
