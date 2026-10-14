@@ -22,33 +22,6 @@ struct CanvasSizeSheet: View {
     private func dimension(_ widthAxis: Bool) -> Binding<Double> {
         Binding(get: { draft.displayed(widthAxis: widthAxis) }, set: { draft.set($0, widthAxis: widthAxis) })
     }
-    private func scrubRange(_ widthAxis: Bool) -> ClosedRange<Double> {
-        let original = Double(widthAxis ? draft.originalWidth : draft.originalHeight)
-        let other = Double(widthAxis ? draft.originalHeight : draft.originalWidth)
-        let lower = draft.locked ? max(1, original / other) : 1.0
-        let upper = draft.locked ? min(30_000, 30_000 * original / other) : 30_000.0
-        func displayed(_ pixels: Double) -> Double {
-            let difference = pixels - (draft.relative ? original : 0)
-            switch draft.unit {
-            case .pixels: return difference
-            case .percent: return difference / original * 100
-            case .inches: return difference / draft.resolution
-            case .centimeters: return difference / draft.resolution * 2.54
-            }
-        }
-        return displayed(lower)...displayed(upper)
-    }
-    private func scrubSensitivity(_ widthAxis: Bool) -> Double {
-        switch draft.unit {
-        case .pixels: return 1
-        case .percent: return 100 / Double(widthAxis ? draft.originalWidth : draft.originalHeight)
-        case .inches: return 1 / draft.resolution
-        case .centimeters: return 2.54 / draft.resolution
-        }
-    }
-    private func bytes(_ width: Int, _ height: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(width) * Int64(height) * 4, countStyle: .memory)
-    }
     private var fill: CanvasExtensionColor? {
         let color: NSColor
         switch extensionChoice {
@@ -68,7 +41,7 @@ struct CanvasSizeSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Canvas Size").font(.title2.bold())
             Text("Current: \(draft.originalWidth) × \(draft.originalHeight) pixels")
-            Text("\(bytes(draft.originalWidth, draft.originalHeight)) uncompressed RGBA canvas")
+            Text("\(CanvasSizeDraft.memory(width: draft.originalWidth, height: draft.originalHeight)) uncompressed RGBA canvas")
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
             Picker("Units", selection: $draft.unit) {
@@ -76,12 +49,12 @@ struct CanvasSizeSheet: View {
             }
             HStack {
                 Text("Width").frame(width: 60, alignment: .leading)
-                    .scrubbable(sensitivity: scrubSensitivity(true), value: dimension(true), range: scrubRange(true), step: 1)
+                    .scrubbable(sensitivity: draft.scrubSensitivity(widthAxis: true), value: dimension(true), range: draft.scrubRange(widthAxis: true), step: 1)
                 TextField("Width", value: dimension(true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
                 Text("Height").frame(width: 60, alignment: .leading)
-                    .scrubbable(sensitivity: scrubSensitivity(false), value: dimension(false), range: scrubRange(false), step: 1)
+                    .scrubbable(sensitivity: draft.scrubSensitivity(widthAxis: false), value: dimension(false), range: draft.scrubRange(widthAxis: false), step: 1)
                 TextField("Height", value: dimension(false), format: .number.precision(.fractionLength(0...3)))
             }
             Toggle("Relative to current dimensions", isOn: $draft.relative)
@@ -90,7 +63,7 @@ struct CanvasSizeSheet: View {
                     if locked { draft.set(draft.displayed(widthAxis: true), widthAxis: true) }
                 }
             if draft.valid {
-                Text("New: \(Int(draft.width.rounded())) × \(Int(draft.height.rounded())) pixels · \(bytes(Int(draft.width.rounded()), Int(draft.height.rounded()))) uncompressed")
+                Text("New: \(Int(draft.width.rounded())) × \(Int(draft.height.rounded())) pixels · \(CanvasSizeDraft.memory(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()))) uncompressed")
                     .font(.callout).foregroundStyle(.secondary)
             } else {
                 Text("Final dimensions must be 1–\(DocumentLimits.maxSide.formatted()) pixels per side.")

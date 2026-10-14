@@ -13,3 +13,13 @@ If you've been asked to make or change an image in a `.comp` project, you don't 
 - Match the surrounding code: its naming, its comment style and density.
 - American spelling in code, comments and UI ("color", not "colour").
 - The project file format is described in [docs/project-format.md](docs/project-format.md). A change to what's saved means a format version bump there and in `ProjectManifest.current`.
+
+## iPadOS
+
+`CompositorPad` is an iPad app on the same editor. It builds Document/, IO/ and Rendering/ from `Compositor/`, under the touch interface in `CompositorPad/`.
+
+- Build: `xcodebuild -project Compositor.xcodeproj -scheme CompositorPad -destination 'generic/platform=iOS Simulator' build`.
+- Tests: the `CompositorPadTests` target, on an iPad simulator (`xcodebuild ... -scheme CompositorPad -destination 'platform=iOS Simulator,name=<an iPad>' test`). CI runs these too.
+- Everything in `Compositor/` builds for both, except the Mac's own interface, listed in `MAC_ONLY_SOURCES` in `CompositorPad/CompositorPad.xcconfig`. A new file that is the Mac's interface goes on that list.
+- In Document/, IO/ and Rendering/, import the frameworks a file uses rather than AppKit. The beep, the general pasteboard and drawing text go through `Compositor/Platform/Platform.swift`, which has each platform's version.
+- `CompositorPad/` is grouped by the part of the window a file makes: `Window/` (the window, its tabs and what's around the canvas), `Canvas/`, `Panels/` (tools, options and layers), `Dialogs/` and `IO/` (the project's files). `CompositorPadTests/` follows the same folders. File names stay unique across folders, as Swift requires.

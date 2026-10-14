@@ -15,7 +15,9 @@ XCTESTRUN=$(ls "$DERIVED"/Build/Products/*.xctestrun 2>/dev/null | head -1)
 
 FILTER_SUITES=(CameraRawTests CameraRawSliderTests HueSaturationTests ImageAdjustmentTests LevelsTests FilterTests
   ScanlinesTests FinishingFilterTests)
-WINDOW_SUITES=(FloatingPanelTests SliderSnapTests)
+# ContentFillTests fills on every core: beside the parallel clones it held them up for the better part of a minute,
+# and one timed out launching, so it runs with the window suites, one at a time.
+WINDOW_SUITES=(FloatingPanelTests SliderSnapTests ContentFillTests)
 # About half of the rest, alternating down the suites by size so neither half gets all the big ones.
 FIRST_SUITES=(PSDRoundTripTests LayerTests SelectionTests SelectionEditTests TransformTests TiledLayerTests
   AdjustmentLayerTests GuideTests SelectionClipboardTests ImageImportTests CompositorTests ExternalChangeTests

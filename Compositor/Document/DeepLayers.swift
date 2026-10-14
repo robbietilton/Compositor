@@ -1,4 +1,6 @@
-import AppKit
+import CoreGraphics
+import CoreImage
+import Foundation
 
 /// 16-bit layers in 8-bit documents. A layer whose `ImportedImage` carries `deep` keeps its pixels at 16 bits a
 /// channel; its `image` is a dithered 8-bit copy that the canvas, thumbnails and every tool keep using unchanged.

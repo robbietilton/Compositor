@@ -10,16 +10,8 @@ struct HueSaturationSheet: View {
     private var hueRange: ClosedRange<Double> { current.colorize ? 0...360 : -180...180 }
     private var saturationRange: ClosedRange<Double> { current.colorize ? 0...100 : -100...100 }
     private var showsSpectrum: Bool { current.range != .master && !current.colorize }
-    /// What a double-click puts a slider back to: Photoshop's colorize start, or no change.
-    private var resetValues: HueSaturationSettings { current.colorize ? .colorizeStart : HueSaturationSettings() }
-    /// The middle of the selected color range; Master centers on red.
-    private var rangeHue: Double { Double(max(0, ColorRange.colorRanges.firstIndex(of: current.range) ?? 0)) * 60 }
-    /// Colorizing picks an absolute hue, red to red; otherwise the track shows the shift around the range's color.
-    private var hueTrack: CameraRawSliderTrack { .spectrum(current.colorize ? 180 : rangeHue) }
-    private var saturationTrack: CameraRawSliderTrack {
-        if current.colorize { return .saturation(current.hue) }
-        return current.range == .master ? .chroma : .saturation(rangeHue)
-    }
+    /// A range other than the selected one that applies outside its band.
+    private var otherInvertedRange: ColorRange? { current.invertedRange.flatMap { $0 == current.range ? nil : $0 } }
 
     private var settings: Binding<HueSaturationSettings> {
         Binding(get: { current },
@@ -40,14 +32,18 @@ struct HueSaturationSheet: View {
                 Spacer()
                 samplingControls
             }
-            slider("Hue", value: settings.hue, range: hueRange, unit: "°", track: hueTrack, reset: resetValues.hue)
-            slider("Saturation", value: settings.saturation, range: saturationRange, unit: "", track: saturationTrack,
-                   reset: resetValues.saturation)
+            slider("Hue", value: settings.hue, range: hueRange, unit: "°", track: current.hueTrack, reset: current.resetValues.hue)
+            slider("Saturation", value: settings.saturation, range: saturationRange, unit: "", track: current.saturationTrack,
+                   reset: current.resetValues.saturation)
             slider("Lightness", value: settings.lightness, range: -100...100, unit: "",
-                   track: .opposing(.black, .white), reset: resetValues.lightness)
+                   track: HueSaturationSettings.lightnessTrack, reset: current.resetValues.lightness)
             if showsSpectrum {
                 SpectrumEditor(settings: settings)
+                // One range at a time: turning it on here would take it off the other.
                 Toggle("Apply outside this range instead", isOn: settings.invertRange)
+                    .disabled(otherInvertedRange != nil)
+                    .help(otherInvertedRange.map { "\($0.rawValue) applies outside its range, and only one range can at a time" }
+                          ?? "Adjust every color outside this range instead of the colors in it")
             }
             HStack(spacing: 18) {
                 Toggle("Colorize", isOn: Binding(get: { current.colorize }, set: { colorize in
@@ -191,20 +187,12 @@ struct SpectrumEditor: View {
                 .onChanged { value in
                     guard width > 0 else { return }
                     let degrees = Double(min(max(0, value.location.x), width) / width) * 360
-                    let index = dragging ?? nearestHandle(to: degrees)
+                    let index = dragging ?? settings.band.nearestHandle(to: degrees)
                     dragging = index
                     settings.band.setHandle(index, to: degrees)
                 }
                 .onEnded { _ in dragging = nil })
         }
         .frame(height: 12)
-    }
-
-    private func nearestHandle(to degrees: Double) -> Int {
-        let distances = settings.band.handles.map { handle -> Double in
-            let gap = abs(handle - degrees).truncatingRemainder(dividingBy: 360)
-            return min(gap, 360 - gap)
-        }
-        return distances.firstIndex(of: distances.min() ?? 0) ?? 0
     }
 }

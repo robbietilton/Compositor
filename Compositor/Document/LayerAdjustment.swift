@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import CoreImage
 
 nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {

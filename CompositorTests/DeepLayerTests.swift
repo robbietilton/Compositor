@@ -1,4 +1,6 @@
-import AppKit
+import CoreGraphics
+import CoreImage
+import Foundation
 import ImageIO
 import Testing
 import UniformTypeIdentifiers
@@ -530,6 +532,37 @@ struct DeepLayerTests {
         var older = snapshot.manifest
         older.version = 12
         await #expect(throws: (any Error).self) { try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: project) }
+    }
+
+    /// An HDR layer whose highlights have all been painted over still saves as EXR, which reopens as a 16-bit layer,
+    /// whose file is PNG: the next save encodes it as one rather than writing the EXR it was read from under the
+    /// PNG's name, which no open could read.
+    @Test func aDemotedEXRSavesAsPNGNotItsHeldBytes() async throws {
+        // Float pixels within white, as painting over every highlight leaves an HDR layer's.
+        let context = try DeepLayer.context(width: Self.width, height: Self.height, hdr: true)
+        context.setFillColor(gray: 0.5, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: Self.width, height: Self.height))
+        let deep = try #require(context.makeImage())
+        let shown = try DeepLayer.dithered(try DeepLayer.image(deep))
+        let session = EditorSession()
+        session.createDocument(width: Self.width, height: Self.height)
+        session.insert(ImportedImage(image: shown, thumbnail: shown, name: "HDR", deep: deep))
+        let id = try #require(session.activeLayerID)
+        #expect(session.activeLayer?.asset?.isHDR == true)
+        let project = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".comp")
+        defer { try? FileManager.default.removeItem(at: project) }
+        let encoded = EncodedImages()
+        try await ProjectStore.shared.save(try #require(session.projectSnapshot()), to: project, encoded: encoded)
+        let loaded = try await ProjectStore.shared.load(from: project, encoded: encoded)
+        let reopened = try #require(loaded.images[id])
+        #expect(reopened.deep != nil && !reopened.isHDR, "within white, so 16-bit")
+        session.installProject(loaded, from: project)
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.layers.first?.imageFile == "\(id.uuidString).png")
+        try await ProjectStore.shared.save(snapshot, to: project, encoded: encoded)
+        #expect(encoded.encoded == 2, "encoded as PNG, not written as the EXR it was read from")
+        let again = try #require(try await ProjectStore.shared.load(from: project, encoded: encoded).images[id])
+        #expect(try row(try #require(again.deep)) == row(try #require(reopened.deep)), "pixel for pixel")
     }
 
     /// An imported HDR render (linear light up to 4× white), with its brightest value.

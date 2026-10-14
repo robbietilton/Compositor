@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// Carries a CGImage out of a detached task.
 nonisolated private struct Box: @unchecked Sendable {
@@ -108,7 +109,7 @@ extension EditorSession {
               let index = document.layers.firstIndex(where: { $0.id == layer.id }) else { return }
         let mask = isMaskSelected
         guard var image = mask ? layer.mask?.asset.image : layer.asset?.image else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         isProjectBusy = true
         defer { isProjectBusy = false }
         do {
@@ -171,7 +172,7 @@ extension EditorSession {
         do {
             let raster = try makeRasterEdit(for: layer)
             guard try raster.liftSelection() else { return false }
-            finishOpacityEdit()
+            finishHeldDrags()
             pixelMove = PixelMove(raster: raster, origin: selection, duplicate: duplicate)
             return true
         } catch { brushError = error.localizedDescription; return false }
@@ -219,13 +220,13 @@ extension EditorSession {
 
     /// Cmd-arrow: moves the selected pixels 1 px (10 px with Shift) as one undo step.
     func nudgePixels(dx: CGFloat, dy: CGFloat) async {
-        guard beginPixelMove() else { NSSound.beep(); return }
+        guard beginPixelMove() else { Platform.beep(); return }
         movePixels(by: CGSize(width: dx, height: dy))
         await finishPixelMove()
     }
 
     private func applyPixelEdit(to layer: ImageLayer, name: String, _ paint: (BrushStroke) throws -> Void) async {
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             // On a mask, a fill covers the whole canvas, past the mask's own area, as the brush can.
             let edit = try makeRasterEdit(for: layer, growsMask: true)

@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// Sharpening and manual noise reduction. Amount is 0…150; the rest use Camera Raw's usual 0…100 ranges.
 nonisolated struct CameraRawDetailSettings: Equatable, Sendable {

@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 nonisolated struct CurvePoint: Codable, Equatable, Sendable {
     var x: Double

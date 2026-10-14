@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 nonisolated enum ShapeKind: String, CaseIterable, Codable, Sendable {
     case rectangle = "Rectangle"

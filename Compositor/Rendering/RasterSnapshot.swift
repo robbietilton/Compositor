@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// Immutable sparse raster. Paint commits share untouched tiles with their source.
 /// A contiguous CGImage backing is materialized only when a consumer (export or an

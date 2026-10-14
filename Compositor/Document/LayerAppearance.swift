@@ -88,6 +88,7 @@ extension EditorSession {
     var canEditOpacity: Bool { canEditLayers && selectedLayerIDs.count == 1 && activeLayer != nil }
     func beginOpacityEdit() {
         guard canEditOpacity, opacityEditLayerID == nil, let id = activeLayerID else { return }
+        finishEffectsChange()
         beginEdit("Layer Opacity")
         opacityEditLayerID = id
     }
@@ -114,7 +115,7 @@ extension EditorSession {
             selectedLayerIDs.contains(document.layers[$0].id) && document.layers[$0].opacity != value
         }
         guard !indices.isEmpty else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Layer Opacity")
         for index in indices { self.document?.layers[index].opacity = value }
         endEdit()
@@ -130,7 +131,7 @@ extension EditorSession {
     func setLayerBlendMode(_ mode: LayerBlendMode) {
         blendPreview = nil
         guard canEditAppearance, let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Layer Blend Mode")
         document?.layers[index].blendMode = mode
         endEdit()

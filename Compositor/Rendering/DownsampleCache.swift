@@ -16,6 +16,8 @@ nonisolated final class DownsampleCache: @unchecked Sendable {
     static let pixelBudget = DocumentLimits.maxSurfacePixels
     /// Most halvings ever used; past this Core Graphics does the rest.
     static let maxLevel = 6
+    /// Whether halvings made now are kept. Something drawn once, as a save's preview is, makes its own and lets them go.
+    @TaskLocal static var keeps = true
 
     private struct Entry {
         let source: CGImage
@@ -54,6 +56,8 @@ nonisolated final class DownsampleCache: @unchecked Sendable {
             levels.append(next)
         }
         guard !levels.isEmpty else { return (image, 0) }
+        let applied = min(wanted, levels.count)
+        guard Self.keeps else { return (levels[applied - 1], applied) }
         lock.lock()
         if let stored = entries[key], stored.source === image, stored.levels.count >= levels.count {
             entries[key]?.lastUse = clock
@@ -62,8 +66,14 @@ nonisolated final class DownsampleCache: @unchecked Sendable {
         }
         evict(keeping: key)
         lock.unlock()
-        let applied = min(wanted, levels.count)
         return (levels[applied - 1], applied)
+    }
+
+    /// How many halvings of `image` are kept, for tests.
+    func keptLevels(of image: CGImage) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries[ObjectIdentifier(image)].flatMap { $0.source === image ? $0.levels.count : nil } ?? 0
     }
 
     /// Drops least recently used copies until the rest fit the budget. Call with the lock held.

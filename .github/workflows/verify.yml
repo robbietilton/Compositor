@@ -148,3 +148,52 @@ jobs:
           path: screenshots
           retention-days: 30
           if-no-files-found: warn
+
+  # The iPad app and its tests, built with this Xcode and not run for now: see the step.
+  ipad:
+    name: ipad
+    # As for unit: push covers same-repo branches, and pull_request only forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      # Whichever iPad the runner has, on its newest iOS.
+      - name: Pick an iPad simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted((r for r in devices if ".iOS-" in r), key=lambda r: [int(n) for n in r.split(".iOS-")[1].split("-")], reverse=True)
+          print(next(d["udid"] for r in runtimes for d in devices[r] if d["name"].startswith("iPad")))')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      # Builds the iPad app and its tests with this Xcode, without running them for now. On the hosted runner, one at a
+      # time, the 541 tests outlast the job's hour, and those that wait on the window or a picker run out of their time
+      # there; side by side on several clones, a minute's limit ends the run. They all pass on an iPad simulator on
+      # iOS 26.5 on a Mac: `xcodebuild test -scheme CompositorPad -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO`.
+      # Running them here again waits on making those waits hold up on a slower machine.
+      - name: Build the iPad app and its tests
+        run: >
+          xcodebuild build-for-testing
+          -project Compositor.xcodeproj
+          -scheme CompositorPad
+          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
+          -derivedDataPath DerivedData
+          -resultBundlePath PadResults.xcresult
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ipad-test-results
+          path: PadResults.xcresult
+          retention-days: 7
+          if-no-files-found: ignore

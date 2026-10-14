@@ -8,16 +8,16 @@ struct CameraRawSliderTests {
         let temperature = try #require(CameraRawSliderTrack.temperature.colors)
         let cool = try #require(temperature.first)
         let warm = try #require(temperature.last)
-        #expect(cool.blueComponent > warm.blueComponent)
+        #expect(cool.blue > warm.blue)
         let tint = try #require(CameraRawSliderTrack.tint.colors)
         let green = try #require(tint.first)
         let mauve = try #require(tint.last)
-        #expect(green.greenComponent > mauve.greenComponent)
+        #expect(green.green > mauve.green)
         let chroma = try #require(CameraRawSliderTrack.chroma.colors)
         let gray = try #require(chroma.first)
         let red = try #require(chroma.last)
-        #expect(abs(gray.redComponent - gray.greenComponent) < 0.05)
-        #expect(red.redComponent > red.greenComponent + 0.4)
+        #expect(abs(gray.red - gray.green) < 0.05)
+        #expect(red.red > red.green + 0.4)
         #expect(CameraRawSliderTrack.plain.colors == nil)
     }
 
@@ -26,7 +26,7 @@ struct CameraRawSliderTests {
         cell.minValue = -100
         cell.maxValue = 100
         cell.doubleValue = 0
-        cell.gradientColors = CameraRawSliderTrack.temperature.colors
+        cell.gradientColors = CameraRawSliderTrack.temperature.colors?.map(\.nsColor)
         let width = 200
         let height = 16
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
@@ -50,14 +50,14 @@ struct CameraRawSliderTests {
     }
 
     @Test func colorBalanceTracksRunFromEachColorToItsOpposite() throws {
-        let cyanRed = try #require(FilterSheet.cyanRedTrack.colors)
-        #expect(cyanRed[0].blueComponent > cyanRed[0].redComponent && cyanRed[1].redComponent > cyanRed[1].blueComponent)
-        let magentaGreen = try #require(FilterSheet.magentaGreenTrack.colors)
-        #expect(magentaGreen[0].redComponent > magentaGreen[0].greenComponent && magentaGreen[1].greenComponent > magentaGreen[1].redComponent)
-        let yellowBlue = try #require(FilterSheet.yellowBlueTrack.colors)
-        #expect(yellowBlue[0].greenComponent > yellowBlue[0].blueComponent && yellowBlue[1].blueComponent > yellowBlue[1].greenComponent)
-        let greens = try #require(CameraRawSliderTrack.luminance(120).colors?.last?.usingColorSpace(.sRGB))
-        #expect(greens.greenComponent > greens.redComponent && greens.greenComponent > greens.blueComponent)
+        let cyanRed = try #require(CameraRawSliderTrack.cyanRed.colors)
+        #expect(cyanRed[0].blue > cyanRed[0].red && cyanRed[1].red > cyanRed[1].blue)
+        let magentaGreen = try #require(CameraRawSliderTrack.magentaGreen.colors)
+        #expect(magentaGreen[0].red > magentaGreen[0].green && magentaGreen[1].green > magentaGreen[1].red)
+        let yellowBlue = try #require(CameraRawSliderTrack.yellowBlue.colors)
+        #expect(yellowBlue[0].green > yellowBlue[0].blue && yellowBlue[1].blue > yellowBlue[1].green)
+        let greens = try #require(CameraRawSliderTrack.luminance(120).colors?.last)
+        #expect(greens.green > greens.red && greens.green > greens.blue)
     }
 
     @Test func trackClickValueMatchesTheClickedPosition() {

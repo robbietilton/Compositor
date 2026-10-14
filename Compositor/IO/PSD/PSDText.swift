@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import CoreGraphics
 import Foundation
 
@@ -27,7 +31,7 @@ nonisolated enum PSDText {
     static let justifyNote = "Full justification was imported as left alignment."
 
     static func missingFontNote(_ name: String) -> String? {
-        guard NSFont(name: name, size: 12) == nil else { return nil }
+        guard PlatformFont(name: name, size: 12) == nil else { return nil }
         return "The font “\(name)” isn’t installed, so the text was drawn with the system font."
     }
 

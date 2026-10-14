@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 nonisolated enum GradientStyle: String, CaseIterable, Sendable {
     case foregroundToBackground = "Foreground to Background"
@@ -61,7 +62,7 @@ extension EditorSession {
             return
         }
         guard canPaint else { brushError = paintRefusal; return }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             gradientEdit = GradientEdit(raster: try makeRasterEdit(for: layer, growsMask: true), start: point)
             brushRevision += 1
@@ -111,6 +112,8 @@ extension EditorSession {
     func commitGradient() async {
         guard let edit = gradientEdit, !isProjectBusy else { return }
         guard edit.hasLine else { cancelGradient(); return }
+        // A drag held in an effect's panel, which works beside the gradient waiting for Apply, keeps a step of its own.
+        finishHeldDrags()
         do {
             try edit.applyFill()
             try await commitRasterEdit(edit.raster, name: edit.raster.isMask ? "Gradient Mask" : "Gradient")
@@ -122,5 +125,15 @@ extension EditorSession {
     func resolveGradient() {
         guard gradientEdit != nil else { return }
         Task { await commitGradient() }
+    }
+}
+
+extension GradientEdit {
+    /// `point` turned about `anchor` to the nearest 45° step, as Shift constrains the line in Photoshop.
+    nonisolated static func constrained(_ point: CGPoint, around anchor: CGPoint) -> CGPoint {
+        let dx = point.x - anchor.x, dy = point.y - anchor.y
+        let length = hypot(dx, dy)
+        let angle = (atan2(dy, dx) / (.pi / 4)).rounded() * (.pi / 4)
+        return CGPoint(x: anchor.x + cos(angle) * length, y: anchor.y + sin(angle) * length)
     }
 }

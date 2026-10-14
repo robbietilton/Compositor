@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// Clone Stamp's options-bar settings.
 nonisolated struct CloneSettings: Equatable, Sendable {

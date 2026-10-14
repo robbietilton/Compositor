@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 
 /// Layers-panel thumbnails framed by the whole canvas, as Photoshop shows them: a layer's pixels (or its
 /// mask) drawn where they sit on a canvas-shaped picture, whatever the layer's own bounds.
@@ -17,7 +17,7 @@ enum CanvasThumbnail {
 
     /// The transparency checkerboard with the layer's pixels (`image`, usually its small preview) placed
     /// on the canvas by `transform`. Without an image it is an empty canvas.
-    static func layer(_ image: CGImage?, transform: LayerTransform, canvas: CGSize, box: CGFloat) -> NSImage {
+    static func layer(_ image: CGImage?, transform: LayerTransform, canvas: CGSize, box: CGFloat) -> PlatformImage {
         render(canvas: canvas, box: box) { context, size, scale in
             context.setFillColor(gray: 0.22, alpha: 1)
             context.fill(CGRect(origin: .zero, size: size))
@@ -35,7 +35,7 @@ enum CanvasThumbnail {
     /// The mask placed by `transform`. Past its pixels a mask carries on in its background, white or black, the way
     /// the canvas treats it (LayerMask.background): a reveal-all mask reads all white, a hide-all mask all black, and a
     /// stroke touching the mask's edge doesn't turn the rest gray.
-    static func mask(_ image: CGImage, transform: LayerTransform, canvas: CGSize, box: CGFloat) -> NSImage {
+    static func mask(_ image: CGImage, transform: LayerTransform, canvas: CGSize, box: CGFloat) -> PlatformImage {
         render(canvas: canvas, box: box) { context, size, scale in
             context.setFillColor(gray: LayerMask.background(of: image), alpha: 1)
             context.fill(CGRect(origin: .zero, size: size))
@@ -44,13 +44,13 @@ enum CanvasThumbnail {
     }
 
     /// A canvas-shaped picture: `draw` gets a top-left context, its size in pixels, and pixels per document pixel.
-    private static func render(canvas: CGSize, box: CGFloat, draw: (CGContext, CGSize, CGFloat) -> Void) -> NSImage {
+    private static func render(canvas: CGSize, box: CGFloat, draw: (CGContext, CGSize, CGFloat) -> Void) -> PlatformImage {
         let points = fittedSize(canvas: canvas, box: box)
         let width = Int(points.width * backingScale), height = Int(points.height * backingScale)
-        guard let context = try? BrushRaster.context(width: width, height: height, mask: false) else { return NSImage(size: points) }
+        guard let context = try? BrushRaster.context(width: width, height: height, mask: false) else { return Platform.emptyImage(size: points) }
         draw(context, CGSize(width: width, height: height), canvas.width > 0 ? CGFloat(width) / canvas.width : 1)
-        guard let image = context.makeImage() else { return NSImage(size: points) }
-        return NSImage(cgImage: image, size: points)
+        guard let image = context.makeImage() else { return Platform.emptyImage(size: points) }
+        return Platform.image(image, size: points)
     }
 
     /// Draws `image` where `transform` puts it on the canvas, the way the canvas itself places layers.

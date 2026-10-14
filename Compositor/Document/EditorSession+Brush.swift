@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 extension EditorSession {
     /// An explicitly empty selection leaves nothing paintable, so painting never starts.
@@ -60,7 +61,7 @@ extension EditorSession {
             }
             sourceOffset = offset
         }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             var settings = brushSettings
             settings.healing = tool == .spotHealing

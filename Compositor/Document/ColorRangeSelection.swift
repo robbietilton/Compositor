@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import Observation
 
 /// Select > Color Range: every pixel near the colors clicked on the canvas, anywhere in the image. The panel shows
