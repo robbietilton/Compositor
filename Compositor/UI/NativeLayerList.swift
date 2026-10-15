@@ -47,7 +47,7 @@ struct NativeLayerList: NSViewRepresentable {
         static let effectType = NSPasteboard.PasteboardType("com.compositor.layer-effect")
         static let maskType = NSPasteboard.PasteboardType("com.compositor.layer-mask")
         let session: EditorSession
-        private var rows: [ImageLayer] = []
+        var rows: [ImageLayer] = []
         private var rowDetails: [UUID: LayerHierarchy.Entry] = [:]
         private var oldCollapsed: Set<UUID> = []
         private var editingEnabled = false
@@ -58,7 +58,8 @@ struct NativeLayerList: NSViewRepresentable {
         func update(_ table: NSTableView) {
             let selectionChanged = activeLayerID != session.activeLayerID
             activeLayerID = session.activeLayerID
-            let entries = session.layerRows
+            // The panel's search and type filter narrow what is listed; every row index below is one of these.
+            let entries = session.filteredLayerRows
             let byID = Dictionary(uniqueKeysWithValues: (session.document?.layers ?? []).map { ($0.id, $0) })
             let next = entries.compactMap { byID[$0.layer.id] }
             let previousDetails = rowDetails
@@ -469,7 +470,8 @@ struct NativeLayerList: NSViewRepresentable {
         }
         private func place(_ ids: [UUID], at row: Int, intoFolder: Bool, copying: Bool) -> Bool {
             // Where the drop lands is worked out once: each layer placed shifts the rows beneath it.
-            let current = session.layerRows
+            // The filtered rows, so a drop's indexes mean the rows the panel is showing.
+            let current = session.filteredLayerRows
             let parent: UUID?, above: UUID?, atBottom: Bool
             if intoFolder {
                 parent = rows[row].id; above = nil; atBottom = false
@@ -506,13 +508,21 @@ struct NativeLayerList: NSViewRepresentable {
             }
             let dragged = Set(dropped)
             let carried = dragged.reduce(into: Set<UUID>()) { $0.formUnion(session.descendantIDs(of: $1)) }
-            return session.layerRows.map(\.layer.id).filter { dragged.contains($0) && !carried.contains($0) }
+            return session.filteredLayerRows.map(\.layer.id).filter { dragged.contains($0) && !carried.contains($0) }
         }
     }
 }
 
 final class LayerTableView: NSTableView {
     weak var session: EditorSession?
+    /// The layers the list is showing: the panel's filtered rows when a search or filter is on, so a row
+    /// index here means the same row it does in the coordinator.
+    var displayedRows: [ImageLayer] {
+        if let coordinator = delegate as? NativeLayerList.Coordinator { return coordinator.rows }
+        // Without the coordinator (never in the panel) there is no honest answer; an empty list only
+        // disables the row's cursor and clicks, where a wrong-order guess would act on the wrong layer.
+        return []
+    }
     private var clippingTracking: NSTrackingArea?
     private var clippingMonitor: Any?
     private var clippingCursorActive = false
@@ -681,8 +691,8 @@ final class LayerTableView: NSTableView {
     /// the duplicate cursor over the rest of it, and over a mask thumbnail the one for showing the mask alone.
     private func clippingCursor(at point: NSPoint) -> NSCursor? {
         let index = row(at: point)
-        guard let session, session.layerRows.indices.contains(index) else { return nil }
-        let layer = session.layerRows[index].layer
+        guard let session, displayedRows.indices.contains(index) else { return nil }
+        let layer = displayedRows[index]
         // Option-click on a mask shows it alone (Option-dragging it onto another layer still copies it).
         if let thumbnail = thumbnail(at: point), thumbnail.isMaskTarget, !thumbnail.isHidden {
             return Self.showMaskCursor
@@ -699,7 +709,7 @@ final class LayerTableView: NSTableView {
     private static let clippingStrip: CGFloat = 10
     private func isClippingZone(_ point: NSPoint, row: Int) -> Bool {
         guard row >= 0 else { return false }
-        if let entries = session?.layerRows, entries.indices.contains(row), entries[row].layer.isGroup == true { return false }
+        if displayedRows.indices.contains(row), displayedRows[row].isGroup == true { return false }
         let rect = rect(ofRow: row)
         return point.y >= rect.maxY - min(Self.clippingStrip, rect.height / 3)
     }
@@ -757,10 +767,9 @@ final class LayerTableView: NSTableView {
         let row = row(at: point)
         // Handle clipping before effect selection: effects occupy the lower portion of taller rows.
         if event.modifierFlags.contains(.option), !event.modifierFlags.contains(.command), isClippingZone(point, row: row),
-           thumbnail(at: point)?.isMaskTarget != true,
-           let entries = session?.layerRows, entries.indices.contains(row) {
+           thumbnail(at: point)?.isMaskTarget != true, displayedRows.indices.contains(row) {
             session?.effectSelection = nil
-            session?.toggleClippingMask(entries[row].layer.id)
+            session?.toggleClippingMask(displayedRows[row].id)
             refreshClippingCursor(event.modifierFlags)
             return
         }
@@ -994,8 +1003,10 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         // A folder steps its contents in by the same distance a clipping mask does; the two add up.
         indentation.constant = CGFloat(min(depth, 8)) * 24 + (layer.maskSourceID == nil ? 0 : 24)
         disclosure.isHidden = !layer.isGroup
-        disclosure.isEnabled = enabled
-        disclosure.image = NSImage(systemSymbolName: session.collapsedGroupIDs.contains(layer.id) ? "chevron.right" : "chevron.down", accessibilityDescription: "Expand or collapse folder")
+        // While the panel filters, folders list themselves opened; the chevron says so, and collapsing
+        // waits until the filter is off (toggling now would change nothing the list shows).
+        disclosure.isEnabled = enabled && !session.isFilteringLayers
+        disclosure.image = NSImage(systemSymbolName: session.isFilteringLayers || !session.collapsedGroupIDs.contains(layer.id) ? "chevron.down" : "chevron.right", accessibilityDescription: "Expand or collapse folder")
         // Pixel layers and masks show the whole canvas with their pixels where they sit, as Photoshop does;
         // editable text, adjustments and folders keep a square icon. Pictures redraw only when what they show changes.
         let canvas = session.document?.size ?? CGSize(width: 1, height: 1)
@@ -1428,13 +1439,14 @@ private final class EyeSwipeButton: NSButton {
         // open if it does.
         defer { session.endVisibilitySwipe() }
         var ancestor = superview
-        while ancestor != nil && !(ancestor is NSTableView) { ancestor = ancestor?.superview }
-        guard let table = ancestor as? NSTableView else { return }
+        while ancestor != nil && !(ancestor is LayerTableView) { ancestor = ancestor?.superview }
+        guard let table = ancestor as? LayerTableView else { return }
+        let rows = table.displayedRows
         while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
             if next.type == .leftMouseUp { return }
             let row = table.row(at: table.convert(next.locationInWindow, from: nil))
-            guard session.layerRows.indices.contains(row) else { continue }
-            session.setVisibilityInSwipe(session.layerRows[row].layer.id, visible: visible)
+            guard rows.indices.contains(row) else { continue }
+            session.setVisibilityInSwipe(rows[row].id, visible: visible)
             table.autoscroll(with: next)
         }
     }

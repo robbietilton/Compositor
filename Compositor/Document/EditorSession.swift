@@ -171,6 +171,9 @@ final class EditorSession {
     var viewport = CanvasViewport()
     var tool: NavigationTool = .move
     var collapsedGroupIDs: Set<UUID> = []
+    /// The Layers panel's search text and type filter (see LayerType). Panel state, not saved with the project.
+    var layerSearchText = ""
+    var layerTypeFilter: Set<LayerType> = []
     var cropRect: CGRect?
     var cropRatioChoice = "Free"
     var cropError: String?
