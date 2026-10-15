@@ -146,6 +146,9 @@ final class ProjectWorkspace {
     }
     func confirmQuit() async -> Bool {
         guard !isManaging, finishTextEditing() else { return false }
+        // An unfinished Pen path is committed (or a lone point dropped), as switching tools does; otherwise it
+        // blocks every project operation and Quit just beeps.
+        for tab in quitOrder { tab.session.resolvePenDraft() }
         await settlePendingEdits()
         guard canSwitch else { NSSound.beep(); return false }
         isManaging = true; defer { isManaging = false }
@@ -275,7 +278,7 @@ final class ProjectWorkspace {
                 mask?.placement?.origin.x += center.x-anchor.x; mask?.placement?.origin.y += center.y-anchor.y
                 return ImageLayer(id: mapping[layer.id]!, asset: layer.asset, name: layer.name, isVisible: layer.isVisible,
                     transform: transform, parentID: layer.parentID.flatMap { mapping[$0] }, isGroup: layer.isGroup,
-                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text)
+                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, vectorPath: layer.vectorPath, effects: layer.effects, text: layer.text)
             }
             target.session.isProjectBusy = false
             target.session.beginEdit("Copy Layers from Project")

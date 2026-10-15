@@ -40,7 +40,7 @@ struct CompositorApp: App {
                         }
                             .configuredKeyboardShortcut("z", modifiers: [.command, .shift])
                     } else {
-                        Button(session.history.canUndo ? "Undo \(session.history.undoName)" : "Undo") { session.undo() }
+                        Button(session.penDraft != nil ? "Undo Add Path Point" : session.canUndoPenClosure ? "Undo Close Path" : session.history.canUndo ? "Undo \(session.history.undoName)" : "Undo") { session.undo() }
                             .configuredKeyboardShortcut("z").disabled(!session.canUndo)
                         Button(session.history.canRedo ? "Redo \(session.history.redoName)" : "Redo") { session.redo() }
                             .configuredKeyboardShortcut("z", modifiers: [.command, .shift]).disabled(!session.canRedo)

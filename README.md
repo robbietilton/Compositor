@@ -79,6 +79,9 @@ brew install --cask robbietilton-compositor
 - Automatic updates, signed and notarized
 
 ### Works with AI agents
+
+Editable Pen paths are also available through the native [Compositor MCP server](docs/mcp.md) for Codex, Claude Code
+and other stdio MCP clients.
 - AI agents and scripts can build and edit projects directly: a `.comp` is a folder of PNG layers and a manifest, and an open project updates live as it's written. See [Writing Compositor projects](docs/writing-comp-files.md)
 
 ## Requirements

@@ -31,6 +31,13 @@ nonisolated struct BrushPatch: @unchecked Sendable {
     let image: CGImage
 }
 
+nonisolated enum BrushStrokeError: LocalizedError {
+    case pathTooComplex
+    var errorDescription: String? {
+        "This path is too complex to stroke safely. Reduce its points, shorten it, or use a larger brush."
+    }
+}
+
 /// Shared top-left raster drawing, including coverage without color conversion.
 nonisolated enum BrushRaster {
     static func context(width: Int, height: Int, mask: Bool) throws -> CGContext {
@@ -294,6 +301,32 @@ final class BrushStroke {
                       before: samples[max(0, count - 4)], after: samples[count - 1], changed: &changed)
         }
         if count >= 2 { try drawTail(from: samples[count - 2], to: point, changed: &changed) }
+        try publish(changed)
+    }
+
+    /// Paints an already-flattened path without rebuilding every touched tile for every point.
+    /// This is for generated geometry such as a Pen path, not sparse mouse samples that need smoothing.
+    func appendPolyline(_ points: [CGPoint]) throws {
+        guard points.count >= 2, points.allSatisfy({
+            $0.x.isFinite && $0.y.isFinite && abs($0.x) <= 10_000_000 && abs($0.y) <= 10_000_000
+        }) else { throw BrushStrokeError.pathTooComplex }
+        let spacing = max(0.25, settings.diameter * Self.spacingFraction(settings.hardness))
+        let length = zip(points, points.dropFirst()).reduce(CGFloat.zero) {
+            $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y)
+        }
+        // A maximum-node zigzag with a tiny brush could otherwise schedule billions of dabs on the main actor.
+        guard length.isFinite, length / spacing <= 2_000_000 else { throw BrushStrokeError.pathTooComplex }
+        guard gpu == nil else {
+            for point in points { try append(point) }
+            try flush()
+            return
+        }
+        var changed = removeTail()
+        samples = []
+        previous = nil
+        distanceToNext = 0
+        for point in points { try walk(to: point, changed: &changed) }
+        if let previous { samples = [previous] }
         try publish(changed)
     }
 

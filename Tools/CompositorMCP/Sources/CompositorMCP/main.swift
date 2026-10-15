@@ -1,0 +1,3 @@
+import CompositorMCPKit
+
+MCPServer().run()

@@ -2,6 +2,9 @@
 
 A Compositor project (`.comp`) is a folder of PNG layer images plus a `manifest.json`. Anything that can write files can build or edit one, and Compositor updates the open canvas as the files change. No plugin or API is involved.
 
+For editable Pen paths, agents can use Compositor's validated MCP tools instead of constructing normalized path
+metadata and fallback PNGs themselves. See [mcp.md](mcp.md).
+
 ## Try it
 
 1. Open a project in Compositor 1.3 or later (save a new canvas somewhere, e.g. `~/Desktop/demo.comp`), and keep it open.
