@@ -6,6 +6,7 @@ import Sparkle
 struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
     @AppStorage("navigator.visible") private var showsNavigator = false
+    @AppStorage("history.visible") private var showsHistory = true
     private var session: EditorSession { applicationDelegate.session }
     var body: some Scene {
         Window("Compositor", id: "editor") {
@@ -132,6 +133,7 @@ struct CompositorApp: App {
                         }
                             .configuredKeyboardShortcut("-").disabled(session.document == nil)
                         Toggle("Navigator (300% and above)", isOn: $showsNavigator)
+                        Toggle("History", isOn: $showsHistory)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
                         Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },

@@ -666,6 +666,17 @@ final class EditorSession {
         restore(snapshot)
     }
 
+    /// The History panel: returns the document to the state at `index` of `history.states`, undoing
+    /// or redoing every step between. A new edit afterwards discards the states it jumped over,
+    /// as Photoshop's panel does.
+    func jumpToHistoryState(_ index: Int) {
+        guard canUseHistory else { return }
+        if gradientEdit != nil { cancelGradient() }
+        let target = max(0, min(index, history.states.count - 1))
+        while history.currentIndex > target, let snapshot = history.undo() { restore(snapshot) }
+        while history.currentIndex < target, let snapshot = history.redo() { restore(snapshot) }
+    }
+
     private func restore(_ snapshot: DocumentHistory.Snapshot) {
         cancelCrop()
         cancelGradient()

@@ -5,11 +5,14 @@ struct ContentView: View {
     /// The Layers panel's width, remembered across launches.
     @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
     @AppStorage("navigator.visible") private var showsNavigator = false
+    @AppStorage("history.visible") private var showsHistory = true
+    @AppStorage("history.floating") private var historyInWindow = false
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
     @State private var canvasFrame: CGRect = .zero
     @State private var levelsPanel = FloatingPanelController(name: "levelsPanel")
+    @State private var historyPanel = FloatingPanelController(name: "historyPanel")
     @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel")
     @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel")
     @State private var colorRangePanel = FloatingPanelController(name: "colorRangePanel")
@@ -22,6 +25,14 @@ struct ContentView: View {
     private var acceptsDrop: Bool {
         guard let workspace = applicationDelegate?.workspace else { return true }
         return workspace.canReceiveDrag(into: workspace.current.id)
+    }
+    /// The Navigator shows from 300% zoom, when the view is a small part of the document.
+    private var navigatorShown: Bool {
+        showsNavigator && !session.canvasOnly && session.viewport.zoom >= NavigatorMinimap.zoomShown
+    }
+    /// The docked History panel: hidden while it lives in its own window, in Canvas Only, or without a document.
+    private var historyDocked: Bool {
+        showsHistory && !historyInWindow && !session.canvasOnly && session.document != nil
     }
     // Extracted from `body`: as one expression the type checker times out (Xcode 26.1).
     @ViewBuilder private var toolHeaders: some View {
@@ -111,11 +122,18 @@ struct ContentView: View {
                                 .padding(.bottom, 14)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                             }
-                            if showsNavigator, !session.canvasOnly, session.viewport.zoom >= NavigatorMinimap.zoomShown {
-                                NavigatorMinimap(session: session)
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            // The History panel yields the corner to the Navigator, sitting below it when that shows.
+                            VStack(alignment: .trailing, spacing: 12) {
+                                if navigatorShown {
+                                    NavigatorMinimap(session: session)
+                                }
+                                if historyDocked {
+                                    HistoryPanel(session: session, showsInWindow: $historyInWindow)
+                                }
                             }
+                            .animation(.default.speed(2), value: navigatorShown)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(12)
                         }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }
@@ -279,7 +297,10 @@ struct ContentView: View {
         }
         .onChange(of: session.document == nil) { _, empty in
             if !empty { session.canvasFocusRequest += 1 }
+            syncHistoryPanel()
         }
+        .onChange(of: showsHistory) { syncHistoryPanel() }
+        .onChange(of: historyInWindow) { syncHistoryPanel() }
         // A folder brings in the images directly inside it.
         .fileImporter(isPresented: $session.showsImporter,
                       allowedContentTypes: UTType.importableImages + [.folder], allowsMultipleSelection: true) { result in
@@ -306,6 +327,12 @@ struct ContentView: View {
     private func requestNewCanvas() {
         if let applicationDelegate { Task { await applicationDelegate.projects.newCanvas() } }
         else { session.clearProject() }
+    }
+    /// Shows the History panel's window while it's wanted (visible, windowed, with a document); closes it otherwise.
+    private func syncHistoryPanel() {
+        guard showsHistory, historyInWindow, session.document != nil else { historyPanel.close(); return }
+        historyPanel.onClose = { showsHistory = false }
+        historyPanel.show(title: "History", content: HistoryPanel(session: session, showsInWindow: $historyInWindow))
     }
     private var toolRail: some View {
         // Scrolls when the window is too short for every tool, rather than pushing the bars above and below away.

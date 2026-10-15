@@ -37,6 +37,25 @@ final class DocumentHistory {
     var redoName: String { future.last?.name ?? "" }
     var isModified: Bool { revision != savedRevision }
     var undoCount: Int { past.count }
+
+    /// One row of the History panel: a named state of the document, told apart by its revision.
+    struct State: Equatable {
+        let name: String
+        let revision: UUID
+    }
+
+    /// Every state the History panel lists: the document as opened, then after each entry, oldest first.
+    /// Redo entries stay listed, as in Photoshop, until a new edit takes them away. Undo stacks them
+    /// onto `future` newest first, so they read back reversed.
+    var states: [State] {
+        var result = [State(name: "Open", revision: past.first?.before.revision ?? revision)]
+        result.append(contentsOf: past.map { State(name: $0.name, revision: $0.after.revision) })
+        result.append(contentsOf: future.reversed().map { State(name: $0.name, revision: $0.after.revision) })
+        return result
+    }
+
+    /// Where the document stands in `states`: one past the last entry undone, or of the last one made.
+    var currentIndex: Int { past.count }
     func markSaved() { savedRevision = revision }
     /// The document as it stands, for a save that captures it now and finishes later.
     var currentRevision: UUID { revision }

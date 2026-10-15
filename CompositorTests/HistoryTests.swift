@@ -156,4 +156,37 @@ struct HistoryTests {
         #expect(history.undoCount == 0)
         #expect(history.retainedBytes(current: doc) == 0)
     }
+
+    @Test func historyPanelStatesListAndJump() throws {
+        let session = EditorSession()
+        session.createDocument(width: 40, height: 40)
+        session.addBlankLayer()
+        let id = try #require(session.activeLayerID)
+        session.renameLayer(id, to: "Foreground")
+        session.toggleLayerVisibility(id)
+        #expect(session.history.states.map(\.name) == ["Open", "New Canvas", "New Blank Layer", "Rename Layer", "Hide Layer"])
+        #expect(session.history.currentIndex == session.history.states.count - 1)
+        session.jumpToHistoryState(1)
+        #expect(session.history.currentIndex == 1)
+        #expect(session.document?.layers.isEmpty == true)
+        #expect(session.canRedo)
+        session.jumpToHistoryState(session.history.states.count - 1)
+        #expect(session.document?.layers.first?.name == "Foreground")
+        #expect(session.document?.layers.first?.isVisible == false)
+        // A jump back, then a new edit, discards the states it jumped over.
+        session.jumpToHistoryState(1)
+        session.addBlankLayer()
+        #expect(session.history.states.map(\.name) == ["Open", "New Canvas", "New Blank Layer"])
+        #expect(session.history.currentIndex == 2)
+        // Out-of-range indices clamp to the ends.
+        session.jumpToHistoryState(-5)
+        #expect(session.history.currentIndex == 0)
+        session.jumpToHistoryState(99)
+        #expect(session.history.currentIndex == session.history.states.count - 1)
+        // History stays put while an import runs.
+        session.isImporting = true
+        session.jumpToHistoryState(1)
+        #expect(session.history.currentIndex == session.history.states.count - 1)
+        session.isImporting = false
+    }
 }
