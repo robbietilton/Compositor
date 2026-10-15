@@ -75,9 +75,11 @@ extension EditorSession {
     /// selection. Shift adds to the current selection; Option subtracts from it.
     func loadMaskSelection(layerID: UUID, mode: SelectionMode = .replace) {
         guard canEditSelection, let layer = document?.layers.first(where: { $0.id == layerID }),
-              let mask = layer.mask?.asset.image else { return }
+              let maskState = selectedMask(for: layer) else { return }
+        let mask = maskState.asset.image
         guard let traced = MaskTracing.darkPixels(in: mask) else { NSSound.beep(); return }
-        var toDocument = BrushRaster.pixelToDocument(layer.maskTransform, width: mask.width, height: mask.height)
+        let transform = isGIFFrameMaskSelected && layer.id == activeLayerID ? displayedTransform(for: layer) : maskState.placement ?? layer.transform
+        var toDocument = BrushRaster.pixelToDocument(transform, width: mask.width, height: mask.height)
         guard let outline = traced.copy(using: &toDocument) else { return }
         applySelection(outline, mode: mode, name: "Load Mask Selection")
     }

@@ -10,8 +10,8 @@ enum ToolHeaderStyle {
 extension View {
     /// Keeps a unit ("%", "px") tight against its field so the two read as one value,
     /// regardless of the wider spacing between controls in a bar.
-    func unitSuffix(_ unit: String) -> some View {
-        HStack(spacing: 2) {
+    func unitSuffix(_ unit: String, spacing: CGFloat = 2) -> some View {
+        HStack(spacing: spacing) {
             self
             Text(unit)
         }
@@ -19,8 +19,9 @@ extension View {
 
     /// Lets a field without a separate label use its unit as the drag target.
     func unitSuffix<Value: BinaryFloatingPoint>(_ unit: String, scrubValue: Binding<Value>,
-                                                sensitivity: Value, range: ClosedRange<Value>, step: Value? = nil) -> some View {
-        HStack(spacing: 2) {
+                                                sensitivity: Value, range: ClosedRange<Value>, step: Value? = nil,
+                                                spacing: CGFloat = 2) -> some View {
+        HStack(spacing: spacing) {
             self
             Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range, step: step)
         }

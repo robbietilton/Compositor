@@ -128,6 +128,81 @@ import Testing
         #expect(second.session.document?.layers.first?.id == copied.id)
     }
 
+    @Test(arguments: [false, true])
+    func copyingGIFWithoutItsLiveMaskSourceBakesTheDisplayedFrame(rotated: Bool) async throws {
+        let workspace = ProjectWorkspace()
+        let (source, _, gifID) = try await gifWithHiddenLiveMask(in: workspace)
+        source.session.document?.layers[1].transform.rotation = rotated ? 90 : 0
+        let before = try await ImageExporter.shared.render(#require(source.session.projectSnapshot()))
+        let destination = workspace.addTab()
+        destination.session.createDocument(width: 32, height: 24)
+        await workspace.copyLayer(gifID, into: destination.id)
+        let copied = try #require(destination.session.activeLayer)
+        #expect(copied.gifAnimation == nil && copied.gifFrameMasks.isEmpty)
+        #expect(copied.transform.rotation == (rotated ? 90 : 0))
+        #expect(copied.maskSourceID == nil && copied.mask != nil)
+        #expect(destination.session.gifTimelineFrames.isEmpty)
+        let after = try await ImageExporter.shared.render(#require(destination.session.projectSnapshot()))
+        #expect(try LiveMaskTests().alpha(after.image) == LiveMaskTests().alpha(before.image))
+        #expect(try ImageImportTests().rgba(after.image, x: 20, y: 5) == ImageImportTests().rgba(before.image, x: 20, y: 5))
+        #expect(source.session.activeLayer?.gifAnimation != nil)
+        #expect(source.session.gifTimelineSelectedFrameIndex == 1)
+        destination.session.undo()
+        #expect(destination.session.document?.layers.isEmpty == true)
+        destination.session.redo()
+        #expect(destination.session.activeLayer?.id == copied.id)
+        #expect(destination.session.activeLayer?.gifAnimation == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func copyingGIFWithItsLiveMaskSourceRetainsAnimationAndFrameMask(rotated: Bool) async throws {
+        let workspace = ProjectWorkspace()
+        let (source, maskID, gifID) = try await gifWithHiddenLiveMask(in: workspace)
+        source.session.document?.layers[1].transform.rotation = rotated ? 90 : 0
+        let before = try await ImageExporter.shared.render(#require(source.session.projectSnapshot()))
+        let destination = workspace.addTab()
+        destination.session.createDocument(width: 32, height: 24)
+        await workspace.copyLayers([maskID, gifID], into: destination.id)
+        let layers = try #require(destination.session.document?.layers)
+        let copied = try #require(layers.first(where: { $0.gifAnimation != nil }))
+        #expect(copied.gifAnimation?.source === source.session.activeLayer?.gifAnimation?.source)
+        #expect(copied.gifAnimation?.selectedFrameIndex == 1)
+        #expect(copied.transform.rotation == (rotated ? 90 : 0))
+        #expect(copied.gifFrameMasks[1] != nil)
+        #expect(copied.maskSourceID == layers.first(where: { !$0.isVisible })?.id)
+        let after = try await ImageExporter.shared.render(#require(destination.session.projectSnapshot()))
+        #expect(try LiveMaskTests().alpha(after.image) == LiveMaskTests().alpha(before.image))
+        destination.session.selectLayer(copied.id)
+        #expect(destination.session.gifTimelineSelectedFrameIndex == 1)
+        await destination.session.selectGIFTimelineFrame(0)
+        #expect(destination.session.gifTimelineSelectedFrameIndex == 0)
+        #expect(destination.session.activeLayer?.gifAnimation != nil)
+    }
+
+    private func gifWithHiddenLiveMask(in workspace: ProjectWorkspace) async throws -> (ProjectTab, UUID, UUID) {
+        let file = try ImageImportTests().animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: file) }
+        let source = workspace.current
+        let session = source.session
+        session.createDocument(width: 32, height: 24)
+        session.insert(try LiveMaskTests().asset([255, 0, 128, 255]))
+        let maskID = try #require(session.activeLayerID)
+        session.document?.layers[0].isVisible = false
+        session.document?.layers[0].transform = LayerTransform(origin: .zero, size: CGSize(width: 32, height: 24), sampling: .nearest)
+        await session.importImages([file])
+        let gifID = try #require(session.activeLayerID)
+        session.document?.layers[1].transform.sampling = .nearest
+        await session.selectGIFTimelineFrame(1)
+        let context = try BrushRaster.context(width: 32, height: 24, mask: true)
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
+        context.setFillColor(gray: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 24))
+        session.document?.layers[1].gifFrameMasks[1] = LayerMask(asset: try LayerMask.asset(from: #require(context.makeImage())))
+        #expect(session.linkMask(source: maskID, target: gifID))
+        return (source, maskID, gifID)
+    }
+
     /// A layer dragged into a new project tab makes a canvas its own size, with it filling it, not the size of the
     /// canvas it came from.
     @Test func aLayerDraggedIntoANewTabSizesTheCanvasToIt() async throws {

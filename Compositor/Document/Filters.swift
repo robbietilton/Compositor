@@ -700,6 +700,8 @@ extension EditorSession {
         }
         commitTransform(); cancelCrop(); cancelLasso()
         guard var layer = activeLayer, let document else { return }
+        pauseGIFForEditing(for: layer.id)
+        layer = pixelEditingLayer(for: layer)
         do {
             // An empty layer has no pixels until something is put on it; Vignette starts it with clear ones.
             let startedEmpty = layer.asset == nil
@@ -974,11 +976,11 @@ extension EditorSession {
             let asset = made.asset
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index],
-                  current.asset?.image === edit.original.image || (edit.startedEmpty && current.asset == nil),
-                  current.transform == edit.transform else { return }
+                  displayedAsset(for: current)?.image === edit.original.image || (edit.startedEmpty && current.asset == nil),
+                  pixelEditTransformMatches(current, transform: edit.transform) else { return }
             // A grown layer's mask (covering the old grid) is carried onto the new one, its edge tone past the old edge.
             var mask = current.mask
-            if let grown, let owned = current.mask, owned.placement == nil,
+            if current.gifAnimation == nil, let grown, let owned = current.mask, owned.placement == nil,
                owned.asset.image.width > 1 || owned.asset.image.height > 1 {
                 var enabled = owned
                 enabled.isEnabled = true
@@ -986,11 +988,9 @@ extension EditorSession {
                                                       width: asset.image.width, height: asset.image.height) else { throw ExportError.render }
                 mask = owned.replacing(try LayerMask.asset(from: carried))
             }
+            let edited = try layerByEditingPixels(current, asset: asset, transform: made.transform ?? current.transform, mask: mask)
             beginEdit(edit.kind.rawValue)
-            document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
-                transform: made.transform ?? current.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID,
-                effects: current.effects)
+            document?.layers[index] = edited
             endEdit()
         } catch { brushError = error.localizedDescription }
     }
@@ -1021,8 +1021,8 @@ extension EditorSession {
                 return mask
             }.value
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
-                  let layer = document?.layers[index], layer.asset?.image === edit.original.image,
-                  layer.transform == edit.transform else { return }
+                  let layer = document?.layers[index], displayedAsset(for: layer)?.image === edit.original.image,
+                  pixelEditTransformMatches(layer, transform: edit.transform) else { return }
             let asset = try LayerMask.asset(from: made)
             beginEdit(edit.kind.rawValue)
             document?.layers[index].mask = layer.mask.map { $0.replacing(asset) } ?? LayerMask(asset: asset)

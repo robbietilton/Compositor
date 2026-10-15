@@ -53,7 +53,7 @@ final class ProjectController {
         catch { await showError("Couldn’t export PNG", error: error) }
     }
 
-    /// File › Export As…: PNG, JPEG or a one-page PDF, at the canvas's size or scaled, previewed first. Export JPEG…
+    /// File › Export As…: still images or animation timelines, sized and previewed first. Export JPEG…
     /// opens it on JPEG.
     func exportAs(start: ExportFormat? = nil) async {
         guard let window, session.document != nil, begin() else { return }
@@ -72,7 +72,7 @@ final class ProjectController {
                 sheet.styleMask = [.titled, .fullSizeContentView]
                 sheet.title = "Export As"
                 sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
-                    raster: raster, deepRaster: deepRaster, hdrRaster: hdrRaster, session: session,
+                    raster: raster, snapshot: snapshot, deepRaster: deepRaster, hdrRaster: hdrRaster, session: session,
                     format: start ?? lastExportFormat) { chosen in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
@@ -415,11 +415,12 @@ final class ProjectController {
 
 /// What File › Export As… writes.
 enum ExportFormat: String, CaseIterable {
-    case png = "PNG", jpeg = "JPEG", tiff = "TIFF", pdf = "PDF", exr = "EXR"
+    case png = "PNG", jpeg = "JPEG", gif = "GIF", tiff = "TIFF", pdf = "PDF", exr = "EXR"
     var type: UTType {
         switch self {
         case .png: .png
         case .jpeg: .jpeg
+        case .gif: .gif
         case .tiff: .tiff
         case .pdf: .pdf
         case .exr: .openEXR

@@ -20,6 +20,24 @@ nonisolated struct ImportedImage: @unchecked Sendable {
     func file(for id: UUID) -> String { "\(id.uuidString).\(isHDR ? "exr" : "png")" }
 }
 
+nonisolated struct GIFTimelineFrame: Identifiable, @unchecked Sendable {
+    /// Editable timeline identity; inserted copies can refer to the same composed source frame.
+    let index: Int
+    let thumbnail: CGImage
+    let duration: TimeInterval
+    var id: Int { index }
+}
+
+nonisolated enum GIFTimelineLimits {
+    static let maxFrames = 4_096
+    // Reserve original source identities, with space for a full timeline of inserted copies.
+    static let frameIdentityLimit = maxFrames * 2
+    static let thumbnailSide = 96
+    static let thumbnailPixelBudget = 16_000_000
+    static let defaultFrameDuration: TimeInterval = 0.1
+    static let minimumFrameDuration: TimeInterval = 0.02
+}
+
 /// A folder brought in as images: the ones directly inside it, not its subfolders'.
 nonisolated enum ImageFolder {
     /// A plain folder: not a file, and not a package such as a Compositor project.
@@ -43,12 +61,13 @@ nonisolated enum ImageFolder {
 }
 
 nonisolated enum ImageImportError: LocalizedError {
-    case unreadable, unsupported, tooLarge
+    case unreadable, unsupported, tooLarge, tooManyFrames
     var errorDescription: String? {
         switch self {
         case .unreadable: "The image could not be read. It may be damaged or unavailable."
-        case .unsupported: "Choose a JPEG, PNG, HEIC, HEIF, TIFF, WebP, or Photoshop (PSD) file."
+        case .unsupported: "Choose a JPEG, PNG, GIF, HEIC, HEIF, TIFF, WebP, or Photoshop (PSD) file."
         case .tooLarge: "This import exceeds the current \(DocumentLimits.documentBudgetMegapixels)-megapixel document budget or \(DocumentLimits.maxSide.formatted())-pixel side limit."
+        case .tooManyFrames: "This animation has more than \(GIFTimelineLimits.maxFrames.formatted()) frames, which exceeds the current timeline limit."
         }
     }
 }
@@ -94,10 +113,12 @@ actor ImageImporter {
                   let identifier = CGImageSourceGetType(source) as String?,
                   let type = UTType(identifier) else { throw ImageImportError.unreadable }
             let photoshop = flattenedPhotoshop ? [UTType.photoshopImage, .photoshopLargeImage] : []
-            guard ([UTType.jpeg, .png, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR] + photoshop).contains(where: { type.conforms(to: $0) }) else {
+            guard ([UTType.jpeg, .png, .gif, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR] + photoshop).contains(where: { type.conforms(to: $0) }) else {
                 throw ImageImportError.unsupported
             }
-            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            // Still decoding uses frame zero; editable animation imports retain their source through GIFDecoder.
+            guard CGImageSourceGetCount(source) > 0,
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let width = properties[kCGImagePropertyPixelWidth] as? Int,
                   let height = properties[kCGImagePropertyPixelHeight] as? Int,
                   width > 0, height > 0 else { throw ImageImportError.unreadable }
@@ -135,6 +156,24 @@ actor ImageImporter {
             }
             return ImportedImage(image: image, thumbnail: thumbnail, name: url.deletingPathExtension().lastPathComponent)
         }
+    }
+
+    func isFrameAnimation(_ url: URL) -> Bool {
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .gif) == true
+    }
+
+    func importGIF(_ url: URL, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> (asset: ImportedImage, animation: GIFAnimation) {
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0, size <= GIFSource.byteLimit else { throw ImageImportError.tooLarge }
+        let source = try GIFDecoder.source(Data(contentsOf: url), name: url.deletingPathExtension().lastPathComponent)
+        guard source.width * source.height <= remainingPixels else { throw ImageImportError.tooLarge }
+        var animation = GIFAnimation(source: source)
+        animation.timing.uniformDelay = GIFFrameTiming.defaultUniformDelay(for: source.frames)
+        return (try GIFDecoder.frame(animation, index: 0, name: url.deletingPathExtension().lastPathComponent), animation)
+    }
+
+    func decodeGIFFrame(_ animation: GIFAnimation, index: Int, name: String) throws -> ImportedImage {
+        try GIFDecoder.frame(animation, index: index, name: name)
     }
 
     func loadPhotoshop(_ url: URL, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> PSDDocument {

@@ -136,3 +136,9 @@ An adjustment layer has an `adjustment` object and no `imageFile`, and it affect
 
 - Folders, text layers, layer effects and everything else the format holds: [project-format.md](project-format.md).
 - Limits: canvases up to 30,000 pixels on a side; layers and masks count toward a memory budget that scales with the Mac.
+
+## GIF layers
+
+Use version 28 and add a `gif` object with `sourceFile: "<id>.gif"` and a zero-based `selectedFrameIndex` to an ordinary image layer. Embed the original GIF under `images/`, and keep `imageFile: "<id>.png"` as the selected frame's unmasked pixels. Save assets before replacing the manifest.
+
+Preserve existing geometry, stable frame identities, pixel overrides, masks, and timing when editing a package. Masks remain separate grayscale PNGs; never bake them into frame pixels. See [GIF fields and validation](project-format.md#gif-layers-version-28) for filenames, defaults, limits, and compatibility, and [GIF workflow](gif-support-plan.md) for editor behavior.

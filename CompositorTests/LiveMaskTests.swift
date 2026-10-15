@@ -127,4 +127,51 @@ import Testing
         raster = try await ImageExporter.shared.render(#require(s.projectSnapshot()))
         #expect(try alpha(raster.image) == [0,0,128,255])
     }
+
+    @Test(arguments: [false, true])
+    func deletingGIFLiveMaskSourceRetainsTheChosenResult(bakes: Bool) async throws {
+        let url = try ImageImportTests().animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let session = EditorSession()
+        session.createDocument(width: 32, height: 24)
+        session.insert(try asset([255, 0, 128, 255]))
+        let source = try #require(session.activeLayerID)
+        session.document?.layers[0].isVisible = false
+        session.document?.layers[0].transform = LayerTransform(origin: .zero, size: CGSize(width: 32, height: 24), sampling: .nearest)
+        await session.importImages([url])
+        let target = try #require(session.activeLayerID)
+        session.document?.layers[1].transform.sampling = .nearest
+        await session.selectGIFTimelineFrame(1)
+        let gray = try BrushRaster.context(width: 1, height: 1, mask: true)
+        gray.setFillColor(gray: 0.5, alpha: 1)
+        gray.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        session.document?.layers[1].mask = LayerMask(asset: try LayerMask.asset(from: #require(gray.makeImage())))
+        session.applySelection(CGPath(rect: CGRect(x: 0, y: 0, width: 16, height: 24), transform: nil), mode: .replace, name: "Select")
+        session.toggleGIFFrameMaskTarget()
+        #expect(session.linkMask(source: source, target: target))
+        let snapshot = try #require(session.projectSnapshot())
+        let before = try await ImageExporter.shared.render(snapshot)
+        let baked = bakes ? [target: try #require(try LiveMaskBaker.bake(snapshot, target: target))] : [:]
+        session.finishDeletingLayers([source], baked: baked)
+        let after = try await ImageExporter.shared.render(#require(session.projectSnapshot()))
+        #expect(session.activeLayer?.maskSourceID == nil)
+        if bakes {
+            #expect(session.activeLayer?.gifAnimation == nil && session.activeLayer?.gifFrameMasks.isEmpty == true)
+            #expect(session.gifTimelineFrames.isEmpty && !session.isGIFFrameMaskSelected)
+            #expect(try alpha(after.image) == alpha(before.image))
+            #expect(try ImageImportTests().rgba(after.image, x: 5, y: 5) == ImageImportTests().rgba(before.image, x: 5, y: 5))
+        } else {
+            #expect(session.activeLayer?.gifAnimation != nil && session.activeLayer?.gifFrameMasks[1] != nil)
+            #expect(session.gifTimelineSelectedFrameIndex == 1)
+            #expect(try alpha(after.image) != alpha(before.image))
+        }
+        session.undo()
+        #expect(session.document?.layers.count == 2 && session.activeLayer?.maskSourceID == source)
+        #expect(session.activeLayer?.gifAnimation != nil && session.activeLayer?.gifFrameMasks[1] != nil)
+        let undone = try await ImageExporter.shared.render(#require(session.projectSnapshot()))
+        #expect(try alpha(undone.image) == alpha(before.image))
+        session.redo()
+        #expect(session.activeLayer?.maskSourceID == nil)
+        #expect((session.activeLayer?.gifAnimation == nil) == bakes)
+    }
 }

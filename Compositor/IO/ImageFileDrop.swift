@@ -27,14 +27,14 @@ enum ImageFileDrop {
         else if let projects { await projects.receive(urls, at: point) }
         else { await session.importImages(urls, at: point) }
         if unreadable, !providers.isEmpty {
-            let message = "Some dropped items couldn’t be read. Drag JPEG, PNG, HEIC, HEIF, TIFF, WebP, or Photoshop (PSD) files from Finder."
+            let message = "Some dropped items couldn’t be read. Drag JPEG, PNG, GIF, HEIC, HEIF, TIFF, WebP, or Photoshop (PSD) files from Finder."
             session.importError = [session.importError, message].compactMap { $0 }.joined(separator: "\n\n")
         }
     }
 
     /// A dropped item's image written to a temporary file, or nil when it holds no image.
     private static func temporaryFile(from provider: NSItemProvider) async -> URL? {
-        let types = [UTType.png, .jpeg, .heic, .heif, .tiff, .webP, .photoshopImage, .photoshopLargeImage, .rawImage, .image].map(\.identifier)
+        let types = [UTType.png, .jpeg, .gif, .heic, .heif, .tiff, .webP, .photoshopImage, .photoshopLargeImage, .rawImage, .image].map(\.identifier)
         guard let type = types.first(where: { provider.hasItemConformingToTypeIdentifier($0) }) else { return nil }
         return await withCheckedContinuation { continuation in
             // The file only exists until this closure returns, so it is copied, not referenced.

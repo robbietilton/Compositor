@@ -137,8 +137,8 @@ struct NativeLayerList: NSViewRepresentable {
 
             // 3. Delete Layer / Delete Selected Layers
             let deleteTitle: String
-            if session.isMaskSelected && session.activeLayer?.mask != nil {
-                deleteTitle = "Delete Mask"
+            if session.isMaskSelected, let layer = session.activeLayer, session.selectedMask(for: layer) != nil {
+                deleteTitle = session.gifTimelineIsFrameMaskSelected ? "Delete Frame Mask" : "Delete Mask"
             } else if session.selectedLayerIDs.count > 1 {
                 deleteTitle = "Delete Selected Layers"
             } else {

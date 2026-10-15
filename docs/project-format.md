@@ -1,12 +1,12 @@
-# Compositor project format, versions 1–14
+# Compositor project format, versions 1–14, 27, and 28
 
 A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
-The manifest identifies `com.compositor.project`, version `14` for new saves (versions `1`–`13` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+The manifest identifies `com.compositor.project`, version `28` for new saves (upstream versions `1`–`14` and local foundation version `27` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 
 Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
 
-Limits: 30,000 pixels per canvas/image side, 100 million total source pixels, 10,000 layers, 4 MiB manifest, 512 MiB per encoded asset. See `ProjectStore.swift` for validation.
+Limits: 30,000 pixels per canvas/image side, a memory-scaled document raster budget, 10,000 layers, 4 MiB manifest, 512 MiB per encoded asset. See `ProjectStore.swift` for validation.
 
 Undo history and viewport are session-only. Opening fits the canvas, restores selection, and starts with clean history. Future editable features must extend the schema and round-trip tests. PNG export is a flattened derivative and does not mark project edits saved.
 
@@ -18,7 +18,7 @@ Version 3 adds optional per-layer `opacity` (finite 0–1) and `blendMode` (Norm
 
 Version 4 adds optional `maskFile` and `maskEnabled` fields to individual layers. Mask filenames must be `<layer UUID>.mask.png` under `images/`; enabled defaults to true when a mask exists. Records without masks omit both fields. Groups cannot carry masks in this version. Files declaring versions 1–3 cannot contain mask metadata.
 
-Masks store 8-bit grayscale coverage without alpha (white reveals, black hides). Their normalized extent matches the image’s local rectangle, so the same layer transform applies to both. A uniform 1×1 mask is valid and avoids allocating full-resolution pixels before painting. Nonuniform mask pixels and a thumbnail are immutable assets shared by history. Image Size resamples them with the image transform; Canvas Size and Crop preserve their pixels. Up to 100 million mask pixels may be stored in addition to the existing 100 million image pixels; per-side and per-file limits also apply to masks. Disabled masks remain embedded and editable but do not affect compositing. Image-versus-mask target selection is session-only and reopens on image pixels.
+Masks store 8-bit grayscale coverage without alpha (white reveals, black hides). Their normalized extent matches the image’s local rectangle, so the same layer transform applies to both. A uniform 1×1 mask is valid and avoids allocating full-resolution pixels before painting. Nonuniform mask pixels and a thumbnail are immutable assets shared by history. Image Size resamples them with the image transform; Canvas Size and Crop preserve their pixels. A separate memory-scaled mask-pixel budget is available alongside the image-pixel budget; per-side and per-file limits also apply to masks. Disabled masks remain embedded and editable but do not affect compositing. Image-versus-mask target selection is session-only and reopens on image pixels.
 
 Version 5 adds optional `maskSourceID`: the UUID of a non-group layer supplying live alpha in document coordinates. It multiplies the target’s alpha alongside its enabled raster mask. Source pixels, transform, opacity, raster mask and upstream live masks contribute coverage; visibility and RGB color do not. Sources remain independent layers. Missing references, self-links, cycles, group endpoints and chains over 256 nodes are rejected. Deletion can bake the live coverage into dependent image pixels (retaining their raster masks) or remove the links, as one undoable operation. Links survive image/canvas resize and crop. Older versions default to no live mask; older app builds reject v5.
 
@@ -56,3 +56,38 @@ Version 12 lets a layer's image file be a 16-bit PNG: a 16-bit layer, which keep
 Version 13 lets a layer's image file be OpenEXR, named `<layer UUID>.exr`: an HDR layer, whose pixels hold light brighter than white as half floats in extended sRGB (white is 1). It is shown, and for now edited, through a copy clipped to white and rounded to 8 bits with a fine noise, made again on load. An EXR whose values all stay within white loads as a 16-bit layer. Masks stay 8-bit PNG. Files declaring versions 1–12 cannot contain EXR images, and older app builds reject v13.
 
 Version 14 adds optional `smoothing` to a layer’s `shape` style. True draws rectangle corners with Figma-style 60% smoothing (the iOS squircle match); false or missing keeps circular corners. Radius stays in document pixels, and smoothing reduces when the corners have insufficient room. Drawing previews and scaled redraws use the same geometry. Files declaring versions 1–13 cannot enable smoothing, and older app builds reject v14.
+
+## GIF layers, version 28
+
+Version 28 adds an optional `gif` object to ordinary image layers. Groups, adjustments, editable text, and editable shapes cannot carry it. The existing transform, opacity, effects, clipping, and shared mask still apply to the whole layer.
+
+```json
+"gif": {
+  "sourceFile": "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F.gif",
+  "selectedFrameIndex": 1,
+  "frameMasks": [
+    {
+      "index": 1,
+      "maskFile": "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F.frame-1.mask.png",
+      "isEnabled": false
+    }
+  ]
+}
+```
+
+- `sourceFile` is required: `<layer UUID>.gif` under `images/`, containing the immutable original GIF and its source timing. `selectedFrameIndex` is required and identifies a surviving frame. The ordinary `imageFile` remains a PNG of that selected frame's raw pixels, including edits, without masks baked in. Opening restores it with playback paused and editing on pixels.
+- `frameMasks` defaults to `[]`. Each record has a unique surviving `index` and `maskFile: "<layer UUID>.frame-<index>.mask.png"`. Masks use ordinary 8-bit grayscale coverage. `isEnabled` and `isLinked` default to true; optional `placement` defaults to nil and otherwise uses a valid layer transform. Disabled masks remain embedded. Enabled frame and shared masks multiply in rendering and export.
+- `geometry` defaults to nil (original source dimensions). It stores Image Size output `width`/`height`, affine coefficients `a`, `b`, `c`, `d`, `tx`, `ty`, and optional `sampling` (default `High quality`; also `Smooth` or `Nearest`). The map runs from normalized source to normalized output coordinates. Dimensions meet raster limits; coefficients are finite within ±1,000,000 with absolute determinant greater than 10⁻¹⁵. Selected and edited PNGs must match these output dimensions, or source dimensions without geometry.
+- `framePixels` defaults to `[]`. Records have unique surviving `index` values and `imageFile: "<layer UUID>.frame-<index>.png"`, containing full edited raw frames without masks. Other frames decode from the source through any geometry. Selected and edited PNGs count toward the document raster budget; masks use its separate mask budget. Thumbnails are regenerated rather than stored.
+- `deletedFrameIndices` defaults to `[]` and contains unique original source indices. `frameOrder` defaults to nil (surviving originals in source order); explicit entries are `{ "index": 4, "sourceIndex": 1 }` in playback order. Original identities equal source indices; inserted identities start at source frame count and remain below 8,192. Identities are unique, every undeleted original must appear, and 1–4,096 frames must remain. Deleting an inserted frame removes its order entry. Selection, pixels, masks, and delay overrides refer to surviving identities, not strip positions.
+- `timing` defaults to imported delays. `mode` is `Frame delay` or `Same for all`; `uniformDelay` is in seconds; `frameDelays` contains unique `{ "index": 4, "duration": 0.16 }` overrides. Delays must be finite and 0.02–655.35 seconds. Missing overrides use source delays; uniform mode retains but ignores overrides. Model defaults are per-frame mode and 0.1 seconds; newly imported layers suggest the most common source delay, or the mean if frequencies tie.
+
+Each source accepts at most 4,096 frames and 512 MiB. Across layers, including duplicates, thumbnails share about 16 megapixels and source bytes are bounded by four times `DocumentLimits.documentPixelBudget`. Ordinary side, surface, raster, mask, and encoded-asset limits also apply. Loading validates source type, dimensions, identities, filenames, and assets before replacing the document; atomic saving preserves the previous package on failure. Full-size source frames decode on demand.
+
+Undo history, batch selection, mask edit targeting, onion skin, playback scope/speed, and export overrides remain session-only. See [GIF workflow](gif-support-plan.md) for editing, timing, and export behavior.
+
+## Submission format compatibility
+
+New saves use provisional version 28, reading upstream versions 1–14 and local foundation version 27. Version 27 omits frame order, deletions, and timing, which default as above; new fields require 28 so earlier readers reject them rather than lose edits. Coordinate any renumbering across writer, reader gates, documentation, and fixtures.
+
+Private-fork versions 15–26 and GIF metadata in versions 1–14 are rejected because the fork's animation schemas overlap upstream's still-image schemas. Keep those packages unchanged and use the complete private fork to open them; do not renumber manifests to bypass validation.

@@ -100,7 +100,7 @@ struct TransformInspector: View {
     }
 }
 
-private struct TransformValueField: View {
+struct TransformValueField: View {
     let label: String
     var suffix: String? = nil
     let value: CGFloat

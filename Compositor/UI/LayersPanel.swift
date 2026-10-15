@@ -56,8 +56,8 @@ struct LayersPanel: View {
                     .accessibilityIdentifier("layerEffects").disabled(!session.layersLookEditable || session.activeLayer?.isGroup != false || session.activeLayer?.asset == nil)
                 Spacer()
                 Button { session.deleteLayerOrMask() } label: { FooterIcon(systemName: "trash") }
-                    .help(session.selectedEffect != nil ? "Delete selected effect" : session.isMaskSelected ? "Delete layer mask" : session.selectedLayerIDs.count > 1 ? "Delete selected layers" : "Delete selected layer")
-                    .accessibilityLabel(session.selectedEffect != nil ? "Delete selected effect" : session.isMaskSelected ? "Delete layer mask" : session.selectedLayerIDs.count > 1 ? "Delete selected layers" : "Delete selected layer")
+                    .help(session.selectedEffect != nil ? "Delete selected effect" : session.isMaskSelected ? (session.gifTimelineIsFrameMaskSelected ? "Delete frame mask" : "Delete layer mask") : session.selectedLayerIDs.count > 1 ? "Delete selected layers" : "Delete selected layer")
+                    .accessibilityLabel(session.selectedEffect != nil ? "Delete selected effect" : session.isMaskSelected ? (session.gifTimelineIsFrameMaskSelected ? "Delete frame mask" : "Delete layer mask") : session.selectedLayerIDs.count > 1 ? "Delete selected layers" : "Delete selected layer")
                     .accessibilityIdentifier("deleteLayer")
                     .disabled(!session.layersLookEditable || session.activeLayer == nil)
             }
@@ -98,4 +98,3 @@ extension View {
             .contentShape(Rectangle())
     }
 }
-

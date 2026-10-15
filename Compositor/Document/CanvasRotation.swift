@@ -44,6 +44,11 @@ extension EditorSession {
             if let placement = layers[index].mask?.placement {
                 layers[index].mask?.placement = placement.quarterTurned(clockwise: clockwise, canvas: canvas)
             }
+            for frame in layers[index].gifFrameMasks.keys {
+                if let placement = layers[index].gifFrameMasks[frame]?.placement {
+                    layers[index].gifFrameMasks[frame]?.placement = placement.quarterTurned(clockwise: clockwise, canvas: canvas)
+                }
+            }
         }
         var turned = CanvasDocument(id: document.id, width: document.height, height: document.width, layers: layers,
                                     resolution: document.resolution,

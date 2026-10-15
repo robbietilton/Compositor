@@ -24,6 +24,70 @@ struct ImageImportTests {
         return url
     }
 
+    func animatedGIFFixture(delays: [Double] = [0.1, 0.1]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".gif")
+        let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 2, nil))
+        let colors = [CGColor(red: 1, green: 0, blue: 0, alpha: 1), CGColor(red: 0, green: 0, blue: 1, alpha: 1)]
+        for (index, color) in colors.enumerated() {
+            let context = try #require(CGContext(data: nil, width: 32, height: 24, bitsPerComponent: 8,
+                                                 bytesPerRow: 128, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(color)
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
+            let image = try #require(context.makeImage())
+            let frameProperties: [CFString: Any] = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: delays[index]] as CFDictionary]
+            CGImageDestinationAddImage(destination, image, frameProperties as CFDictionary)
+        }
+        #expect(CGImageDestinationFinalize(destination))
+        return url
+    }
+
+    func asymmetricGIFFixture() throws -> (gif: URL, pngs: [URL]) {
+        let gif = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".gif")
+        let destination = try #require(CGImageDestinationCreateWithURL(gif as CFURL, UTType.gif.identifier as CFString, 2, nil))
+        let colors = [CGColor(red: 1, green: 0, blue: 0, alpha: 1), CGColor(red: 0, green: 1, blue: 0, alpha: 1),
+                      CGColor(red: 0, green: 0, blue: 1, alpha: 1), CGColor(red: 1, green: 1, blue: 0, alpha: 1)]
+        var pngs: [URL] = []
+        for index in 0..<2 {
+            let context = try #require(CGContext(data: nil, width: 32, height: 24, bitsPerComponent: 8,
+                bytesPerRow: 128, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            for quadrant in 0..<4 {
+                context.setFillColor(colors[index == 0 ? quadrant : 3 - quadrant])
+                context.fill(CGRect(x: (quadrant % 2) * 16, y: (quadrant / 2) * 12, width: 16, height: 12))
+            }
+            context.clear(CGRect(x: 28, y: 20, width: 4, height: 4))
+            let image = try #require(context.makeImage())
+            let png = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+            let still = try #require(CGImageDestinationCreateWithURL(png as CFURL, UTType.png.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(still, image, nil)
+            #expect(CGImageDestinationFinalize(still))
+            pngs.append(png)
+            CGImageDestinationAddImage(destination, image, [kCGImagePropertyGIFDictionary:
+                [kCGImagePropertyGIFDelayTime: 0.1] as CFDictionary] as CFDictionary)
+        }
+        #expect(CGImageDestinationFinalize(destination))
+        return (gif, pngs)
+    }
+
+    func rgba(_ image: CGImage, x: Int, y: Int) throws -> [UInt8] {
+        let context = try #require(CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                             bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        let offset = (y * image.width + x) * 4
+        return (0..<4).map { bytes[offset + $0] }
+    }
+
+    func gray(_ image: CGImage, x: Int, y: Int) throws -> UInt8 {
+        let context = try #require(CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                             bytesPerRow: image.width, space: CGColorSpaceCreateDeviceGray(),
+                                             bitmapInfo: CGImageAlphaInfo.none.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return try #require(context.data).assumingMemoryBound(to: UInt8.self)[y * image.width + x]
+    }
+
     @Test(arguments: [UTType.png, .jpeg, .tiff, .heic])
     func supportedFormats(type: UTType) async throws {
         let url = try fixture(type)
@@ -115,10 +179,261 @@ struct ImageImportTests {
         } catch ImageImportError.unreadable { }
         let gif = try fixture(.gif)
         defer { try? FileManager.default.removeItem(at: gif) }
-        do {
-            _ = try await ImageImporter.shared.decode(gif)
-            Issue.record("Unsupported image should fail")
-        } catch ImageImportError.unsupported { }
+        let gifResult = try await ImageImporter.shared.decode(gif)
+        #expect(gifResult.image.width == 64)
+        #expect(gifResult.image.height == 32)
+        #expect(UTType.importableImages.contains(.gif))
+    }
+
+    @Test func animatedGIFTimelineSelectsAndDisplaysFrames() async throws {
+        let url = try animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let (imported, animation) = try await ImageImporter.shared.importGIF(url)
+        let frames = animation.source.frames
+        #expect(frames.map(\.index) == [0, 1])
+        #expect(frames.allSatisfy { abs($0.duration - 0.1) < 0.005 })
+        #expect(frames.allSatisfy { $0.thumbnail.width <= GIFTimelineLimits.thumbnailSide })
+        #expect(try rgba(imported.image, x: 16, y: 12)[0] > 240)
+        #expect(try rgba(frames[1].thumbnail, x: frames[1].thumbnail.width / 2, y: frames[1].thumbnail.height / 2)[2] > 240)
+
+        let session = EditorSession()
+        await session.importImages([url])
+        #expect(session.document?.size == CGSize(width: 32, height: 24))
+        #expect(session.gifTimelineFrames.map(\.index) == [0, 1])
+        #expect(session.gifTimelineLayerID == session.activeLayerID)
+        let importedLayerImage = try #require(session.activeLayer?.asset?.image)
+
+        let undoCount = session.history.undoCount
+        await session.selectGIFTimelineFrame(1)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+        #expect(session.history.undoCount == undoCount)
+        #expect(session.gifTimelineIsLoadingFrame == false)
+        #expect(session.activeLayer?.asset?.image === importedLayerImage)
+        let displayedImage = try #require(session.activeLayer.flatMap { session.displayedAsset(for: $0)?.image })
+        #expect(displayedImage !== importedLayerImage)
+        #expect(try rgba(displayedImage, x: 16, y: 12)[2] > 240)
+        let snapshotImage = try #require(session.projectSnapshot()?.images[session.activeLayer!.id]?.image)
+        #expect(try rgba(snapshotImage, x: 16, y: 12)[2] > 240)
+    }
+
+    @Test func gifTimelineKeepsFrameDelaysForPlayback() async throws {
+        let url = try animatedGIFFixture(delays: [0.04, 0.16])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let (_, animation) = try await ImageImporter.shared.importGIF(url)
+        let frames = animation.source.frames
+        #expect(frames.count == 2)
+        #expect(abs(frames[0].duration - 0.04) < 0.005)
+        #expect(abs(frames[1].duration - 0.16) < 0.005)
+    }
+
+    @Test func gifFramesKeepTheSameOrientationAsStillImages() async throws {
+        let files = try asymmetricGIFFixture()
+        defer { for file in [files.gif] + files.pngs { try? FileManager.default.removeItem(at: file) } }
+        let session = EditorSession()
+        await session.importImages([files.gif])
+        for index in files.pngs.indices {
+            let still = try await ImageImporter.shared.decode(files.pngs[index])
+            await session.selectGIFTimelineFrame(index)
+            let displayed = try #require(session.activeLayer.flatMap { session.displayedAsset(for: $0) })
+            let timeline = session.gifTimelineFrames[index].thumbnail
+            let exported = try await ImageExporter.shared.render(#require(session.projectSnapshot()))
+            // Four different quadrants and a transparent corner expose flips hidden by solid-color fixtures.
+            for (x, y) in [(4, 3), (24, 3), (4, 18), (24, 18), (30, 22)] {
+                let expected = try rgba(still.image, x: x, y: y)
+                #expect(try rgba(displayed.image, x: x, y: y) == expected)
+                #expect(try rgba(displayed.thumbnail, x: x, y: y) == expected)
+                #expect(try rgba(timeline, x: x, y: y) == expected)
+                #expect(try rgba(exported.image, x: x, y: y) == expected)
+            }
+        }
+    }
+
+    @Test func gifFrameMasksStayWithTheirFramesAndUndoSeparately() async throws {
+        let url = try animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let session = EditorSession()
+        await session.importImages([url])
+        let layerID = try #require(session.activeLayerID)
+        session.setSelection(DocumentSelection(path: CGPath(rect: CGRect(x: 0, y: 0, width: 16, height: 24), transform: nil),
+                                               antialiased: false), name: "Select Left Side")
+        session.toggleGIFFrameMaskTarget()
+
+        var layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        let firstMask = try #require(layer.gifFrameMasks[0]?.asset.image)
+        #expect(layer.mask == nil)
+        #expect(session.isMaskSelected)
+        #expect(session.isGIFFrameMaskSelected)
+        #expect(session.document?.selection == nil)
+        #expect(try gray(firstMask, x: 8, y: 12) > 240)
+        #expect(try gray(firstMask, x: 24, y: 12) < 15)
+        #expect(session.canCopyPixels)
+        let copiedMask = try #require(try session.renderSelectedPixels(from: layer, mask: true))
+        let maskToDocument = BrushRaster.pixelToDocument(layer.transform, width: firstMask.width, height: firstMask.height)
+        let leftInDocument = CGPoint(x: 8.5, y: 12.5).applying(maskToDocument)
+        let rightInDocument = CGPoint(x: 24.5, y: 12.5).applying(maskToDocument)
+        let copiedLeft = try rgba(copiedMask.image,
+            x: Int((leftInDocument.x - copiedMask.region.minX).rounded(.down)),
+            y: Int((leftInDocument.y - copiedMask.region.minY).rounded(.down)))
+        let copiedRight = try rgba(copiedMask.image,
+            x: Int((rightInDocument.x - copiedMask.region.minX).rounded(.down)),
+            y: Int((rightInDocument.y - copiedMask.region.minY).rounded(.down)))
+        #expect(copiedLeft[0] > 240, "Copied left pixel \(copiedLeft), region \(copiedMask.region), size \(copiedMask.image.width)×\(copiedMask.image.height)")
+        #expect(copiedRight[0] < 15, "Copied right pixel \(copiedRight), region \(copiedMask.region), size \(copiedMask.image.width)×\(copiedMask.image.height)")
+
+        session.tool = .brush
+        session.brushSettings.diameter = 4
+        session.maskPaintWhite = false
+        session.beginBrush(at: CGPoint(x: 8, y: 12))
+        #expect(session.brushStroke != nil)
+        #expect(session.finishBrushImmediately())
+        layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        #expect(try gray(try #require(layer.gifFrameMasks[0]?.asset.image), x: 8, y: 12) < 15)
+        session.undo()
+        layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        #expect(try gray(try #require(layer.gifFrameMasks[0]?.asset.image), x: 8, y: 12) > 240)
+
+        await session.selectGIFTimelineFrame(1)
+        #expect(!session.isGIFFrameMaskSelected)
+        session.setSelection(DocumentSelection(path: CGPath(rect: CGRect(x: 16, y: 0, width: 16, height: 24), transform: nil),
+                                               antialiased: false), name: "Select Right Side")
+        session.toggleGIFFrameMaskTarget()
+
+        layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        #expect(Set(layer.gifFrameMasks.keys) == [0, 1])
+        #expect(session.displayedLayer(for: layer).mask?.asset.image === layer.gifFrameMasks[1]?.asset.image)
+        #expect(session.projectSnapshot()?.frameMasks[layerID]?[1]?.asset.image.width == 32)
+        let maskedFrame = try await ImageExporter.shared.render(try #require(session.projectSnapshot()))
+        #expect(try rgba(maskedFrame.image, x: 24, y: 12)[3] > 240)
+        #expect(try rgba(maskedFrame.image, x: 8, y: 12)[3] < 15)
+        let document = try #require(session.document)
+        let liveContext = try BrushRaster.context(width: document.width, height: document.height, mask: false)
+        session.drawLiveComposite(document, in: liveContext)
+        let liveFrame = try #require(liveContext.makeImage())
+        #expect(try rgba(liveFrame, x: 24, y: 12)[3] > 240)
+        #expect(try rgba(liveFrame, x: 8, y: 12)[3] < 15)
+
+        await session.selectGIFTimelineFrame(0)
+        #expect(session.displayedLayer(for: try #require(session.activeLayer)).mask?.asset.image === firstMask)
+        await session.selectGIFTimelineFrame(1)
+        session.undo()
+        layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        #expect(Set(layer.gifFrameMasks.keys) == [0])
+        #expect(session.document?.selection != nil)
+    }
+
+    @Test func gifFrameMaskWithoutSelectionUsesFramePixelGridAndCanBePainted() async throws {
+        let url = try animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let session = EditorSession()
+        await session.importImages([url])
+        session.toggleGIFFrameMaskTarget()
+
+        let layerID = try #require(session.activeLayerID)
+        var layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        let mask = try #require(layer.gifFrameMasks[0]?.asset.image)
+        #expect(mask.width == 32)
+        #expect(mask.height == 24)
+        #expect(try gray(mask, x: 8, y: 12) > 240)
+
+        session.tool = .brush
+        session.brushSettings.diameter = 4
+        session.maskPaintWhite = false
+        session.beginBrush(at: CGPoint(x: 8, y: 12))
+        #expect(session.finishBrushImmediately())
+        layer = try #require(session.document?.layers.first(where: { $0.id == layerID }))
+        #expect(try gray(try #require(layer.gifFrameMasks[0]?.asset.image), x: 8, y: 12) < 15)
+    }
+
+    @Test func gifFrameMaskLoadsItsHiddenAreaAsASelection() async throws {
+        let url = try animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let session = EditorSession()
+        await session.importImages([url])
+        let layerID = try #require(session.activeLayerID)
+        session.setSelection(DocumentSelection(path: CGPath(rect: CGRect(x: 0, y: 0, width: 16, height: 24), transform: nil),
+                                               antialiased: false), name: "Select Left Side")
+        session.toggleGIFFrameMaskTarget()
+        session.loadMaskSelection(layerID: layerID)
+
+        let selection = try #require(session.selection)
+        let layer = try #require(session.activeLayer)
+        let frameToDocument = BrushRaster.pixelToDocument(layer.transform, width: 32, height: 24)
+        let hiddenPoint = CGPoint(x: 24, y: 12).applying(frameToDocument)
+        let visiblePoint = CGPoint(x: 8, y: 12).applying(frameToDocument)
+        #expect(selection.path.contains(hiddenPoint, using: .winding))
+        #expect(!selection.path.contains(visiblePoint, using: .winding))
+    }
+
+    @Test func gifFrameMaskCanBeDisabledEnabledAndUndone() async throws {
+        let url = try animatedGIFFixture()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let session = EditorSession()
+        await session.importImages([url])
+        session.toggleGIFFrameMaskTarget()
+        #expect(session.gifTimelineCanToggleFrameMask)
+        #expect(session.gifTimelineSelectedFrameMaskIsEnabled)
+
+        session.toggleGIFFrameMaskEnabled()
+        #expect(!session.gifTimelineSelectedFrameMaskIsEnabled)
+        #expect(session.displayedLayer(for: try #require(session.activeLayer)).mask == nil)
+        session.undo()
+        #expect(session.gifTimelineSelectedFrameMaskIsEnabled)
+        #expect(session.displayedLayer(for: try #require(session.activeLayer)).mask != nil)
+        session.redo()
+        #expect(!session.gifTimelineSelectedFrameMaskIsEnabled)
+    }
+
+    @Test func gifTimelinesStayAssociatedWithTheirLayers() async throws {
+        let firstGIF = try animatedGIFFixture()
+        let secondGIF = try animatedGIFFixture()
+        let stillImage = try fixture(.png)
+        defer {
+            try? FileManager.default.removeItem(at: firstGIF)
+            try? FileManager.default.removeItem(at: secondGIF)
+            try? FileManager.default.removeItem(at: stillImage)
+        }
+
+        let session = EditorSession()
+        await session.importImages([firstGIF])
+        let firstLayerID = try #require(session.activeLayerID)
+        await session.selectGIFTimelineFrame(1)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+
+        await session.importImages([stillImage])
+        let stillLayerID = try #require(session.activeLayerID)
+        #expect(session.gifTimelineLayerID == nil)
+        session.selectLayers([firstLayerID], primary: firstLayerID)
+        #expect(session.gifTimelineLayerID == firstLayerID)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+
+        await session.importImages([secondGIF])
+        let secondLayerID = try #require(session.activeLayerID)
+        #expect(secondLayerID != firstLayerID)
+        #expect(session.gifTimelineLayerID == secondLayerID)
+        #expect(session.gifTimelineSelectedFrameIndex == 0)
+        session.toggleGIFPlayback(for: secondLayerID)
+        #expect(session.gifTimelineIsPlaying)
+        session.stopGIFPlayback(for: secondLayerID)
+        #expect(!session.gifTimelineIsPlaying)
+        await session.selectGIFTimelineFrame(1)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+
+        session.selectLayers([firstLayerID], primary: firstLayerID)
+        #expect(session.gifTimelineLayerID == firstLayerID)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+        let displayedFirstFrame = try #require(session.activeLayer.flatMap { session.displayedAsset(for: $0)?.image })
+        #expect(try rgba(displayedFirstFrame, x: 16, y: 12)[2] > 240)
+
+        session.selectLayers([secondLayerID], primary: secondLayerID)
+        #expect(session.gifTimelineLayerID == secondLayerID)
+        #expect(session.gifTimelineSelectedFrameIndex == 1)
+        #expect(session.document?.layers.contains(where: { $0.id == stillLayerID }) == true)
     }
 
     @Test func importPlacementAndPartialFailure() async throws {

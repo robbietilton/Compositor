@@ -213,10 +213,13 @@ final class WarpStroke {
 
 extension EditorSession {
     func beginWarp(at point: CGPoint) {
-        guard canPaint, !isMaskSelected, let layer = activeLayer, let image = layer.asset?.image, let document else {
+        guard canPaint, !isMaskSelected, let active = activeLayer, let document else {
             brushError = isMaskSelected ? "Smudge and Liquify work on a layer's pixels, not its mask." : paintRefusal
             return
         }
+        pauseGIFForEditing(for: active.id)
+        let layer = pixelEditingLayer(for: active)
+        guard let image = layer.asset?.image else { return }
         finishOpacityEdit()
         do {
             let stroke = try WarpStroke(layer: layer, image: image, deep: try layer.asset.flatMap { try DeepLayer.flattened($0) },
@@ -236,7 +239,7 @@ extension EditorSession {
         brushRevision += 1
         guard !warp.points.isEmpty, let result = warp.image,
               let current = document?.layers.first(where: { $0.id == warp.layer.id }),
-              current.asset?.image === warp.layer.asset?.image, current.transform == warp.layer.transform else { return }
+              pixelEditTargetMatches(current, original: warp.layer) else { return }
         do {
             var settings = brushSettings
             // A hard tip a little wider than the brush covers everything the stroke moved.

@@ -3,10 +3,11 @@ import AppKit
 extension EditorSession {
     /// An explicitly empty selection leaves nothing paintable, so painting never starts.
     var canPaint: Bool {
+        let targetMask = activeLayer.flatMap { selectedMask(for: $0) }
         // A folder has no pixels of its own, so only its mask can be painted.
-        canEditLayers && selectedLayerIDs.count == 1 && (activeLayer?.isGroup == false || isMaskSelected) && selection?.isEmpty != true
+        return canEditLayers && selectedLayerIDs.count == 1 && (activeLayer?.isGroup == false || isMaskSelected) && selection?.isEmpty != true
             && activeLayerID.map { document?.effectiveVisibleIDs.contains($0) == true } == true
-            && (!isMaskSelected || activeLayer?.mask?.isEnabled == true)
+            && (!isMaskSelected || targetMask?.isEnabled == true)
             && (isMaskSelected || activeLayer?.adjustment == nil)
     }
     /// Why a stroke can't start on the target, for the alert, as Photoshop explains a brush it refuses. Nil when
@@ -20,7 +21,7 @@ extension EditorSession {
         if document?.effectiveVisibleIDs.contains(layer.id) != true {
             return "“\(layer.name)” is hidden, or inside a hidden folder. Show it to paint on it."
         }
-        if isMaskSelected, layer.mask?.isEnabled != true {
+        if isMaskSelected, selectedMask(for: layer)?.isEnabled != true {
             return "The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint."
         }
         if !isMaskSelected, layer.adjustment != nil {
@@ -34,16 +35,33 @@ extension EditorSession {
     /// Tiled raster edit of the active layer's pixels or mask, within the shared pixel budgets.
     func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false) throws -> BrushStroke {
         guard let document else { throw ProjectError.tooLarge }
-        let stroke = try BrushStroke(layer: layer, mask: isMaskSelected, settings: settings, canvas: document.size, growsMask: growsMask)
-        let used = document.layers.filter { $0.id != layer.id }.reduce(0) { total, layer in
-            let image = isMaskSelected ? layer.mask?.asset.image : layer.asset?.image
-            return total + (image.map { $0.width * $0.height } ?? 0)
+        pauseGIFForEditing(for: layer.id)
+        var sourceLayer = pixelEditingLayer(for: layer)
+        if isGIFFrameMaskSelected {
+            sourceLayer.mask = selectedMask(for: layer)
+        }
+        let stroke = try BrushStroke(layer: sourceLayer, mask: isMaskSelected, settings: settings, canvas: document.size,
+                                     growsMask: growsMask && !isGIFFrameMaskSelected)
+        let targetFrameIndex = isGIFFrameMaskSelected ? selectedGIFFrameIndex(for: layer.id) : nil
+        func maskPixels(_ candidate: ImageLayer) -> Int {
+            (candidate.mask.map { $0.asset.image.width * $0.asset.image.height } ?? 0)
+                + candidate.gifFrameMasks.filter { candidate.id != layer.id || $0.key != targetFrameIndex }
+                    .values.reduce(0) { $0 + $1.asset.image.width * $1.asset.image.height }
+        }
+        let used = document.layers.reduce(0) { total, candidate in
+            if isMaskSelected { return total + maskPixels(candidate) }
+            let base = candidate.id == layer.id && layer.gifAnimation == nil ? 0
+                : (candidate.asset.map { $0.image.width * $0.image.height } ?? 0)
+            let frames = candidate.gifAnimation?.framePixels.filter {
+                candidate.id != layer.id || $0.key != sourceLayer.gifAnimation?.selectedFrameIndex
+            }.values.reduce(0) { $0 + $1.image.width * $1.image.height } ?? 0
+            return total + base + frames
         }
         stroke.pixelLimit = DocumentLimits.documentPixelBudget - used
         stroke.selectionClip = try selection?.clip(canvas: document.size)
-        if !isMaskSelected, layer.mask != nil {
-            let maskPixels = document.layers.filter { $0.id != layer.id }.reduce(0) { $0 + ($1.mask.map { $0.asset.image.width * $0.asset.image.height } ?? 0) }
-            stroke.pixelLimit = min(stroke.pixelLimit, DocumentLimits.documentPixelBudget - maskPixels)
+        if !isMaskSelected, layer.mask != nil || !layer.gifFrameMasks.isEmpty {
+            let usedMasks = document.layers.reduce(0) { $0 + maskPixels($1) }
+            stroke.pixelLimit = min(stroke.pixelLimit, DocumentLimits.documentPixelBudget - usedMasks)
         }
         return stroke
     }
@@ -159,29 +177,39 @@ extension EditorSession {
         let result = try stroke.paintSnapshot()
         guard result.transform.isValid,
               let index = document?.layers.firstIndex(where: { $0.id == stroke.layer.id }),
-              let current = document?.layers[index], current.asset?.image === stroke.layer.asset?.image,
-              current.transform == stroke.layer.transform else { return }
+              let current = document?.layers[index], pixelEditTransformMatches(current, original: stroke.layer) else { return }
+        let frameIndex = isGIFFrameMaskSelected ? selectedGIFFrameIndex(for: current.id) : nil
+        if let frameIndex {
+            guard stroke.isMask, current.gifFrameMasks[frameIndex]?.asset.image === stroke.layer.mask?.asset.image,
+                  displayedAsset(for: current)?.image === stroke.layer.asset?.image else { return }
+        } else {
+            guard pixelEditTargetMatches(current, original: stroke.layer) else { return }
+        }
         var mask = current.mask
-        if !stroke.isMask, let original = mask, original.placement == nil, result.bounds != stroke.sourceRect {
+        if !stroke.isMask, current.gifAnimation == nil, let original = mask, original.placement == nil, result.bounds != stroke.sourceRect {
             let raster = RasterSnapshot.replacing(source: original.asset, sourceRect: stroke.sourceRect,
                 patches: [], crop: result.bounds, isMask: true)
             mask = original.replacing(ImportedImage(image: try raster.makeImage(), thumbnail: try raster.thumbnail(),
                 name: original.asset.name, raster: raster))
         }
+        let edited = stroke.isMask ? nil : try layerByEditingPixels(current, asset: result.asset, transform: result.transform, mask: mask)
         beginEdit(stroke.editName ?? (stroke.isMask ? "Paint Mask" : stroke.settings.erasing ? "Erase" : stroke.isBlur ? "Blur" : stroke.clone != nil ? "Clone Stamp" : stroke.settings.healing ? "Spot Healing" : "Brush Stroke"))
         if stroke.isMask {
-            document?.layers[index].mask = current.mask.map { mask in
-                var painted = mask.replacing(result.asset)
-                // Grown past its layer, or already placed on its own: the mask keeps its place on the document. A linked
-                // one still moves with its layer.
-                if mask.placement != nil || result.bounds != stroke.sourceRect { painted.placement = result.transform }
-                return painted
-            } ?? LayerMask(asset: result.asset)
-        } else {
-            document?.layers[index] = ImageLayer(id: current.id, asset: result.asset, name: current.name,
-                isVisible: current.isVisible, transform: result.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: mask, maskSourceID: current.maskSourceID, effects: current.effects)
-        }
+            if let frameIndex {
+                document?.layers[index].gifFrameMasks[frameIndex] = LayerMask(asset: result.asset)
+            } else {
+                document?.layers[index].mask = current.mask.map { mask in
+                    var painted = mask.replacing(result.asset)
+                    // Grown past its layer, or already placed on its own: the mask keeps its place on the document. A linked
+                    // one still moves with its layer.
+                    if mask.placement != nil || result.bounds != stroke.sourceRect { painted.placement = result.transform }
+                    if current.gifAnimation != nil {
+                        painted.placement = painted.placement(movingLayer: stroke.layer.transform, to: current.transform)
+                    }
+                    return painted
+                } ?? LayerMask(asset: result.asset)
+            }
+        } else if let edited { document?.layers[index] = edited }
         endEdit()
     }
 
@@ -197,34 +225,46 @@ extension EditorSession {
         let transform = stroke.transform(for: result.pixelBounds.offsetBy(dx: stroke.committedBounds.minX, dy: stroke.committedBounds.minY))
         guard transform.isValid else { throw ProjectError.tooLarge }
         var mask = stroke.layer.mask
-        if !stroke.isMask, let originalMask = mask, originalMask.placement == nil {
+        if !stroke.isMask, stroke.layer.gifAnimation == nil, let originalMask = mask, originalMask.placement == nil {
             mask = originalMask.replacing(try await BrushCommit.shared.expandMask(originalMask.asset, for: input, croppedTo: result.pixelBounds))
         }
         // The raster was built from this layer's pixels, transform, and mask; never
         // write it over content that changed underneath it.
         guard let index = document?.layers.firstIndex(where: { $0.id == stroke.layer.id }),
-              let current = document?.layers[index], current.asset?.image === stroke.layer.asset?.image,
-              current.transform == stroke.layer.transform,
-              current.mask?.asset.image === stroke.layer.mask?.asset.image else { return }
+              let current = document?.layers[index], pixelEditTransformMatches(current, original: stroke.layer) else { return }
+        let frameIndex = isGIFFrameMaskSelected ? selectedGIFFrameIndex(for: current.id) : nil
+        if let frameIndex {
+            guard stroke.isMask, displayedAsset(for: current)?.image === stroke.layer.asset?.image,
+                  current.gifFrameMasks[frameIndex]?.asset.image === stroke.layer.mask?.asset.image else { return }
+        } else {
+            guard pixelEditTargetMatches(current, original: stroke.layer),
+                  current.mask?.asset.image === stroke.layer.mask?.asset.image else { return }
+        }
+        let keptMask = mask.map { mask -> LayerMask in
+            var kept = mask
+            kept.isEnabled = current.mask?.isEnabled ?? mask.isEnabled
+            return kept
+        }
+        let edited = stroke.isMask ? nil : try layerByEditingPixels(current, asset: asset, transform: transform, mask: keptMask)
         beginEdit(name)
         if stroke.isMask {
             let bounds = result.pixelBounds.offsetBy(dx: stroke.committedBounds.minX, dy: stroke.committedBounds.minY)
-            document?.layers[index].mask = current.mask.map { mask in
-                var edited = mask.replacing(asset)
-                // Grown past its layer, or already placed on its own: the mask keeps its place on the document.
-                if mask.placement != nil || bounds != stroke.sourceRect { edited.placement = transform }
-                return edited
-            } ?? LayerMask(asset: asset)
-        } else {
-            document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name,
-                isVisible: current.isVisible, transform: transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode,
-                mask: mask.map { mask -> LayerMask in
-                    var kept = mask
-                    kept.isEnabled = current.mask?.isEnabled ?? mask.isEnabled
-                    return kept
-                }, maskSourceID: current.maskSourceID, effects: current.effects)
-        }
+            if let frameIndex {
+                var edited = current.gifFrameMasks[frameIndex] ?? LayerMask(asset: asset)
+                edited = edited.replacing(asset)
+                document?.layers[index].gifFrameMasks[frameIndex] = edited
+            } else {
+                document?.layers[index].mask = current.mask.map { mask in
+                    var edited = mask.replacing(asset)
+                    // Grown past its layer, or already placed on its own: the mask keeps its place on the document.
+                    if mask.placement != nil || bounds != stroke.sourceRect { edited.placement = transform }
+                    if current.gifAnimation != nil {
+                        edited.placement = edited.placement(movingLayer: stroke.layer.transform, to: current.transform)
+                    }
+                    return edited
+                } ?? LayerMask(asset: asset)
+            }
+        } else if let edited { document?.layers[index] = edited }
         alsoApply?()
         endEdit()
     }

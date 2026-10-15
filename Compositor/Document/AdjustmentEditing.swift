@@ -16,7 +16,8 @@ extension EditorSession {
         for i in manifest.layers.indices where manifest.layers[i].isGroup != true && !underneath.contains(manifest.layers[i].id) {
             manifest.layers[i].isVisible = false
         }
-        let source = ProjectSnapshot(manifest: manifest, images: snapshot.images, masks: snapshot.masks)
+        let source = ProjectSnapshot(manifest: manifest, images: snapshot.images, masks: snapshot.masks,
+                                     animations: snapshot.animations, frameMasks: snapshot.frameMasks)
         do {
             let raster = try await ImageExporter.shared.render(source)
             guard !Task.isCancelled, adjustmentEditingID == id, adjustmentOriginal == nil else { return }

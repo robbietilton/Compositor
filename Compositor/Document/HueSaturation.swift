@@ -465,10 +465,11 @@ extension EditorSession {
         guard hueSaturation == nil, canAdjustColors else { NSSound.beep(); return }
         commitTransform()
         if gradientEdit != nil { resolveGradient() }
-        guard let document, let layer = activeLayer, let asset = layer.asset else { return }
+        guard let document, let layer = activeLayer, let asset = displayedAsset(for: layer) else { return }
+        pauseGIFForEditing(for: layer.id)
         do {
             hueSaturation = try HueSaturationEdit(layerID: layer.id, original: asset,
-                selection: try selection?.clip(canvas: document.size), transform: layer.transform)
+                selection: try selection?.clip(canvas: document.size), transform: displayedTransform(for: layer))
         } catch { brushError = error.localizedDescription }
     }
 
@@ -554,14 +555,13 @@ extension EditorSession {
             asset = ImportedImage(image: adjusted.image, thumbnail: adjusted.thumbnail ?? adjusted.image, name: edit.original.name)
         }
         guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
-              let current = document?.layers[index], current.asset?.image === edit.original.image else { return }
-        beginEdit("Hue/Saturation")
-        document?.layers[index] = ImageLayer(id: current.id,
-            asset: ImportedImage(image: asset.image, thumbnail: asset.thumbnail, name: current.name, deep: asset.deep),
-            name: current.name, isVisible: current.isVisible, transform: current.transform, parentID: current.parentID,
-            isGroup: false, opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID,
-            effects: current.effects)
-        endEdit()
+              let current = document?.layers[index], displayedAsset(for: current)?.image === edit.original.image else { return }
+        do {
+            let edited = try layerByEditingPixels(current, asset: asset, transform: current.transform, mask: current.mask)
+            beginEdit("Hue/Saturation")
+            document?.layers[index] = edited
+            endEdit()
+        } catch { brushError = error.localizedDescription }
     }
 
     /// The hue under a document point, from the visible composite. Near-neutral pixels

@@ -136,7 +136,17 @@ extension EditorSession {
         for i in document?.layers.indices ?? 0..<0 {
             if let source = document?.layers[i].maskSourceID, removed.contains(source) {
                 document?.layers[i].maskSourceID = nil
-                if let asset = baked[document!.layers[i].id] { document?.layers[i].asset = asset }
+                if let asset = baked[document!.layers[i].id] {
+                    let layer = document!.layers[i]
+                    if layer.gifAnimation != nil {
+                        // Bake preserves the displayed frame and its mask as a still layer after its source is deleted.
+                        document?.layers[i].mask = displayedLayer(for: layer).mask
+                        document?.layers[i].gifAnimation = nil
+                        document?.layers[i].gifFrameMasks = [:]
+                        if activeLayerID == layer.id { isGIFFrameMaskSelected = false }
+                    }
+                    document?.layers[i].asset = asset
+                }
             }
         }
         if activeLayerID.map({ removed.contains($0) }) == true {
@@ -168,10 +178,12 @@ extension EditorSession {
         }
         let records = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let live = LiveMaskRenderer(bounds: context.boundingBoxOfClipPath, source: { records[$0]?.maskSourceID }) { id, ctx in
-            guard let layer = records[id], let image = layer.asset?.image else { return }
+            guard let layer = records[id] else { return }
+            let displayed = self.displayedLayer(for: layer)
+            guard let image = displayed.asset?.image else { return }
             let opacity = layer.effectiveOpacity(in: records)
             let transform = self.displayedTransform(for: layer)
-            let mask = layer.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
+            let mask = displayed.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
             let effects = LayerEffectsRenderer.cached(image, mask: mask, effects: layer.effects)
             func drawLayer(_ mode: LayerBlendMode, _ target: CGContext) {
                 if let effects {

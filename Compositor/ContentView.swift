@@ -119,6 +119,58 @@ struct ContentView: View {
                         }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
                     }
+                    if !session.canvasOnly,
+                       let gifLayerID = session.gifTimelineLayerID,
+                       session.activeLayerID == gifLayerID,
+                       session.document?.layers.contains(where: { $0.id == gifLayerID }) == true,
+                       !session.gifTimelineFrames.isEmpty {
+                        Divider()
+                        GIFTimeline(layerName: session.activeLayer?.name ?? "GIF", frames: session.gifTimelineFrames,
+                                    selectedFrameIndex: session.gifTimelineSelectedFrameIndex,
+                                    isPlaying: session.gifTimelineIsPlaying,
+                                    playbackSpeed: session.gifTimelinePlaybackSpeed,
+                                    playbackScope: session.gifPlaybackScope,
+                                    canPlay: session.gifTimelineCanPlay,
+                                    playbackLayerIDs: session.gifPlaybackLayerIDs,
+                                    sourceFrames: session.gifTimelineSourceFrames,
+                                    timing: session.gifTimelineTiming,
+                                    onionSkin: session.gifOnionSkin,
+                                    frameMaskIndices: session.gifTimelineFrameMaskIndices,
+                                    enabledFrameMaskIndices: session.gifTimelineEnabledFrameMaskIndices,
+                                    hasSelectedFrameMask: session.gifTimelineHasSelectedFrameMask,
+                                    isSelectedFrameMaskEnabled: session.gifTimelineSelectedFrameMaskIsEnabled,
+                                    isFrameMaskSelected: session.gifTimelineIsFrameMaskSelected,
+                                    frameMaskControlsLookEditable: session.canEditMask,
+                                    canEditFrameMask: session.gifTimelineCanEditFrameMask,
+                                    canEditFrames: session.gifTimelineCanEditFrames,
+                                    canEditTiming: session.gifTimelineCanEditTiming,
+                                    onSelectFrame: { index in
+                                        guard session.activeLayerID == gifLayerID else { return }
+                                        await session.selectGIFTimelineFrame(index)
+                                    },
+                                    onTogglePlayback: { session.toggleGIFPlayback(for: gifLayerID) },
+                                    onStopPlayback: { session.stopGIFPlayback(for: gifLayerID) },
+                                    onChangePlaybackSpeed: { session.setGIFPlaybackSpeed($0, for: gifLayerID) },
+                                    onChangePlaybackScope: { session.setGIFPlaybackScope($0, for: gifLayerID) },
+                                    onPlayAllFrames: { await session.playAllGIFFrames(for: gifLayerID) },
+                                    onChangeTiming: { session.setGIFFrameTiming($0, for: gifLayerID) },
+                                    onToggleFrameMask: { session.toggleGIFFrameMaskTarget() },
+                                    onToggleFrameMaskEnabled: { session.toggleGIFFrameMaskEnabled() },
+                                    onAddFrameMask: { await session.addGIFFrameMask(at: $0, for: gifLayerID) },
+                                    onAddFrameMasks: { _ = await session.addGIFFrameMasks(at: $0, for: gifLayerID) },
+                                    onDeleteFrameMask: { session.deleteGIFFrameMask(at: $0, for: gifLayerID) },
+                                    onDeleteFrameMasks: { _ = session.deleteGIFFrameMasks(at: $0, for: gifLayerID) },
+                                    onToggleFrameMaskEnabledAtIndex: { session.toggleGIFFrameMaskEnabled(at: $0, for: gifLayerID) },
+                                    onPrepareFrameMaskCopy: { session.prepareGIFFrameMaskCopy(at: $0, for: gifLayerID) },
+                                    onCopyFrameMask: { session.copyGIFFrameMask($0, to: $1) },
+                                    onDuplicateFrame: { await session.duplicateGIFFrame(at: $0, for: gifLayerID) },
+                                    onDeleteFrames: { await session.deleteGIFFrames(at: $0, for: gifLayerID) },
+                                    onMoveFrame: { session.moveGIFFrame(at: $0, to: $1, for: gifLayerID) },
+                                    onBeginFrameDrag: { session.pauseGIFForEditing(for: gifLayerID) })
+                            .id(gifLayerID)
+                            .frame(height: 126)
+                            .releasesFocusOnCommit(session)
+                    }
                 }
                 if !session.canvasOnly {
                     PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)

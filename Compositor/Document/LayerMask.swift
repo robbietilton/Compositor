@@ -47,6 +47,57 @@ nonisolated struct LayerMask: Equatable, @unchecked Sendable {
         return ImportedImage(image: image, thumbnail: thumbnail, name: "Layer Mask")
     }
 
+    /// Rasterizes canvas-space selection coverage onto a frame's pixel grid; nil reveals the whole frame.
+    static func revealing(_ selection: SelectionClip?, over transform: LayerTransform, width: Int, height: Int) throws -> LayerMask {
+        let context = try BrushRaster.context(width: width, height: height, mask: true)
+        if let selection {
+            context.setFillColor(gray: 0, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.concatenate(BrushRaster.pixelToDocument(transform, width: width, height: height).inverted())
+            selection.apply(to: context)
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(selection.rect)
+        } else {
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        guard let image = context.makeImage() else { throw ExportError.render }
+        return LayerMask(asset: try asset(from: image))
+    }
+
+    /// Multiplies a frame-local mask by the layer mask after placing the latter on the current frame's pixel grid.
+    static func combining(_ frameMask: LayerMask, with sharedMask: LayerMask?, layerTransform: LayerTransform,
+                          sharedPlacement: LayerTransform?, width: Int, height: Int) -> LayerMask? {
+        guard frameMask.isEnabled else { return sharedMask?.isEnabled == true ? sharedMask : nil }
+        guard let sharedMask, let shared = sharedMask.clipImage(placement: sharedPlacement, over: layerTransform,
+                                                                width: width, height: height) else { return frameMask }
+        guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels,
+              let frame = frameMask.enabledImage,
+              let frameContext = try? BrushRaster.context(width: width, height: height, mask: true),
+              let sharedContext = try? BrushRaster.context(width: width, height: height, mask: true) else { return nil }
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        BrushRaster.draw(frame, in: bounds, mask: true, context: frameContext)
+        BrushRaster.draw(shared, in: bounds, mask: true, context: sharedContext)
+        guard let frameData = frameContext.data?.assumingMemoryBound(to: UInt8.self),
+              let sharedData = sharedContext.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        var bytes = [UInt8](repeating: 0, count: width * height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let frameValue = Int(frameData[y * frameContext.bytesPerRow + x])
+                let sharedValue = Int(sharedData[y * sharedContext.bytesPerRow + x])
+                bytes[y * width + x] = UInt8((frameValue * sharedValue + 127) / 255)
+            }
+        }
+        let data = Data(bytes)
+        guard let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8,
+                                  bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent),
+              let asset = try? asset(from: image) else { return nil }
+        return LayerMask(asset: asset)
+    }
+
     // MARK: Placement
 
     /// Where the mask sits once its layer moves from `old` to `new`: carried along when linked (still covering the
@@ -210,19 +261,35 @@ nonisolated struct FolderMaskClip {
 }
 
 extension ProjectSnapshot {
-    nonisolated func mask(for layer: ProjectLayerRecord) -> LayerMask? {
+    nonisolated func sharedMask(for layer: ProjectLayerRecord) -> LayerMask? {
         guard layer.maskFile != nil, let asset = masks[layer.id] else { return nil }
         return LayerMask(asset: asset, isEnabled: layer.maskEnabled ?? true, placement: layer.maskPlacement, isLinked: layer.maskLinked ?? true)
+    }
+
+    /// Render the captured frame with both masks, without merging their independently editable saved assets.
+    nonisolated func mask(for layer: ProjectLayerRecord) -> LayerMask? {
+        let shared = sharedMask(for: layer)
+        guard let animation = animations[layer.id], let frame = frameMasks[layer.id]?[animation.selectedFrameIndex],
+              frame.isEnabled, let image = images[layer.id]?.image else { return shared }
+        return LayerMask.combining(frame, with: shared, layerTransform: layer.transform,
+                                   sharedPlacement: shared?.placement, width: image.width, height: image.height)
     }
 }
 
 extension EditorSession {
     /// Layers and folders alike take a mask.
     var canEditMask: Bool { canEditLayers && selectedLayerIDs.count == 1 && activeLayer != nil }
+    var retainedMaskPixels: Int {
+        (document?.layers ?? []).reduce(0) { total, layer in
+            total + (layer.mask.map { $0.asset.image.width * $0.asset.image.height } ?? 0)
+                + layer.gifFrameMasks.values.reduce(0) { $0 + $1.asset.image.width * $1.asset.image.height }
+        }
+    }
     func selectLayerTarget(_ id: UUID, mask: Bool) {
         effectSelection = nil
         guard !isProjectBusy, !isImporting, brushStroke == nil else { return }
         resolveGradient()
+        isGIFFrameMaskSelected = false
         selectLayer(id)
         isMaskSelected = mask && activeLayer?.mask != nil
     }
@@ -246,12 +313,13 @@ extension EditorSession {
         let height = layer.asset?.image.height ?? Int(layer.size.height.rounded())
         do {
             guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
+            guard width * height <= DocumentLimits.documentPixelBudget - retainedMaskPixels else { throw ProjectError.tooLarge }
             let context = try BrushRaster.context(width: width, height: height, mask: true)
             context.setFillColor(gray: revealing ? 0 : 1, alpha: 1)
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             guard let canvasSize = document?.size else { return }
             let clip = try selection.clip(canvas: canvasSize)
-            context.concatenate(BrushRaster.pixelToDocument(layer.transform, width: width, height: height).inverted())
+            context.concatenate(BrushRaster.pixelToDocument(displayedTransform(for: layer), width: width, height: height).inverted())
             clip.apply(to: context)
             context.setFillColor(gray: revealing ? 1 : 0, alpha: 1)
             context.fill(clip.rect)
@@ -259,6 +327,7 @@ extension EditorSession {
             let mask = LayerMask(asset: try LayerMask.asset(from: image))
             finishOpacityEdit()
             beginEdit(revealing ? "Reveal Selection" : "Hide Selection")
+            isGIFFrameMaskSelected = false
             document?.layers[index].mask = mask
             document?.selection = nil
             isMaskSelected = true
@@ -266,17 +335,108 @@ extension EditorSession {
         } catch { brushError = error.localizedDescription }
     }
 
+    /// Adds a mask to the selected GIF frame, or selects its existing mask for painting.
+    func toggleGIFFrameMaskTarget() {
+        guard canEditMask, !gifTimelineIsLoadingFrame, let layerID = gifTimelineLayerID,
+              let frameIndex = selectedGIFFrameIndex(for: layerID),
+              let layerIndex = document?.layers.firstIndex(where: { $0.id == layerID }),
+              let layer = document?.layers[layerIndex], let asset = displayedAsset(for: layer) else { return }
+        stopGIFPlayback(for: layerID)
+        if layer.gifFrameMasks[frameIndex] != nil {
+            if isGIFFrameMaskSelected { isMaskSelected = false }
+            else {
+                isGIFFrameMaskSelected = true
+                isMaskSelected = true
+            }
+            return
+        }
+
+        do {
+            let width = asset.image.width, height = asset.image.height
+            guard width > 0, height > 0, width * height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
+            guard width * height <= DocumentLimits.documentPixelBudget - retainedMaskPixels else { throw ProjectError.tooLarge }
+            guard let canvasSize = document?.size else { return }
+            let mask = try LayerMask.revealing(selection?.clip(canvas: canvasSize), over: displayedTransform(for: layer),
+                                               width: width, height: height)
+            finishOpacityEdit()
+            beginEdit("Add Frame Mask")
+            document?.layers[layerIndex].gifFrameMasks[frameIndex] = mask
+            if selection != nil { document?.selection = nil }
+            isGIFFrameMaskSelected = true
+            isMaskSelected = true
+            endEdit()
+            brushRevision += 1
+        } catch { brushError = error.localizedDescription }
+    }
+
+    /// Enables or disables the selected frame's mask without changing the current paint target.
+    func toggleGIFFrameMaskEnabled() {
+        guard let layerID = gifTimelineLayerID else { return }
+        toggleGIFFrameMaskEnabled(at: gifTimelineSelectedFrameIndex, for: layerID)
+    }
+
+    func addGIFFrameMask(at frameIndex: Int, for layerID: UUID) async {
+        guard gifTimelineCanEditFrameMask, activeLayerID == layerID,
+              let animation = activeLayer?.gifAnimation, animation.containsFrame(frameIndex),
+              activeLayer?.gifFrameMasks[frameIndex] == nil else { return }
+        pauseGIFForEditing(for: layerID)
+        await selectGIFTimelineFrame(frameIndex)
+        guard !Task.isCancelled, activeLayerID == layerID,
+              activeLayer?.gifAnimation?.source === animation.source,
+              selectedGIFFrameIndex(for: layerID) == frameIndex,
+              activeLayer?.gifFrameMasks[frameIndex] == nil else { return }
+        toggleGIFFrameMaskTarget()
+    }
+
+    func deleteGIFFrameMask(at frameIndex: Int, for layerID: UUID) {
+        deleteGIFFrameMasks(at: [frameIndex], for: layerID)
+    }
+
+    func toggleGIFFrameMaskEnabled(at frameIndex: Int, for layerID: UUID) {
+        guard gifTimelineCanEditFrameMask, activeLayerID == layerID,
+              activeLayer?.gifAnimation?.containsFrame(frameIndex) == true,
+              let layerIndex = document?.layers.firstIndex(where: { $0.id == layerID }) else { return }
+        guard let mask = document?.layers[layerIndex].gifFrameMasks[frameIndex] else { return }
+        pauseGIFForEditing(for: layerID)
+        finishOpacityEdit()
+        beginEdit(mask.isEnabled ? "Disable Frame Mask" : "Enable Frame Mask")
+        document?.layers[layerIndex].gifFrameMasks[frameIndex]?.isEnabled.toggle()
+        endEdit()
+        brushRevision += 1
+    }
+
+    private func selectedGIFFrameMaskLocation() -> (layerIndex: Int, frameIndex: Int, mask: LayerMask)? {
+        guard isGIFFrameMaskSelected, let layerID = activeLayerID,
+              let frameIndex = selectedGIFFrameIndex(for: layerID),
+              let layerIndex = document?.layers.firstIndex(where: { $0.id == layerID }),
+              let mask = document?.layers[layerIndex].gifFrameMasks[frameIndex] else { return nil }
+        return (layerIndex, frameIndex, mask)
+    }
+
     /// A plain all-white (reveal) or all-black (hide) mask, whatever is selected.
     func addLayerMask(revealing: Bool = true) {
         guard canEditMask, activeLayer?.mask == nil, let mask = LayerMask.solid(revealing: revealing),
               let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
+        guard retainedMaskPixels < DocumentLimits.documentPixelBudget else {
+            brushError = ProjectError.tooLarge.localizedDescription
+            return
+        }
         finishOpacityEdit()
         beginEdit(revealing ? "Add Reveal-All Mask" : "Add Hide-All Mask")
+        isGIFFrameMaskSelected = false
         document?.layers[index].mask = mask
         isMaskSelected = true
         endEdit()
     }
     func toggleLayerMask() {
+        if let target = selectedGIFFrameMaskLocation() {
+            finishOpacityEdit()
+            beginEdit(target.mask.isEnabled ? "Disable Frame Mask" : "Enable Frame Mask")
+            document?.layers[target.layerIndex].gifFrameMasks[target.frameIndex]?.isEnabled.toggle()
+            endEdit()
+            brushRevision += 1
+            return
+        }
         guard canEditMask, activeLayer?.mask != nil,
               let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
         finishOpacityEdit()
@@ -285,6 +445,15 @@ extension EditorSession {
         endEdit()
     }
     func deleteLayerMask() {
+        if let target = selectedGIFFrameMaskLocation() {
+            finishOpacityEdit()
+            beginEdit("Delete Frame Mask")
+            document?.layers[target.layerIndex].gifFrameMasks.removeValue(forKey: target.frameIndex)
+            isMaskSelected = false
+            endEdit()
+            brushRevision += 1
+            return
+        }
         guard canEditMask, activeLayer?.mask != nil,
               let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }) else { return }
         finishOpacityEdit()
@@ -329,6 +498,12 @@ extension EditorSession {
     /// Where `layer`'s mask shows right now — nil while it covers the layer's (displayed) pixel grid: a pending
     /// mask transform's draft, or where a pending layer transform leaves it (carried along when linked).
     func displayedMaskPlacement(for layer: ImageLayer) -> LayerTransform? {
+        if let frameIndex = selectedGIFFrameIndex(for: layer.id), layer.gifFrameMasks[frameIndex]?.isEnabled == true { return nil }
+        return displayedSharedMaskPlacement(for: layer)
+    }
+
+    /// The shared layer mask's placement, even when the selected GIF frame also has its own mask.
+    func displayedSharedMaskPlacement(for layer: ImageLayer) -> LayerTransform? {
         guard let mask = layer.mask else { return nil }
         // Content-Aware Fill previewing on a grown layer: the mask keeps covering the layer's old bounds.
         if let edit = filterEdit, edit.preparedTransform != nil, edit.previewImage(for: layer.id) != nil { return mask.placement ?? layer.transform }
@@ -423,4 +598,3 @@ extension BrushStroke {
         }
     }
 }
-
