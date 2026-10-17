@@ -22,13 +22,15 @@ final class ProjectWorkspace {
     private(set) var selectedID: UUID
     var isManaging = false
     @ObservationIgnored weak var window: NSWindow?
+    @ObservationIgnored private let pdfOptions: @MainActor (String, [PDFPageInfo], NSWindow?) async -> PDFImportOptions?
     var current: ProjectTab { tabs.first { $0.id == selectedID } ?? tabs[0] }
     var canSwitch: Bool {
         let s = current.session
         return !isManaging && s.canStartProjectOperation && s.hueSaturation == nil && s.filterEdit == nil
             && s.gradientEdit == nil && s.pixelMove == nil && s.colorPicker == nil
     }
-    init() {
+    init(pdfOptions: @escaping @MainActor (String, [PDFPageInfo], NSWindow?) async -> PDFImportOptions? = PDFImportSheet.choose) {
+        self.pdfOptions = pdfOptions
         let first = ProjectTab(name: "Untitled")
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
@@ -82,7 +84,7 @@ final class ProjectWorkspace {
         var urls = suppliedURL.map { [$0] } ?? []
         if urls.isEmpty {
             let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.compositorProject]
+            panel.allowedContentTypes = [.compositorProject, .pdf]
             panel.allowsMultipleSelection = true
             panel.treatsFilePackagesAsDirectories = false
             let response = if let window { await panel.beginSheetModal(for: window) } else { await panel.begin() }
@@ -90,7 +92,10 @@ final class ProjectWorkspace {
             urls = panel.urls
         }
         var opened = false
-        for url in urls { opened = await loadProject(url) || opened }
+        for url in urls {
+            if url.pathExtension.lowercased() == "pdf" { opened = await choosePDF(url) || opened }
+            else { opened = await loadProject(url) || opened }
+        }
         return opened
     }
     private func loadProject(_ url: URL) async -> Bool {
@@ -104,6 +109,53 @@ final class ProjectWorkspace {
         if tabs.count == 1, current.session.document == nil { tabs.removeAll() }
         tab.controller.workspace = self; tabs.append(tab); selectedID = tab.id
         return true
+    }
+    func importPDF(_ url: URL, options: PDFImportOptions) async throws {
+        guard canSwitch else { return }
+        isManaging = true
+        defer { isManaging = false }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let source = try await PDFImporter.shared.open(url)
+        try await loadPDF(source, options: options)
+    }
+
+    private func choosePDF(_ url: URL) async -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let source = try await PDFImporter.shared.open(url)
+            let info = await source.inspect()
+            guard let options = await pdfOptions(url.lastPathComponent, info, window) else { return false }
+            try await loadPDF(source, options: options)
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            current.session.importError = "\(url.lastPathComponent): \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    private func loadPDF(_ source: PDFImportSource, options: PDFImportOptions) async throws {
+        // Validate the entire selection first and stage the new tabs off-screen. Errors leave all existing work intact.
+        let plan = try await source.plan(options: options)
+        var prepared: [ProjectTab] = []
+        for page in plan.pages {
+            try Task.checkCancellation()
+            let image = try await source.render(page: page.number, dpi: options.dpi)
+            let tab = ProjectTab(name: image.name)
+            tab.session.createDocument(width: image.image.width, height: image.image.height, resolution: options.dpi)
+            tab.session.insert(image)
+            tab.controller.workspace = self
+            tab.controller.window = window
+            prepared.append(tab)
+        }
+        try Task.checkCancellation()
+        guard !prepared.isEmpty else { return }
+        if tabs.count == 1, current.session.document == nil { tabs.removeAll() }
+        tabs.append(contentsOf: prepared)
+        selectedID = prepared[0].id
     }
     func close(_ id: UUID) async {
         guard canSwitch, let tab = tabs.first(where: { $0.id == id }), canClose(tab) else { return }
@@ -171,11 +223,17 @@ final class ProjectWorkspace {
             try? await Task.sleep(for: .milliseconds(30))
         }
         isManaging = true; defer { isManaging = false }
+        // A PDF can replace the initial empty tab. Retain a captured image destination
+        // so later images in the same drop are not silently discarded.
+        let imageDestination = destination.flatMap { id in tabs.first { $0.id == id } }
         for url in urls {
+            if Task.isCancelled { return }
             if url.pathExtension.lowercased() == "comp" { _ = await loadProject(url); continue }
+            if url.pathExtension.lowercased() == "pdf" { _ = await choosePDF(url); continue }
             let tab: ProjectTab
             if let destination {
-                guard let existing = tabs.first(where: { $0.id == destination }) else { continue }
+                guard let existing = tabs.first(where: { $0.id == destination }) ?? imageDestination else { continue }
+                if !tabs.contains(where: { $0.id == existing.id }) { tabs.append(existing) }
                 tab = existing
             } else { tab = addTab() }
             selectedID = tab.id
@@ -183,6 +241,10 @@ final class ProjectWorkspace {
         }
     }
     func receiveProviders(_ providers: [NSItemProvider], into destination: UUID? = nil, at point: CGPoint? = nil) async {
+        if providers.allSatisfy({ !$0.hasItemConformingToTypeIdentifier(Self.layerType) }) {
+            await ImageFileDrop.importProviders(providers, into: current.session, at: point, workspace: self, destination: destination)
+            return
+        }
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(Self.layerType) {
                 let data: Data? = await withCheckedContinuation { continuation in
@@ -197,6 +259,7 @@ final class ProjectWorkspace {
         }
     }
     static let layerType = "com.compositor.layer-row"
+    static let dropTypes = [layerType, UTType.fileURL.identifier, UTType.image.identifier, UTType.pdf.identifier]
     /// Cmd-V with a whole layer copied: pastes it complete — a copy above it in its own project, or brought over as
     /// dragging it onto this tab does. False when there is none, and Paste goes on with pixels.
     func pasteCopiedLayer() -> Bool {

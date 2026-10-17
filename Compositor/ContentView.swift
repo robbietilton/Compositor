@@ -146,7 +146,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
+        .onDrop(of: ProjectWorkspace.dropTypes, isTargeted: $isDropTargeted) { providers, location in
             guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
             let point: CGPoint?
             if let document = session.document, canvasFrame.contains(location) {
@@ -282,9 +282,17 @@ struct ContentView: View {
         }
         // A folder brings in the images directly inside it.
         .fileImporter(isPresented: $session.showsImporter,
-                      allowedContentTypes: UTType.importableImages + [.folder], allowsMultipleSelection: true) { result in
+                      allowedContentTypes: UTType.importableDocuments + [.folder], allowsMultipleSelection: true) { result in
             switch result {
-            case .success(let urls): Task { await session.importImages(urls) }
+            case .success(let urls):
+                let workspace = applicationDelegate?.workspace
+                let destination = workspace?.current.id
+                Task {
+                    if let workspace, urls.contains(where: { $0.pathExtension.lowercased() == "pdf" }) {
+                        await workspace.receive(urls, into: destination)
+                    }
+                    else { await session.importImages(urls) }
+                }
             case .failure(let error):
                 if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
             }

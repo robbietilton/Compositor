@@ -98,7 +98,7 @@ struct ProjectTabStrip: View {
             .frame(height: 34, alignment: .leading)
             // The whole bar opens a drop in a new project, not just the small "New" slot; a tab, under the pointer,
             // takes the drop itself.
-            .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+            .onDrop(of: ProjectWorkspace.dropTypes, delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $newTargeted))
             .onAppear { slotWidth = proxy.size.width }
             .onChange(of: proxy.size.width) { _, new in slotWidth = new }
@@ -132,7 +132,7 @@ struct ProjectTabStrip: View {
                 dragging = false
                 dragChangeCount = pasteboard.changeCount
             } else if pasteboard.changeCount != dragChangeCount {
-                dragging = pasteboard.availableType(from: [.fileURL, .png, .tiff, NSPasteboard.PasteboardType(ProjectWorkspace.layerType)]) != nil
+                dragging = pasteboard.availableType(from: [.fileURL, .png, .tiff, .pdf, NSPasteboard.PasteboardType(ProjectWorkspace.layerType)]) != nil
             }
         }
     }
@@ -263,7 +263,7 @@ private struct NewTabDropSlot: View {
             .fixedSize()
             .help("Drop to open in a new canvas")
             .accessibilityLabel("Drop into new canvas")
-            .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+            .onDrop(of: ProjectWorkspace.dropTypes, delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
 }
@@ -377,7 +377,7 @@ private struct ProjectTabButton: View {
         .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
         .help(targeted ? "Add to \(tab.title)" : tab.title)
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+        .onDrop(of: ProjectWorkspace.dropTypes, delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
     }
 }
@@ -389,7 +389,7 @@ struct NewProjectDropTarget: ViewModifier {
         content
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
             .help(targeted ? "Open in a new project tab" : "New canvas (⌘N) · Drop images here for new tabs")
-            .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
+            .onDrop(of: ProjectWorkspace.dropTypes, delegate:
                 ProjectTabDropDelegate(workspace: workspace, destination: nil, targeted: $targeted))
     }
 }
@@ -418,7 +418,7 @@ private struct ProjectTabDropDelegate: DropDelegate {
         // Option-dragging a layer duplicates it within the Layers panel, so it is not a drag to another project.
         if NSEvent.modifierFlags.contains(.option), info.hasItemsConforming(to: [ProjectWorkspace.layerType]) { return false }
         return workspace?.canSwitch == true && workspace?.canReceiveDrag(into: destination) == true
-            && info.hasItemsConforming(to: [ProjectWorkspace.layerType, UTType.fileURL.identifier, UTType.image.identifier])
+            && info.hasItemsConforming(to: ProjectWorkspace.dropTypes)
     }
     func dropEntered(info: DropInfo) { targeted = validateDrop(info: info) }
     func dropExited(info: DropInfo) { targeted = false }
@@ -428,7 +428,7 @@ private struct ProjectTabDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         targeted = false
         guard let workspace, validateDrop(info: info) else { return false }
-        let providers = info.itemProviders(for: [ProjectWorkspace.layerType, UTType.fileURL.identifier, UTType.image.identifier])
+        let providers = info.itemProviders(for: ProjectWorkspace.dropTypes)
         Task { await workspace.receiveProviders(providers, into: destination) }
         return true
     }

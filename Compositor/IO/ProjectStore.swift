@@ -9,6 +9,7 @@ extension UTType {
     nonisolated static let photoshopLargeImage = UTType(importedAs: "com.adobe.photoshop-large-image")
     static let importableImages: [UTType] = [.jpeg, .png, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR, .photoshopImage,
                                              .photoshopLargeImage, .rawImage, .svg]
+    static var importableDocuments: [UTType] { importableImages + [.pdf] }
     /// OpenEXR, the format renders (Blender's among them) keep light brighter than white in.
     static let openEXR = UTType("com.ilm.openexr-image") ?? .image
     /// Radiance HDR (.hdr), the usual format for HDRI panoramas.

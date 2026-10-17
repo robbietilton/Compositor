@@ -52,7 +52,7 @@ struct CompositorApp: App {
                         Task { await applicationDelegate.projects.newCanvas() }
                     }.configuredKeyboardShortcut("n")
                         .disabled(!applicationDelegate.projects.canStart)
-                    Button("Open Project…") {
+                    Button("Open Project or PDF…") {
                         applicationDelegate.showEditor?()
                         Task { await applicationDelegate.projects.open() }
                     }
@@ -69,7 +69,7 @@ struct CompositorApp: App {
                             .disabled(RecentProjects.shared.urls.isEmpty)
                     }
                         .disabled(!applicationDelegate.projects.canStart)
-                    Button("Import Images…") { session.showsImporter = true }
+                    Button("Import Images or PDF…") { session.showsImporter = true }
                         .disabled(session.levels != nil || session.showsBusy || session.isImporting || session.showsNewDocument)
                 }
                 CommandGroup(replacing: .saveItem) {
