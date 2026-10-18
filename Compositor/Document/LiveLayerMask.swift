@@ -78,8 +78,20 @@ nonisolated enum LiveMaskBaker {
         let context = try BrushRaster.context(width: w, height: h, mask: false)
         let inverse = BrushRaster.pixelToDocument(record.transform, width: w, height: h).inverted()
         let records = Dictionary(uniqueKeysWithValues: snapshot.manifest.layers.map { ($0.id, $0) })
+        try LiveMaskGraph.validate(snapshot.manifest.layers)
+        // Only this target and its mask dependencies are baked. Resolve their operations before LiveMask's
+        // nonthrowing drawing closure; a missing renderer must not turn a display fallback into committed pixels.
+        var images = snapshot.images
+        var dependency: UUID? = target
+        while let id = dependency, let layer = records[id] {
+            if let operation = layer.cameraRawOperation {
+                guard let source = images[id] else { throw CameraRawOperationRenderError.unavailable }
+                images[id] = try CameraRawOperationRenderer.shared.render(source, operation: operation)
+            }
+            dependency = layer.maskSourceID
+        }
         let live = LiveMaskRenderer(bounds: CGRect(x: 0, y: 0, width: w, height: h), source: { records[$0]?.maskSourceID }) { id, ctx in
-            guard let layer = records[id], let image = snapshot.images[id]?.image else { return }
+            guard let layer = records[id], let image = images[id]?.image else { return }
             if id == target {
                 // Bake only the live dependency into pixels; retain the target's raster mask and appearance.
                 LayerRenderer.draw(image, transform: LayerTransform(origin: .zero, size: CGSize(width: w, height: h)), center: CGPoint(x: CGFloat(w)/2, y: CGFloat(h)/2), in: ctx)
@@ -106,11 +118,11 @@ extension EditorSession {
         let targets = (document?.layers ?? []).filter { !removed.contains($0.id) && $0.maskSourceID.map(removed.contains) == true }.map(\.id)
         guard !targets.isEmpty else { return false }
         let alert = NSAlert()
-        alert.messageText = ids.count == 1 ? "This layer supplies a live mask" : "These layers supply live masks"
-        alert.informativeText = "Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."
-        alert.addButton(withTitle: "Bake and Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Remove Links and Delete")
+        alert.messageText = ids.count == 1 ? AppLocalization.string("This layer supplies a live mask") : AppLocalization.string("These layers supply live masks")
+        alert.informativeText = AppLocalization.string("Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice.")
+        alert.addButton(withTitle: AppLocalization.string("Bake and Delete"))
+        alert.addButton(withTitle: AppLocalization.string("Cancel"))
+        alert.addButton(withTitle: AppLocalization.string("Remove Links and Delete"))
         let response = alert.runModal()
         if response == .alertThirdButtonReturn { finishDeletingLayers(ids, baked: [:]); return true }
         guard response == .alertFirstButtonReturn, let snapshot = projectSnapshot() else { return true }
@@ -136,7 +148,10 @@ extension EditorSession {
         for i in document?.layers.indices ?? 0..<0 {
             if let source = document?.layers[i].maskSourceID, removed.contains(source) {
                 document?.layers[i].maskSourceID = nil
-                if let asset = baked[document!.layers[i].id] { document?.layers[i].asset = asset }
+                if let asset = baked[document!.layers[i].id] {
+                    document?.layers[i].asset = asset
+                    document?.layers[i].cameraRawOperation = nil
+                }
             }
         }
         if activeLayerID.map({ removed.contains($0) }) == true {
@@ -168,7 +183,8 @@ extension EditorSession {
         }
         let records = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let live = LiveMaskRenderer(bounds: context.boundingBoxOfClipPath, source: { records[$0]?.maskSourceID }) { id, ctx in
-            guard let layer = records[id], let image = layer.asset?.image else { return }
+            guard let layer = records[id], let asset = layer.effectiveRenderAsset else { return }
+            let image = sixteenBit ? (try? DeepLayer.flattened(asset)) ?? asset.image : asset.image
             let opacity = layer.effectiveOpacity(in: records)
             let transform = self.displayedTransform(for: layer)
             let mask = layer.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)

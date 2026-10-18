@@ -1,0 +1,132 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%1$@ image" : {
+      "comment" : "Accessibility label for an original or preview image. The argument is the already localized image title.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ image" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@图像" } }
+      }
+    },
+    "%1$@ must be a number from %2$@ to %3$@." : {
+      "comment" : "Numeric validation error. Arguments are the host-localized control title and the unchanged machine-formatted lower and upper bounds.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ must be a number from %2$@ to %3$@." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@必须是 %2$@ 到 %3$@ 之间的数字。" } }
+      }
+    },
+    "Apply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Apply" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用" } }
+      }
+    },
+    "Applying…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applying…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在应用…" } }
+      }
+    },
+    "Camera Raw" : {
+      "comment" : "Product/window title, intentionally unchanged in Simplified Chinese.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Camera Raw" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Camera Raw" } }
+      }
+    },
+    "Cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } }
+      }
+    },
+    "Compare with Original" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Compare with Original" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "与原图对比" } }
+      }
+    },
+    "Could not apply Camera Raw settings: %1$@" : {
+      "comment" : "Apply error; the argument is an error description from the host or system.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not apply Camera Raw settings: %1$@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法应用 Camera Raw 设置：%1$@" } }
+      }
+    },
+    "Could not preview Camera Raw settings: %1$@" : {
+      "comment" : "Preview error; the argument is an error description from the host or system.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not preview Camera Raw settings: %1$@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法预览 Camera Raw 设置：%1$@" } }
+      }
+    },
+    "Original" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Original" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "原图" } }
+      }
+    },
+    "Preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预览" } }
+      }
+    },
+    "Rendering Preview…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rendering Preview…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在渲染预览…" } }
+      }
+    },
+    "Reset Sliders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset Sliders" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重置滑块" } }
+      }
+    },
+    "Retry Preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry Preview" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试预览" } }
+      }
+    },
+    "The Camera Raw settings must be a valid JSON object." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Camera Raw settings must be a valid JSON object." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Camera Raw 设置必须是有效的 JSON 对象。" } }
+      }
+    },
+    "The host supplied an invalid control: %1$@." : {
+      "comment" : "Invalid host control metadata. The argument is the already localized control title, not its stable ID.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The host supplied an invalid control: %1$@." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主程序提供了无效的控件：%1$@。" } }
+      }
+    },
+    "The setting for %1$@ must be a finite JSON number." : {
+      "comment" : "Invalid draft value. The argument is the already localized control title.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The setting for %1$@ must be a finite JSON number." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@的设置必须是有限的 JSON 数字。" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

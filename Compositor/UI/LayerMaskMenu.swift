@@ -9,8 +9,8 @@ struct LayerMaskMenu: View {
         Button {
             session.addMask(revealing: NSApp.currentEvent?.modifierFlags.contains(.option) != true)
         } label: { FooterIcon(systemName: "rectangle.inset.filled") }
-        .help(session.selection == nil ? "Add layer mask (Option-click for a black mask)"
-              : "Add layer mask revealing the selection (Option-click to hide it)")
+        .help(AppLocalization.string(session.selection == nil ? "Add layer mask (Option-click for a black mask)"
+              : "Add layer mask revealing the selection (Option-click to hide it)"))
         .accessibilityLabel("Add layer mask")
         .disabled(!session.layersLookEditable || session.selectedLayerIDs.count != 1 || session.activeLayer == nil
                   || session.activeLayer?.mask != nil)
@@ -53,7 +53,7 @@ struct ProofBadge: NSViewRepresentable {
 /// A pill at the foot of the canvas naming a way it's showing the document, with a button to leave it. Built in
 /// AppKit, as the canvas under it is, so its button gets its clicks.
 final class CanvasPillView: NSView {
-    var title = "" { didSet { heading.stringValue = title; invalidateIntrinsicContentSize() } }
+    var title = "" { didSet { heading.stringValue = AppLocalization.string(title); invalidateIntrinsicContentSize() } }
     var detail = "" { didSet { name.stringValue = detail; invalidateIntrinsicContentSize() } }
     private let heading = NSTextField(labelWithString: "")
     private let name = NSTextField(labelWithString: "")
@@ -70,11 +70,11 @@ final class CanvasPillView: NSView {
         name.font = .systemFont(ofSize: 12)
         name.textColor = NSColor.white.withAlphaComponent(0.6)
         name.lineBreakMode = .byTruncatingTail
-        let button = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: closeLabel) ?? NSImage(),
+        let button = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: AppLocalization.string(closeLabel)) ?? NSImage(),
                               target: nil, action: nil)
         button.isBordered = false
         button.symbolConfiguration = .init(pointSize: 9, weight: .bold)
-        button.toolTip = closeHelp
+        button.toolTip = AppLocalization.string(closeHelp)
         stack = NSStackView(views: [icon, title, name, button])
         stack.spacing = 7
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 11, bottom: 0, right: 8)

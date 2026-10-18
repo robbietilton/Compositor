@@ -127,6 +127,7 @@ nonisolated enum FloatingMerge {
     /// the new area.
     static func merge(_ pixels: CGImage, transform: LayerTransform, into source: ImageLayer)
         throws -> (asset: ImportedImage, transform: LayerTransform, mask: LayerMask?) {
+        guard source.cameraRawOperation == nil else { throw CameraRawSourceEditError.protectedSource }
         guard let sourceAsset = source.asset else { throw ProjectError.invalid }
         // A 16-bit layer, or 16-bit pixels going in, merge at 16 bits and leave a 16-bit layer (`DeepLayer`).
         let sourceDeep = try DeepLayer.flattened(sourceAsset)

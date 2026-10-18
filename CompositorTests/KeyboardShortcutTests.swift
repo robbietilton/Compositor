@@ -47,7 +47,7 @@ extension KeyboardShortcutTests {
         #expect(ShortcutSettings.problem(in: [:]) == nil, "two commands without a key don't conflict")
         settings.save(["Menus:CMYK Proof Colors": ShortcutChord("y", 1)])
         #expect(settings.assigned("CMYK Proof Colors") == KeyboardShortcut("y", modifiers: .command))
-        #expect(ShortcutChord.unassigned.label == "None")
+        #expect(ShortcutChord.unassigned.label == AppLocalization.string("None"))
     }
 
     /// A key that types nothing (a dead key on some layouts) must not be taken for an unassigned command's key.

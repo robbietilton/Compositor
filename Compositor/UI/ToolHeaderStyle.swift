@@ -13,7 +13,7 @@ extension View {
     func unitSuffix(_ unit: String) -> some View {
         HStack(spacing: 2) {
             self
-            Text(unit)
+            Text(AppLocalization.string(unit))
         }
     }
 
@@ -22,7 +22,7 @@ extension View {
                                                 sensitivity: Value, range: ClosedRange<Value>, step: Value? = nil) -> some View {
         HStack(spacing: 2) {
             self
-            Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range, step: step)
+            Text(AppLocalization.string(unit)).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range, step: step)
         }
     }
 
@@ -30,7 +30,7 @@ extension View {
                     range: ClosedRange<Int>) -> some View {
         HStack(spacing: 2) {
             self
-            Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range)
+            Text(AppLocalization.string(unit)).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range)
         }
     }
 

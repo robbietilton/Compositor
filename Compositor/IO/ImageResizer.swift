@@ -22,6 +22,7 @@ actor ImageResizer {
             manifest.layers = old.layers
             return ProjectSnapshot(manifest: manifest, images: snapshot.images, masks: snapshot.masks)
         }
+        guard !old.layers.contains(where: { $0.cameraRawOperation != nil }) else { throw CameraRawSourceEditError.protectedSource }
         guard options.width * options.height <= DocumentLimits.maxSurfacePixels else { throw ProjectError.tooLarge }
         let sx = CGFloat(options.width) / CGFloat(old.width)
         let sy = CGFloat(options.height) / CGFloat(old.height)

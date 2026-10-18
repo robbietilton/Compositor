@@ -2,7 +2,7 @@ import AppKit
 
 nonisolated enum WandSampleSize: Int, CaseIterable, Sendable {
     case point, threeByThree, fiveByFive
-    var title: String { ["Point Sample", "3 by 3 Average", "5 by 5 Average"][rawValue] }
+    var title: String { [AppLocalization.string("Point Sample"), AppLocalization.string("3 by 3 Average"), AppLocalization.string("5 by 5 Average")][rawValue] }
     /// Pixels either side of the click that are averaged into the color to match.
     var radius: Int { rawValue }
 }
@@ -25,8 +25,8 @@ nonisolated enum MagicWand {
         case tooDetailed, memory
         var errorDescription: String? {
             switch self {
-            case .tooDetailed: "That selection is too detailed to outline. Try a different Tolerance, or turn on Contiguous."
-            case .memory: "There isn’t enough memory to make that selection."
+            case .tooDetailed: AppLocalization.string("That selection is too detailed to outline. Try a different Tolerance, or turn on Contiguous.")
+            case .memory: AppLocalization.string("There isn’t enough memory to make that selection.")
             }
         }
     }
@@ -129,7 +129,7 @@ extension EditorSession {
         guard let context = try? BrushRaster.context(width: document.width, height: document.height, mask: false) else { return nil }
         if sampleAllLayers {
             drawLiveComposite(document, in: context)
-        } else if let layer = activeLayer, !layer.isGroup, let image = layer.asset?.image {
+        } else if let layer = activeLayer, !layer.isGroup, let image = layer.effectiveRenderAsset?.image {
             let transform = displayedTransform(for: layer)
             LayerRenderer.draw(image, transform: transform, center: transform.center, in: context)
         }

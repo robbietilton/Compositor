@@ -8,6 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		5A9C0D1E2F3A4B5C6D7E8F01 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5A9C0D1E2F3A4B5C6D7E8F03 /* Sparkle */; };
+		CAAA00000000000000000011 /* CameraRawHostContract.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000003 /* CameraRawHostContract.framework */; };
+		CAAA00000000000000000012 /* CameraRawHostContract.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000003 /* CameraRawHostContract.framework */; };
+		CAAA00000000000000000013 /* CameraRawHostContract.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000003 /* CameraRawHostContract.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		CAAA00000000000000000014 /* CameraRawPlugin.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000004 /* CameraRawPlugin.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		CAAA00000000000000000024 /* CameraRawHostContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000020 /* CameraRawHostContract.swift */; };
+		CAAA00000000000000000025 /* CameraRawDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000021 /* CameraRawDraft.swift */; };
+		CAAA00000000000000000026 /* CameraRawPanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000022 /* CameraRawPanelModel.swift */; };
+		CAAA00000000000000000027 /* CameraRawPrincipal.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000023 /* CameraRawPrincipal.swift */; };
+		CAAA00000000000000000030 /* CameraRawLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000031 /* CameraRawLocalization.swift */; };
+		CAAA00000000000000000032 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CAAA00000000000000000033 /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,12 +35,49 @@
 			remoteGlobalIDString = 8F311F98304F03BB0017D14F;
 			remoteInfo = Compositor;
 		};
+		CAAA00000000000000000015 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8F311F91304F03BB0017D14F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAAA00000000000000000001;
+			remoteInfo = CameraRawHostContract;
+		};
+		CAAA00000000000000000016 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8F311F91304F03BB0017D14F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAAA00000000000000000002;
+			remoteInfo = CameraRawPlugin;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CAAA00000000000000000017 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				CAAA00000000000000000013 /* CameraRawHostContract.framework in Embed Frameworks */,
+				CAAA00000000000000000014 /* CameraRawPlugin.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		8F311F99304F03BB0017D14F /* Compositor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Compositor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F311FA6304F03BC0017D14F /* CompositorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CompositorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CompositorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CAAA00000000000000000003 /* CameraRawHostContract.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CameraRawHostContract.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		CAAA00000000000000000004 /* CameraRawPlugin.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CameraRawPlugin.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		CAAA00000000000000000020 /* CameraRawHostContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRawHostContract.swift; sourceTree = "<group>"; };
+		CAAA00000000000000000021 /* CameraRawDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRawDraft.swift; sourceTree = "<group>"; };
+		CAAA00000000000000000022 /* CameraRawPanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRawPanelModel.swift; sourceTree = "<group>"; };
+		CAAA00000000000000000023 /* CameraRawPrincipal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRawPrincipal.swift; sourceTree = "<group>"; };
+		CAAA00000000000000000031 /* CameraRawLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRawLocalization.swift; sourceTree = "<group>"; };
+		CAAA00000000000000000033 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,6 +104,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5A9C0D1E2F3A4B5C6D7E8F01 /* Sparkle in Frameworks */,
+				CAAA00000000000000000011 /* CameraRawHostContract.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +122,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CAAA00000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAAA0000000000000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAAA00000000000000000012 /* CameraRawHostContract.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +144,8 @@
 			isa = PBXGroup;
 			children = (
 				8F311F9B304F03BB0017D14F /* Compositor */,
+				CAAA00000000000000000005 /* CameraRawHostContract */,
+				CAAA00000000000000000006 /* CameraRawPlugin */,
 				8F311FA9304F03BC0017D14F /* CompositorTests */,
 				8F311FB3304F03BC0017D14F /* CompositorUITests */,
 				8F311F9A304F03BB0017D14F /* Products */,
@@ -91,10 +156,32 @@
 			isa = PBXGroup;
 			children = (
 				8F311F99304F03BB0017D14F /* Compositor.app */,
+				CAAA00000000000000000003 /* CameraRawHostContract.framework */,
+				CAAA00000000000000000004 /* CameraRawPlugin.framework */,
 				8F311FA6304F03BC0017D14F /* CompositorTests.xctest */,
 				8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		CAAA00000000000000000005 /* CameraRawHostContract */ = {
+			isa = PBXGroup;
+			children = (
+				CAAA00000000000000000020 /* CameraRawHostContract.swift */,
+			);
+			path = CameraRawHostContract;
+			sourceTree = "<group>";
+		};
+		CAAA00000000000000000006 /* CameraRawPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				CAAA00000000000000000021 /* CameraRawDraft.swift */,
+				CAAA00000000000000000022 /* CameraRawPanelModel.swift */,
+				CAAA00000000000000000023 /* CameraRawPrincipal.swift */,
+				CAAA00000000000000000031 /* CameraRawLocalization.swift */,
+				CAAA00000000000000000033 /* Localizable.xcstrings */,
+			);
+			path = CameraRawPlugin;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -107,10 +194,13 @@
 				8F311F95304F03BB0017D14F /* Sources */,
 				8F311F96304F03BB0017D14F /* Frameworks */,
 				8F311F97304F03BB0017D14F /* Resources */,
+				CAAA00000000000000000017 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CAAA00000000000000000018 /* PBXTargetDependency */,
+				CAAA00000000000000000019 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8F311F9B304F03BB0017D14F /* Compositor */,
@@ -169,6 +259,40 @@
 			productReference = 8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		CAAA00000000000000000001 /* CameraRawHostContract */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CAAA0000000000000000000F /* Build configuration list for PBXNativeTarget "CameraRawHostContract" */;
+			buildPhases = (
+				CAAA00000000000000000007 /* Sources */,
+				CAAA00000000000000000009 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CameraRawHostContract;
+			productName = CameraRawHostContract;
+			productReference = CAAA00000000000000000003 /* CameraRawHostContract.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		CAAA00000000000000000002 /* CameraRawPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CAAA00000000000000000010 /* Build configuration list for PBXNativeTarget "CameraRawPlugin" */;
+			buildPhases = (
+				CAAA00000000000000000008 /* Sources */,
+				CAAA0000000000000000000A /* Frameworks */,
+				CAAA00000000000000000034 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CAAA0000000000000000001A /* PBXTargetDependency */,
+			);
+			name = CameraRawPlugin;
+			productName = CameraRawPlugin;
+			productReference = CAAA00000000000000000004 /* CameraRawPlugin.framework */;
+			productType = "com.apple.product-type.framework";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -198,6 +322,7 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = 8F311F90304F03BB0017D14F;
 			minimizedProjectReferenceProxies = 1;
@@ -212,6 +337,8 @@
 				8F311F98304F03BB0017D14F /* Compositor */,
 				8F311FA5304F03BC0017D14F /* CompositorTests */,
 				8F311FAF304F03BC0017D14F /* CompositorUITests */,
+				CAAA00000000000000000002 /* CameraRawPlugin */,
+				CAAA00000000000000000001 /* CameraRawHostContract */,
 			);
 		};
 /* End PBXProject section */
@@ -235,6 +362,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAAA00000000000000000034 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAAA00000000000000000032 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -262,6 +397,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CAAA00000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAAA00000000000000000024 /* CameraRawHostContract.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAAA00000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CAAA00000000000000000025 /* CameraRawDraft.swift in Sources */,
+				CAAA00000000000000000026 /* CameraRawPanelModel.swift in Sources */,
+				CAAA00000000000000000027 /* CameraRawPrincipal.swift in Sources */,
+				CAAA00000000000000000030 /* CameraRawLocalization.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +428,21 @@
 			isa = PBXTargetDependency;
 			target = 8F311F98304F03BB0017D14F /* Compositor */;
 			targetProxy = 8F311FB1304F03BC0017D14F /* PBXContainerItemProxy */;
+		};
+		CAAA00000000000000000018 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAAA00000000000000000001 /* CameraRawHostContract */;
+			targetProxy = CAAA00000000000000000015 /* PBXContainerItemProxy */;
+		};
+		CAAA00000000000000000019 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAAA00000000000000000002 /* CameraRawPlugin */;
+			targetProxy = CAAA00000000000000000016 /* PBXContainerItemProxy */;
+		};
+		CAAA0000000000000000001A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAAA00000000000000000001 /* CameraRawHostContract */;
+			targetProxy = CAAA00000000000000000015 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -434,7 +603,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -473,7 +642,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -567,6 +736,138 @@
 			};
 			name = Release;
 		};
+		CAAA0000000000000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../../..",
+				);
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.CameraRawHostContract;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		CAAA0000000000000000000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../../..",
+				);
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.CameraRawHostContract;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		CAAA0000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = CameraRawPlugin.CameraRawPrincipal;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../../..",
+				);
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.CameraRawPlugin;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		CAAA0000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = CameraRawPlugin.CameraRawPrincipal;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../../..",
+				);
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.CameraRawPlugin;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -602,6 +903,24 @@
 			buildConfigurations = (
 				8F311FC1304F03BC0017D14F /* Debug */,
 				8F311FC2304F03BC0017D14F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CAAA0000000000000000000F /* Build configuration list for PBXNativeTarget "CameraRawHostContract" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAAA0000000000000000000B /* Debug */,
+				CAAA0000000000000000000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CAAA00000000000000000010 /* Build configuration list for PBXNativeTarget "CameraRawPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CAAA0000000000000000000D /* Debug */,
+				CAAA0000000000000000000E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

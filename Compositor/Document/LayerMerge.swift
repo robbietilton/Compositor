@@ -27,7 +27,7 @@ extension EditorSession {
     }
 
     var canMergeLayers: Bool { mergePlan() != nil }
-    var mergeTitle: String { mergePlan()?.action ?? "Merge Down" }
+    var mergeTitle: String { AppLocalization.string(mergePlan()?.action ?? "Merge Down") }
 
     /// ⌘E: the layers composited as the canvas shows them — blend modes, opacity, masks, clipping and adjustments
     /// baked in — into one pixel layer, trimmed to what is there, in their place, as one undo step.
@@ -37,12 +37,16 @@ extension EditorSession {
         let layers = document.layers
         let kept = Set(plan.ids)
         // Only the merged layers, cut loose from anything outside the merge.
-        let subset = layers.filter { kept.contains($0.id) }.map { layer -> ImageLayer in
+        var subset = layers.filter { kept.contains($0.id) }.map { layer -> ImageLayer in
             var copy = layer
             if let parent = copy.parentID, !kept.contains(parent) { copy.parentID = nil }
             if let source = copy.maskSourceID, !kept.contains(source) { copy.maskSourceID = nil }
             return copy
         }
+        do {
+            subset = try CanvasDocument(id: document.id, width: document.width, height: document.height,
+                                        layers: subset, resolution: document.resolution).renderedCameraRawOperations().layers
+        } catch { brushError = error.localizedDescription; return }
         let canvas = LayerTransform(origin: .zero, size: CGSize(width: document.width, height: document.height))
         let asset: ImportedImage, placed: LayerTransform
         if subset.contains(where: { $0.asset?.deep != nil }) {

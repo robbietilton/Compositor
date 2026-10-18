@@ -72,7 +72,7 @@ struct CommandPaletteView: View {
 final class CommandPaletteController {
     static let shared = CommandPaletteController()
     /// Left out of the palette: the palette itself and the system menus.
-    static let skipped: Set<String> = ["Search Commands…", "Window", "Help", "Services"]
+    static var skipped: Set<String> { [AppLocalization.string("Search Commands…")] }
 
     private(set) var panel: PalettePanel?
     private weak var window: NSWindow?
@@ -84,7 +84,8 @@ final class CommandPaletteController {
         if isOpen { close(); return }
         self.window = window
         let bar = menu ?? NSApp.mainMenu
-        let entries = (bar.map { CommandPaletteMenu.entries(in: $0, skipping: Self.skipped) } ?? []) + CommandPaletteEntry.layerCommands(for: session)
+        let entries = (bar.map { CommandPaletteMenu.entries(in: $0, skipping: Self.skipped,
+            excluding: [NSApp.windowsMenu, NSApp.helpMenu, NSApp.servicesMenu].compactMap { $0 }) } ?? []) + CommandPaletteEntry.layerCommands(for: session)
             + CommandPaletteEntry.tools(for: session)
         let model = CommandPaletteModel(entries: entries)
         let panel = self.panel ?? makePanel()

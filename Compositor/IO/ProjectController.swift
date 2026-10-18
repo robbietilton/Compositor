@@ -50,7 +50,7 @@ final class ProjectController {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try await ImageExporter.shared.exportPNG(snapshot, to: url) }
-        catch { await showError("Couldn’t export PNG", error: error) }
+        catch { await showError(AppLocalization.string("Couldn’t export PNG"), error: error) }
     }
 
     /// File › Export As…: PNG, JPEG or a one-page PDF, at the canvas's size or scaled, previewed first. Export JPEG…
@@ -70,7 +70,7 @@ final class ProjectController {
             let chosen: (data: Data, format: ExportFormat)? = await withCheckedContinuation { continuation in
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
-                sheet.title = "Export As"
+                sheet.title = AppLocalization.string("Export As")
                 sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
                     raster: raster, deepRaster: deepRaster, hdrRaster: hdrRaster, session: session,
                     format: start ?? lastExportFormat) { chosen in
@@ -88,7 +88,7 @@ final class ProjectController {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             try await ImageExporter.shared.write(chosen.data, to: url)
-        } catch { await showError("Couldn’t export", error: error) }
+        } catch { await showError(AppLocalization.string("Couldn’t export"), error: error) }
     }
 
     /// The format Export As last used, offered first next time.
@@ -100,7 +100,7 @@ final class ProjectController {
         panel.allowedContentTypes = [format.type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        panel.title = "Export " + format.rawValue
+        panel.title = AppLocalization.format("Export %@", format.rawValue)
         panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
             + "." + (format.type.preferredFilenameExtension ?? format.rawValue.lowercased())
         let response: NSApplication.ModalResponse
@@ -114,7 +114,7 @@ final class ProjectController {
         let options: CanvasSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Canvas Size"
+            sheet.title = AppLocalization.string("Canvas Size")
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, session: session) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -127,7 +127,7 @@ final class ProjectController {
         do {
             let resized = try await CanvasResizer.shared.resize(snapshot, to: options)
             session.applyDocumentSize(resized, actionName: "Canvas Size")
-        } catch { await showError("Couldn’t change canvas size", error: error) }
+        } catch { await showError(AppLocalization.string("Couldn’t change canvas size"), error: error) }
     }
 
     func imageSize() async {
@@ -136,7 +136,7 @@ final class ProjectController {
         let options: ImageSizeOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Image Size"
+            sheet.title = AppLocalization.string("Image Size")
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -149,7 +149,7 @@ final class ProjectController {
         do {
             let resized = try await ImageResizer.shared.resize(snapshot, to: options)
             session.applyImageSize(resized)
-        } catch { await showError("Couldn’t resize the image", error: error) }
+        } catch { await showError(AppLocalization.string("Couldn’t resize the image"), error: error) }
     }
 
     func trim() async {
@@ -158,7 +158,7 @@ final class ProjectController {
         let options: TrimOptions? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Trim"
+            sheet.title = AppLocalization.string("Trim")
             sheet.contentViewController = NSHostingController(rootView: TrimSheet { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -173,7 +173,7 @@ final class ProjectController {
                 return
             }
             session.applyDocumentSize(resized, actionName: "Trim")
-        } catch { await showError("Couldn’t trim image", error: error) }
+        } catch { await showError(AppLocalization.string("Couldn’t trim image"), error: error) }
     }
 
     /// View > Grid Settings…: changes only how the grid is drawn and snapped to, so nothing is saved or undone. The
@@ -185,7 +185,7 @@ final class ProjectController {
         let settings: (LayoutGrid, GridAppearance)? = await withCheckedContinuation { continuation in
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Grid"
+            sheet.title = AppLocalization.string("Grid")
             sheet.contentViewController = NSHostingController(rootView: GridSettingsSheet(
                 session: session, grid: original.grid, appearance: original.appearance,
                 preview: { [session] grid, appearance in
@@ -221,7 +221,7 @@ final class ProjectController {
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
             panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
-            panel.title = asNew ? "Save Project As" : "Save Project"
+            panel.title = asNew ? AppLocalization.string("Save Project As") : AppLocalization.string("Save Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -251,7 +251,7 @@ final class ProjectController {
                 watchProject(at: destination)
                 return true
             } catch {
-                await showError("Couldn’t save the project", error: error)
+                await showError(AppLocalization.string("Couldn’t save the project"), error: error)
                 return false
             }
         }
@@ -273,7 +273,7 @@ final class ProjectController {
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
             panel.treatsFilePackagesAsDirectories = false
-            panel.title = "Open Project"
+            panel.title = AppLocalization.string("Open Project")
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }
             else { response = await panel.begin() }
@@ -284,7 +284,7 @@ final class ProjectController {
         // A recent project deleted in Finder: name the project, not the manifest inside it the load would miss.
         guard FileManager.default.fileExists(atPath: source.path) else {
             RecentProjects.shared.refresh()
-            await showError("Couldn’t open the project", error: CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: source.path]))
+            await showError(AppLocalization.string("Couldn’t open the project"), error: CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: source.path]))
             return false
         }
         let scoped = source.startAccessingSecurityScopedResource()
@@ -305,7 +305,7 @@ final class ProjectController {
             watchProject(at: source)
             return true
         } catch {
-            await showError("Couldn’t open the project", error: error)
+            await showError(AppLocalization.string("Couldn’t open the project"), error: error)
             return false
         }
     }
@@ -343,11 +343,11 @@ final class ProjectController {
         await finishWriting()
         guard session.isModified, session.document != nil else { return true }
         let alert = NSAlert()
-        alert.messageText = "Save changes to \(session.projectURL?.lastPathComponent ?? "Untitled")?"
-        alert.informativeText = "Your changes will be lost if you don’t save them."
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Don’t Save")
+        alert.messageText = AppLocalization.format("Save changes to %@?", session.projectURL?.lastPathComponent ?? AppLocalization.string("Untitled"))
+        alert.informativeText = AppLocalization.string("Your changes will be lost if you don’t save them.")
+        alert.addButton(withTitle: AppLocalization.string("Save"))
+        alert.addButton(withTitle: AppLocalization.string("Cancel"))
+        alert.addButton(withTitle: AppLocalization.string("Don’t Save"))
         let response = await show(alert)
         if response == .alertFirstButtonReturn { return await saveCurrent() }
         return response == .alertThirdButtonReturn
@@ -358,7 +358,7 @@ final class ProjectController {
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: AppLocalization.string("OK"))
         _ = await show(alert)
     }
 
@@ -397,7 +397,7 @@ final class ProjectController {
             let urls = request.files.map(\.0)
             let projects = urls.filter { $0.pathExtension.lowercased() == "comp" }
             if projects.count > 1 {
-                await showError("Open one project at a time", error: ProjectError.invalid)
+                await showError(AppLocalization.string("Open one project at a time"), error: ProjectError.invalid)
             } else {
                 var proceed = true
                 if let project = projects.first { proceed = await open(project) }

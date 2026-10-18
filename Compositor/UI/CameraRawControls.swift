@@ -7,6 +7,9 @@ struct CameraRawControls: View {
     @Bindable var session: EditorSession
     @State private var expanded: Set<Section> = [.light, .color, .colorGrading]
     @State private var optionMonitor: Any?
+    @State private var hoveredHistogramZone: CameraRawHistogramZone?
+    @State private var histogramDrag: CameraRawHistogramDrag?
+    @GestureState private var histogramTracking = false
 
     private var settings: FilterSettings { session.filterEdit?.settings ?? FilterSettings() }
     private var raw: CameraRawSettings { settings.cameraRaw }
@@ -28,7 +31,11 @@ struct CameraRawControls: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .onAppear { installOptionMonitor() }
-        .onDisappear { removeOptionMonitor() }
+        .onDisappear { finishHistogramDrag(clearHover: true); removeOptionMonitor() }
+        .onChange(of: session.filterEdit.map(ObjectIdentifier.init)) { finishHistogramDrag(clearHover: true) }
+        .onChange(of: session.filterEdit?.cameraRawScopeMode) { finishHistogramDrag(clearHover: true) }
+        .onChange(of: session.filterEdit?.committing) { finishHistogramDrag(clearHover: true) }
+        .onChange(of: histogramTracking) { if !histogramTracking { finishHistogramDrag() } }
     }
 
     private var histogram: some View {
@@ -36,7 +43,7 @@ struct CameraRawControls: View {
         let mode = session.filterEdit?.cameraRawScopeMode ?? .histogram
         return VStack(alignment: .leading, spacing: 4) {
             ZStack {
-                graph(scope, mode: mode)
+                histogramSurface(scope, mode: mode)
                     .frame(height: 110)
                     .background(Color.black.opacity(0.35))
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -51,14 +58,106 @@ struct CameraRawControls: View {
                 Button("Histogram") { session.filterEdit?.cameraRawScopeMode = .histogram }
                 Button("Vectorscope") { session.filterEdit?.cameraRawScopeMode = .vectorscope }
             }
-            .help(mode == .histogram
-                  ? "Tones from black on the left to white on the right: blacks, shadows, midtones, highlights, whites. Control-click to show the vectorscope."
-                  : "Hue around the wheel, saturation outward from the center. Control-click to show the histogram.")
+            .help(AppLocalization.string(mode == .histogram
+                  ? "Drag left or right to adjust blacks, shadows, exposure, highlights, or whites. The starting region stays selected. Hold Option to see clipping. Control-click to show the vectorscope."
+                  : "Hue around the wheel, saturation outward from the center. Control-click to show the histogram."))
+            if mode == .histogram {
+                Text(verbatim: histogramFeedback)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("cameraRaw.histogram.feedback")
+            }
             Text(readout)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .help("Red, green, and blue of the pixel under the pointer.")
         }
+    }
+
+    private var histogramFeedback: String {
+        guard let zone = histogramDrag?.zone ?? hoveredHistogramZone else {
+            return AppLocalization.string("Drag left or right to adjust tones.")
+        }
+        return AppLocalization.format("%1$@: %2$@", zone.title, zone.readout(raw))
+    }
+
+    @ViewBuilder private func histogramSurface(_ scope: CameraRawScope?, mode: CameraRawScopeMode) -> some View {
+        if let edit = session.filterEdit, mode == .histogram {
+            GeometryReader { geometry in
+                graph(scope, mode: mode)
+                    .accessibilityHidden(true)
+                    .overlay {
+                        HStack(spacing: 0) {
+                            ForEach(CameraRawHistogramZone.allCases) { zone in
+                                let active = histogramDrag?.zone == zone
+                                Rectangle()
+                                    .fill(Color.white.opacity(active ? 0.18 : (hoveredHistogramZone == zone ? 0.09 : 0)))
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(zone.title)
+                                    .accessibilityValue(zone.readout(raw))
+                                    .accessibilityIdentifier("cameraRaw.histogram.\(zone.identifier)")
+                                    .accessibilityAdjustableAction { direction in
+                                        switch direction {
+                                        case .increment: CameraRawHistogramDrag.adjust(zone, increment: true, edit: edit, in: session)
+                                        case .decrement: CameraRawHistogramDrag.adjust(zone, increment: false, edit: edit, in: session)
+                                        @unknown default: break
+                                        }
+                                    }
+                            }
+                        }
+                        .allowsHitTesting(false)
+                    }
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        guard session.filterEdit === edit, !edit.committing else { return }
+                        switch phase {
+                        case .active(let location):
+                            hoveredHistogramZone = CameraRawHistogramZone.at(x: location.x, width: geometry.size.width)
+                            NSCursor.resizeLeftRight.set()
+                        case .ended:
+                            hoveredHistogramZone = nil
+                            if histogramDrag == nil { NSCursor.arrow.set() }
+                        }
+                    }
+                    .gesture(DragGesture(minimumDistance: 1)
+                        .updating($histogramTracking) { _, tracking, _ in tracking = true }
+                        .onChanged { value in
+                            guard session.filterEdit === edit, !edit.committing,
+                                  edit.cameraRawScopeMode == .histogram,
+                                  !NSEvent.modifierFlags.contains(.control), NSEvent.pressedMouseButtons & 2 == 0 else { return }
+                            if histogramDrag == nil {
+                                guard let zone = CameraRawHistogramZone.at(x: value.startLocation.x, width: geometry.size.width) else { return }
+                                histogramDrag = CameraRawHistogramDrag(edit: edit, zone: zone)
+                            }
+                            guard var drag = histogramDrag else { return }
+                            drag.update(translation: value.translation.width, option: NSEvent.modifierFlags.contains(.option), in: session)
+                            histogramDrag = drag
+                            NSCursor.resizeLeftRight.set()
+                        }
+                        .onEnded { value in
+                            if var drag = histogramDrag {
+                                drag.update(translation: value.translation.width, option: NSEvent.modifierFlags.contains(.option), in: session)
+                                histogramDrag = drag
+                            }
+                            finishHistogramDrag()
+                        })
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(AppLocalization.string("RGB histogram"))
+            }
+            .id(ObjectIdentifier(edit))
+        } else {
+            graph(scope, mode: mode)
+        }
+    }
+
+    private func finishHistogramDrag(clearHover: Bool = false) {
+        let ownedCursor = histogramDrag != nil || hoveredHistogramZone != nil
+        if var drag = histogramDrag { drag.finish(in: session) }
+        histogramDrag = nil
+        if clearHover { hoveredHistogramZone = nil }
+        if ownedCursor { (hoveredHistogramZone == nil ? NSCursor.arrow : NSCursor.resizeLeftRight).set() }
     }
 
     private var readout: String {
@@ -78,8 +177,9 @@ struct CameraRawControls: View {
                 .foregroundStyle(on ? (shadows ? Color.blue : Color.red) : Color.white.opacity(0.55))
         }
         .buttonStyle(.plain)
-        .help(shadows ? "Show clipped shadows in blue on the preview." : "Show clipped highlights in red on the preview.")
-        .accessibilityLabel(shadows ? "Shadow Clipping Indicator" : "Highlight Clipping Indicator")
+        .help(AppLocalization.string(shadows ? "Show clipped shadows in blue on the preview." : "Show clipped highlights in red on the preview."))
+        .accessibilityLabel(AppLocalization.string(shadows ? "Shadow Clipping Indicator" : "Highlight Clipping Indicator"))
+        .accessibilityIdentifier(shadows ? "cameraRaw.histogram.shadowClipping" : "cameraRaw.histogram.highlightClipping")
     }
 
     private func graph(_ scope: CameraRawScope?, mode: CameraRawScopeMode) -> some View {
@@ -105,7 +205,7 @@ struct CameraRawControls: View {
                 }
             }
         }
-        .accessibilityLabel(mode == .histogram ? "RGB histogram" : "Vectorscope")
+        .accessibilityLabel(AppLocalization.string(mode == .histogram ? "RGB histogram" : "Vectorscope"))
     }
 
     private func ribbon(_ bins: [Double], color: Color, peak: Double, in context: GraphicsContext, size: CGSize) {
@@ -131,12 +231,12 @@ struct CameraRawControls: View {
                         Image(systemName: expanded.contains(section) ? "chevron.down" : "chevron.right")
                             .font(.caption.weight(.semibold))
                             .frame(width: 12)
-                        Text(section.rawValue).font(.headline)
+                        Text(AppLocalization.string(section.rawValue)).font(.headline)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(section.rawValue)
+                .accessibilityLabel(AppLocalization.string(section.rawValue))
                 Spacer(minLength: 0)
                 if section == .light, raw.adjustsLight {
                     eye(shown: session.filterEdit?.showsCameraRawLight ?? true, name: "Light", group: .light)
@@ -219,7 +319,7 @@ struct CameraRawControls: View {
                 Text("White Balance").frame(minWidth: Self.labelWidth, alignment: .leading)
                     .help("Auto balances the average color. Custom follows Temperature and Tint.")
                 Picker("White Balance", selection: Binding(get: { raw.whiteBalance }, set: setWhiteBalance)) {
-                    ForEach(CameraRawWhiteBalance.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(CameraRawWhiteBalance.allCases, id: \.self) { Text(AppLocalization.string($0.rawValue)).tag($0) }
                 }
                 .labelsHidden()
                 .help("Auto balances the average color. Custom follows Temperature and Tint.")
@@ -261,7 +361,7 @@ struct CameraRawControls: View {
             slider("Glow", \.glow, range: CameraRawSettings.unitRange, decimals: 0, clipping: nil,
                    help: "Spreads a glow from the bright areas.")
             Picker("Style", selection: Binding(get: { raw.glowStyle }, set: { style in update { $0.cameraRaw.glowStyle = style } })) {
-                ForEach(CameraRawGlowStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawGlowStyle.allCases, id: \.self) { Text(AppLocalization.string($0.rawValue)).tag($0) }
             }
             .help("Diffusion is soft and wide, Bloom is tighter, and Halation is a red fringe.")
             VStack(alignment: .leading, spacing: 8) {
@@ -277,7 +377,7 @@ struct CameraRawControls: View {
             slider("Amount", \.vignetteAmount, range: CameraRawSettings.toneRange, decimals: 0, clipping: nil,
                    help: "Darkens or lightens the edges. The center does not change.")
             Picker("Style", selection: Binding(get: { raw.vignetteStyle }, set: { style in update { $0.cameraRaw.vignetteStyle = style } })) {
-                ForEach(CameraRawVignetteStyle.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(CameraRawVignetteStyle.allCases, id: \.self) { Text(AppLocalization.string($0.rawValue)).tag($0) }
             }
             .help("Highlight Priority protects bright edges. Color Priority also reduces color. Paint Overlay covers the edges evenly.")
             VStack(alignment: .leading, spacing: 8) {
@@ -320,8 +420,8 @@ struct CameraRawControls: View {
             Image(systemName: shown ? "eye" : "eye.slash")
         }
         .buttonStyle(.borderless)
-        .help(shown ? "Hide \(name) in the preview" : "Show \(name) in the preview")
-        .accessibilityLabel(shown ? "Hide \(name)" : "Show \(name)")
+        .help(shown ? AppLocalization.format("Hide %1$@ in the preview", AppLocalization.string(name)) : AppLocalization.format("Show %1$@ in the preview", AppLocalization.string(name)))
+        .accessibilityLabel(shown ? AppLocalization.format("Hide %1$@", AppLocalization.string(name)) : AppLocalization.format("Show %1$@", AppLocalization.string(name)))
     }
 
     /// Puts an adjusted section back to its defaults.
@@ -331,8 +431,8 @@ struct CameraRawControls: View {
         }
         .buttonStyle(.borderless)
         .disabled(session.filterEdit?.committing == true)
-        .help("Reset \(group.rawValue) to its defaults")
-        .accessibilityLabel("Reset \(group.rawValue)")
+        .help(AppLocalization.format("Reset %1$@ to its defaults", AppLocalization.string(group.rawValue)))
+        .accessibilityLabel(AppLocalization.format("Reset %1$@", AppLocalization.string(group.rawValue)))
     }
 
     private func slider(_ title: String, _ key: WritableKeyPath<CameraRawSettings, Double>, range: ClosedRange<Double>,
@@ -340,9 +440,9 @@ struct CameraRawControls: View {
                         reset resetValue: Double = 0, help: String) -> some View {
         let step = pow(10, Double(decimals))
         return HStack(spacing: 10) {
-            Text(title)
+            Text(AppLocalization.string(title))
                 .frame(minWidth: Self.labelWidth, alignment: .leading)
-                .help(help)
+                .help(AppLocalization.string(help))
                 .onTapGesture(count: 2) { reset(key, to: resetValue) }
                 .scrubbable(sensitivity: 1 / step,
                             value: Binding(get: { raw[keyPath: key] }, set: { assign(key, $0, clipping: nil) }),
@@ -350,13 +450,13 @@ struct CameraRawControls: View {
             CameraRawSlider(value: raw[keyPath: key], range: range, track: track, help: help,
                             onChange: { rawValue in assign(key, (rawValue * step).rounded() / step, clipping: clipping) },
                             onReset: { reset(key, to: resetValue) })
-            TextField(title, value: Binding(get: { raw[keyPath: key] }, set: { assign(key, $0, clipping: nil) }),
+            TextField(AppLocalization.string(title), value: Binding(get: { raw[keyPath: key] }, set: { assign(key, $0, clipping: nil) }),
                       format: .number.precision(.fractionLength(0...decimals)))
                 .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
-                .help(help)
+                .help(AppLocalization.string(help))
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(title)
+        .accessibilityLabel(AppLocalization.string(title))
     }
 
     private func setWhiteBalance(_ mode: CameraRawWhiteBalance) {

@@ -1,12 +1,12 @@
 import AppKit
 import CoreImage
 
-nonisolated enum CameraRawUprightMode: String, CaseIterable, Sendable {
+nonisolated enum CameraRawUprightMode: String, Codable, CaseIterable, Sendable {
     case off = "Off"
     case guided = "Guided"
 }
 
-nonisolated enum CameraRawProjection: String, CaseIterable, Sendable {
+nonisolated enum CameraRawProjection: String, Codable, CaseIterable, Sendable {
     case perspective = "Perspective"
     case rectilinear = "Rectilinear"
 }
@@ -22,7 +22,7 @@ nonisolated struct CameraRawGeometryGuide: Equatable, Sendable, Codable {
     var end: CGPoint { CGPoint(x: endX, y: endY) }
 }
 
-nonisolated struct CameraRawGeometrySettings: Equatable, Sendable {
+nonisolated struct CameraRawGeometrySettings: Codable, Equatable, Sendable {
     var upright: CameraRawUprightMode = .off
     var projection: CameraRawProjection = .perspective
     var vertical: Double = 0
@@ -172,7 +172,7 @@ nonisolated struct CameraRawGeometrySettings: Equatable, Sendable {
     }
 }
 
-nonisolated enum CameraRawProcessVersion: String, CaseIterable, Sendable {
+nonisolated enum CameraRawProcessVersion: String, Codable, CaseIterable, Sendable {
     case version1 = "Version 1"
     case version2 = "Version 2"
     case version3 = "Version 3"
@@ -194,22 +194,22 @@ nonisolated enum CameraRawProcessVersion: String, CaseIterable, Sendable {
     var summary: String {
         switch self {
         case .version1:
-            return "Earliest response. Hue, saturation, and shadow tint move about half as far as Version 6."
+            return AppLocalization.string("Earliest response. Hue, saturation, and shadow tint move about half as far as Version 6.")
         case .version2:
-            return "A little stronger than Version 1. The sliders below still fall well short of the current look."
+            return AppLocalization.string("A little stronger than Version 1. The sliders below still fall well short of the current look.")
         case .version3:
-            return "Firmer color than Version 2. Primary shifts stay gentler than the current process."
+            return AppLocalization.string("Firmer color than Version 2. Primary shifts stay gentler than the current process.")
         case .version4:
-            return "The 2012 response. Calibration reaches most of the strength used by Version 6."
+            return AppLocalization.string("The 2012 response. Calibration reaches most of the strength used by Version 6.")
         case .version5:
-            return "Close to the current process, with slightly softer primary and shadow shifts."
+            return AppLocalization.string("Close to the current process, with slightly softer primary and shadow shifts.")
         case .version6:
-            return "Current default. The calibration sliders below apply at full strength."
+            return AppLocalization.string("Current default. The calibration sliders below apply at full strength.")
         }
     }
 }
 
-nonisolated struct CameraRawCalibrationSettings: Equatable, Sendable {
+nonisolated struct CameraRawCalibrationSettings: Codable, Equatable, Sendable {
     var process: CameraRawProcessVersion = .version6
     var shadowTint: Double = 0
     var redHue: Double = 0

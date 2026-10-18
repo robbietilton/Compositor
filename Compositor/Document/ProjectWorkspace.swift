@@ -234,7 +234,7 @@ final class ProjectWorkspace {
         var copied = sourceDocument.layers.filter { included.contains($0.id) }
         let used = target.session.document?.layers.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) } ?? 0
         let added = copied.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) }
-        guard used + added <= DocumentLimits.documentPixelBudget else { target.session.importError = "The copied layers exceed this project’s \(DocumentLimits.documentBudgetMegapixels)-megapixel limit."; return }
+        guard used + added <= DocumentLimits.documentPixelBudget else { target.session.importError = AppLocalization.format("The copied layers exceed this project’s %@-megapixel limit.", String(DocumentLimits.documentBudgetMegapixels)); return }
         isManaging = true
         sourceTab.session.isProjectBusy = true
         target.session.isProjectBusy = true
@@ -249,6 +249,7 @@ final class ProjectWorkspace {
                 let layerID = copied[i].id
                 copied[i].asset = try await Task.detached(priority: .userInitiated) { try LiveMaskBaker.bake(snapshot, target: layerID) }.value
                 copied[i].maskSourceID = nil
+                copied[i].cameraRawOperation = nil // The clipped pixels above already include the grade.
             }
             let mapping = Dictionary(uniqueKeysWithValues: copied.map { ($0.id, UUID()) })
             let pictured = copied.filter { !$0.isGroup }.map { CGRect(origin: $0.transform.origin, size: $0.transform.size) }
@@ -275,7 +276,8 @@ final class ProjectWorkspace {
                 mask?.placement?.origin.x += center.x-anchor.x; mask?.placement?.origin.y += center.y-anchor.y
                 return ImageLayer(id: mapping[layer.id]!, asset: layer.asset, name: layer.name, isVisible: layer.isVisible,
                     transform: transform, parentID: layer.parentID.flatMap { mapping[$0] }, isGroup: layer.isGroup,
-                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text)
+                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text,
+                    cameraRawOperation: layer.cameraRawOperation)
             }
             target.session.isProjectBusy = false
             target.session.beginEdit("Copy Layers from Project")

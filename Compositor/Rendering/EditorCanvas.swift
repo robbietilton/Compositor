@@ -515,6 +515,7 @@ final class CanvasView: NSView {
             let id: UUID
             let transform: LayerTransform
             let imageID: ObjectIdentifier?
+            let cameraRawOperation: CameraRawOperation?
             let maskID: ObjectIdentifier?
             let maskSourceID: UUID?
             /// Moving a layer into or out of a masked folder changes how it is clipped.
@@ -572,7 +573,7 @@ final class CanvasView: NSView {
         let state = DisplayState(brushRevision: session.brushRevision, pixelGrid: session.showsPixelGrid, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
             layers: (document.map { $0.layers.contains(where: { $0.maskSourceID != nil }) ? $0.layers : $0.renderLayers } ?? []).filter { $0.asset != nil || $0.adjustment != nil }.map {
                 DisplayState.Layer(id: $0.id, transform: session.displayedTransform(for: $0),
-                                   imageID: $0.asset.map { ObjectIdentifier($0.image) }, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: visible.contains($0.id), opacity: opacities[$0.id] ?? $0.opacity, blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment, effects: $0.effects,
+                                   imageID: $0.asset.map { ObjectIdentifier($0.image) }, cameraRawOperation: $0.cameraRawOperation, maskID: $0.mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: visible.contains($0.id), opacity: opacities[$0.id] ?? $0.opacity, blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment, effects: $0.effects,
                                    maskPlacement: session.displayedMaskPlacement(for: $0))
             },
             folderMasks: (document?.layers ?? []).filter { $0.isGroup && $0.mask != nil }.map {
@@ -993,7 +994,10 @@ final class CanvasView: NSView {
         }
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
-            guard let layer = byID[id] else { return }
+            guard var layer = byID[id] else { return }
+            // Replace only this drawing copy, before effects, distortion and sparse-raster fast paths read pixels.
+            layer.asset = layer.effectiveRenderAsset
+            layer.cameraRawOperation = nil
             // Text being edited draws as it will be committed, in its place among the layers.
             if layer.id == session.textDraft?.layerID {
                 guard let shown = editedText(layer) else { return }
@@ -1101,7 +1105,7 @@ final class CanvasView: NSView {
                 }
                 // Painting pixels previews exactly as the finished layer will look, with the layer's own
                 // sampling, so nothing shifts when a stroke starts or ends (see TiledLayerRenderer).
-                let previous = stroke.layer.asset
+                let previous = stroke.layer.effectiveRenderAsset
                 TiledLayerRenderer.drawStroke(width: stroke.width, height: stroke.height, sourceRect: stroke.sourceRect,
                     patches: stroke.patches, image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
                     transform: transform, center: center(transform.center), scale: scale,
@@ -1120,10 +1124,10 @@ final class CanvasView: NSView {
                         opacity: opacity, blendMode: blendMode(of: layer), mask: nil, in: context)
                     return
                 }
-                if let raster = stroke.layer.asset?.raster {
+                if let raster = stroke.layer.effectiveRenderAsset?.raster {
                     TiledLayerRenderer.drawRaster(raster, transform: transform, center: center(transform.center), scale: scale,
                         opacity: opacity, blendMode: blendMode(of: layer), mask: preview, in: context)
-                } else if let image = stroke.layer.asset?.image {
+                } else if let image = stroke.layer.effectiveRenderAsset?.image {
                     LayerRenderer.draw(image, transform: transform, center: center(transform.center), scale: scale,
                         opacity: opacity, blendMode: blendMode(of: layer), mask: preview, in: context)
                 }
@@ -1137,7 +1141,7 @@ final class CanvasView: NSView {
                     return
                 }
                 // Painting the mask shows the layer through the mask as it will be once committed, the same way.
-                let previous = stroke.layer.asset
+                let previous = stroke.layer.effectiveRenderAsset
                 TiledLayerRenderer.drawMaskStroke(width: stroke.width, height: stroke.height, sourceRect: stroke.sourceRect,
                     patches: stroke.patches, oldMask: stroke.layer.mask?.asset,
                     image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
@@ -1293,7 +1297,7 @@ final class CanvasView: NSView {
             // The mask as the stroke leaves it, over a region of the grid: beyond the old mask an edit reveals, as it
             // does once committed.
             let old = stroke.layer.mask?.asset.image, patches = stroke.patches, sourceRect = stroke.sourceRect, background = stroke.maskBackground
-            surface.update(base: stroke.layer.asset?.image, patches: [], mask: nil, maskStroke: .init(patches: patches, toGrid: .identity) { region in
+            surface.update(base: stroke.layer.effectiveRenderAsset?.image, patches: [], mask: nil, maskStroke: .init(patches: patches, toGrid: .identity) { region in
                 guard let coverage = try? BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: true) else { return nil }
                 coverage.translateBy(x: -region.minX, y: -region.minY)
                 coverage.setFillColor(gray: background, alpha: 1)
@@ -1305,7 +1309,7 @@ final class CanvasView: NSView {
                 return coverage.makeImage()
             })
         } else {
-            surface.update(base: stroke.layer.asset?.image, patches: stroke.patches, mask: mask)
+            surface.update(base: stroke.layer.effectiveRenderAsset?.image, patches: stroke.patches, mask: mask)
         }
         return surface
     }
@@ -1313,7 +1317,7 @@ final class CanvasView: NSView {
     /// The effects surface for a mask on its own placement being painted. Its stroke paints in the mask's grid; the
     /// surface stays in the layer's, and takes the mask from `preview`, the stroke's mask resampled into that grid.
     private func placedMaskSurface(layer: ImageLayer, stroke: BrushStroke, placement: LayerTransform, preview: CGImage) -> LayerEffectsSurface? {
-        guard let effects = layer.effects?.visible, !effects.isEmpty, effects.isValid, let base = stroke.layer.asset?.image else { return nil }
+        guard let effects = layer.effects?.visible, !effects.isEmpty, effects.isValid, let base = stroke.layer.effectiveRenderAsset?.image else { return nil }
         let grid = CGSize(width: base.width, height: base.height)
         let full = CGRect(origin: .zero, size: grid)
         if strokeSurface?.matches(layerID: layer.id, effects: effects, grid: grid, sourceRect: full) != true {
@@ -1580,7 +1584,7 @@ final class CanvasView: NSView {
             context.interpolationQuality = .medium
             if session.cloneSettings.sampleAllLayers {
                 session.drawLiveComposite(document, in: context)
-            } else if let layer = session.activeLayer, let source = layer.asset?.image {
+            } else if let layer = session.activeLayer, let source = layer.effectiveRenderAsset?.image {
                 let transform = session.displayedTransform(for: layer)
                 LayerRenderer.draw(source, transform: transform, center: transform.center, in: context)
             }
@@ -2827,7 +2831,7 @@ extension CanvasView {
         var unsupported = false
         // The old pixels of a layer being painted — or of its mask, painting the mask — as they were when it started.
         func oldPixels(_ stroke: BrushStroke) -> CIImage? {
-            let asset = stroke.isMask ? stroke.layer.mask?.asset : stroke.layer.asset
+            let asset = stroke.isMask ? stroke.layer.mask?.asset : stroke.layer.effectiveRenderAsset
             if let raster = asset?.raster { return placement.renderer.image(raster) }
             return asset.flatMap { placement.renderer.image($0.image, mask: stroke.isMask) }
         }
@@ -2862,8 +2866,8 @@ extension CanvasView {
             let drawn = max(base.size.width, base.size.height) * placement.scale
             let steady = pow(2, ceil(log2(max(64, drawn))))
             return owned.clipImage(placement: maskPlacement, over: base,
-                width: stroke.layer.asset?.image.width ?? Int(base.size.width.rounded()),
-                height: stroke.layer.asset?.image.height ?? Int(base.size.height.rounded()),
+                width: stroke.layer.effectiveRenderAsset?.image.width ?? Int(base.size.width.rounded()),
+                height: stroke.layer.effectiveRenderAsset?.image.height ?? Int(base.size.height.rounded()),
                 limit: session.transformEdit != nil ? min(2048, steady) : steady)
         }
         // Option-click on a mask thumbnail: that mask by itself, gray across the canvas (its edge tone past its pixels),
@@ -2987,7 +2991,11 @@ extension CanvasView {
             return shaded.transformed(by: toGrid)
         }
         // One layer's pixels, placed, through its own mask and at its opacity — what `drawOwn` draws.
-        func own(_ layer: ImageLayer) -> CIImage? {
+        func own(_ source: ImageLayer) -> CIImage? {
+            var layer = source
+            // The CPU operation runs before upload; deep and tiled upload paths must see its derived asset too.
+            layer.asset = source.effectiveRenderAsset
+            layer.cameraRawOperation = nil
             let opacity = layer.effectiveOpacity(in: byID)
             // Text being edited, as it will be committed.
             if layer.id == session.textDraft?.layerID {

@@ -7,33 +7,37 @@ extension EditorSession {
         canEditLayers && selectedLayerIDs.count == 1 && (activeLayer?.isGroup == false || isMaskSelected) && selection?.isEmpty != true
             && activeLayerID.map { document?.effectiveVisibleIDs.contains($0) == true } == true
             && (!isMaskSelected || activeLayer?.mask?.isEnabled == true)
-            && (isMaskSelected || activeLayer?.adjustment == nil)
+            && (isMaskSelected || (activeLayer?.adjustment == nil && activeLayer?.cameraRawOperation == nil))
     }
     /// Why a stroke can't start on the target, for the alert, as Photoshop explains a brush it refuses. Nil when
     /// nothing about the target is in the way; while the editor is busy (a transform, a dialog) a press just waits.
     var paintRefusal: String? {
         guard canEditLayers, let layer = activeLayer, !canPaint else { return nil }
-        if selectedLayerIDs.count > 1 { return "Several layers are selected. Select just one to paint on it." }
+        if selectedLayerIDs.count > 1 { return AppLocalization.string("Several layers are selected. Select just one to paint on it.") }
         if layer.isGroup, !isMaskSelected {
-            return "“\(layer.name)” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask."
+            return AppLocalization.format("“%@” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask.", layer.name)
         }
         if document?.effectiveVisibleIDs.contains(layer.id) != true {
-            return "“\(layer.name)” is hidden, or inside a hidden folder. Show it to paint on it."
+            return AppLocalization.format("“%@” is hidden, or inside a hidden folder. Show it to paint on it.", layer.name)
         }
         if isMaskSelected, layer.mask?.isEnabled != true {
-            return "The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint."
+            return AppLocalization.string("The layer mask is turned off. Shift-click its thumbnail to turn it on, then paint.")
         }
         if !isMaskSelected, layer.adjustment != nil {
-            return "“\(layer.name)” is an adjustment layer, with no pixels to paint. Paint on its mask instead."
+            return AppLocalization.format("“%@” is an adjustment layer, with no pixels to paint. Paint on its mask instead.", layer.name)
+        }
+        if !isMaskSelected, layer.cameraRawOperation != nil {
+            return CameraRawSourceEditError.protectedSource.localizedDescription
         }
         if selection?.isEmpty == true {
-            return "Nothing is selected, so there’s nowhere to paint. Choose Select › Deselect (⌘D) to paint anywhere."
+            return AppLocalization.string("Nothing is selected, so there’s nowhere to paint. Choose Select › Deselect (⌘D) to paint anywhere.")
         }
         return nil
     }
     /// Tiled raster edit of the active layer's pixels or mask, within the shared pixel budgets.
     func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false) throws -> BrushStroke {
         guard let document else { throw ProjectError.tooLarge }
+        guard isMaskSelected || layer.cameraRawOperation == nil else { throw CameraRawSourceEditError.protectedSource }
         let stroke = try BrushStroke(layer: layer, mask: isMaskSelected, settings: settings, canvas: document.size, growsMask: growsMask)
         let used = document.layers.filter { $0.id != layer.id }.reduce(0) { total, layer in
             let image = isMaskSelected ? layer.mask?.asset.image : layer.asset?.image
@@ -55,7 +59,7 @@ extension EditorSession {
         var sourceOffset: CGSize?
         if tool == .cloneStamp {
             guard let offset = cloneStrokeOffset(at: point) else {
-                brushError = "Option-click where Clone Stamp should copy from first."
+                brushError = AppLocalization.string("Option-click where Clone Stamp should copy from first.")
                 return
             }
             sourceOffset = offset
@@ -69,7 +73,7 @@ extension EditorSession {
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
             if let offset = sourceOffset {
-                guard let sample = cloneSample(document, for: stroke, offset: offset) else { return }
+                guard let sample = try cloneSample(document, for: stroke, offset: offset) else { return }
                 cloneOffset = offset
                 stroke.clone = sample
             }
@@ -161,6 +165,7 @@ extension EditorSession {
               let index = document?.layers.firstIndex(where: { $0.id == stroke.layer.id }),
               let current = document?.layers[index], current.asset?.image === stroke.layer.asset?.image,
               current.transform == stroke.layer.transform else { return }
+        guard stroke.isMask || current.cameraRawOperation == nil else { throw CameraRawSourceEditError.protectedSource }
         var mask = current.mask
         if !stroke.isMask, let original = mask, original.placement == nil, result.bounds != stroke.sourceRect {
             let raster = RasterSnapshot.replacing(source: original.asset, sourceRect: stroke.sourceRect,
@@ -206,6 +211,7 @@ extension EditorSession {
               let current = document?.layers[index], current.asset?.image === stroke.layer.asset?.image,
               current.transform == stroke.layer.transform,
               current.mask?.asset.image === stroke.layer.mask?.asset.image else { return }
+        guard stroke.isMask || current.cameraRawOperation == nil else { throw CameraRawSourceEditError.protectedSource }
         beginEdit(name)
         if stroke.isMask {
             let bounds = result.pixelBounds.offsetBy(dx: stroke.committedBounds.minX, dy: stroke.committedBounds.minY)

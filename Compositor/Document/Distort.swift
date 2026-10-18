@@ -263,6 +263,11 @@ extension EditorSession {
     /// the pixels, so the edit then waits for Apply rather than applying on mouse-up.
     func beginDistort() {
         guard let edit = transformEdit, edit.corners == nil, edit.draft.isValid else { return }
+        let ids = Set(edit.group.map { Array($0.originals.keys) } ?? [edit.layerID])
+        guard edit.mask || document?.layers.contains(where: { ids.contains($0.id) && $0.cameraRawOperation != nil }) != true else {
+            brushError = CameraRawSourceEditError.protectedSource.localizedDescription
+            return
+        }
         transformEdit = TransformEdit(layerID: edit.layerID, draft: edit.draft, persistent: true, floating: edit.floating,
                                       corners: DistortWarp.corners(of: edit.draft), mask: edit.mask, group: edit.group)
     }
@@ -350,6 +355,11 @@ extension EditorSession {
         distortPreviewCache = [:]
         defer { distortEffectsCache = [:] }
         let ids = edit.group.map { Array($0.originals.keys) } ?? [edit.layerID]
+        // Refuse the entire group before changing any member, even if a recipe arrived after the preview began.
+        guard document?.layers.contains(where: { ids.contains($0.id) && $0.cameraRawOperation != nil }) != true else {
+            brushError = CameraRawSourceEditError.protectedSource.localizedDescription
+            return
+        }
         beginEdit(edit.group == nil ? "Distort" : "Distort Layers")
         for id in ids {
             guard let index = document?.layers.firstIndex(where: { $0.id == id }), let layer = document?.layers[index],

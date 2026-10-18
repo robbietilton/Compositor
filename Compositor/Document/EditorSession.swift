@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.isVisible == rhs.isVisible && lhs.transform == rhs.transform
-            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.text == rhs.text && lhs.effects == rhs.effects
+            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.text == rhs.text && lhs.effects == rhs.effects && lhs.cameraRawOperation == rhs.cameraRawOperation
     }
     let id: UUID
     var asset: ImportedImage?
@@ -24,6 +24,8 @@ struct ImageLayer: Identifiable, Equatable {
     /// A stroke and drop shadow drawn around the layer, kept apart from its pixels.
     var effects: LayerEffects?
     var text: LayerText?
+    /// A non-destructive grade. `asset` always remains its ungraded source.
+    var cameraRawOperation: CameraRawOperation?
     nonisolated var size: CGSize { transform.size }
 
     init(asset: ImportedImage, origin: CGPoint) {
@@ -40,7 +42,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.name = name
     }
 
-    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, effects: LayerEffects? = nil, text: LayerText? = nil) {
+    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, effects: LayerEffects? = nil, text: LayerText? = nil, cameraRawOperation: CameraRawOperation? = nil) {
         self.id = id
         self.asset = asset
         self.name = name
@@ -56,6 +58,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.shape = shape
         self.effects = effects
         self.text = text
+        self.cameraRawOperation = cameraRawOperation
     }
 }
 
@@ -96,7 +99,7 @@ enum NavigationTool: String, CaseIterable {
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
     var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var label: String { self == .type ? AppLocalization.string("Type (T)") : self == .eyedropper ? AppLocalization.string("Eyedropper (I)") : self == .marquee ? AppLocalization.string("Marquee (M)") : self == .lasso ? AppLocalization.string("Lasso (L)") : self == .wand ? AppLocalization.string("Magic (W) · Tab switches Wand and Object") : self == .brush ? AppLocalization.string("Brush (B) · Eraser (E)") : self == .spotHealing ? AppLocalization.string("Spot Healing Brush (J)") : self == .cloneStamp ? AppLocalization.string("Clone Stamp (S) · Option-click sets the source") : self == .blur ? AppLocalization.string("Smear (R)") : self == .gradient ? AppLocalization.string("Gradient (G)") : self == .shape ? AppLocalization.string("Shape (U) · Shift-U switches Rectangle/Ellipse") : self == .crop ? AppLocalization.string("Crop (C)") : self == .move ? AppLocalization.string("Move / Transform (V)") : self == .hand ? AppLocalization.string("Hand (H)") : AppLocalization.string("Zoom (Z)") }
 }
 
 @Observable
@@ -150,7 +153,7 @@ final class EditorSession {
     private var fileRequestWaiters: [CheckedContinuation<Void, Never>] = []
     var canStartProjectOperation: Bool {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
-        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
+        return cameraRawPluginEdit == nil && selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
     }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
@@ -254,6 +257,9 @@ final class EditorSession {
     /// The open filter (Filter menu), and the settings the next one starts from.
     var filterEdit: FilterEdit?
     var filterSettings = FilterSettings()
+    var cameraRawPluginEdit: CameraRawPluginEdit? { didSet { resumeFileRequests() } }
+    var cameraRawPluginError: String?
+    @ObservationIgnored var cameraRawPluginWindow: NSWindowController?
     /// What Filter › Last Filter runs again.
     var lastFilter: FilterKind?
     @ObservationIgnored var hueSaturationTask: Task<Void, Never>?
@@ -649,7 +655,7 @@ final class EditorSession {
     var isModified: Bool { history.isModified }
     var canUseHistory: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
+        return cameraRawPluginEdit == nil && selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && transformEdit == nil && !showsConversionSheet
     }
     var canUndo: Bool { canUseHistory && (history.canUndo || gradientEdit != nil) }
     var canRedo: Bool { canUseHistory && history.canRedo }
@@ -693,11 +699,11 @@ final class EditorSession {
         selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && !showsBusy
             && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil
             && transformEdit?.persistent != true && cropRect == nil && gradientEdit == nil
-            && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+            && hueSaturation == nil && levels == nil && filterEdit == nil && cameraRawPluginEdit == nil && adjustmentEditingID == nil
     }
     var canEditLayers: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+        return cameraRawPluginEdit == nil && selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
 
     func addBlankLayer() {
@@ -829,7 +835,7 @@ final class EditorSession {
         }
         defer { for folder in folders { folder.stopAccessingSecurityScopedResource() } }
         if !empty.isEmpty {
-            let message = empty.map { "“\($0)” has no images to import." }.joined(separator: "\n")
+            let message = empty.map { AppLocalization.format("“%@” has no images to import.", $0) }.joined(separator: "\n")
             importError = [importError, message].compactMap { $0 }.joined(separator: "\n\n")
         }
         guard !urls.isEmpty else { return }
@@ -891,7 +897,7 @@ final class EditorSession {
                                                                          remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
                     insert(asset, centeredAt: point)
                 } else if PSDReader.matches(url) {
-                    beginPSDReading(title: "Open “\(url.lastPathComponent)”?", confirmTitle: "Import")
+                    beginPSDReading(title: AppLocalization.format("Open “%@”?", url.lastPathComponent), confirmTitle: AppLocalization.string("Import"))
                     let imported: PSDImport
                     do {
                         let parsed = try await ImageImporter.shared.loadPhotoshop(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
@@ -918,7 +924,7 @@ final class EditorSession {
                     insert(asset, centeredAt: point)
                 }
             } catch {
-                failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+                failures.append(AppLocalization.format("%@: %@", url.lastPathComponent, error.localizedDescription))
             }
           }
           endEdit()
@@ -1038,7 +1044,7 @@ final class EditorSession {
     /// `emptyLayer` starts the canvas with a selected blank "Layer 1", as File > New does.
     /// `background`: white or black fills the first layer, named Background as in Photoshop; nil leaves it transparent.
     func createDocument(width: Int, height: Int, emptyLayer: Bool = false, resolution: Double = 72, background: CGColor? = nil) {
-        guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
+        guard cameraRawPluginEdit == nil, !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
         commitTransform()
         beginEdit("New Canvas")
         defer { endEdit() }

@@ -274,7 +274,7 @@ extension EditorSession {
     /// text, an adjustment or a folder, which have none of their own to keep).
     var canConvertLayerDepth: Bool {
         guard canEditLayers, selectedLayerIDs.count <= 1, let layer = activeLayer else { return false }
-        return layer.liveText == nil && layer.adjustment == nil && !layer.isGroup
+        return layer.liveText == nil && layer.adjustment == nil && !layer.isGroup && layer.cameraRawOperation == nil
     }
 
     /// An HDR layer's Convert to 16-Bit, as one undo step: its pixels clipped to white and kept at 16 bits, more finely

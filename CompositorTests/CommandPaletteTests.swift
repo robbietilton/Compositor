@@ -56,21 +56,26 @@ struct CommandPaletteTests {
     @Test func realMenuBarRunsItsCommands() async throws {
         let bar = try #require(NSApp.mainMenu)
         func entries() -> [CommandPaletteEntry] { CommandPaletteMenu.entries(in: bar, skipping: CommandPaletteController.skipped) }
-        func gridState() -> NSControl.StateValue? {
-            bar.items.first { $0.title == "View" }?.submenu?.items.first { $0.title == "Pixel Grid (800% and above)" }?.state
+        let gridTitle = AppLocalization.string("Pixel Grid (800% and above)")
+        func gridState(in menu: NSMenu) -> NSControl.StateValue? {
+            for item in menu.items {
+                if item.title == gridTitle { return item.state }
+                if let submenu = item.submenu, let state = gridState(in: submenu) { return state }
+            }
+            return nil
         }
         let listed = entries()
-        let titles = Set(listed.map(\.title))
-        #expect(titles.contains("Filter › Gaussian Blur…") && !titles.contains("View › Search Commands…"))
+        #expect(listed.contains { $0.title.hasSuffix(AppLocalization.string("Gaussian Blur") + "…") })
+        #expect(!listed.contains { $0.title.hasSuffix(AppLocalization.string("Search Commands…")) })
         // The test host has no document open, so Zoom In is disabled: listed, greyed.
-        let zoom = try #require(listed.first { $0.title == "View › Zoom In" })
+        let zoom = try #require(listed.first { $0.title.hasSuffix(AppLocalization.string("Zoom In")) })
         #expect(!zoom.isEnabled)
-        let grid = try #require(listed.first { $0.title == "View › Pixel Grid (800% and above)" })
-        let before = try #require(gridState())
+        let grid = try #require(listed.first { $0.title.hasSuffix(gridTitle) })
+        let before = try #require(gridState(in: bar))
         grid.perform()
         try await Task.sleep(for: .milliseconds(300))
         let after = entries() // Reading the menu again refreshes it, as opening the palette does.
-        #expect(gridState() != before, "the toggle's SwiftUI binding flipped")
+        #expect(gridState(in: bar) != before, "the toggle's SwiftUI binding flipped")
         #expect(after.first { $0.title == grid.title }?.isOn != grid.isOn, "and the palette's checkmark follows it")
         grid.perform() // Put it back.
         try await Task.sleep(for: .milliseconds(300))

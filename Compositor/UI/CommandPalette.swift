@@ -104,13 +104,14 @@ enum CommandPaletteSearch {
 enum CommandPaletteMenu {
     /// `skipping` holds titles left out: top-level menus (Window, Help) and single items (the palette's own).
     /// The app menu, the first in the bar, is always left out.
-    static func entries(in menu: NSMenu, skipping: Set<String>) -> [CommandPaletteEntry] {
+    static func entries(in menu: NSMenu, skipping: Set<String>, excluding menus: [NSMenu] = []) -> [CommandPaletteEntry] {
         var seen: [String: Int] = [:]
-        return collect(menu, root: menu, path: [], skipping: skipping, seen: &seen)
+        return collect(menu, root: menu, path: [], skipping: skipping, excluded: Set(menus.map(ObjectIdentifier.init)), seen: &seen)
     }
 
-    private static func collect(_ menu: NSMenu, root: NSMenu, path: [String], skipping: Set<String>,
+    private static func collect(_ menu: NSMenu, root: NSMenu, path: [String], skipping: Set<String>, excluded: Set<ObjectIdentifier>,
                                 seen: inout [String: Int]) -> [CommandPaletteEntry] {
+        guard !excluded.contains(ObjectIdentifier(menu)) else { return [] }
         // SwiftUI brings a menu's titles, checkmarks and enabled states up to date only when it's about to open, through
         // its delegate; ask for that, then let AppKit validate, so what's read is what the menu would show now.
         menu.delegate?.menuNeedsUpdate?(menu)
@@ -121,7 +122,7 @@ enum CommandPaletteMenu {
             guard !item.isSeparatorItem, !item.isHidden, !skipping.contains(item.title), !item.title.isEmpty else { continue }
             if let submenu = item.submenu {
                 if path.isEmpty, index == 0 { continue } // The app menu: About, Hide, Quit.
-                result += collect(submenu, root: root, path: path + [item.title], skipping: skipping, seen: &seen)
+                result += collect(submenu, root: root, path: path + [item.title], skipping: skipping, excluded: excluded, seen: &seen)
                 continue
             }
             // SwiftUI takes the action off a disabled item, so an item without one is listed greyed rather than dropped.
@@ -177,9 +178,11 @@ extension CommandPaletteEntry {
         let selected = session.selection != nil
         return [
             CommandPaletteEntry(id: selected ? "Layer › Add Layer Mask from Selection" : "Layer › Add Layer Mask",
+                                title: AppLocalization.string(selected ? "Layer › Add Layer Mask from Selection" : "Layer › Add Layer Mask"),
                                 shortcut: nil, isEnabled: canAdd,
                                 perform: { [weak session] in session?.addMask(revealing: true) }),
             CommandPaletteEntry(id: selected ? "Layer › Add Layer Mask Hiding Selection" : "Layer › Add Layer Mask (Hide All)",
+                                title: AppLocalization.string(selected ? "Layer › Add Layer Mask Hiding Selection" : "Layer › Add Layer Mask (Hide All)"),
                                 shortcut: nil, isEnabled: canAdd,
                                 perform: { [weak session] in session?.addMask(revealing: false) }),
         ]
@@ -216,7 +219,7 @@ extension CommandPaletteEntry {
             ("Zoom", "Z", .zoom, nil),
         ]
         return tools.map { name, key, tool, setup in
-            CommandPaletteEntry(id: "Tool › \(name)", shortcut: key, isEnabled: session.document != nil,
+            CommandPaletteEntry(id: "Tool › \(name)", title: AppLocalization.format("Tool › %1$@", AppLocalization.string(name)), shortcut: key, isEnabled: session.document != nil,
                                 perform: { [weak session] in
                                     guard let session else { return }
                                     session.selectTool(tool)

@@ -145,9 +145,9 @@ nonisolated enum HueSampleMode: String, CaseIterable, Sendable {
     }
     var help: String {
         switch self {
-        case .replace: "Click the image to center this range on that color"
-        case .add: "Click the image to widen this range to include that color"
-        case .remove: "Click the image to narrow this range to exclude that color"
+        case .replace: AppLocalization.string("Click the image to center this range on that color")
+        case .add: AppLocalization.string("Click the image to widen this range to include that color")
+        case .remove: AppLocalization.string("Click the image to narrow this range to exclude that color")
         }
     }
 }
@@ -454,8 +454,8 @@ extension EditorSession {
     private func canAdjust(allowingEmpty: Bool) -> Bool {
         _ = showsBusy
         // Text being edited is drawn by its editor, not the layer, so a filter's preview of it would be wrong: commit it first.
-        guard levels == nil, filterEdit == nil, textDraft == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
-              pixelMove == nil, renamingLayerID == nil, !showsNewDocument, !showsImporter,
+        guard cameraRawPluginEdit == nil, levels == nil, filterEdit == nil, textDraft == nil, document != nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil,
+              layer.cameraRawOperation == nil, pixelMove == nil, renamingLayerID == nil, !showsNewDocument, !showsImporter,
               selectedLayerIDs.count == 1, !layer.isGroup, !isMaskSelected, layer.asset != nil || allowingEmpty,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }
         return true
@@ -554,7 +554,8 @@ extension EditorSession {
             asset = ImportedImage(image: adjusted.image, thumbnail: adjusted.thumbnail ?? adjusted.image, name: edit.original.name)
         }
         guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
-              let current = document?.layers[index], current.asset?.image === edit.original.image else { return }
+              let current = document?.layers[index], current.asset?.image === edit.original.image,
+              current.cameraRawOperation == nil else { return }
         beginEdit("Hue/Saturation")
         document?.layers[index] = ImageLayer(id: current.id,
             asset: ImportedImage(image: asset.image, thumbnail: asset.thumbnail, name: current.name, deep: asset.deep),

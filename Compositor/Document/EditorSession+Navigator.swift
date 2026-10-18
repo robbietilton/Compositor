@@ -34,6 +34,10 @@ private extension CanvasDocument {
         }
         return CanvasDocument(id: id, width: width, height: height, layers: layers.map { layer in
             var small = layer
+            // Develop at the source pixel size, before scaling its placement. This is only a display copy: an
+            // unavailable operation shows its preserved source, just as the main canvas does.
+            small.asset = layer.effectiveRenderAsset
+            small.cameraRawOperation = nil
             small.transform = scaled(layer.transform)
             if let placement = layer.mask?.placement { small.mask?.placement = scaled(placement) }
             // Blurs are measured in document pixels, so they shrink with everything else.

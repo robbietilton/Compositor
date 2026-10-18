@@ -227,7 +227,7 @@ extension EditorSession {
             }.value
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index], current.asset?.image === edit.original.image,
-                  current.transform == edit.transform else { return }
+                  current.transform == edit.transform, current.cameraRawOperation == nil else { return }
             beginEdit("Levels")
             document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
                 transform: current.transform, parentID: current.parentID, isGroup: false,

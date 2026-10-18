@@ -975,7 +975,7 @@ extension EditorSession {
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
                   let current = document?.layers[index],
                   current.asset?.image === edit.original.image || (edit.startedEmpty && current.asset == nil),
-                  current.transform == edit.transform else { return }
+                  current.transform == edit.transform, current.cameraRawOperation == nil else { return }
             // A grown layer's mask (covering the old grid) is carried onto the new one, its edge tone past the old edge.
             var mask = current.mask
             if let grown, let owned = current.mask, owned.placement == nil,

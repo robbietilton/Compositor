@@ -49,6 +49,11 @@ extension EditorSession {
     /// `sixteenBit`: a 16-bit layer's pixels lifted at 16 bits (`DeepLayer`).
     func renderSelectedPixels(from layer: ImageLayer, mask: Bool, sixteenBit: Bool = false) throws -> (image: CGImage, region: CGRect)? {
         guard let document else { return nil }
+        var layer = layer
+        if !mask, let operation = layer.cameraRawOperation, let asset = layer.asset {
+            layer.asset = try CameraRawOperationRenderer.shared.render(asset, operation: operation)
+            layer.cameraRawOperation = nil
+        }
         let clip = try selection?.clip(canvas: document.size)
         if clip != nil, clip?.coverage == nil { return nil }
         guard let region = selectionCopyRegion() else { return nil }
@@ -86,7 +91,7 @@ extension EditorSession {
         // but Color Burn and Color Dodge need to read what they are blending with, which a group hides.
         let composite = try BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: false)
         composite.translateBy(x: -region.minX, y: -region.minY)
-        drawLiveComposite(document, in: composite)
+        drawLiveComposite(try document.renderedCameraRawOperations(), in: composite)
         guard let merged = composite.makeImage() else { throw ExportError.render }
         let context = try BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: false)
         context.translateBy(x: -region.minX, y: -region.minY)
@@ -140,7 +145,7 @@ extension EditorSession {
 
     /// Cmd-X: copy, then clear the selected pixels.
     func cutSelection() async {
-        guard selection != nil, canCopyPixels else { return }
+        guard selection != nil, canCopyPixels, canEditPixels else { return }
         copySelection()
         await clearSelectedPixels()
     }
@@ -268,7 +273,8 @@ extension EditorSession {
                 transform: original.transform, parentID: original.parentID.map { mapping[$0] ?? $0 },
                 isGroup: original.isGroup, opacity: original.opacity, blendMode: original.blendMode,
                 mask: original.mask, maskSourceID: original.maskSourceID.map { mapping[$0] ?? $0 },
-                adjustment: original.adjustment, shape: original.shape, effects: original.effects, text: original.text)
+                adjustment: original.adjustment, shape: original.shape, effects: original.effects, text: original.text,
+                cameraRawOperation: original.cameraRawOperation)
         }
         document?.layers.insert(contentsOf: copies, at: index + 1)
         for original in originals where collapsedGroupIDs.contains(original.id) {

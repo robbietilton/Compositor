@@ -107,7 +107,7 @@ struct ExportAsSheet: View {
                     // which takes the chosen one's name.
                     HStack(spacing: 12) {
                         Picker("Format", selection: $format) {
-                            ForEach([ExportFormat.jpeg, .png], id: \.self) { Text($0.rawValue).tag($0) }
+                            ForEach([ExportFormat.jpeg, .png], id: \.self) { Text(AppLocalization.string($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented).labelsHidden().fixedSize()
                         moreFormats
@@ -174,12 +174,12 @@ struct ExportAsSheet: View {
                 }
             }
             HStack(spacing: 12) {
-                Text(format == .exr ? "Brighter than white kept · Transparency kept"
-                     : takesCMYK && cmyk ? "CMYK – \(profile?.name ?? "No profile")"
-                     : format == .png || format == .tiff ? "Transparency kept · sRGB" : "sRGB")
+                Text(format == .exr ? AppLocalization.string("Brighter than white kept · Transparency kept")
+                     : takesCMYK && cmyk ? AppLocalization.format("CMYK – %1$@", profile?.name ?? AppLocalization.string("No profile"))
+                     : format == .png || format == .tiff ? AppLocalization.string("Transparency kept · sRGB") : "sRGB")
                     .foregroundStyle(.secondary)
                 Spacer()
-                if let error { Text(error).foregroundStyle(.red) }
+                if let error { Text(AppLocalization.string(error)).foregroundStyle(.red) }
                 else if isReady, let result {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(result.data.count), countStyle: .file)).monospacedDigit()
                 } else { Text("Updating…").foregroundStyle(.secondary) }
@@ -242,7 +242,7 @@ struct ExportAsSheet: View {
     /// RGB or CMYK: one small menu, as few need CMYK. The profile CMYK goes through is View › CMYK › Profile's, named in
     /// the line under the settings.
     private var colorMenu: some View {
-        Menu(cmyk ? "CMYK" : "RGB") {
+        Menu(AppLocalization.string(cmyk ? "CMYK" : "RGB")) {
             Toggle("RGB", isOn: Binding(get: { !cmyk }, set: { if $0 { cmyk = false } }))
             Toggle("CMYK", isOn: Binding(get: { cmyk }, set: { if $0 { cmyk = true } }))
         }
@@ -253,7 +253,7 @@ struct ExportAsSheet: View {
     private func loadProfile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "icc") ?? .data, UTType(filenameExtension: "icm") ?? .data]
-        panel.message = "Choose a CMYK ICC profile, such as the one your printer gave you"
+        panel.message = AppLocalization.string("Choose a CMYK ICC profile, such as the one your printer gave you")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { session.proofProfile = try CMYK.load(url) }
         catch { self.error = error.localizedDescription }
@@ -264,14 +264,14 @@ struct ExportAsSheet: View {
     @ViewBuilder private var moreFormats: some View {
         let others = formats.filter { $0 != .png && $0 != .jpeg }
         let chosen = others.contains(format)
-        let menu = Menu(chosen ? format.rawValue : "More") {
+        let menu = Menu(AppLocalization.string(chosen ? format.rawValue : "More")) {
             Picker("More formats", selection: $format) {
-                ForEach(others, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(others, id: \.self) { Text(AppLocalization.string($0.rawValue)).tag($0) }
             }
             .pickerStyle(.inline).labelsHidden()
         }
         .menuStyle(.button).fixedSize()
-        .help("Other formats: TIFF and PDF\(others.contains(.exr) ? ", and EXR to keep light brighter than white" : "")")
+        .help(AppLocalization.string(others.contains(.exr) ? "Other formats: TIFF and PDF, and EXR to keep light brighter than white" : "Other formats: TIFF and PDF"))
         if chosen { menu.buttonStyle(.borderedProminent) } else { menu.buttonStyle(.bordered) }
     }
 
@@ -294,7 +294,7 @@ struct ExportAsSheet: View {
     private var pageSize: String {
         let dpi = raster.resolution > 0 ? raster.resolution : 72
         let inches = { (pixels: Int) in (Double(pixels) / dpi).formatted(.number.precision(.fractionLength(0...2))) }
-        return "\(inches(width)) × \(inches(height)) in at \(Int(dpi.rounded())) DPI"
+        return AppLocalization.format("%1$@ × %2$@ in at %3$lld DPI", inches(width), inches(height), Int(dpi.rounded()))
     }
     private var percent: String { "\(Int((shownZoom * 100).rounded()))%" }
     private func zoomBy(_ direction: Int) {

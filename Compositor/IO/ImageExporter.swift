@@ -7,9 +7,9 @@ nonisolated enum ExportError: LocalizedError {
     case tooLarge, render, encode
     var errorDescription: String? {
         switch self {
-        case .tooLarge: "Image export supports canvases up to \(DocumentLimits.maxSurfaceMegapixels) megapixels and \(DocumentLimits.maxSide.formatted()) pixels per side."
-        case .render: "The canvas could not be rendered. Try a smaller canvas."
-        case .encode: "The image could not be encoded."
+        case .tooLarge: AppLocalization.format("Image export supports canvases up to %@ megapixels and %@ pixels per side.", String(DocumentLimits.maxSurfaceMegapixels), DocumentLimits.maxSide.formatted())
+        case .render: AppLocalization.string("The canvas could not be rendered. Try a smaller canvas.")
+        case .encode: AppLocalization.string("The image could not be encoded.")
         }
     }
 }
@@ -45,8 +45,16 @@ actor ImageExporter {
                       layer.maskFile == nil || snapshot.masks[layer.id] != nil else { throw ProjectError.missingImage }
             }
             try LiveMaskGraph.validate(snapshot.manifest.layers)
+            // Resolve operations before entering LiveMask's nonthrowing closures. The snapshot remains the source
+            // document; export, QuickLook and all flattened formats draw only from this derived dictionary.
+            var images = snapshot.images
+            for layer in snapshot.manifest.layers {
+                guard let operation = layer.cameraRawOperation else { continue }
+                guard let asset = images[layer.id] else { throw CameraRawOperationRenderError.unavailable }
+                images[layer.id] = try CameraRawOperationRenderer.shared.render(asset, operation: operation)
+            }
             let live = LiveMaskRenderer(bounds: CGRect(x: 0, y: 0, width: width, height: height), source: { records[$0]?.maskSourceID }) { id, target in
-                guard let layer = records[id], let asset = snapshot.images[id] else { return }
+                guard let layer = records[id], let asset = images[id] else { return }
                 let image = sixteenBit ? (try? DeepLayer.flattened(asset)) ?? asset.image : asset.image
                 let opacity = layer.effectiveOpacity(in: records)
                 let mask = snapshot.mask(for: layer).flatMap { $0.clipImage(placement: $0.placement, over: layer.transform, width: image.width, height: image.height) }

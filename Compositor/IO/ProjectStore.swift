@@ -17,7 +17,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 14
+    static let current = 15
     /// Every version `load` accepts. The package-header check, the manifest check and the error
     /// message all read this, so they cannot drift apart when `current` is bumped.
     static let supported = 1...ProjectManifest.current
@@ -58,6 +58,8 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     /// The stroke and drop shadow drawn around the layer.
     var effects: LayerEffects? = nil
     var text: LayerTextStyle? = nil
+    /// A plugin grade on the embedded source pixels. Missing on versions 1–14.
+    var cameraRawOperation: CameraRawOperation? = nil
 }
 
 nonisolated struct ProjectSnapshot: @unchecked Sendable {
@@ -70,11 +72,11 @@ nonisolated enum ProjectError: LocalizedError {
     case invalid, version(Int), missingImage, tooLarge, encode
     var errorDescription: String? {
         switch self {
-        case .invalid: "This is not a valid Compositor project, or its metadata is damaged."
-        case .version(let version): "This project uses format version \(version). This app supports versions \(ProjectManifest.supported.lowerBound)–\(ProjectManifest.supported.upperBound)."
-        case .missingImage: "An image inside the project is missing or damaged. The current document has not been replaced."
-        case .tooLarge: "This project exceeds the supported canvas, layer, file-size, or \(DocumentLimits.documentBudgetMegapixels)-megapixel document limit."
-        case .encode: "An image could not be saved. The previous project has not been replaced."
+        case .invalid: AppLocalization.string("This is not a valid Compositor project, or its metadata is damaged.")
+        case .version(let version): AppLocalization.format("This project uses format version %@. This app supports versions %@–%@.", String(version), String(ProjectManifest.supported.lowerBound), String(ProjectManifest.supported.upperBound))
+        case .missingImage: AppLocalization.string("An image inside the project is missing or damaged. The current document has not been replaced.")
+        case .tooLarge: AppLocalization.format("This project exceeds the supported canvas, layer, file-size, or %@-megapixel document limit.", String(DocumentLimits.documentBudgetMegapixels))
+        case .encode: AppLocalization.string("An image could not be saved. The previous project has not been replaced.")
         }
     }
 }
@@ -220,6 +222,11 @@ actor ProjectStore {
         guard (1...DocumentLimits.maxSide).contains(manifest.width), (1...DocumentLimits.maxSide).contains(manifest.height),
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
+            if let operation = layer.cameraRawOperation {
+                guard manifest.version >= 15, layer.imageFile != nil, layer.isGroup != true,
+                      layer.adjustment == nil, layer.text == nil, layer.shape == nil,
+                      operation.isValid else { throw ProjectError.invalid }
+            }
             if layer.shape?.smoothing == true {
                 guard manifest.version >= 14 else { throw ProjectError.invalid }
             }
