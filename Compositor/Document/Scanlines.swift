@@ -1,5 +1,6 @@
-import AppKit
+import CoreGraphics
 import CoreImage
+import Foundation
 
 /// Filter › Scanlines: the picture as a CRT draws it, in lines of light on a dark screen. The lines can bead into dots,
 /// waver, rise with the picture's brightness into its shapes, stop below a threshold, and split their red and blue.

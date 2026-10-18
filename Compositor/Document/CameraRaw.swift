@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// White balance on an already-rendered layer. Raw lighting presets are absent: temperature and tint
 /// are relative offsets, not kelvin.

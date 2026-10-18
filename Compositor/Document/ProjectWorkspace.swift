@@ -90,10 +90,19 @@ final class ProjectWorkspace {
             urls = panel.urls
         }
         var opened = false
-        for url in urls { opened = await loadProject(url) || opened }
+        for (index, url) in urls.enumerated() {
+            opened = await loadProject(url, preparing: !sendsBehindAtOnce(urls.dropFirst(index + 1).first)) || opened
+        }
         return opened
     }
-    private func loadProject(_ url: URL) async -> Bool {
+    /// Whether opening `next` straight after a project selects another tab before the project's draws: an image opens in
+    /// a tab of its own at once, and so does a project already open in one.
+    private func sendsBehindAtOnce(_ next: URL?) -> Bool {
+        guard let next else { return false }
+        return next.pathExtension.lowercased() != "comp"
+            || tabs.contains { $0.session.projectURL?.resolvingSymlinksInPath() == next.resolvingSymlinksInPath() }
+    }
+    private func loadProject(_ url: URL, preparing: Bool = true) async -> Bool {
         if let existing = tabs.first(where: { $0.session.projectURL?.resolvingSymlinksInPath() == url.resolvingSymlinksInPath() }) {
             selectedID = existing.id; return true
         }
@@ -101,8 +110,15 @@ final class ProjectWorkspace {
         let tab = ProjectTab(name: url.deletingPathExtension().lastPathComponent)
         tab.controller.window = window
         guard await tab.controller.open(url) else { return false }
+        // The textures its first frame draws from are made before the tab shows, away from the main thread, and go to
+        // the canvas as it's selected.
+        var prepared: GPUCanvasRenderer.Prepared?
+        if preparing, !CanvasView.gpuDisabled, let renderer = GPUCanvasRenderer.shared, let document = tab.session.document {
+            prepared = await renderer.prepare(document.canvasSources)
+        }
         if tabs.count == 1, current.session.document == nil { tabs.removeAll() }
         tab.controller.workspace = self; tabs.append(tab); selectedID = tab.id
+        if let prepared { GPUCanvasRenderer.shared?.adopt(prepared) }
         return true
     }
     func close(_ id: UUID) async {
@@ -128,25 +144,9 @@ final class ProjectWorkspace {
         }
         return true
     }
-    /// Readies the project on screen for quitting or closing, rather than refusing over what's in progress. Edits on
-    /// the canvas (a gradient waiting for Apply, pixels being moved) are applied, as switching tools does; an open dialog
-    /// (a filter, Levels, Hue/Saturation, the color picker…) is cancelled, as its Cancel button would, so nothing is
-    /// applied that wasn't OK'd.
-    func settlePendingEdits() async {
-        let session = current.session
-        if session.gradientEdit != nil { await session.commitGradient() }
-        if session.pixelMove != nil { await session.finishPixelMove() }
-        session.cancelFilter()
-        session.cancelHueSaturation()
-        session.cancelLevels()
-        session.finishAdjustmentEditing(commit: false)
-        session.cancelColorRange()
-        session.selectionAmountOperation = nil
-        if session.colorPicker != nil { session.closeColorPicker(commit: false) }
-    }
     func confirmQuit() async -> Bool {
         guard !isManaging, finishTextEditing() else { return false }
-        await settlePendingEdits()
+        await current.session.settlePendingEdits()
         guard canSwitch else { NSSound.beep(); return false }
         isManaging = true; defer { isManaging = false }
         for tab in quitOrder {
@@ -171,8 +171,11 @@ final class ProjectWorkspace {
             try? await Task.sleep(for: .milliseconds(30))
         }
         isManaging = true; defer { isManaging = false }
-        for url in urls {
-            if url.pathExtension.lowercased() == "comp" { _ = await loadProject(url); continue }
+        for (index, url) in urls.enumerated() {
+            if url.pathExtension.lowercased() == "comp" {
+                _ = await loadProject(url, preparing: !sendsBehindAtOnce(urls.dropFirst(index + 1).first))
+                continue
+            }
             let tab: ProjectTab
             if let destination {
                 guard let existing = tabs.first(where: { $0.id == destination }) else { continue }
@@ -200,7 +203,7 @@ final class ProjectWorkspace {
     /// Cmd-V with a whole layer copied: pastes it complete — a copy above it in its own project, or brought over as
     /// dragging it onto this tab does. False when there is none, and Paste goes on with pixels.
     func pasteCopiedLayer() -> Bool {
-        let count = EditorSession.pasteboard.changeCount
+        let count = SystemPasteboard.changeCount
         guard let source = tabs.first(where: { $0.session.copiedLayer?.changeCount == count }),
               let copied = source.session.copiedLayer?.ids, let layers = source.session.document?.layers else { return false }
         let ids = copied.filter { id in layers.contains { $0.id == id } }

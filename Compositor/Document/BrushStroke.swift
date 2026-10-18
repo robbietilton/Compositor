@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 nonisolated enum SpotHealingMode: String, CaseIterable, Sendable, Hashable {
     case contentAware = "Content-Aware"
@@ -46,8 +47,7 @@ nonisolated enum BrushRaster {
     /// is copied byte for byte, several times quicker than drawing it.
     static func copy(_ image: CGImage) throws -> CGContext {
         let context = try Self.context(width: image.width, height: image.height, mask: false)
-        guard image.bitsPerPixel == 32, image.bitsPerComponent == 8, image.bitmapInfo == context.bitmapInfo,
-              image.colorSpace == context.colorSpace, let source = image.dataProvider?.data,
+        guard copiesStraight(image, into: context), let source = image.dataProvider?.data,
               let bytes = CFDataGetBytePtr(source), let target = context.data,
               CFDataGetLength(source) >= image.bytesPerRow * (image.height - 1) + image.width * 4 else {
             draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), mask: false, context: context)
@@ -58,6 +58,15 @@ nonisolated enum BrushRaster {
             memcpy(target + y * context.bytesPerRow, bytes + y * image.bytesPerRow, row)
         }
         return context
+    }
+    /// Whether `copy` copies `image` byte for byte rather than drawing it: its pixels are laid out as a color context's.
+    static func copiesStraight(_ image: CGImage) -> Bool {
+        guard let layout = try? context(width: 1, height: 1, mask: false) else { return false }
+        return copiesStraight(image, into: layout)
+    }
+    private static func copiesStraight(_ image: CGImage, into context: CGContext) -> Bool {
+        image.bitsPerPixel == 32 && image.bitsPerComponent == 8 && image.bitmapInfo == context.bitmapInfo
+            && image.colorSpace == context.colorSpace
     }
 
     /// Runs `body` over `count` pixels in a few bands at once, each a (start, length) of whole pixels.
@@ -917,10 +926,12 @@ final class BrushStroke {
         }
         guard let rgba = pixels.data, let gray = painting.data else { throw ExportError.render }
         let mode = Int32(SpotHealingMode.allCases.firstIndex(of: settings.healingMode) ?? 0)
-        guard spot_heal(rgba.assumingMemoryBound(to: UInt8.self), gray.assumingMemoryBound(to: UInt8.self), w, h,
-                        pixels.bytesPerRow, Float(settings.opacity), mode, UInt32.random(in: .min ... .max)) == 0 else {
-            throw ProjectError.tooLarge
+        // Held to the end of the call: optimized, Swift may free a context right after its last use, its `data`.
+        let status = withExtendedLifetime((pixels, painting)) {
+            spot_heal(rgba.assumingMemoryBound(to: UInt8.self), gray.assumingMemoryBound(to: UInt8.self), w, h,
+                      pixels.bytesPerRow, Float(settings.opacity), mode, UInt32.random(in: .min ... .max))
         }
+        guard status == 0 else { throw ProjectError.tooLarge }
         guard let healed = pixels.makeImage() else { throw ExportError.render }
         for key in coverage.keys {
             guard let tile = tiles[key] else { continue }

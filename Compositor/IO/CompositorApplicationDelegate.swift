@@ -6,6 +6,13 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     var session: EditorSession { workspace.current.session }
     var projects: ProjectController { workspace.current.controller }
     var showEditor: (() -> Void)?
+    /// Whether the app is hosting its tests: XCTest's configuration is in the environment from launch, and XCTest itself
+    /// is loaded. The UI tests, which drive the app from outside, pass -SUEnableAutomaticChecks NO instead.
+    static var runsTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
     /// Checks the update feed and installs new versions (Sparkle), offering each one with what's new listed in it.
     /// Started only after launch: its first-run prompt, shown during launch, kept the editor window from ever opening.
     private let updateDriver = UpdateDriver()
@@ -81,6 +88,8 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { Self.removeIfSystemExtra(at: index, in: menu) }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            // Not while tests host the app: an update out since this build would come up as a modal alert and stop them.
+            guard !Self.runsTests else { return }
             do { try self?.updater.start() } catch { NSLog("Sparkle didn't start: \(error)") }
             #if DEBUG
             // Trying an update against a local feed: check straight away.

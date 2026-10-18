@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 nonisolated enum CameraRawCurvePage: String, CaseIterable, Sendable { case parametric = "Parametric", point = "Point" }
 nonisolated enum CameraRawPointChannel: String, CaseIterable, Sendable { case rgb = "RGB", red = "Red", green = "Green", blue = "Blue" }

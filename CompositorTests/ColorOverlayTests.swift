@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 import Testing
 @testable import Compositor
 

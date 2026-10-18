@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#endif
+import CoreGraphics
+import Foundation
 import Observation
 
 nonisolated struct PaletteColor: Equatable, Sendable {
@@ -7,14 +11,18 @@ nonisolated struct PaletteColor: Equatable, Sendable {
     var blue: CGFloat
     static let black = PaletteColor(red: 0, green: 0, blue: 0)
     static let white = PaletteColor(red: 1, green: 1, blue: 1)
+    #if os(macOS)
     var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
+    #endif
     init(red: CGFloat, green: CGFloat, blue: CGFloat) {
         self.red = red; self.green = green; self.blue = blue
     }
+    #if os(macOS)
     init?(_ color: NSColor) {
         guard let rgb = color.usingColorSpace(.sRGB) else { return nil }
         self.init(red: min(1, max(0, rgb.redComponent)), green: min(1, max(0, rgb.greenComponent)), blue: min(1, max(0, rgb.blueComponent)))
     }
+    #endif
 }
 
 extension EditorSession {
@@ -119,8 +127,7 @@ extension EditorSession {
                     if commit, !isMaskSelected { foregroundColor = color }
                 }
             case .effect(let kind):
-                let color = commit ? colorPicker.color : colorPicker.original
-                changeEffects { $0.setColor(color, for: kind) }
+                setEffectColor(commit ? colorPicker.color : colorPicker.original, for: kind, picking: colorPicker, exactly: !commit)
             case .gradientMap(let highlights):
                 // The end has been previewing the working color; Cancel puts the original back.
                 setGradientMapColor(commit ? colorPicker.color : colorPicker.original, highlights: highlights)
@@ -153,7 +160,15 @@ extension EditorSession {
     /// While the picker is open on an effect's color, the canvas follows its working color.
     func previewEffectColor() {
         guard let colorPicker, case .effect(let kind) = colorPicker.target else { return }
-        changeEffects { $0.setColor(colorPicker.color, for: kind) }
+        setEffectColor(colorPicker.color, for: kind, picking: colorPicker)
+    }
+    /// The whole picking, OK or Cancel included, is one undo step, yet Undo stays available while picking. A color the
+    /// effect already has, to the 8 bits the picker works in, is left as it is: an effect's color can be finer, written
+    /// by hand or by a script, and the picker opening on it, or following an Undo to it, mustn't add a step for that.
+    /// `exactly`: for Cancel, which puts back the very color the effect had, however fine.
+    private func setEffectColor(_ color: PaletteColor, for kind: LayerEffectKind, picking: ColorPickerState, exactly: Bool = false) {
+        guard exactly || editingEffects.color(kind)?.quantized != color.quantized else { return }
+        changeEffects(coalescing: picking) { $0.setColor(color, for: kind) }
     }
     /// Preview the picker's working color in the active on-canvas text draft.
     func previewTextColor() {
@@ -290,7 +305,9 @@ enum ColorPickerTarget: Equatable {
 final class ColorPickerState {
     let target: ColorPickerTarget
     var background: Bool { target == .palette(background: true) }
-    let original: PaletteColor
+    /// What Cancel puts back. An effect's picking starts over from the color an Undo or Redo of another edit gives the
+    /// effect.
+    var original: PaletteColor
     /// The foreground picker opened while text was being edited: that text and the color it had.
     var editedText: (draftID: UUID, style: LayerTextStyle)?
     var hsb: PickerHSB

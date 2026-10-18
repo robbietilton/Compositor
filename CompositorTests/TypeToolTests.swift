@@ -36,6 +36,7 @@ struct TypeToolTests {
         #expect(session.activeLayer?.liveText?.style == draft.style)
         #expect(session.activeLayer?.origin == start.origin)
         #expect(session.history.undoCount == before + 1)
+        #expect(session.history.undoName == "New Text Layer")
         session.editActiveText()
         session.textDraft = nil
         #expect(session.history.undoCount == before + 1)
@@ -43,6 +44,7 @@ struct TypeToolTests {
         draft = try #require(session.textDraft)
         draft.style.content = "Changed"
         #expect(session.applyText(draft))
+        #expect(session.history.undoName == "Edit Text")
         session.undo()
         #expect(session.activeLayer?.liveText?.style.content == "Hello\nCompositor")
         session.undo()
@@ -293,6 +295,31 @@ struct TypeToolTests {
         #expect(NSCursor.current === NSCursor.arrow, "off the canvas, the arrow")
     }
 
+    /// A save made while text is typed takes it as Done would put it, new text or changed, and leaves the editor
+    /// as it was: the text still open, the document and its history untouched.
+    @Test func aSaveWhileTypingTakesTheTextAsDoneWould() throws {
+        let session = makeSession()
+        session.beginText(at: CGPoint(x: 30, y: 40))
+        session.textDraft?.style.content = "Hello"
+        let document = session.document, undoCount = session.history.undoCount
+        let typed = try #require(session.saveSnapshot())
+        #expect(typed.manifest.layers.compactMap(\.text?.content) == ["Hello"])
+        #expect(typed.manifest.activeLayerID == typed.manifest.layers.last?.id)
+        #expect(session.textDraft?.style.content == "Hello")
+        #expect(session.document == document && session.history.undoCount == undoCount)
+
+        #expect(session.finishText())
+        session.editActiveText()
+        session.textDraft?.style.content = "Changed"
+        let changed = try #require(session.saveSnapshot())
+        #expect(changed.manifest.layers.compactMap(\.text?.content) == ["Changed"])
+        #expect(session.activeLayer?.liveText?.style.content == "Hello")
+        // Nothing typed yet in new text: nothing to put in.
+        session.cancelText()
+        session.beginText(at: CGPoint(x: 300, y: 300), newLayer: true)
+        #expect(session.saveSnapshot()?.manifest.layers.count == 2)
+    }
+
     @Test func invalidAndStaleDraftsDoNotChangeDocument() throws {
         let session = makeSession()
         session.beginText(at: .zero)
@@ -501,5 +528,34 @@ struct TypeToolTests {
         #expect(session.textDraft?.style.color(at: 0).blue == 1)
         session.closeColorPicker(commit: false)
         #expect(session.textDraft?.style == colored)
+    }
+
+    /// Option with the arrows sets the spacing while typing, as in Photoshop: left and right the tracking, up and down
+    /// the leading, counting from what Auto works out to; Shift makes each step ten.
+    @Test func optionArrowsSetTheSpacing() throws {
+        let session = makeSession()
+        beginEditingText(in: session)
+        let view = CanvasView(session: session)
+        view.frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+        view.synchronizeDisplay()
+        let editor = try #require(view.inlineTextEditor)
+        func press(_ keyCode: UInt16, _ arrow: Int, shift: Bool = false) throws {
+            let key = String(Character(try #require(Unicode.Scalar(UInt32(arrow)))))
+            let flags: NSEvent.ModifierFlags = shift ? [.option, .shift, .function, .numericPad] : [.option, .function, .numericPad]
+            editor.textView.keyDown(with: try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: 0, windowNumber: 0, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false,
+                keyCode: keyCode)))
+        }
+        let style = try #require(session.textDraft?.style)
+        try press(124, NSRightArrowFunctionKey)
+        #expect(session.textDraft?.style.tracking == style.tracking + 1)
+        try press(123, NSLeftArrowFunctionKey, shift: true)
+        #expect(session.textDraft?.style.tracking == style.tracking - 9)
+        try press(126, NSUpArrowFunctionKey, shift: true)
+        #expect(session.textDraft?.style.leading == style.lineHeight - 10)
+        let leading = try #require(session.textDraft?.style.lineHeight)
+        try press(125, NSDownArrowFunctionKey)
+        #expect(session.textDraft?.style.leading == leading + 1)
+        #expect(session.textDraft?.style.content == "Editing")
     }
 }

@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import Metal
 
 /// Shared pipeline, with stroke-local tile storage. No full-canvas GPU allocation.

@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import Accelerate
 import CoreImage
 

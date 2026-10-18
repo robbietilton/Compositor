@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// The Blur tool's modes. Smudge and Liquify push the active layer's pixels around under the brush.
 /// The Brush tool's modes.
@@ -217,7 +218,7 @@ extension EditorSession {
             brushError = isMaskSelected ? "Smudge and Liquify work on a layer's pixels, not its mask." : paintRefusal
             return
         }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             let stroke = try WarpStroke(layer: layer, image: image, deep: try layer.asset.flatMap { try DeepLayer.flattened($0) },
                                         transform: displayedTransform(for: layer),

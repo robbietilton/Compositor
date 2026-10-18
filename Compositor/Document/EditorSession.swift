@@ -59,6 +59,26 @@ struct ImageLayer: Identifiable, Equatable {
     }
 }
 
+extension ImageLayer {
+    /// The layer's size on the canvas and, once it's scaled, by how much, for its row. A photo shrunk to 5% keeps
+    /// every one of its pixels; the percentage says so, where the size alone reads as if it had been resampled small.
+    var sizeLabel: String {
+        let text = "\(Int(size.width.rounded())) × \(Int(size.height.rounded())) px"
+        guard let pixels = asset?.image.width, pixels > 0 else { return text }
+        // Measured across the width, as the Transform bar's Scale field is.
+        let percent = Double(size.width) / Double(pixels) * 100
+        guard abs(percent - 100) >= 0.05 else { return text }
+        return text + " · " + percent.formatted(.number.precision(.fractionLength(0...1))) + "%"
+    }
+
+    /// The tag after the size of a layer keeping 16 bits a channel, or light brighter than white (`DeepLayer`); nil
+    /// once it's rasterized to 8.
+    var depthLabel: String? {
+        guard let asset, asset.deep != nil, liveText == nil, adjustment == nil, !isGroup else { return nil }
+        return asset.isHDR ? "HDR" : "16-Bit"
+    }
+}
+
 struct CanvasDocument: Equatable {
     let id: UUID
     let width: Int
@@ -95,6 +115,9 @@ enum NavigationTool: String, CaseIterable {
     var isBrushTool: Bool { self == .brush || self == .spotHealing || self == .cloneStamp || self == .blur }
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
+    /// Tools that hold Option to sample a color, as the Eyedropper does, as in Photoshop. Clone Stamp's Option sets its
+    /// source.
+    var samplesColorWithOption: Bool { self == .brush || self == .spotHealing || self == .gradient }
     var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
     var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
 }
@@ -110,6 +133,8 @@ final class EditorSession {
     /// The layer whose effects panel is open.
     var effectsEditing: LayerEffectSelection?
     var effectsEditingOriginal: LayerEffects?
+    /// A slider in the effect's panel is held: what it sets goes into one undo step, finished when it's let go.
+    var isChangingEffects = false
     var effectSelection: LayerEffectSelection?
     @ObservationIgnored var effectsPreviews = EffectsPreviewCache()
     var projectURL: URL?
@@ -152,6 +177,9 @@ final class EditorSession {
         _ = showsBusy // Re-evaluate in the UI when a long operation starts or ends.
         return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && !isProjectBusy && !isImporting && brushStroke == nil && warpStroke == nil && levels == nil && !showsNewDocument && !showsImporter && renamingLayerID == nil && importError == nil && adjustmentEditingID == nil && !showsConversionSheet
     }
+    /// An edit under way, which a change to the project made elsewhere waits for rather than pulling the document out
+    /// from under it: whatever a project operation waits for, and a transform.
+    var hasEditInProgress: Bool { !canStartProjectOperation || transformEdit != nil }
     func waitForFileRequest() async {
         while !canStartProjectOperation {
             await withCheckedContinuation { fileRequestWaiters.append($0) }
@@ -384,6 +412,100 @@ final class EditorSession {
               let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
         return LayerTransform(origin: CGPoint(x: minX, y: minY), size: CGSize(width: max(1, maxX - minX), height: max(1, maxY - minY)))
     }
+    /// The layer a Move-tool press that misses the transform handles drags, and whether it was picked from under
+    /// the press. Command flips Auto Select while it's held, as in Photoshop: with Auto Select off it picks
+    /// the layer under the press; with it on, it keeps the active layer. Otherwise the active layer, unless
+    /// auto-select finds another layer there — including one stacked above a selected background that also
+    /// contains the press. A press on empty canvas still drags the active layer: it need not land inside the layer's bounds.
+    func transformPressLayer(at pixel: CGPoint, command: Bool = false, shift: Bool = false) -> (id: UUID, picked: Bool)? {
+        guard canEditLayers || transformEdit != nil, let document else { return nil }
+        let underPointer = document.renderLayers.reversed().first { $0.asset != nil && $0.transform.contains(pixel) }?.id
+        let active = activeLayer.flatMap { layer in
+            layer.asset != nil && !layer.isGroup && document.effectiveVisibleIDs.contains(layer.id) ? layer : nil
+        }
+        let picks = transformEdit == nil
+        let autoSelect = transformAutoSelect != command
+        // Cmd-Shift-click adds the layer under the pointer to the selection, whichever way Auto Select is set.
+        if command, shift || !transformAutoSelect, picks, let underPointer {
+            return (underPointer, true)
+        }
+        // Several layers selected, or a folder: a press inside their box drags them all, and so does one outside it
+        // unless auto-select finds a layer there.
+        if transformsAsGroup, let id = activeLayerID {
+            let box = transformEdit?.draft ?? groupTransformBox
+            if box?.contains(pixel) == true || !(picks && autoSelect) || underPointer == nil { return (id, false) }
+        }
+        if let active, editedTransform(for: active).contains(pixel) {
+            // `renderLayers` is bottom to top, so a later index is painted above. Prefer that layer
+            // when auto-select is on; a full-canvas background contains every press, and keeping it
+            // would hide a foreground layer stacked on top of it.
+            if picks, autoSelect, let underPointer, underPointer != active.id,
+               let top = document.renderLayers.lastIndex(where: { $0.id == underPointer }),
+               let current = document.renderLayers.lastIndex(where: { $0.id == active.id }),
+               top > current {
+                return (underPointer, true)
+            }
+            return (active.id, false)
+        }
+        if picks, autoSelect, let underPointer { return (underPointer, true) }
+        return active.map { ($0.id, false) }
+    }
+    /// A Move-tool press at `pixel`: on the transform box's `handle`, which the canvas finds, or else on the layer
+    /// `transformPressLayer` picks, which is selected. It starts an edit, unless one waits for Apply, once a value the
+    /// Move bar's fields were still changing is applied; Command on a handle distorts, as in Photoshop. Nil when there's
+    /// nothing to drag.
+    func beginTransformDrag(at pixel: CGPoint, handle: TransformDrag.Mode?, command: Bool = false, shift: Bool = false) -> TransformDrag? {
+        guard canEditLayers || transformEdit != nil, document != nil else { return nil }
+        var mode = handle
+        if mode == nil, let target = transformPressLayer(at: pixel, command: command, shift: shift) {
+            // Cmd-Shift-click adds the layer under the pointer to the selection (and takes it out again); Cmd-click
+            // on its own selects just that one.
+            if target.picked, command, shift {
+                extendSelection(with: target.id)
+            } else if target.picked {
+                selectLayer(target.id)
+            }
+            mode = .move
+        }
+        guard var mode else { return nil }
+        // A value the Move bar's fields were still changing is applied first: this drag is an edit of its own.
+        if transformEdit?.fromFields == true { commitTransform() }
+        if transformEdit == nil { beginTransform(persistent: false) }
+        // Cmd-dragging a handle distorts, as in Photoshop; once distorted, handles keep distorting.
+        if case .resize(let index) = mode, command || transformEdit?.corners != nil {
+            beginDistort()
+            if transformEdit?.corners != nil { mode = .distort(index) }
+        }
+        guard let transform = transformEdit?.draft else { return nil }
+        return TransformDrag(original: transform, start: pixel, mode: mode, originalCorners: transformEdit?.corners)
+    }
+    /// A Move-tool drag carried on to `pixel`. Shift keeps a move on one axis, turns in 15° steps and flips the aspect
+    /// lock while resizing; Option resizes about the center; Control drags without snapping. True when it moved a
+    /// distortion's corners rather than the transform.
+    @discardableResult
+    func dragTransform(_ drag: TransformDrag, to pixel: CGPoint, shift: Bool = false, option: Bool = false, control: Bool = false) -> Bool {
+        if let corners = drag.corners(to: pixel, shift: shift) {
+            previewCorners(corners)
+            return true
+        }
+        let moving = transformEdit?.group.map { Set($0.originals.keys) } ?? Set([transformEdit?.layerID].compactMap { $0 })
+        let tolerance = TransformSnap.distance / max(viewport.pointsPerPixel, 0.0001)
+        // Moving and resizing snap to the canvas and the other layers — a resized layer's dragged edges — and
+        // rotating is left alone. Control drags freely.
+        var target = pixel
+        if case .resize = drag.mode, !control {
+            target = snappedResizePoint(pixel, drag: drag, proportional: locksTransformRatio != shift, moving: moving, tolerance: tolerance) {
+                drag.updated(to: $0, lockRatio: locksTransformRatio, shift: shift, option: option)
+            }
+        }
+        // Dragging, scaling and rotating land on whole pixels and whole degrees; typed values stay exact.
+        var draft = drag.updated(to: target, lockRatio: locksTransformRatio, shift: shift, option: option).rounded()
+        if case .move = drag.mode, !control {
+            draft = snappedMove(draft, moving: moving, tolerance: tolerance)
+        }
+        previewTransform(draft)
+        return false
+    }
     func selectLayer(_ id: UUID?) {
         effectSelection = nil
         if id != activeLayerID, !finishText() { return }
@@ -484,7 +606,7 @@ final class EditorSession {
     func commitTransform() {
         snapGuides = ([], [])
         blendPreview = nil
-        finishOpacityEdit()
+        finishHeldDrags()
         guard let edit = transformEdit else { return }
         defer {
             if transformDuplicate != nil { transformDuplicate = nil; endEdit() }
@@ -581,6 +703,11 @@ final class EditorSession {
     var showsImporter = false { didSet { resumeFileRequests() } }
     var isImporting = false { didSet { resumeFileRequests() } }
     var importError: String? { didSet { resumeFileRequests() } }
+    /// Why the project couldn't be saved, for whoever shows the editor to say so.
+    var saveError: String?
+    /// Something else changed the project's file while it has unsaved work, for whoever shows the editor to ask
+    /// whether to take that version up.
+    var changedOnDisk = false
     var showsConversionSheet = false { didSet { resumeFileRequests() } }
     var conversionRequest: PSDConversionRequest?
     /// Tests assign this to skip the conversion sheet.
@@ -596,6 +723,9 @@ final class EditorSession {
     @ObservationIgnored private var rawContinuation: CheckedContinuation<RawDevelopSettings?, Never>?
     /// Tests assign this to develop without a sheet.
     @ObservationIgnored var confirmRawDevelop: ((URL, RawDevelopSettings) async -> RawDevelopSettings?)?
+    /// Import develops the full frame at 16 bits a channel, for a 16-bit layer that keeps the RAW's latitude
+    /// (`DeepLayer`); off, at 8 bits, dithered, as any other image comes in. The iPad's window turns it off.
+    @ObservationIgnored var developsRawAtSixteenBits = true
 
     /// Puts the develop sheet up and waits for the choice; nil means the import was cancelled.
     func developRaw(_ url: URL) async -> RawDevelopSettings? {
@@ -657,25 +787,38 @@ final class EditorSession {
     func undo() {
         // Like Photoshop, the first Undo discards a pending gradient.
         if gradientEdit != nil { cancelGradient(); return }
+        let group = history.undoGroup
         guard canUndo, let snapshot = history.undo() else { return }
-        restore(snapshot)
+        restore(snapshot, group: group)
     }
 
     func redo() {
+        let group = history.redoGroup
         guard canRedo, let snapshot = history.redo() else { return }
-        restore(snapshot)
+        restore(snapshot, group: group)
     }
 
-    private func restore(_ snapshot: DocumentHistory.Snapshot) {
+    /// `group`: what the edit undone or redone carried on (see `DocumentHistory.end`).
+    private func restore(_ snapshot: DocumentHistory.Snapshot, group: AnyObject?) {
         cancelCrop()
         cancelGradient()
         // A different canvas, or this one at another size (a rotation), is fitted to the window again.
         let changedCanvas = document?.id != snapshot.document?.id || document?.size != snapshot.document?.size
         let keepMaskTarget = isMaskSelected && activeLayerID == snapshot.activeLayerID
+        var picking: (picker: ColorPickerState, kind: LayerEffectKind, color: PaletteColor?)?
+        if let colorPicker, case .effect(let kind) = colorPicker.target { picking = (colorPicker, kind, editingEffects.color(kind)) }
         document = snapshot.document
         activeLayerID = snapshot.activeLayerID
         isMaskSelected = keepMaskTarget && activeLayer?.mask != nil
         if changedCanvas, let document { viewport.fit(documentSize: document.size) }
+        // The picker open on an effect's color follows the color Undo or Redo gave the effect. Another edit undone or
+        // redone starts the picking over from there, so neither its OK nor its Cancel puts back a color that edit took
+        // away. An Undo or Redo of the picking's own step leaves Cancel putting back the color from before the picking,
+        // with no step left unless an edit made beside the picker had split the picking in two.
+        if let picking, let color = editingEffects.color(picking.kind), color != picking.color {
+            if group !== picking.picker { picking.picker.original = color }
+            picking.picker.hsb.setRGB(color)
+        }
     }
 
     /// Nestable transaction boundary; future tools can group a complete gesture.
@@ -683,7 +826,10 @@ final class EditorSession {
         history.begin(name, document: document, selection: activeLayerID)
     }
 
-    func endEdit() { history.end(document: document, selection: activeLayerID) }
+    /// `coalescing`: what the edit carries on, such as the color picker it came from (see `DocumentHistory.end`).
+    func endEdit(coalescing group: AnyObject? = nil) {
+        history.end(document: document, selection: activeLayerID, coalescing: group)
+    }
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
     /// How the Layers panel looks: grayed for what lasts (a dialog, a pending transform, crop or gradient, a long
     /// operation), but not for what only lasts while the mouse is down (a stroke, a move or Auto Select drag, moving
@@ -696,8 +842,15 @@ final class EditorSession {
             && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
     var canEditLayers: Bool {
+        textDraft == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && canEditBesideCanvasEdits
+    }
+    /// `canEditLayers`, but with text being typed, a transform, a crop or a gradient waiting for Apply open on the
+    /// canvas: none of them changes a layer's effects, and each is applied to the layer as it is then, so the effect
+    /// panel, which floats beside the canvas, keeps working through them. Transform Selection, whose Cancel puts back
+    /// the whole project, OKs the panel as it starts instead.
+    var canEditBesideCanvasEdits: Bool {
         _ = showsBusy
-        return selectionAmountOperation == nil && colorRange == nil && textDraft == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
+        return selectionAmountOperation == nil && colorRange == nil && document != nil && brushStroke == nil && warpStroke == nil && !isProjectBusy && !isImporting && !showsNewDocument && !showsImporter && renamingLayerID == nil && pixelMove == nil && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
 
     func addBlankLayer() {
@@ -880,10 +1033,15 @@ final class EditorSession {
                     guard let settings = await developRaw(url) else { continue }
                     defer { if rawImporting { endRawDevelop() } }
                     // Seconds of work: off the main actor, or pressing Import freezes the window.
-                    // A 16-bit layer: a RAW's latitude stays for later Levels, Curves and Camera Raw (`DeepLayer`).
-                    guard let developed = await RawImporter.Queue.shared.develop(url, settings: settings, limit: nil, sixteenBit: true)
+                    // A 16-bit layer: a RAW's latitude stays for later Levels, Curves and Camera Raw (`DeepLayer`),
+                    // unless the window has the develop at 8 bits (`developsRawAtSixteenBits`).
+                    let sixteenBit = developsRawAtSixteenBits
+                    guard let developed = await RawImporter.Queue.shared.develop(url, settings: settings, limit: nil, sixteenBit: sixteenBit)
                     else { throw ImageImportError.unreadable }
-                    insert(try DeepLayer.asset(developed, name: url.deletingPathExtension().lastPathComponent), centeredAt: point)
+                    let name = url.deletingPathExtension().lastPathComponent
+                    insert(sixteenBit ? try DeepLayer.asset(developed, name: name)
+                                      : ImportedImage(image: developed, thumbnail: try PixelAdjust.thumbnail(of: developed), name: name),
+                           centeredAt: point)
                     if rawOpensCameraRaw { cameraRawAfterImport = activeLayerID }
                     rawOpensCameraRaw = false
                 } else if UTType(filenameExtension: url.pathExtension)?.conforms(to: .svg) == true {

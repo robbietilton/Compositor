@@ -1,0 +1,22 @@
+// Tests on iPadOS: the iPad's own, in this folder, and the editor's that build for it unchanged. The rest of
+// CompositorTests/ drives the Mac's windows and views, or imports AppKit.
+
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 2
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+
+PRODUCT_NAME = $(TARGET_NAME)
+PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.ipad.tests
+GENERATE_INFOPLIST_FILE = YES
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/CompositorPad.app/CompositorPad
+BUNDLE_LOADER = $(TEST_HOST)
+
+SWIFT_VERSION = 5.0
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
+
+EXCLUDED_SOURCE_FILE_NAMES = $(SRCROOT)/CompositorPadTests/CompositorPadTests.xcconfig $(SRCROOT)/CompositorTests/*
+INCLUDED_SOURCE_FILE_NAMES = $(SRCROOT)/CompositorTests/BlurBrushTests.swift $(SRCROOT)/CompositorTests/CanvasRotationTests.swift $(SRCROOT)/CompositorTests/CloneStampTests.swift $(SRCROOT)/CompositorTests/ColorOverlayTests.swift $(SRCROOT)/CompositorTests/CompositorTests.swift $(SRCROOT)/CompositorTests/CropToCanvasImportTests.swift $(SRCROOT)/CompositorTests/DeepLayerTests.swift $(SRCROOT)/CompositorTests/DraftDrawingTests.swift $(SRCROOT)/CompositorTests/GPUTexturePreparationTests.swift $(SRCROOT)/CompositorTests/GroupingSelectionTests.swift $(SRCROOT)/CompositorTests/LargeCanvasBrushTests.swift $(SRCROOT)/CompositorTests/PSBImportTests.swift $(SRCROOT)/CompositorTests/PSDAdjustmentTests.swift $(SRCROOT)/CompositorTests/PSDFixture.swift $(SRCROOT)/CompositorTests/PSDRoundTripTests.swift $(SRCROOT)/CompositorTests/PSDVectorFixtures.swift $(SRCROOT)/CompositorTests/ProjectRoundTripTests.swift $(SRCROOT)/CompositorTests/RawDitherTests.swift $(SRCROOT)/CompositorTests/ResizeSnapTests.swift $(SRCROOT)/CompositorTests/ScanlinesTests.swift $(SRCROOT)/CompositorTests/ShapeToolTests.swift $(SRCROOT)/CompositorTests/SizeDraftTests.swift $(SRCROOT)/CompositorTests/SpotHealingTests.swift $(SRCROOT)/CompositorTests/TextEditingTests.swift $(SRCROOT)/CompositorTests/TransformDragTests.swift

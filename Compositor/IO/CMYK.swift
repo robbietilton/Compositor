@@ -1,5 +1,7 @@
-import AppKit
 import ColorSync
+import CoreGraphics
+import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 /// A CMYK output profile: how a press or printer turns ink amounts into color, read from an ICC file.

@@ -29,14 +29,43 @@ nonisolated struct CanvasSizeDraft {
     }
 
     func displayed(widthAxis: Bool) -> Double {
+        displayed(widthAxis ? width : height, widthAxis: widthAxis)
+    }
+
+    /// `pixels` along an axis in the unit chosen, less the current size when relative.
+    private func displayed(_ pixels: Double, widthAxis: Bool) -> Double {
         let original = Double(widthAxis ? originalWidth : originalHeight)
-        let pixels = (widthAxis ? width : height) - (relative ? original : 0)
+        let difference = pixels - (relative ? original : 0)
         switch unit {
-        case .pixels: return pixels
-        case .percent: return pixels / original * 100
-        case .inches: return pixels / resolution
-        case .centimeters: return pixels / resolution * 2.54
+        case .pixels: return difference
+        case .percent: return difference / original * 100
+        case .inches: return difference / resolution
+        case .centimeters: return difference / resolution * 2.54
         }
+    }
+
+    /// How far scrubbing the width or height can take it, in the unit chosen.
+    func scrubRange(widthAxis: Bool) -> ClosedRange<Double> {
+        let original = Double(widthAxis ? originalWidth : originalHeight)
+        let other = Double(widthAxis ? originalHeight : originalWidth)
+        let lower = locked ? max(1, original / other) : 1.0
+        let upper = locked ? min(30_000, 30_000 * original / other) : 30_000.0
+        return displayed(lower, widthAxis: widthAxis)...displayed(upper, widthAxis: widthAxis)
+    }
+
+    /// How much a point of scrubbing changes the width or height, in the unit chosen.
+    func scrubSensitivity(widthAxis: Bool) -> Double {
+        switch unit {
+        case .pixels: return 1
+        case .percent: return 100 / Double(widthAxis ? originalWidth : originalHeight)
+        case .inches: return 1 / resolution
+        case .centimeters: return 2.54 / resolution
+        }
+    }
+
+    /// What an uncompressed RGBA canvas of `width` × `height` takes in memory, as the dialog shows it.
+    static func memory(width: Int, height: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(width) * Int64(height) * 4, countStyle: .memory)
     }
 
     mutating func set(_ value: Double, widthAxis: Bool) {

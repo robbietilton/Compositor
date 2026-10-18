@@ -1,0 +1,64 @@
+// The iPadOS app: the editor in Compositor/ (its document model, file formats and renderers) under the UIKit interface
+// in this folder. It builds from the same sources as the Mac app, less the files below that are the Mac's own
+// interface.
+
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 2
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+SUPPORTS_MACCATALYST = NO
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
+
+PRODUCT_NAME = $(TARGET_NAME)
+// A build of your own, for your own device or TestFlight, sets its bundle identifier, build number and display name,
+// with DEVELOPMENT_TEAM, in the local file included at the end rather than here.
+PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.ipad
+MARKETING_VERSION = 0.1
+CURRENT_PROJECT_VERSION = 1
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+INFOPLIST_FILE = Config/CompositorPad-Info.plist
+GENERATE_INFOPLIST_FILE = YES
+// Set in the local file too, by a build of your own.
+INFOPLIST_KEY_CFBundleDisplayName = Compositor
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.graphics-design
+// Why the share sheet's Save Image adds an export to the photo library, which iPadOS asks the first time. Without it,
+// Save Image isn't offered.
+INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = Compositor saves the images you export to your photo library.
+INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES
+INFOPLIST_KEY_UILaunchScreen_Generation = YES
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+// The app sends nothing anywhere and encrypts nothing (a project's fingerprint is a SHA-256 hash, which is exempt), so
+// App Store Connect needn't ask about export compliance on every upload.
+INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+
+// The Mac's icon set, whose iPad entry is the Mac artwork redrawn by scripts/ipad-icon.swift.
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+
+// As the Mac app: the pixel kernels are optimized even in Debug, and Swift code runs on the main actor unless it says
+// otherwise.
+GCC_OPTIMIZATION_LEVEL = 3
+ENABLE_PREVIEWS = YES
+STRING_CATALOG_GENERATE_SYMBOLS = YES
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_EMIT_LOC_STRINGS = YES
+SWIFT_OBJC_BRIDGING_HEADER = Compositor/Compositor-Bridging-Header.h
+SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES
+SWIFT_VERSION = 5.0
+// The same module name as the Mac app's, so the shared tests' `@testable import Compositor` finds it.
+PRODUCT_MODULE_NAME = Compositor
+
+// The Mac's interface: its app and windows, its AppKit canvas and overlays, its panels and its file dialogs. Everything
+// else in Compositor/ is shared. A new file there is shared too, unless it's listed here.
+MAC_ONLY_SOURCES = $(SRCROOT)/Compositor/CompositorApp.swift $(SRCROOT)/Compositor/ContentView.swift $(SRCROOT)/Compositor/UI/* $(SRCROOT)/Compositor/Document/ProjectWorkspace.swift $(SRCROOT)/Compositor/IO/CompositorApplicationDelegate.swift $(SRCROOT)/Compositor/IO/ImageFileDrop.swift $(SRCROOT)/Compositor/IO/ProjectController.swift $(SRCROOT)/Compositor/IO/ProjectController+ExternalChanges.swift $(SRCROOT)/Compositor/IO/RecentProjects.swift $(SRCROOT)/Compositor/IO/UpdateDriver.swift $(SRCROOT)/Compositor/Rendering/EditorCanvas.swift $(SRCROOT)/Compositor/Rendering/BrushCursorOverlay.swift $(SRCROOT)/Compositor/Rendering/CanvasLinesOverlay.swift $(SRCROOT)/Compositor/Rendering/InlineTextEditor.swift $(SRCROOT)/Compositor/Rendering/SampleRingOverlay.swift $(SRCROOT)/Compositor/Rendering/TransformOverlay.swift
+EXCLUDED_SOURCE_FILE_NAMES = $(MAC_ONLY_SOURCES) $(SRCROOT)/CompositorPad/CompositorPad.xcconfig
+
+// Settings personal to one machine or to a build of your own, such as DEVELOPMENT_TEAM and the bundle identifier, build
+// number and display name above, go in this file, which git ignores, so signing for your own device or TestFlight
+// doesn't touch the project. It's optional: without it the app builds unsigned for the simulator as before.
+#include? "../Config/CompositorPad.local.xcconfig"

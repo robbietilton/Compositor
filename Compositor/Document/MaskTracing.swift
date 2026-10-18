@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// Turns raster coverage into a selection outline along exact pixel edges.
 nonisolated enum MaskTracing {
@@ -76,7 +77,7 @@ extension EditorSession {
     func loadMaskSelection(layerID: UUID, mode: SelectionMode = .replace) {
         guard canEditSelection, let layer = document?.layers.first(where: { $0.id == layerID }),
               let mask = layer.mask?.asset.image else { return }
-        guard let traced = MaskTracing.darkPixels(in: mask) else { NSSound.beep(); return }
+        guard let traced = MaskTracing.darkPixels(in: mask) else { Platform.beep(); return }
         var toDocument = BrushRaster.pixelToDocument(layer.maskTransform, width: mask.width, height: mask.height)
         guard let outline = traced.copy(using: &toDocument) else { return }
         applySelection(outline, mode: mode, name: "Load Mask Selection")
@@ -86,8 +87,8 @@ extension EditorSession {
     /// the selection, ignoring its mask, as in Photoshop. Shift adds; Option subtracts.
     func loadLayerSelection(layerID: UUID, mode: SelectionMode = .replace) {
         guard canEditSelection, let layer = document?.layers.first(where: { $0.id == layerID }), !layer.isGroup,
-              let image = layer.asset?.image else { NSSound.beep(); return }
-        guard let traced = MaskTracing.opaquePixels(in: image) else { NSSound.beep(); return }
+              let image = layer.asset?.image else { Platform.beep(); return }
+        guard let traced = MaskTracing.opaquePixels(in: image) else { Platform.beep(); return }
         var toDocument = BrushRaster.pixelToDocument(layer.transform, width: image.width, height: image.height)
         guard let outline = traced.copy(using: &toDocument) else { return }
         applySelection(outline, mode: mode, name: "Load Layer Selection")
