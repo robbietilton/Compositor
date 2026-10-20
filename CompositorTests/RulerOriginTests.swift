@@ -80,6 +80,8 @@ struct RulerOriginTests {
     @Test func rulerTicksCountBackwardsBeforeTheZeroPoint() {
         #expect(CanvasRulerNSView.ticks(from: 0, to: 300, zero: 0, minor: 100) == [0, 100, 200, 300])
         #expect(CanvasRulerNSView.ticks(from: 0, to: 300, zero: 120, minor: 40) == [-120, -80, -40, 0, 40, 80, 120, 160, 200])
-        #expect(CanvasRulerNSView.label(-120) == "-120" && CanvasRulerNSView.label(-0.2) == "0")
+        // Labels carry no sign: before zero they count up away from it, as after it.
+        #expect(CanvasRulerNSView.label(-120) == "120" && CanvasRulerNSView.label(120) == "120")
+        #expect(CanvasRulerNSView.label(-0.2) == "0")
     }
 }

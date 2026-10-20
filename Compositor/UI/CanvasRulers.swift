@@ -241,7 +241,7 @@ final class CanvasRulerNSView: NSView {
     }
 
     /// The ruler readings of every tick between two document positions, `minor` apart. They are counted from the
-    /// rulers' zero point (a document position), so everything before it reads negative; the tick for a reading sits
+    /// rulers' zero point (a document position), so everything before it is negative; the tick for a reading sits
     /// at `zero` plus that reading.
     static func ticks(from start: CGFloat, to end: CGFloat, zero: CGFloat, minor: CGFloat) -> [CGFloat] {
         let first = floor((min(start, end) - zero) / minor) * minor
@@ -263,8 +263,10 @@ final class CanvasRulerNSView: NSView {
         return nice.first { $0 >= target } ?? 50_000
     }
 
+    /// How far a reading is from the zero point, without a sign: numbers before it count up away from zero just as
+    /// the ones after it do, as Photoshop's rulers read.
     static func label(_ value: CGFloat) -> NSString {
-        let rounded = value.rounded()
+        let rounded = abs(value.rounded())
         return (rounded == 0 ? "0" : String(Int(rounded))) as NSString
     }
 }
