@@ -340,6 +340,10 @@ final class EditorSession {
     var snapToDocumentBounds = ToolDefaults.bool("snapBounds", true) { didSet { ToolDefaults.set(snapToDocumentBounds, "snapBounds") } }
     var locksGuides = ToolDefaults.bool("lockGuides", false) { didSet { ToolDefaults.set(locksGuides, "lockGuides") } }
     var guideDrag: GuideDrag?
+    /// Where the rulers count from, when moved off the canvas's top-left corner (see `rulerZero`).
+    var rulerOrigin: RulerOrigin?
+    /// Where a drag out of the rulers' corner would put the zero point, in document pixels.
+    var rulerOriginDrag: CGPoint?
     /// Pixels the Expand / Contract buttons grow or shrink the selection by.
     var selectionExpandAmount = 1
     var selectionContractAmount = 1

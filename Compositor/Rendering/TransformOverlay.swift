@@ -194,6 +194,31 @@ final class TransformOverlay: NSView {
         drawSelection()
         drawLassoDraft()
         drawSnapGuides()
+        drawRulerOriginDrag()
+    }
+
+    /// While the rulers' zero point is dragged out of their corner, a crosshair across the whole view where it will
+    /// land: dashed white over black, so it shows on any image.
+    private func drawRulerOriginDrag() {
+        guard let point = session.rulerOriginDrag, let document = session.document,
+              let context = NSGraphicsContext.current?.cgContext else { return }
+        let center = session.viewport.viewPoint(from: point, documentSize: document.size)
+        let hairline = 1 / max(session.viewport.backingScale, 1)
+        let lines = CGMutablePath()
+        lines.move(to: CGPoint(x: center.x, y: 0))
+        lines.addLine(to: CGPoint(x: center.x, y: bounds.height))
+        lines.move(to: CGPoint(x: 0, y: center.y))
+        lines.addLine(to: CGPoint(x: bounds.width, y: center.y))
+        context.saveGState()
+        context.setLineWidth(hairline)
+        context.addPath(lines)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.85).cgColor)
+        context.strokePath()
+        context.addPath(lines)
+        context.setLineDash(phase: 0, lengths: [4, 4])
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.strokePath()
+        context.restoreGState()
     }
 
     /// Non-printing layout grid over the document: majors in the chosen style, dotted subdivisions, both in the

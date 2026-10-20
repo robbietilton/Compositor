@@ -5,18 +5,97 @@ enum CanvasRuler {
     static let thickness: CGFloat = 18
 }
 
-struct CanvasRulerCorner: View {
-    var body: some View {
-        Rectangle()
-            .fill(Color(white: 0.2))
-            .overlay(alignment: .bottomTrailing) {
-                Path { path in
-                    path.move(to: CGPoint(x: 5, y: CanvasRuler.thickness - 4))
-                    path.addLine(to: CGPoint(x: CanvasRuler.thickness - 4, y: 5))
-                }
-                .stroke(Color.white.opacity(0.28), lineWidth: 1)
-            }
-            .frame(width: CanvasRuler.thickness, height: CanvasRuler.thickness)
+/// Where the two rulers meet. Dragging out of it onto the canvas moves the rulers' zero point, as in Photoshop;
+/// double-clicking it puts the zero point back on the canvas's top-left corner.
+struct CanvasRulerCorner: NSViewRepresentable {
+    let session: EditorSession
+
+    func makeNSView(context: Context) -> CanvasRulerCornerNSView {
+        CanvasRulerCornerNSView(session: session)
+    }
+
+    func updateNSView(_ view: CanvasRulerCornerNSView, context: Context) {
+        view.session = session
+        _ = session.rulerZero
+        view.needsDisplay = true
+    }
+}
+
+final class CanvasRulerCornerNSView: NSView {
+    var session: EditorSession
+
+    init(session: EditorSession) {
+        self.session = session
+        super.init(frame: .zero)
+        toolTip = "Drag onto the canvas to set where the rulers count from; double-click to reset"
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Ruler origin")
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(white: 0.2, alpha: 1).setFill()
+        bounds.fill()
+        let line = NSBezierPath()
+        line.move(to: CGPoint(x: 5, y: bounds.height - 4))
+        line.line(to: CGPoint(x: bounds.width - 4, y: 5))
+        NSColor(white: 1, alpha: session.rulerZero == .zero ? 0.28 : 0.6).setStroke()
+        line.lineWidth = 1
+        line.stroke()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let canvas = compositorCanvas
+        window?.makeFirstResponder(canvas)
+        if event.clickCount >= 2 {
+            session.resetRulerOrigin()
+            return
+        }
+        guard session.canMoveRulerOrigin, let point = documentPoint(for: event, in: canvas) else { return }
+        session.beginRulerOriginDrag(at: point)
+        NSCursor.crosshair.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard session.rulerOriginDrag != nil, let point = documentPoint(for: event, in: compositorCanvas) else { return }
+        session.moveRulerOriginDrag(to: point)
+        NSCursor.crosshair.set()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard session.rulerOriginDrag != nil else { return }
+        // Let go back over the rulers, or without leaving the corner, and the zero point stays where it was.
+        if let canvas = compositorCanvas {
+            session.finishRulerOriginDrag(cancel: canvas.isOverRuler(canvas.convert(event.locationInWindow, from: nil)))
+        } else {
+            session.finishRulerOriginDrag(cancel: true)
+        }
+        NSCursor.arrow.set()
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .crosshair)
+    }
+
+    private func documentPoint(for event: NSEvent, in canvas: CanvasView?) -> CGPoint? {
+        guard let canvas, let document = session.document else { return nil }
+        let point = canvas.convert(event.locationInWindow, from: nil)
+        return session.viewport.documentPoint(from: point, documentSize: document.size)
+    }
+}
+
+extension NSView {
+    /// The canvas in this view's window, which the rulers measure and hand the keyboard back to.
+    var compositorCanvas: CanvasView? {
+        func find(_ view: NSView) -> CanvasView? {
+            if let canvas = view as? CanvasView { return canvas }
+            return view.subviews.compactMap(find).first
+        }
+        return window?.contentView.flatMap(find)
     }
 }
 
@@ -34,6 +113,7 @@ struct CanvasRulerView: NSViewRepresentable {
         _ = session.viewport
         _ = session.document?.id
         _ = session.document?.size
+        _ = session.rulerZero
         view.needsDisplay = true
     }
 }
@@ -80,17 +160,13 @@ final class CanvasRulerNSView: NSView {
             start = session.viewport.documentPoint(from: CGPoint(x: 0, y: 0), documentSize: size).y
             end = session.viewport.documentPoint(from: CGPoint(x: 0, y: bounds.height), documentSize: size).y
         }
-        let first = floor(min(start, end) / minor) * minor
-        let last = ceil(max(start, end) / minor) * minor
-        guard minor > 0, last.isFinite, first.isFinite else { return }
-
-        var value = first
-        while value <= last + 0.001 {
+        let zero = axis == .horizontal ? session.rulerZero.x : session.rulerZero.y
+        for value in Self.ticks(from: start, to: end, zero: zero, minor: minor) {
             let view: CGFloat
             if axis == .horizontal {
-                view = session.viewport.viewPoint(from: CGPoint(x: value, y: 0), documentSize: size).x
+                view = session.viewport.viewPoint(from: CGPoint(x: value + zero, y: 0), documentSize: size).x
             } else {
-                view = session.viewport.viewPoint(from: CGPoint(x: 0, y: value), documentSize: size).y
+                view = session.viewport.viewPoint(from: CGPoint(x: 0, y: value + zero), documentSize: size).y
             }
             let remainder = abs(value.remainder(dividingBy: step))
             let isMajor = remainder < 0.001 || abs(remainder - step) < 0.001
@@ -119,7 +195,6 @@ final class CanvasRulerNSView: NSView {
                     NSGraphicsContext.current?.restoreGraphicsState()
                 }
             }
-            value += minor
         }
         NSColor(white: 0.08, alpha: 1).setFill()
         if axis == .horizontal {
@@ -152,13 +227,7 @@ final class CanvasRulerNSView: NSView {
         addCursorRect(bounds, cursor: axis == .vertical ? .resizeLeftRight : .resizeUpDown)
     }
 
-    private func canvasView() -> CanvasView? {
-        func find(_ view: NSView) -> CanvasView? {
-            if let canvas = view as? CanvasView { return canvas }
-            return view.subviews.compactMap(find).first
-        }
-        return window?.contentView.flatMap(find)
-    }
+    private func canvasView() -> CanvasView? { compositorCanvas }
 
     private func documentPosition(for event: NSEvent) -> Double? {
         guard let canvas = canvasView() else { return nil }
@@ -169,6 +238,22 @@ final class CanvasRulerNSView: NSView {
     private func isOverRuler(_ event: NSEvent) -> Bool {
         guard let canvas = canvasView() else { return true }
         return canvas.isOverRuler(canvas.convert(event.locationInWindow, from: nil))
+    }
+
+    /// The ruler readings of every tick between two document positions, `minor` apart. They are counted from the
+    /// rulers' zero point (a document position), so everything before it reads negative; the tick for a reading sits
+    /// at `zero` plus that reading.
+    static func ticks(from start: CGFloat, to end: CGFloat, zero: CGFloat, minor: CGFloat) -> [CGFloat] {
+        let first = floor((min(start, end) - zero) / minor) * minor
+        let last = ceil((max(start, end) - zero) / minor) * minor
+        guard minor > 0, first.isFinite, last.isFinite else { return [] }
+        var values: [CGFloat] = []
+        var value = first
+        while value <= last + 0.001 {
+            values.append(value)
+            value += minor
+        }
+        return values
     }
 
     /// Numbered ticks about 70 points apart, using 1-2-5 steps in document pixels.

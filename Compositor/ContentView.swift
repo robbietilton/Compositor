@@ -88,7 +88,8 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     if session.showsRulers, session.document != nil, !session.canvasOnly {
                         HStack(spacing: 0) {
-                            CanvasRulerCorner()
+                            CanvasRulerCorner(session: session)
+                                .frame(width: CanvasRuler.thickness, height: CanvasRuler.thickness)
                             CanvasRulerView(session: session, axis: .horizontal)
                                 .frame(height: CanvasRuler.thickness)
                         }

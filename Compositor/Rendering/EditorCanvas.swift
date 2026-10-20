@@ -12,6 +12,7 @@ struct EditorCanvas: NSViewRepresentable {
         _ = session.gridAppearance
         _ = session.showsGuides
         _ = session.guideDrag
+        _ = session.rulerOriginDrag
         _ = session.document?.guides
         view.synchronizeDisplay()
         view.window?.isDocumentEdited = session.isModified
@@ -2243,6 +2244,8 @@ final class CanvasView: NSView {
         } else if session.tool == .crop, [36, 76].contains(event.keyCode) {
             cropDrag = nil
             Task { await session.commitCrop() }
+        } else if event.keyCode == 53, session.rulerOriginDrag != nil {
+            session.finishRulerOriginDrag(cancel: true)
         } else if event.keyCode == 53, session.guideDrag != nil {
             session.cancelGuideDrag()
             guideDragging = false
