@@ -41,6 +41,21 @@ struct TransformInspector: View {
                 }.frame(width: 170)
                 Button("Flip H") { change { $0.flipX.toggle() } }
                 Button("Flip V") { change { $0.flipY.toggle() } }
+                Divider().frame(height: 16)
+                // Align to the selection, the canvas with one thing selected, or else to each other.
+                HStack(spacing: 2) {
+                    ForEach(LayerAlignment.allCases, id: \.self) { alignment in
+                        Button { session.alignLayers(alignment) } label: { Image(systemName: alignment.symbol) }
+                            .help("Align " + alignment.rawValue).accessibilityLabel("Align " + alignment.rawValue)
+                    }
+                }.buttonStyle(.borderless).disabled(!session.canAlignLayers)
+                HStack(spacing: 2) {
+                    ForEach(LayerDistribution.allCases, id: \.self) { distribution in
+                        Button { session.distributeLayers(distribution) } label: { Image(systemName: distribution.symbol) }
+                            .help("Distribute " + distribution.rawValue + " (three or more layers)")
+                            .accessibilityLabel("Distribute " + distribution.rawValue)
+                    }
+                }.buttonStyle(.borderless).disabled(!session.canDistributeLayers)
 
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.
             }.disabled((!session.canTransform && session.transformEdit == nil) || session.transformEdit?.corners != nil)
