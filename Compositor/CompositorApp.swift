@@ -108,6 +108,7 @@ struct CompositorApp: App {
                 Group {
                     CommandGroup(after: .appInfo) {
                         Button("Check for Updates…") { applicationDelegate.updater.checkForUpdates() }
+                        Button("Agent Access…") { AgentAccessWindow.show(over: applicationDelegate.projects.window) }
                     }
                     CommandGroup(after: .toolbar) {
                         Button("Search Commands…") {

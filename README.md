@@ -81,6 +81,7 @@ brew install --cask robbietilton-compositor
 - Automatic updates, signed and notarized
 
 ### Works with AI agents
+- A built-in MCP server (Compositor › Agent Access…) lets agents such as Claude Code make and edit images in the open app while you watch: layers, adjustments, effects, selections, filters and every menu command. See [Driving Compositor from an AI agent](docs/mcp.md)
 - AI agents and scripts can build and edit projects directly: a `.comp` is a folder of PNG layers and a manifest, and an open project updates live as it's written. See [Writing Compositor projects](docs/writing-comp-files.md)
 
 ## Requirements
