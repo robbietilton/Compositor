@@ -374,4 +374,33 @@ struct AgentToolsTests {
             try AgentFilterSettings.apply(["cameraRaw": ["geometry": ["guides": [["start": [0, 0], "end": [2, 0]]]]]], for: .cameraRaw, to: &settings)
         }
     }
+
+    @Test func claudeDesktopKeepsItsOtherSettings() throws {
+        let existing = Data(#"{"globalShortcut": "Cmd+Space", "mcpServers": {"files": {"command": "files-mcp"}, "compositor": {"command": "old"}}}"#.utf8)
+        let merged = try ClaudeDesktopConfig.merged(existing, endpoint: "http://127.0.0.1:39271/mcp", token: "abc")
+        let config = try #require(try JSONSerialization.jsonObject(with: merged) as? [String: Any])
+        let servers = try #require(config["mcpServers"] as? [String: Any])
+        #expect(config["globalShortcut"] as? String == "Cmd+Space", "its other settings stay")
+        #expect((servers["files"] as? [String: Any])?["command"] as? String == "files-mcp", "and its other servers")
+        let compositor = try #require(servers["compositor"] as? [String: Any])
+        #expect(compositor["command"] as? String == "npx", "an old entry is replaced")
+        #expect(compositor["args"] as? [String] == ["-y", "mcp-remote", "http://127.0.0.1:39271/mcp", "--header", "Authorization:${AUTH}"])
+        #expect((compositor["env"] as? [String: String])?["AUTH"] == "Bearer abc")
+
+        let fresh = try JSONSerialization.jsonObject(with: try ClaudeDesktopConfig.merged(nil, endpoint: "e", token: "t")) as? [String: Any]
+        #expect((fresh?["mcpServers"] as? [String: Any])?.keys.sorted() == ["compositor"], "no file yet: a new one")
+        #expect(throws: (any Error).self) { try ClaudeDesktopConfig.merged(Data("{ not json".utf8), endpoint: "e", token: "t") }
+        #expect(ClaudeDesktopConfig.snippet(endpoint: "e", token: "t").contains("\"compositor\""))
+    }
+
+    @Test func claudeDesktopFileIsBackedUpBeforeItChanges() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Claude-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let original = Data(#"{"mcpServers": {}}"#.utf8)
+        try original.write(to: folder.appendingPathComponent(ClaudeDesktopConfig.fileName))
+        try ClaudeDesktopConfig.install(in: folder, endpoint: "e", token: "t")
+        #expect(try Data(contentsOf: folder.appendingPathComponent("claude_desktop_config.json.bak")) == original)
+        #expect(try String(contentsOf: folder.appendingPathComponent(ClaudeDesktopConfig.fileName), encoding: .utf8).contains("mcp-remote"))
+    }
 }

@@ -14,6 +14,7 @@ For writing `.comp` files directly instead, with no app running, see [writing-co
    ```
 
    **Copy JSON for Other Apps** gives the same as an `mcpServers` entry for apps configured with JSON.
+   For Claude Desktop's own chat, **Add to Claude Desktop…** puts Compositor in its `claude_desktop_config.json` (keeping its other servers, and the file as it was in a `.bak`); then quit and reopen Claude Desktop. It connects through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), so Node.js must be installed. **Copy JSON** under it gives the same entry to paste by hand.
 3. Optionally **Add Folder…**: agents can open, import and save files only inside the folders listed there (the app is sandboxed). Without one, they can still make images, send images in as base64 and get the result back directly.
 
 The server listens on the loopback interface only, so nothing on the network can reach it, and it answers only requests that carry its token. **Make New Token** replaces the token; agents set up with the old one stop working. It stays off until you turn it on, and remembers the setting.

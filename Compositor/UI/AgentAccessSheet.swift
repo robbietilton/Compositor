@@ -8,6 +8,8 @@ struct AgentAccessSheet: View {
     @State private var folders = AgentFolders.urls
     @State private var portText = String(AgentServer.shared.port)
     @State private var copied: String?
+    /// What adding Compositor to Claude Desktop came to, to show under its buttons.
+    @State private var desktopResult: (ok: Bool, message: String)?
 
     var body: some View { sheet.roundedControls() }
 
@@ -50,6 +52,26 @@ struct AgentAccessSheet: View {
                     Spacer()
                     Button("Make New Token") { server.makeNewToken() }
                         .help("Agents set up with the old token stop working until they're given the new one.")
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Claude Desktop").font(.headline)
+                Text("Claude Desktop’s chat reaches Compositor through mcp-remote, which needs Node.js. Add Compositor to its settings file (claude_desktop_config.json), then quit and reopen Claude Desktop.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Add to Claude Desktop…", action: addToClaudeDesktop)
+                    Button(copied == "desktop" ? "Copied" : "Copy JSON") {
+                        copy(ClaudeDesktopConfig.snippet(endpoint: server.endpoint, token: server.token), as: "desktop")
+                    }
+                }
+                if let desktopResult {
+                    Label(desktopResult.message, systemImage: desktopResult.ok ? "checkmark.circle" : "exclamationmark.triangle")
+                        .foregroundStyle(desktopResult.ok ? Color.secondary : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -127,6 +149,31 @@ struct AgentAccessSheet: View {
     private func applyPort() {
         guard let port = UInt16(portText), port >= 1024 else { portText = String(server.port); return }
         server.port = port
+    }
+
+    /// The sandbox lets the app into Claude Desktop's folder only once the person picks it, so the panel opens there
+    /// and asks; the server's entry then goes into the settings file inside, its other servers kept.
+    private func addToClaudeDesktop() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = ClaudeDesktopConfig.folder
+        panel.prompt = "Add Compositor"
+        panel.message = "Choose Claude Desktop’s settings folder (Library › Application Support › Claude) to add Compositor to it."
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        guard FileManager.default.fileExists(atPath: folder.appendingPathComponent(ClaudeDesktopConfig.fileName).path)
+                || folder.lastPathComponent == "Claude" else {
+            desktopResult = (false, "That isn’t Claude Desktop’s folder. It’s Library › Application Support › Claude in your home folder; if it isn’t there, open Claude Desktop once first.")
+            return
+        }
+        do {
+            try ClaudeDesktopConfig.install(in: folder, endpoint: server.endpoint, token: server.token)
+            desktopResult = (true, "Added. Quit and reopen Claude Desktop to use it. The file as it was is kept beside it as \(ClaudeDesktopConfig.fileName).bak.")
+        } catch {
+            desktopResult = (false, error.localizedDescription)
+        }
     }
 
     private func addFolder() {
