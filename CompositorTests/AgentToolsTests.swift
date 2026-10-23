@@ -377,20 +377,35 @@ struct AgentToolsTests {
 
     @Test func claudeDesktopKeepsItsOtherSettings() throws {
         let existing = Data(#"{"globalShortcut": "Cmd+Space", "mcpServers": {"files": {"command": "files-mcp"}, "compositor": {"command": "old"}}}"#.utf8)
-        let merged = try ClaudeDesktopConfig.merged(existing, endpoint: "http://127.0.0.1:39271/mcp", token: "abc")
+        let app = "/Applications/Compositor.app/Contents/MacOS/Compositor"
+        let merged = try ClaudeDesktopConfig.merged(existing, executable: app)
         let config = try #require(try JSONSerialization.jsonObject(with: merged) as? [String: Any])
         let servers = try #require(config["mcpServers"] as? [String: Any])
         #expect(config["globalShortcut"] as? String == "Cmd+Space", "its other settings stay")
         #expect((servers["files"] as? [String: Any])?["command"] as? String == "files-mcp", "and its other servers")
         let compositor = try #require(servers["compositor"] as? [String: Any])
-        #expect(compositor["command"] as? String == "npx", "an old entry is replaced")
-        #expect(compositor["args"] as? [String] == ["-y", "mcp-remote", "http://127.0.0.1:39271/mcp", "--header", "Authorization:${AUTH}"])
-        #expect((compositor["env"] as? [String: String])?["AUTH"] == "Bearer abc")
+        #expect(compositor["command"] as? String == app, "an old entry is replaced")
+        #expect(compositor["args"] as? [String] == ["--mcp-stdio"])
+        #expect(compositor["env"] == nil, "no token is written into another app's settings")
 
-        let fresh = try JSONSerialization.jsonObject(with: try ClaudeDesktopConfig.merged(nil, endpoint: "e", token: "t")) as? [String: Any]
+        let fresh = try JSONSerialization.jsonObject(with: try ClaudeDesktopConfig.merged(nil, executable: app)) as? [String: Any]
         #expect((fresh?["mcpServers"] as? [String: Any])?.keys.sorted() == ["compositor"], "no file yet: a new one")
-        #expect(throws: (any Error).self) { try ClaudeDesktopConfig.merged(Data("{ not json".utf8), endpoint: "e", token: "t") }
-        #expect(ClaudeDesktopConfig.snippet(endpoint: "e", token: "t").contains("\"compositor\""))
+        #expect(throws: (any Error).self) { try ClaudeDesktopConfig.merged(Data("{ not json".utf8), executable: app) }
+        #expect(ClaudeDesktopConfig.snippet(executable: app).contains("\"--mcp-stdio\""))
+    }
+
+    @Test func stdioBridgePassesLinesThroughAndExplainsFailures() {
+        let request = #"{"jsonrpc":"2.0","id":7,"method":"tools/list"}"#
+        var sent: [Data] = []
+        let reply = MCPStdioBridge.reply(to: request) { body in sent.append(body); return (200, Data("{\"id\":7,\"result\":{}}\n".utf8)) }
+        #expect(reply == #"{"id":7,"result":{}}"#, "one line, as stdio needs")
+        #expect(sent == [Data(request.utf8)])
+        #expect(MCPStdioBridge.reply(to: #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#) { _ in (202, Data()) } == nil)
+        #expect(MCPStdioBridge.reply(to: "   ") { _ in Issue.record("blank lines aren't sent"); return (200, Data()) } == nil)
+        let down = MCPStdioBridge.reply(to: request) { _ in throw URLError(.cannotConnectToHost) }
+        #expect(down?.contains("\"id\":7") == true && down?.contains("Agent Access") == true, "the agent is told what to turn on")
+        #expect(MCPStdioBridge.reply(to: #"{"jsonrpc":"2.0","method":"notifications/x"}"#) { _ in throw URLError(.cannotConnectToHost) } == nil)
+        #expect(MCPStdioBridge.reply(to: request) { _ in (401, Data()) }?.contains("token") == true)
     }
 
     @Test func claudeDesktopFileIsBackedUpBeforeItChanges() throws {
@@ -399,8 +414,8 @@ struct AgentToolsTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let original = Data(#"{"mcpServers": {}}"#.utf8)
         try original.write(to: folder.appendingPathComponent(ClaudeDesktopConfig.fileName))
-        try ClaudeDesktopConfig.install(in: folder, endpoint: "e", token: "t")
+        try ClaudeDesktopConfig.install(in: folder, executable: "/Applications/Compositor.app/Contents/MacOS/Compositor")
         #expect(try Data(contentsOf: folder.appendingPathComponent("claude_desktop_config.json.bak")) == original)
-        #expect(try String(contentsOf: folder.appendingPathComponent(ClaudeDesktopConfig.fileName), encoding: .utf8).contains("mcp-remote"))
+        #expect(try String(contentsOf: folder.appendingPathComponent(ClaudeDesktopConfig.fileName), encoding: .utf8).contains("--mcp-stdio"))
     }
 }

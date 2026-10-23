@@ -59,13 +59,13 @@ struct AgentAccessSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Claude Desktop").font(.headline)
-                Text("Claude Desktop’s chat reaches Compositor through mcp-remote, which needs Node.js. Add Compositor to its settings file (claude_desktop_config.json), then quit and reopen Claude Desktop.")
+                Text("Claude Desktop’s chat starts Compositor as a helper to reach it. Quit Claude Desktop first (it rewrites its settings while open), add Compositor to its settings file (claude_desktop_config.json), then open Claude Desktop again. Agent Access must be on for it to connect.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button("Add to Claude Desktop…", action: addToClaudeDesktop)
                     Button(copied == "desktop" ? "Copied" : "Copy JSON") {
-                        copy(ClaudeDesktopConfig.snippet(endpoint: server.endpoint, token: server.token), as: "desktop")
+                        copy(ClaudeDesktopConfig.snippet(executable: executable), as: "desktop")
                     }
                 }
                 if let desktopResult {
@@ -151,9 +151,21 @@ struct AgentAccessSheet: View {
         server.port = port
     }
 
+    /// What Claude Desktop starts: this copy of the app.
+    private var executable: String { Bundle.main.executablePath ?? "/Applications/Compositor.app/Contents/MacOS/Compositor" }
+
     /// The sandbox lets the app into Claude Desktop's folder only once the person picks it, so the panel opens there
     /// and asks; the server's entry then goes into the settings file inside, its other servers kept.
     private func addToClaudeDesktop() {
+        guard !ClaudeDesktopConfig.claudeIsRunning else {
+            desktopResult = (false, "Quit Claude Desktop first (⌘Q): while it’s open, it writes its own settings back over the file and the change is lost.")
+            return
+        }
+        // Claude Desktop starts the app from where it is now, so it must stay there.
+        guard !executable.hasPrefix("/Volumes/") else {
+            desktopResult = (false, "Compositor is running from its disk image. Drag it to Applications, open it from there, and add it again.")
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -169,8 +181,8 @@ struct AgentAccessSheet: View {
             return
         }
         do {
-            try ClaudeDesktopConfig.install(in: folder, endpoint: server.endpoint, token: server.token)
-            desktopResult = (true, "Added. Quit and reopen Claude Desktop to use it. The file as it was is kept beside it as \(ClaudeDesktopConfig.fileName).bak.")
+            try ClaudeDesktopConfig.install(in: folder, executable: executable)
+            desktopResult = (true, "Added. Open Claude Desktop to use it, with Agent Access on. The file as it was is kept beside it as \(ClaudeDesktopConfig.fileName).bak.")
         } catch {
             desktopResult = (false, error.localizedDescription)
         }

@@ -2,7 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Sparkle
 
+/// Where the app starts: as the editor, or, launched with `--mcp-stdio`, as the bridge AI apps talk to (see
+/// MCPStdioBridge) and nothing else.
 @main
+enum CompositorMain {
+    static func main() {
+        if CommandLine.arguments.contains(MCPStdioBridge.argument) { MCPStdioBridge.run() }
+        CompositorApp.main()
+    }
+}
+
 struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
     @AppStorage("navigator.visible") private var showsNavigator = false

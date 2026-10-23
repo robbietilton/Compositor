@@ -1,7 +1,7 @@
-import Foundation
+import AppKit
 
-/// Claude Desktop's own chat starts the MCP servers it uses as commands (stdio), so it reaches Compositor's HTTP
-/// server through `mcp-remote`, a bridge run with Node's npx. This is that server's entry in its
+/// Claude Desktop's own chat starts the MCP servers it uses as commands talking over stdin and stdout, so it starts
+/// Compositor itself as one, with `--mcp-stdio` (see MCPStdioBridge). This is that entry in its
 /// `claude_desktop_config.json`, and the file with the entry put in, everything else in it kept.
 enum ClaudeDesktopConfig {
     static let serverName = "compositor"
@@ -11,22 +11,24 @@ enum ClaudeDesktopConfig {
         URL(fileURLWithPath: AgentFolders.home).appendingPathComponent("Library/Application Support/Claude", isDirectory: true)
     }
 
-    /// The token goes in through an environment variable: `mcp-remote` splits arguments at spaces, and "Bearer …" has one.
-    static func entry(endpoint: String, token: String) -> [String: Any] {
-        ["command": "npx",
-         "args": ["-y", "mcp-remote", endpoint, "--header", "Authorization:${AUTH}"],
-         "env": ["AUTH": "Bearer \(token)"]]
+    static let bundleIdentifier = "com.anthropic.claudefordesktop"
+    /// Claude Desktop keeps its settings in memory and writes them back over the file, so a change made while it runs is lost.
+    static var claudeIsRunning: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty }
+
+    /// No port or token: the bridge reads them from Compositor's own settings, so they stay current and private.
+    static func entry(executable: String) -> [String: Any] {
+        ["command": executable, "args": [MCPStdioBridge.argument]]
     }
 
     /// The whole file, for pasting into one that has no other servers.
-    static func snippet(endpoint: String, token: String) -> String {
-        let data = (try? merged(nil, endpoint: endpoint, token: token)) ?? Data()
+    static func snippet(executable: String) -> String {
+        let data = (try? merged(nil, executable: executable)) ?? Data()
         return String(data: data, encoding: .utf8) ?? ""
     }
 
     /// `existing` (the file's bytes, or nil when there's no file yet) with Compositor's entry added or replaced. Its
     /// other servers and settings stay as they were; a file that isn't a JSON object is refused rather than overwritten.
-    static func merged(_ existing: Data?, endpoint: String, token: String) throws -> Data {
+    static func merged(_ existing: Data?, executable: String) throws -> Data {
         var config: [String: Any] = [:]
         if let existing, !existing.allSatisfy({ $0 == 0x20 || $0 == 0x0A || $0 == 0x0D || $0 == 0x09 }) {
             guard let object = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] else {
@@ -36,17 +38,17 @@ enum ClaudeDesktopConfig {
             config = object
         }
         var servers = config["mcpServers"] as? [String: Any] ?? [:]
-        servers[serverName] = entry(endpoint: endpoint, token: token)
+        servers[serverName] = entry(executable: executable)
         config["mcpServers"] = servers
         return try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     }
 
     /// Writes the entry into the config file in `folder` (Claude Desktop's, as the person granted it), keeping the file
     /// as it was beside it, in a `.bak`, before replacing it.
-    static func install(in folder: URL, endpoint: String, token: String) throws {
+    static func install(in folder: URL, executable: String) throws {
         let file = folder.appendingPathComponent(fileName)
         let existing = FileManager.default.fileExists(atPath: file.path) ? try Data(contentsOf: file) : nil
-        let updated = try merged(existing, endpoint: endpoint, token: token)
+        let updated = try merged(existing, executable: executable)
         if let existing { try existing.write(to: folder.appendingPathComponent(fileName + ".bak"), options: .atomic) }
         try updated.write(to: file, options: .atomic)
     }
