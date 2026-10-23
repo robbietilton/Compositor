@@ -227,6 +227,23 @@ nonisolated struct CameraRawPointColor: Equatable, Sendable {
     }
 }
 
+nonisolated extension CameraRawPointColor {
+    /// The point picking this color with the eyedropper makes: hue in degrees, saturation as HSV's, luminance as HSL's.
+    init(red: Double, green: Double, blue: Double) {
+        let maxChannel = max(red, green, blue), minChannel = min(red, green, blue)
+        let chroma = maxChannel - minChannel
+        var hue = 0.0
+        if chroma > 1e-6 {
+            if maxChannel == red { hue = (green - blue) / chroma }
+            else if maxChannel == green { hue = 2 + (blue - red) / chroma }
+            else { hue = 4 + (red - green) / chroma }
+            hue /= 6
+            if hue < 0 { hue += 1 }
+        }
+        self.init(hue: hue * 360, saturation: maxChannel == 0 ? 0 : chroma / maxChannel, luminance: (maxChannel + minChannel) / 2)
+    }
+}
+
 /// Four color wheels plus how the three tonal wheels overlap and which end they favor.
 nonisolated struct CameraRawGradingSettings: Equatable, Sendable {
     var shadows = CameraRawGradeWheel()

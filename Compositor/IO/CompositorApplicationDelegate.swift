@@ -89,6 +89,9 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
             guard let menu = note.object as? NSMenu, let index = note.userInfo?["NSMenuItemIndex"] as? Int else { return }
             MainActor.assumeIsolated { Self.removeIfSystemExtra(at: index, in: menu) }
         }
+        // The MCP server for AI agents, if the person turned it on (Compositor › Agent Access). Not while tests host the
+        // app: the copy the person runs may be listening on the same port.
+        if !Self.runsTests { AgentServer.shared.attach(workspace) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             // Not while tests host the app: an update out since this build would come up as a modal alert and stop them.
             guard !Self.runsTests else { return }

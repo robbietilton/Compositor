@@ -226,6 +226,7 @@ struct NativeResolutionPaintTests {
         full.transform.size = CGSize(width: 1000, height: 1000)
         #expect(full.sizeLabel == "1000 × 1000 px")
         full.transform.size = CGSize(width: 25, height: 25)
-        #expect(full.sizeLabel == "25 × 25 px · 2.5%")
+        // The fraction is written as the Mac's region writes it: "2.5" in English, "2,5" in Russian or German.
+        #expect(full.sizeLabel == "25 × 25 px · \(2.5.formatted(.number.precision(.fractionLength(0...1))))%")
     }
 }

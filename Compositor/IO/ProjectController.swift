@@ -37,9 +37,22 @@ final class ProjectController {
         return await write(prepared.snapshot, to: prepared.destination, revision: prepared.revision)
     }
 
+    /// Saves to `destination` without a Save panel or an alert, for agents (see AgentTools): a failure is thrown for
+    /// them to report, rather than shown to the person.
+    func save(to destination: URL) async throws {
+        guard session.document != nil else { return }
+        await finishWriting()
+        guard begin() else { throw CocoaError(.userCancelled) }
+        let revision = session.history.currentRevision
+        let snapshot = session.projectSnapshot()
+        session.isProjectBusy = false
+        guard let snapshot else { return }
+        try await writeReportingErrors(snapshot, to: destination, revision: revision)
+    }
+
     /// The save still writing, if any. Close, quit and replacing the document wait for it.
-    private var writing: Task<Bool, Never>?
-    func finishWriting() async { if let writing { _ = await writing.value } }
+    private var writing: Task<Void, Error>?
+    func finishWriting() async { if let writing { _ = try? await writing.value } }
 
     /// File › Export PNG…: the flattened canvas, lossless, straight to a save panel.
     func exportPNG() async {
@@ -234,31 +247,35 @@ final class ProjectController {
 
     /// Writes a captured document in the background. Only that captured version counts as saved.
     private func write(_ snapshot: ProjectSnapshot, to destination: URL, revision: UUID) async -> Bool {
-        let task = Task { @MainActor [self] () -> Bool in
+        do {
+            try await writeReportingErrors(snapshot, to: destination, revision: revision)
+            return true
+        } catch {
+            await showError("Couldn’t save the project", error: error)
+            return false
+        }
+    }
+
+    /// `write`, with a failure thrown to the caller.
+    private func writeReportingErrors(_ snapshot: ProjectSnapshot, to destination: URL, revision: UUID) async throws {
+        let task = Task { @MainActor [self] in
             let scoped = destination.startAccessingSecurityScopedResource()
             defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
             // Our own save changes the package too; the watch ignores events until the saved bytes are remembered.
             externalChanges.saving = true
             defer { externalChanges.saving = false }
-            do {
-                let quickLook = await ImageExporter.shared.quickLookImages(snapshot)
-                try await ProjectStore.shared.save(snapshot, to: destination, quickLook: quickLook)
-                session.projectURL = destination
-                session.history.markSaved(revision)
-                saveGeneration += 1
-                RecentProjects.shared.note(destination)
-                await rememberProjectDigest(for: destination)
-                watchProject(at: destination)
-                return true
-            } catch {
-                await showError("Couldn’t save the project", error: error)
-                return false
-            }
+            let quickLook = await ImageExporter.shared.quickLookImages(snapshot)
+            try await ProjectStore.shared.save(snapshot, to: destination, quickLook: quickLook)
+            session.projectURL = destination
+            session.history.markSaved(revision)
+            saveGeneration += 1
+            RecentProjects.shared.note(destination)
+            await rememberProjectDigest(for: destination)
+            watchProject(at: destination)
         }
         writing = task
-        let saved = await task.value
-        if writing == task { writing = nil }
-        return saved
+        defer { if writing == task { writing = nil } }
+        try await task.value
     }
 
     @discardableResult

@@ -8,6 +8,12 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- Agent Access: the MCP server AI agents connect to, on this Mac only (see AgentServer). -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <!-- The folders the person lets agents use, reopened after a relaunch. -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
     <!-- Sparkle installs updates through its helper services, which a sandboxed app reaches by name. -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
