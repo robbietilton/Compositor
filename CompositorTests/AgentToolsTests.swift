@@ -418,4 +418,14 @@ struct AgentToolsTests {
         #expect(try Data(contentsOf: folder.appendingPathComponent("claude_desktop_config.json.bak")) == original)
         #expect(try String(contentsOf: folder.appendingPathComponent(ClaudeDesktopConfig.fileName), encoding: .utf8).contains("--mcp-stdio"))
     }
+
+    /// A filter added to the app later must be given to agents too: it would otherwise be listed with "no settings".
+    @Test func everyFilterHasSettingsForAgents() throws {
+        for kind in FilterKind.allCases { #expect(AgentFilterSettings.keys[kind] != nil, "\(kind.rawValue) has no entry in AgentFilterSettings.keys") }
+        var settings = FilterSettings()
+        try AgentFilterSettings.apply(["lens": ["effect": "Starburst", "starPoints": 8, "starAmount": 70, "bokehShape": "Hexagon"]], for: .lensEffects, to: &settings)
+        #expect(settings.lens.effect == .starburst && settings.lens.starPoints == 8 && settings.lens.starAmount == 70 && settings.lens.bokehShape == .hexagon)
+        #expect(throws: AgentError.self) { try AgentFilterSettings.apply(["lens": ["starPoints": 5]], for: .lensEffects, to: &settings) }
+        #expect(throws: AgentError.self) { try AgentFilterSettings.apply(["lens": ["effect": "Lasers"]], for: .lensEffects, to: &settings) }
+    }
 }

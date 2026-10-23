@@ -17,6 +17,7 @@ enum AgentFilterSettings {
         .rgbSplit: ["rgbSplitDistance", "rgbSplitBlur", "rgbSplitAngle", "rgbSplitRadial", "rgbSplitCenter", "rgbSplitReach"],
         .tonalContrast: ["tonalAmount", "tonalRadius", "tonalShadows", "tonalMidtones", "tonalHighlights"],
         .lensCorrection: ["distortion"],
+        .lensEffects: ["lens"],
         .cameraRaw: ["cameraRaw"],
         .removeBackground: ["backgroundQuality", "refineEdges", "matteContrast", "shiftEdge"],
         .contentAwareFill: [],
@@ -56,6 +57,7 @@ enum AgentFilterSettings {
             case "colorBalance": settings.colorBalance = try AgentTools.patched(settings.colorBalance, with: value)
             case "dither": try dither.apply(value, to: &settings.dither, in: key)
             case "scanlines": try scanlines.apply(value, to: &settings.scanlines, in: key)
+            case "lens": try lens.apply(value, to: &settings.lens, in: key)
             case "cameraRaw": try cameraRaw.apply(value, to: &settings.cameraRaw, in: key)
             default: try filter.apply(.object([key: value]), to: &settings, in: nil)
             }
@@ -63,7 +65,8 @@ enum AgentFilterSettings {
     }
 
     /// Settings that take an object of their own fields.
-    private static let groups: [String: [String]] = ["dither": dither.names, "scanlines": scanlines.names, "cameraRaw": cameraRaw.names]
+    private static let groups: [String: [String]] = ["dither": dither.names, "scanlines": scanlines.names, "cameraRaw": cameraRaw.names,
+                                                     "lens": lens.names]
     /// Settings that are an adjustment layer's own, written as its manifest writes them.
     private static let codableGroups: Set<String> = ["curves", "exposure", "gradientMap", "grain", "blackWhite", "colorBalance"]
 
@@ -92,6 +95,22 @@ enum AgentFilterSettings {
         choices: ["style": .init(DitherStyle.self, \.style), "pixelShape": .init(DitherPixelShape.self, \.pixelShape),
                   "colors": .init(DitherColors.self, \.colors)],
         strings: ["characters": \.characters])
+
+    /// Lens Effects: `effect` picks which of the five, and each reads only its own settings, as its panel shows them.
+    private static let lens = Fields<LensEffectSettings>(
+        numbers: ["threshold": \.threshold, "flareAmount": \.flareAmount, "flareLength": \.flareLength, "flareBlue": \.flareBlue,
+                  "starAmount": \.starAmount, "starLength": \.starLength, "starAngle": \.starAngle,
+                  "mistStrength": \.mistStrength, "mistSize": \.mistSize, "prismAmount": \.prismAmount,
+                  "prismCopies": \.prismCopies, "prismOffset": \.prismOffset, "prismAngle": \.prismAngle,
+                  "prismSpread": \.prismSpread, "bokehRadius": \.bokehRadius, "bokehBrightness": \.bokehBrightness,
+                  "bokehRing": \.bokehRing],
+        choices: ["effect": .init(LensEffect.self, \.effect), "bokehShape": .init(BokehShape.self, \.bokehShape)],
+        nested: ["starPoints": .init { lens, value, name in
+            guard let points = value.number, LensEffectSettings.starPointChoices.contains(Int(points)), points.rounded() == points else {
+                throw AgentError("“\(name)” is one of: \(LensEffectSettings.starPointChoices.map(String.init).joined(separator: ", ")).")
+            }
+            lens.starPoints = Int(points)
+        }])
 
     private static let scanlines = Fields<ScanlinesSettings>(
         numbers: ["lineSpacing": \.lineSpacing, "thickness": \.thickness, "glow": \.glow, "dots": \.dots, "wobble": \.wobble,
