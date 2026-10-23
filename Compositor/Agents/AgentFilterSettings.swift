@@ -100,8 +100,7 @@ enum AgentFilterSettings {
         colors: ["dark": \.dark, "light": \.light],
         choices: ["colors": .init(DitherColors.self, \.colors)])
 
-    /// Every Camera Raw panel's sliders, switches and menus. Left to the person: the Point Color picks and the
-    /// Upright guides, which are drawn on the image.
+    /// Every Camera Raw panel's sliders, switches and menus, the Point Color picks and Upright guides included.
     private static let cameraRaw = Fields<CameraRawSettings>(
         numbers: ["temperature": \.temperature, "tint": \.tint, "exposure": \.exposure, "contrast": \.contrast,
                   "highlights": \.highlights, "shadows": \.shadows, "whites": \.whites, "blacks": \.blacks,
@@ -120,7 +119,8 @@ enum AgentFilterSettings {
                           "refineSaturation": \.refineSaturation],
                 nested: ["rgb": .replaced(\.rgb), "red": .replaced(\.red), "green": .replaced(\.green), "blue": .replaced(\.blue)])),
             "mixer": .group(\.mixer, Fields<CameraRawMixerSettings>(
-                nested: ["hue": .families(\.hue), "saturation": .families(\.saturation), "luminance": .families(\.luminance)])),
+                nested: ["hue": .families(\.hue), "saturation": .families(\.saturation), "luminance": .families(\.luminance),
+                         "points": pointColors])),
             "grading": .group(\.grading, Fields<CameraRawGradingSettings>(
                 numbers: ["blending": \.blending, "balance": \.balance],
                 nested: ["shadows": .group(\.shadows, wheel), "midtones": .group(\.midtones, wheel),
@@ -141,13 +141,54 @@ enum AgentFilterSettings {
                 numbers: ["vertical": \.vertical, "horizontal": \.horizontal, "rotate": \.rotate, "aspect": \.aspect,
                           "scale": \.scale, "offsetX": \.offsetX, "offsetY": \.offsetY],
                 flags: ["constrainCrop": \.constrainCrop],
-                choices: ["upright": .init(CameraRawUprightMode.self, \.upright), "projection": .init(CameraRawProjection.self, \.projection)])),
+                choices: ["upright": .init(CameraRawUprightMode.self, \.upright), "projection": .init(CameraRawProjection.self, \.projection)],
+                nested: ["guides": guides])),
             "calibration": .group(\.calibration, Fields<CameraRawCalibrationSettings>(
                 numbers: ["shadowTint": \.shadowTint, "redHue": \.redHue, "redSaturation": \.redSaturation,
                           "greenHue": \.greenHue, "greenSaturation": \.greenSaturation, "blueHue": \.blueHue,
                           "blueSaturation": \.blueSaturation],
                 choices: ["process": .init(CameraRawProcessVersion.self, \.process)])),
         ])
+
+    /// The Color Mixer's Point Color list, up to eight: each picks a `color` ("#RRGGBB", as the eyedropper would) or
+    /// gives its hue (degrees), saturation and luminance (0–1) outright, then shifts it.
+    private static let pointColors = Fields<CameraRawMixerSettings>.Nested { mixer, value, name in
+        guard let list = value.array, list.count <= 8 else { throw AgentError("“\(name)” is a list of up to 8 picked colors.") }
+        mixer.points = try list.enumerated().map { index, item in
+            guard var fields = item.object else { throw AgentError("Each of “\(name)” is an object.") }
+            var point = CameraRawPointColor()
+            if let picked = fields.removeValue(forKey: "color") {
+                guard let color = picked.string.flatMap({ PaletteColor(hex: $0) }) else { throw AgentError("“\(name)[\(index)].color” is #RRGGBB.") }
+                point = CameraRawPointColor(red: Double(color.red), green: Double(color.green), blue: Double(color.blue))
+            }
+            try pointColor.apply(.object(fields), to: &point, in: "\(name)[\(index)]")
+            return point
+        }
+    }
+
+    private static let pointColor = Fields<CameraRawPointColor>(
+        numbers: ["hue": \.hue, "saturation": \.saturation, "luminance": \.luminance, "hueShift": \.hueShift,
+                  "saturationShift": \.saturationShift, "luminanceShift": \.luminanceShift, "hueRange": \.hueRange,
+                  "saturationRange": \.saturationRange, "luminanceRange": \.luminanceRange])
+
+    /// Upright's guides, at most two, each {"start": [x, y], "end": [x, y]} as fractions of the layer from its top-left:
+    /// the first straightens, the second corrects perspective too. Giving them turns Upright to Guided.
+    private static let guides = Fields<CameraRawGeometrySettings>.Nested { geometry, value, name in
+        guard let list = value.array, list.count <= 2 else { throw AgentError("“\(name)” is a list of one or two guides.") }
+        func fraction(_ value: JSONValue?) -> CGPoint? {
+            guard let pair = value?.array, pair.count == 2, let x = pair[0].number, let y = pair[1].number,
+                  (0...1).contains(x), (0...1).contains(y) else { return nil }
+            return CGPoint(x: x, y: y)
+        }
+        geometry.guides = try list.map { item in
+            guard let start = fraction(item["start"]), let end = fraction(item["end"]) else {
+                throw AgentError("Each of “\(name)” is {\"start\": [x, y], \"end\": [x, y]}, fractions 0–1 of the layer from its top-left.")
+            }
+            // The filter keeps them from the pixel grid's lower-left.
+            return CameraRawGeometryGuide(startX: start.x, startY: 1 - start.y, endX: end.x, endY: 1 - end.y)
+        }
+        geometry.upright = list.isEmpty ? .off : .guided
+    }
 
     private static let wheel = Fields<CameraRawGradeWheel>(numbers: ["hue": \.hue, "saturation": \.saturation, "luminance": \.luminance])
 }

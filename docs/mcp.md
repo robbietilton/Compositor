@@ -31,6 +31,8 @@ The server listens on the loopback interface only, so nothing on the network can
 | `add_text`, `update_text`, `list_fonts` | Text layers that stay editable: words, font, size, color, alignment, spacing, a wrapping box, letters in other colors or faces |
 | `add_shape`, `update_shape` | Rectangles (rounded, smoothed), ellipses and lines (dashed, capped) that redraw sharply when scaled |
 | `paint` | Strokes along points, with pen pressure if wanted: Brush, Eraser, Spot Healing, Clone Stamp, Blur, Smudge, Liquify, on pixels or a mask |
+| `gradient` | Linear or radial, between two colors or to clear, on pixels or a mask |
+| `gif_frames`, `edit_gif` | An animated GIF layer's frames: show one to paint or filter it, duplicate, delete, set delays |
 | `select` | Rectangle, ellipse, polygon, all, none, invert, or the subject; add or subtract; feather |
 | `fill` | Fill the selection (or layer) with a color |
 | `apply_filter` | Any filter from the Filter and Image menus with its settings, Content-Aware Fill and Remove Background included |
@@ -43,11 +45,9 @@ Commands whose names end in "…" open a dialog for you to answer, so `run_comma
 
 Tools act on the document in front unless they're given `document`, and on the selected layer unless they're given `layer_id`. Coordinates are document pixels from the top-left. If you're in the middle of something (typing text, a dialog open), tools that would change the document don't, and say why, so the agent can ask you to finish first.
 
-## Not yet
+## Camera Raw
 
-Camera Raw's Point Color picks and Upright guides, which are drawn on the image; the Gradient tool; editing a GIF's frames. Each can be reached through `run_command`, with you answering any dialog.
-
-`apply_filter` takes every other Camera Raw setting under `cameraRaw`, panel by panel as the filter shows them: e.g. `{"cameraRaw": {"exposure": 0.5, "curve": {"shadows": -20}, "mixer": {"saturation": {"Oranges": -30}}, "grading": {"highlights": {"hue": 40, "saturation": 25}}}}`. A name it doesn't know is answered with the ones it does.
+`apply_filter` takes every Camera Raw setting under `cameraRaw`, panel by panel as the filter shows them: e.g. `{"cameraRaw": {"exposure": 0.5, "curve": {"shadows": -20}, "mixer": {"saturation": {"Oranges": -30}}, "grading": {"highlights": {"hue": 40, "saturation": 25}}}}`. Point Color picks go in `mixer.points` (`{"color": "#FF8000", "saturationShift": -40}`), and Upright's guides in `geometry.guides` (`{"start": [0.1, 0.2], "end": [0.9, 0.25]}`, fractions of the layer from its top-left). A name it doesn't know is answered with the ones it does.
 
 ## How it works
 

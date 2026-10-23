@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import Testing
 import UniformTypeIdentifiers
 @testable import Compositor
@@ -294,5 +295,83 @@ struct AgentToolsTests {
         #expect(raw.detail.sharpenAmount == 40 && raw.optics.removeChromaticAberration && raw.geometry.rotate == 2 && raw.calibration.process == .version5)
         #expect(throws: AgentError.self) { try AgentFilterSettings.apply(["cameraRaw": ["grading": ["shadows": ["tint": 1]]]], for: .cameraRaw, to: &settings) }
         #expect(throws: AgentError.self) { try AgentFilterSettings.apply(["cameraRaw": ["mixer": ["hue": ["Teals": 1]]]], for: .cameraRaw, to: &settings) }
+    }
+
+    /// An animated GIF of solid frames, base64, as an agent would send it.
+    private func gif(_ colors: [CGColor], size: Int = 8) throws -> String {
+        let data = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.gif.identifier as CFString, colors.count, nil))
+        for color in colors {
+            let context = try #require(CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(color)
+            context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+            CGImageDestinationAddImage(destination, try #require(context.makeImage()),
+                                       [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]] as CFDictionary)
+        }
+        #expect(CGImageDestinationFinalize(destination))
+        return (data as Data).base64EncodedString()
+    }
+
+    @Test func laysGradients() async throws {
+        let workspace = ProjectWorkspace()
+        let handler = MCPHandler(tools: AgentTools.all, workspace: workspace)
+        _ = try await call(handler, "new_document", ["width": 100, "height": 10, "background": "#FFFFFF"])
+        let session = workspace.current.session
+        let foreground = session.foregroundColor, tool = session.tool
+        let laid = try await call(handler, "gradient", ["from": [0, 5], "to": [100, 5], "start_color": "#000000", "end_color": "#FFFFFF"])
+        #expect(laid["isError"] == false, "\(text(laid))")
+        let image = try #require(session.document?.layers.first?.asset?.image)
+        let left = try pixel(image, x: 2, y: 5)[0], middle = try pixel(image, x: 50, y: 5)[0], right = try pixel(image, x: 97, y: 5)[0]
+        #expect(left < 20 && right > 235 && middle > 100 && middle < 155, "dark to light along the line")
+        #expect(session.foregroundColor == foreground && session.tool == tool, "the person's colors and tool are as they were")
+        #expect(session.gradientEdit == nil, "nothing is left pending")
+        #expect(try await call(handler, "gradient", ["from": [5, 5], "to": [5, 5]])["isError"] == true)
+    }
+
+    @Test func editsGIFFrames() async throws {
+        let workspace = ProjectWorkspace()
+        let handler = MCPHandler(tools: AgentTools.all, workspace: workspace)
+        _ = try await call(handler, "new_document", ["width": 8, "height": 8])
+        let session = workspace.current.session
+        let red = CGColor(red: 1, green: 0, blue: 0, alpha: 1), green = CGColor(red: 0, green: 1, blue: 0, alpha: 1)
+        let added = try await call(handler, "add_layer", ["type": "image", "name": "Blink", "image_data": .string(try gif([red, green, red]))])
+        #expect(added["isError"] == false, "\(text(added))")
+        #expect(added["structuredContent"]?["kind"] == "gif")
+
+        let listed = try await call(handler, "gif_frames")
+        let frames = try #require(listed["structuredContent"]?["frames"]?.array)
+        #expect(frames.count == 3 && listed["structuredContent"]?["selected_frame"] == 0)
+        #expect(try await call(handler, "edit_gif", ["action": "select", "frame": 1])["isError"] == false)
+        let shown = try #require(session.activeLayer.flatMap { session.displayedAsset(for: $0) }?.image)
+        #expect(try pixel(shown, x: 4, y: 4)[1] > 200, "the canvas shows the green frame")
+
+        #expect(try await call(handler, "edit_gif", ["action": "duplicate", "frame": 1])["isError"] == false)
+        #expect(session.activeLayer?.gifAnimation?.frames.count == 4)
+        #expect(try await call(handler, "edit_gif", ["action": "delete", "frames": [0]])["isError"] == false)
+        #expect(session.activeLayer?.gifAnimation?.frames.count == 3)
+        let timed = try await call(handler, "edit_gif", ["action": "set_delays", "delay": 0.5])
+        #expect(timed["isError"] == false, "\(text(timed))")
+        #expect(session.activeLayer?.gifAnimation?.timing.mode == .uniform && session.activeLayer?.gifAnimation?.timing.uniformDelay == 0.5)
+        #expect(try await call(handler, "edit_gif", ["action": "select", "frame": 99])["isError"] == true)
+    }
+
+    @Test func cameraRawPicksColorsAndDrawsGuides() throws {
+        var settings = FilterSettings()
+        try AgentFilterSettings.apply(["cameraRaw": [
+            "mixer": ["points": [["color": "#FF8000", "saturationShift": -40], ["hue": 200, "saturation": 0.5, "luminance": 0.4]]],
+            "geometry": ["guides": [["start": [0.1, 0.2], "end": [0.9, 0.25]]]],
+        ]], for: .cameraRaw, to: &settings)
+        let points = settings.cameraRaw.mixer.points
+        #expect(points.count == 2)
+        #expect(abs(points[0].hue - 30) < 0.5 && points[0].saturation == 1 && points[0].saturationShift == -40, "picked as the eyedropper picks orange")
+        #expect(points[1].hue == 200 && points[1].luminance == 0.4)
+        let guide = try #require(settings.cameraRaw.geometry.guides.first)
+        #expect(settings.cameraRaw.geometry.upright == .guided)
+        #expect(abs(guide.startY - 0.8) < 1e-9 && guide.startX == 0.1, "kept from the lower-left, as the filter keeps them")
+        #expect(throws: AgentError.self) {
+            try AgentFilterSettings.apply(["cameraRaw": ["geometry": ["guides": [["start": [0, 0], "end": [2, 0]]]]]], for: .cameraRaw, to: &settings)
+        }
     }
 }

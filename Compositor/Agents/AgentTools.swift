@@ -197,7 +197,7 @@ enum Schema {
 
 enum AgentTools {
     /// Every tool, in the order tools/list gives them.
-    static var all: [AgentTool] { documentTools + layerTools + textAndShapeTools + paintingTools + editingTools + canvasTools + commandTools }
+    static var all: [AgentTool] { documentTools + layerTools + textAndShapeTools + paintingTools + editingTools + canvasTools + gifTools + commandTools }
 
     /// What MCP clients pass on to the agent about the server as a whole.
     static let instructions = """

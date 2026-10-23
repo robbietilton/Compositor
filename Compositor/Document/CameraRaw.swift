@@ -601,18 +601,8 @@ extension EditorSession {
         let red = min(1, Double(bytes[0]) / Double(bytes[3]))
         let green = min(1, Double(bytes[1]) / Double(bytes[3]))
         let blue = min(1, Double(bytes[2]) / Double(bytes[3]))
-        let maxChannel = max(red, green, blue), minChannel = min(red, green, blue)
-        let chroma = maxChannel - minChannel
-        var hue = 0.0
-        if chroma > 1e-6 {
-            if maxChannel == red { hue = (green - blue) / chroma }
-            else if maxChannel == green { hue = 2 + (blue - red) / chroma }
-            else { hue = 4 + (red - green) / chroma }
-            hue /= 6
-            if hue < 0 { hue += 1 }
-        }
         let tone = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        let saturation = maxChannel == 0 ? 0 : chroma / maxChannel
-        return (tone, hue * 360, saturation, (maxChannel + minChannel) / 2)
+        let picked = CameraRawPointColor(red: red, green: green, blue: blue)
+        return (tone, picked.hue, picked.saturation, picked.luminance)
     }
 }

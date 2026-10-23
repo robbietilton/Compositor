@@ -117,6 +117,68 @@ extension AgentTools {
                 return .text(painted > 0 ? "Painted \(painted) stroke\(painted == 1 ? "" : "s") with \(name) on “\(layer.name)”\(onMask ? "’s mask" : "")."
                                          : "The strokes left “\(layer.name)” as it was.")
             },
+            AgentTool(name: "gradient",
+                      description: """
+                        Lays a gradient on a layer (or its mask), inside the selection when there is one, as dragging the \
+                        Gradient tool from `from` to `to` does: "linear" along that line, "radial" out from `from` with `to` \
+                        on its rim. From `start_color` to `end_color`, or to clear. On a mask it runs from white to black \
+                        when `start_color` is light, black to white when it's dark.
+                        """,
+                      schema: Schema.object([
+                        "document": Schema.document,
+                        "layer_id": Schema.layer,
+                        "from": Schema.point("Where it starts, in document pixels."),
+                        "to": Schema.point("Where it ends."),
+                        "shape": Schema.string("Default linear.", oneOf: GradientShape.allCases.map { $0.rawValue.lowercased() }),
+                        "start_color": Schema.string("#RRGGBB. Default the foreground color."),
+                        "end_color": Schema.string("#RRGGBB, or \"transparent\". Default transparent."),
+                        "opacity": Schema.number("0–1. Default 1."),
+                        "on_mask": Schema.boolean("Lay it on the layer's mask."),
+                      ], required: ["from", "to"])) { call in
+                let session = try call.session()
+                let layer = try call.layer(in: session)
+                guard let from = try call.point("from"), let to = try call.point("to") else { throw AgentError("Give `from` and `to`.") }
+                guard hypot(to.x - from.x, to.y - from.y) >= 0.5 else { throw AgentError("`from` and `to` must be apart.") }
+                let shapeName = try call.string("shape", default: "linear")
+                guard let shape = GradientShape.allCases.first(where: { $0.rawValue.lowercased() == shapeName.lowercased() }) else {
+                    throw AgentError("`shape` is linear or radial.")
+                }
+                let opacity = CGFloat(try call.double("opacity") ?? 1)
+                guard (0.01...1).contains(opacity) else { throw AgentError("`opacity` runs 0.01–1.") }
+                let onMask = try call.bool("on_mask") ?? false
+                guard !onMask || layer.mask != nil else { throw AgentError("That layer has no mask; add one with add_mask.") }
+                let start = try call.string("start_color").map { try color($0) } ?? session.foregroundColor
+                let endName = try call.string("end_color", default: "transparent")
+                let end = endName.lowercased() == "transparent" ? nil : try color(endName)
+
+                let kept = (tool: session.tool, settings: session.gradientSettings, foreground: session.foregroundColor,
+                            background: session.backgroundColor, maskWhite: session.maskPaintWhite)
+                defer {
+                    session.selectTool(kept.tool)
+                    session.gradientSettings = kept.settings
+                    session.foregroundColor = kept.foreground
+                    session.backgroundColor = kept.background
+                    session.maskPaintWhite = kept.maskWhite
+                }
+                session.selectLayer(layer.id)
+                session.isMaskSelected = onMask
+                session.selectTool(.gradient)
+                guard session.tool == .gradient else { throw AgentError("Compositor couldn't take up the Gradient tool: \(busyReason(session) ?? "it's busy").") }
+                session.foregroundColor = start
+                if let end { session.backgroundColor = end }
+                session.maskPaintWhite = (start.red + start.green + start.blue) / 3 >= 0.5
+                session.gradientSettings = GradientSettings(shape: shape, style: end == nil ? .foregroundToTransparent : .foregroundToBackground,
+                                                            reversed: false, opacity: opacity)
+                let revision = session.history.currentRevision
+                session.beginGradient(at: from)
+                guard session.gradientEdit != nil else { throw AgentError(takeError(session) ?? session.paintRefusal ?? "A gradient can't go on “\(layer.name)”.") }
+                session.moveGradient(end: to)
+                session.endGradientDrag()
+                await session.commitGradient()
+                if let error = takeError(session) { throw AgentError(error) }
+                guard session.history.currentRevision != revision else { throw AgentError("The gradient wasn't laid down.") }
+                return .text("Laid a \(shape.rawValue.lowercased()) gradient on “\(layer.name)”\(onMask ? "’s mask" : "").")
+            },
         ]
     }
 
