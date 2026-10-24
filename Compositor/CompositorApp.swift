@@ -340,7 +340,7 @@ struct CompositorApp: App {
                         // ⌃⌘F, as in Photoshop; ⌘F is the command palette.
                         .configuredKeyboardShortcut("f", modifiers: [.command, .control]).disabled(!session.canRepeatLastFilter)
                     Divider()
-                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }, id: \.self) { kind in
+                    ForEach(FilterKind.allCases.filter { $0 != .contentAwareFill && $0 != .structure && !$0.isImageAdjustment }, id: \.self) { kind in
                         Button("\(kind.rawValue)…") { session.beginFilter(kind) }
                             .disabled(!(kind == .vignette ? session.canVignette : session.canAdjustColors) || session.hueSaturation != nil)
                     }
