@@ -2,6 +2,17 @@ import Foundation
 import CoreGraphics
 
 nonisolated enum CropGeometry {
+    static func ratio(_ text: String) -> CGFloat? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let width = Double(parts[0].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")),
+              let height = Double(parts[1].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")),
+              width.isFinite, height.isFinite, width > 0, height > 0 else { return nil }
+        let ratio = CGFloat(width / height)
+        guard ratio.isFinite, (1 / DocumentLimits.maxSideExtent...DocumentLimits.maxSideExtent).contains(ratio) else { return nil }
+        return ratio
+    }
+
     static func snapped(_ rect: CGRect) -> CGRect {
         let rect = rect.standardized
         let x = rect.minX.rounded(), y = rect.minY.rounded()
@@ -218,19 +229,15 @@ extension EditorSession {
     var cropRatio: CGFloat? {
         switch cropRatioChoice {
         case "Original": return document.map { CGFloat($0.width) / CGFloat($0.height) }
-        case "1:1": return 1
-        case "4:3": return 4 / 3
-        case "3:4": return 3 / 4
-        case "16:9": return 16 / 9
-        case "9:16": return 9 / 16
-        default: return nil
+        default: return CropGeometry.ratio(cropRatioChoice)
         }
     }
     func cancelCrop() { cropRect = nil }
     func changeCropRatio() {
         guard let rect = visibleCropRect, let ratio = cropRatio else { return }
-        let height = rect.width / ratio
-        let next = CropGeometry.snapped(CGRect(x: rect.minX, y: rect.midY - height / 2, width: rect.width, height: height))
+        let height = min(DocumentLimits.maxSideExtent, max(1, rect.width / ratio))
+        let width = height * ratio
+        let next = CropGeometry.snapped(CGRect(x: rect.minX, y: rect.midY - height / 2, width: width, height: height))
         if CropGeometry.valid(next) { cropRect = next }
     }
     func commitCrop() async {
