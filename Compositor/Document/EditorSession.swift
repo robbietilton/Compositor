@@ -268,6 +268,9 @@ final class EditorSession {
     var layerSearchText = ""
     var layerTypeFilter: Set<LayerType> = []
     var cropRect: CGRect?
+    /// The Crop tool's Perspective switch, and the corners it has been dragged to (see `PerspectiveCrop`).
+    var cropPerspective = false
+    var cropCorners: [CGPoint]?
     var cropRatioChoice = "Free"
     var cropError: String?
     var transformEdit: TransformEdit?

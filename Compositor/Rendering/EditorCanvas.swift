@@ -652,6 +652,8 @@ final class CanvasView: NSView {
         // Observe selection only for the lightweight handles overlay.
         _ = session.activeLayerID
         _ = session.cropRect
+        _ = session.cropCorners
+        _ = session.cropPerspective
         transformOverlay.needsDisplay = true
         redrawRulers()
         return changed
@@ -2642,12 +2644,23 @@ final class CanvasView: NSView {
         let pixel = session.viewport.documentPoint(from: point, documentSize: document.size)
         let rect = session.visibleCropRect ?? CGRect(origin: pixel, size: .zero)
         let mode: CropDrag.Mode
-        if let region = transformOverlay.cropResizeRegions.first(where: { $0.rect.contains(point) }) {
+        let corners = session.visibleCropCorners
+        if let corners {
+            // Perspective: a corner moves on its own, inside moves them all, and outside starts a new frame.
+            let handles = transformOverlay.cropCornerHandles
+            let shape = CGMutablePath()
+            shape.addLines(between: corners)
+            shape.closeSubpath()
+            if let index = handles.indices.first(where: { hypot(handles[$0].x - point.x, handles[$0].y - point.y) <= 10 }) {
+                mode = .corner(index)
+            } else if shape.contains(pixel) { mode = .move }
+            else { mode = .create; session.cropRect = nil; session.cropCorners = nil }
+        } else if let region = transformOverlay.cropResizeRegions.first(where: { $0.rect.contains(point) }) {
             mode = .resize(region.index)
         } else if session.cropRect?.contains(pixel) == true,
                   rect != CGRect(origin: .zero, size: document.size) { mode = .move }
         else { mode = .create; session.cropRect = nil }
-        cropDrag = CropDrag(start: pixel, original: rect, mode: mode)
+        cropDrag = CropDrag(start: pixel, original: rect, mode: mode, corners: corners)
         let targets = session.cropSnapTargets()
         cropSnap = CropSnap(xs: targets.xs, ys: targets.ys, tolerance: Self.cropSnapDistance / max(session.viewport.pointsPerPixel, 0.0001))
         dragCursor = .current
@@ -2660,6 +2673,7 @@ final class CanvasView: NSView {
     /// fixed, and edges snap to nearby layer and canvas edges unless Control is held.
     private func dragCrop(_ drag: CropDrag, to point: CGPoint, flags: NSEvent.ModifierFlags, documentSize: CGSize) {
         let pixel = session.viewport.documentPoint(from: point, documentSize: documentSize)
+        if let corners = drag.updatedCorners(to: pixel) { return session.setCropCorners(corners) }
         let symmetric = flags.contains(.option)
         var next = drag.updated(to: pixel, ratio: session.cropRatio, symmetric: symmetric)
         if let cropSnap, session.snappingEnabled, !flags.contains(.control) {

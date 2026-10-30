@@ -38,10 +38,12 @@ nonisolated enum CropGeometry {
 }
 
 struct CropDrag {
-    enum Mode { case create, move, resize(Int) }
+    enum Mode { case create, move, resize(Int), corner(Int) }
     let start: CGPoint
     let original: CGRect
     let mode: Mode
+    /// With Perspective on, the corners the drag started from.
+    var corners: [CGPoint]? = nil
     /// `symmetric` (Option held) keeps the frame's center fixed: the opposite edges move with the dragged ones.
     func updated(to point: CGPoint, ratio: CGFloat?, symmetric: Bool = false) -> CGRect {
         switch mode {
@@ -52,7 +54,20 @@ struct CropDrag {
             let drag = TransformDrag(original: transform, start: start, mode: .resize(index))
             let next = drag.updated(to: point, lockRatio: ratio != nil, shift: false, option: symmetric)
             return CropGeometry.snapped(CGRect(origin: next.origin, size: next.size))
+        case .corner: return original
         }
+    }
+
+    /// With Perspective on: where dragging one corner, or inside the shape, takes the corners. Nil for a new frame.
+    func updatedCorners(to point: CGPoint) -> [CGPoint]? {
+        guard var corners else { return nil }
+        let dx = point.x - start.x, dy = point.y - start.y
+        switch mode {
+        case .corner(let index): corners[index] = CGPoint(x: corners[index].x + dx, y: corners[index].y + dy)
+        case .move: corners = corners.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+        case .create, .resize: return nil
+        }
+        return corners
     }
 }
 
@@ -80,6 +95,7 @@ nonisolated struct CropSnap {
         guard tolerance > 0 else { return rect }
         let horizontal: Bool, vertical: Bool
         switch drag.mode {
+        case .corner: return rect
         case .move:
             func shift(_ edges: [CGFloat], _ targets: [CGFloat]) -> CGFloat {
                 edges.compactMap { edge in nearest(edge, in: targets).map { $0 - edge } }.min { abs($0) < abs($1) } ?? 0
@@ -232,7 +248,7 @@ extension EditorSession {
         default: return CropGeometry.ratio(cropRatioChoice)
         }
     }
-    func cancelCrop() { cropRect = nil }
+    func cancelCrop() { cropRect = nil; cropCorners = nil }
     func changeCropRatio() {
         guard let rect = visibleCropRect, let ratio = cropRatio else { return }
         let height = min(DocumentLimits.maxSideExtent, max(1, rect.width / ratio))
@@ -241,6 +257,7 @@ extension EditorSession {
         if CropGeometry.valid(next) { cropRect = next }
     }
     func commitCrop() async {
+        if let corners = cropCorners { return await commitPerspectiveCrop(corners) }
         guard canStartProjectOperation, let rect = cropRect, CropGeometry.valid(rect),
               let snapshot = projectSnapshot() else { return }
         isProjectBusy = true

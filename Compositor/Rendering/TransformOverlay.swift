@@ -416,8 +416,13 @@ final class TransformOverlay: NSView {
         guard let rect = cropViewRect else { return [] }
         return LayerTransform.handles.map { CGPoint(x: rect.minX + $0.x * rect.width, y: rect.minY + $0.y * rect.height) }
     }
+    /// With Perspective on, the four corners in view coordinates, in handle order.
+    var cropCornerHandles: [CGPoint] {
+        guard let corners = session.visibleCropCorners, let document = session.document else { return [] }
+        return corners.map { session.viewport.viewPoint(from: $0, documentSize: document.size) }
+    }
     var cropResizeRegions: [(index: Int, rect: CGRect)] {
-        guard let rect = cropViewRect else { return [] }
+        guard session.visibleCropCorners == nil, let rect = cropViewRect else { return [] }
         let handles = cropHandles
         let radius: CGFloat = 10
         var regions = [0, 2, 4, 6].map { index in
@@ -521,8 +526,45 @@ final class TransformOverlay: NSView {
         context.restoreGState()
     }
 
+    /// The corners' shape, shaded outside, with a grid drawn in the same perspective to line up with what's square.
+    private func drawPerspectiveCrop(_ corners: [CGPoint], in context: CGContext) {
+        let shape = CGMutablePath()
+        shape.addLines(between: corners)
+        shape.closeSubpath()
+        context.saveGState()
+        context.addRect(bounds)
+        context.addPath(shape)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+        context.drawPath(using: .eoFill)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.4).cgColor)
+        let map = DistortWarp.homography(corners)
+        for index in 1...3 {
+            let fraction = CGFloat(index) / 4
+            context.move(to: map(CGPoint(x: fraction, y: 0)))
+            context.addLine(to: map(CGPoint(x: fraction, y: 1)))
+            context.move(to: map(CGPoint(x: 0, y: fraction)))
+            context.addLine(to: map(CGPoint(x: 1, y: fraction)))
+        }
+        context.strokePath()
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth(1)
+        context.addPath(shape)
+        context.strokePath()
+        context.setFillColor(NSColor.white.cgColor)
+        context.setStrokeColor(NSColor.black.cgColor)
+        for point in corners {
+            let handle = CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)
+            context.fill(handle)
+            context.stroke(handle)
+        }
+        context.restoreGState()
+    }
+
     private func drawCrop() {
-        guard let rect = cropViewRect, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let corners = cropCornerHandles
+        if corners.count == 4 { return drawPerspectiveCrop(corners, in: context) }
+        guard let rect = cropViewRect else { return }
         context.saveGState()
         context.addRect(bounds)
         context.addRect(rect)
