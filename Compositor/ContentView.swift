@@ -320,6 +320,10 @@ struct ContentView: View {
                 // No cancel role: an alert with only a cancel button gets a second OK of its own.
                 Button("OK") { session.importError = nil }
             } message: { Text(session.importError ?? "") }
+        .alert("Couldn’t align", isPresented: Binding(get: { session.alignError != nil },
+            set: { if !$0 { session.alignError = nil } })) {
+                Button("OK") { session.alignError = nil }
+            } message: { Text(session.alignError ?? "") }
         .alert("Couldn’t paint", isPresented: Binding(get: { session.brushError != nil },
             set: { if !$0 { session.brushError = nil } })) {
                 Button("OK") { session.brushError = nil }
