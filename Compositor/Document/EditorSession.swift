@@ -447,6 +447,7 @@ final class EditorSession {
     @ObservationIgnored var pendingOpacityDigit: (digit: Int, time: TimeInterval)?
     var colorPicker: ColorPickerState?
     var brushError: String?
+    var alignError: String?
     var brushRevision = 0
     /// Not observed by the UI, so controls don't dim for the length of every stroke;
     /// a stroke keeps the settings it started with, so edits made mid-stroke are harmless.

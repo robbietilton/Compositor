@@ -181,6 +181,13 @@ private struct AlignButton: View {
                 VStack(alignment: .leading, spacing: 6) {
                     row([.left, .horizontalCenter, .right], [.horizontalCenters, .horizontalSpacing])
                     row([.top, .verticalCenter, .bottom], [.verticalCenters, .verticalSpacing])
+                    Divider()
+                    Button("Auto-Align") {
+                        showing = false
+                        Task { await session.autoAlignLayers() }
+                    }
+                    .disabled(!session.canAutoAlignLayers)
+                    .help("Match the selected photos to the active layer by what's in them (two or more pixel layers)")
                 }
                 .padding(8)
             }

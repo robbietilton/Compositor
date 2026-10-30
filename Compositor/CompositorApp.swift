@@ -413,6 +413,9 @@ struct CompositorApp: App {
                             ForEach(LayerAlignment.allCases, id: \.self) { alignment in
                                 Button(alignment.rawValue) { session.alignLayers(alignment) }
                             }
+                            Divider()
+                            Button("Auto-Align Layers") { Task { await session.autoAlignLayers() } }
+                                .disabled(!session.canAutoAlignLayers)
                         }
                             .disabled(!session.canAlignLayers)
                         Menu("Distribute") {
