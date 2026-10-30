@@ -20,12 +20,9 @@ extension EditorSession {
             guard let ends = shapeLineEnds else { context.restoreGState(); return }
             let thickness = max(1, CGFloat(shapeLineWidth) * scale)
             context.setStrokeColor(color)
-            context.setLineWidth(thickness)
-            context.setLineCap(.round)
             // Exactly the two points being dragged between, so the start never shifts.
-            context.move(to: center(ends.start))
-            context.addLine(to: center(ends.end))
-            context.strokePath()
+            context.strokeShapeLine(from: center(ends.start), to: center(ends.end), width: thickness,
+                                    style: draft.lineStyle, cap: draft.lineCap)
         } else {
             context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, smoothing: draft.smoothing))
             context.fillPath()

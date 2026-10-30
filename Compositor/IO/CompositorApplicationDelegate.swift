@@ -51,6 +51,8 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         // Slider knobs snap to a click on the track instead of gliding there.
         SliderSnap.install()
+        // The Brush's pressure buttons wait for a tablet pen.
+        PenInput.install()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

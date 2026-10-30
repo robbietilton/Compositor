@@ -167,7 +167,13 @@ extension PaletteColor {
 
 /// Hosts the picker in the shared floating panel: first opened centered on the canvas,
 /// afterwards wherever it was last left. Closing it with the title-bar button cancels.
+///
+/// One for the app, not one per view showing the palette: the tool rail can rebuild its palette (switching between one
+/// column and two), and a picker opened by the old one would then be left open with nothing to close it, its OK and
+/// Cancel doing nothing visible.
 final class ColorPickerPanelController: NSObject {
+    static let shared = ColorPickerPanelController()
+
     static let identifier = NSUserInterfaceItemIdentifier("colorPickerPanel")
     private let panel = FloatingPanelController(name: "colorPickerPanel")
     private weak var session: EditorSession?
@@ -178,8 +184,10 @@ final class ColorPickerPanelController: NSObject {
             if session?.colorPicker != nil { session?.closeColorPicker(commit: false) }
         }
         panel.show(title: state.target.title,
-                   content: ColorPickerSheet(state: state) { [weak session] commit in
+                   content: ColorPickerSheet(state: state) { [weak self, weak session] commit in
                        session?.closeColorPicker(commit: commit)
+                       // Put away here too, not only when the palette notices the picker has gone.
+                       if session?.colorPicker == nil { self?.close() }
                    })
     }
 

@@ -25,6 +25,9 @@ nonisolated enum SubjectRemoval {
         }
     }
 
+    /// Vision's subject mask for `image`, white over the subject, as it comes: Rim Light lights the subject it finds.
+    static func subjectMask(_ image: CGImage) throws -> CGImage { try vision(image) }
+
     /// Vision's raw subject mask, white over the subject: the model has no settings of its own, so everything the
     /// panel offers is done to this afterwards by `refined`.
     private static func vision(_ image: CGImage) throws -> CGImage {

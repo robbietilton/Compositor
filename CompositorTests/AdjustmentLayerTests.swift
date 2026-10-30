@@ -189,7 +189,8 @@ import Testing
             session.updateFilter(settings, preview: true)
             #expect(session.activeLayer?.adjustment?.curves == settings.curves)
             await session.commitFilter()
-        case .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
+             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
             #expect(session.filterEdit?.kind == kind.filterKind)
             var settings = try #require(session.filterEdit).settings
             switch kind {
@@ -200,6 +201,13 @@ import Testing
             case .gaussianBlur: settings.radius = 24
             case .motionBlur: settings.angle = 35; settings.distance = 48
             case .addNoise: settings.amount = 35; settings.gaussian = true; settings.monochromatic = true
+            case .progressiveBlur: settings.progressiveTo = 30; settings.progressiveRadial = true
+            case .bloomGlow: settings.bloomAmount = 70; settings.bloomRadius = 10
+            case .rgbSplit: settings.rgbSplitDistance = 20; settings.rgbSplitBlur = 40; settings.rgbSplitRadial = true
+            case .vignette: settings.vignetteAmount = 70; settings.vignetteRoundness = -40
+            case .tonalContrast: settings.tonalAmount = 80; settings.tonalRadius = 30
+            case .lensEffects: settings.lens.effect = .bokeh; settings.lens.bokehShape = .hexagon
+            case .sharpen: settings.sharpenAmount = 150; settings.sharpenRadius = 2.5
             default: settings.grain.amount = 70
             }
             session.updateFilter(settings, preview: true)
@@ -210,6 +218,15 @@ import Testing
             if kind == .addNoise {
                 #expect(live.resolvedNoiseAmount == 35 && live.resolvedNoiseGaussian && live.resolvedNoiseMonochromatic)
             }
+            if kind == .progressiveBlur { #expect(live.filterLayer.progressiveTo == 30 && live.filterLayer.progressiveRadial) }
+            if kind == .bloomGlow { #expect(live.filterLayer.bloomAmount == 70 && live.filterLayer.bloomRadius == 10) }
+            if kind == .rgbSplit {
+                #expect(live.filterLayer.rgbSplitDistance == 20 && live.filterLayer.rgbSplitBlur == 40 && live.filterLayer.rgbSplitRadial)
+            }
+            if kind == .vignette { #expect(live.filterLayer.vignette?.amount == 70 && live.filterLayer.vignette?.roundness == -40) }
+            if kind == .tonalContrast { #expect(live.filterLayer.tonal?.amount == 80 && live.filterLayer.tonal?.radius == 30) }
+            if kind == .lensEffects { #expect(live.filterLayer.lens?.effect == .bokeh && live.filterLayer.lens?.bokehShape == .hexagon) }
+            if kind == .sharpen { #expect(live.filterLayer.sharpen?.amount == 150 && live.filterLayer.sharpen?.radius == 2.5) }
             await session.commitFilter()
         case .hsv:
             var settings = try #require(session.hueSaturation).settings
@@ -235,8 +252,10 @@ import Testing
             #expect(session.levels?.settings == saved.levels)
             session.updateLevels(LevelsSettings(), preview: true)
             session.cancelLevels()
-        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
+             .progressiveBlur, .bloomGlow, .rgbSplit:
             let reopened = try #require(session.filterEdit).settings
+            #expect(FilterLayerSettings(reopened) == saved.filterLayer)
             #expect(reopened.curves == saved.curves && reopened.exposure == saved.exposure
                     && reopened.gradientMap == saved.gradientMap && reopened.grain == saved.grain
                     && reopened.blackWhite == saved.blackWhite && reopened.colorBalance == saved.colorBalance)
@@ -244,6 +263,17 @@ import Testing
                     && reopened.distance == saved.resolvedMotionDistance)
             #expect(reopened.amount == saved.resolvedNoiseAmount && reopened.gaussian == saved.resolvedNoiseGaussian
                     && reopened.monochromatic == saved.resolvedNoiseMonochromatic)
+            session.updateFilter(FilterSettings(), preview: true)
+            session.cancelFilter()
+        case .vignette, .lensEffects, .tonalContrast, .sharpen:
+            // Their settings reopen in the filter's panel as they were saved.
+            let reopened = try #require(session.filterEdit).settings
+            switch kind {
+            case .vignette: #expect(VignetteLayerSettings(reopened) == saved.filterLayer.vignette)
+            case .tonalContrast: #expect(TonalLayerSettings(reopened) == saved.filterLayer.tonal)
+            case .sharpen: #expect(SharpenLayerSettings(reopened) == saved.filterLayer.sharpen)
+            default: #expect(reopened.lens.normalized == saved.filterLayer.lens)
+            }
             session.updateFilter(FilterSettings(), preview: true)
             session.cancelFilter()
         case .hsv:

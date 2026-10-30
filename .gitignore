@@ -28,3 +28,7 @@ Config/CompositorPad.local.xcconfig
 
 # Local HDR plans and agent handoffs: HDR_FULL_PLAN.md, HDR_EDITING_PLAN.md, HDR_LIGHT_PLAN.md
 /HDR_*.md
+
+# Local depth-model plan, and the results it brings back (models, depth maps, reports)
+/DEPTH_MODEL_PLAN.md
+/depth-model-results/

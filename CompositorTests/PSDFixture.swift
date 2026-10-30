@@ -59,8 +59,11 @@ nonisolated enum PSDFixture {
                 if record.isGroup {
                     prepared.append(try emptyLayer(name: "</Layer group>", blendKey: "norm", section: 3, parent: parent, largeDocument: largeDocument))
                     try emit(record.id)
-                    prepared.append(try emptyLayer(name: record.name, blendKey: record.blendKey == "pass" ? "pass" : record.blendKey,
-                                                   section: 1, visible: record.isVisible, opacity: record.opacity, parent: record.parentID, id: record.id, mask: record.mask, maskEnabled: record.maskEnabled, largeDocument: largeDocument))
+                    var folder = try emptyLayer(name: record.name, blendKey: record.blendKey == "pass" ? "pass" : record.blendKey,
+                                                section: 1, visible: record.isVisible, opacity: record.opacity, parent: record.parentID, id: record.id, mask: record.mask, maskEnabled: record.maskEnabled, largeDocument: largeDocument)
+                    // A folder's own blocks, such as an artboard's.
+                    folder.extras = extras[record.id] ?? [:]
+                    prepared.append(folder)
                 } else {
                     prepared.append(try layer(record, largeDocument: largeDocument, extras: extras[record.id] ?? [:],
                                               cmyk: document.cmykProfile))

@@ -21,6 +21,7 @@ actor CanvasResizer {
             transform.origin.x += offset.x
             transform.origin.y += offset.y
             guard transform.isValid else { throw ProjectError.tooLarge }
+            let gif = layer.gif
             manifest.layers.append(ProjectLayerRecord(id: layer.id, name: layer.name,
                 isVisible: layer.isVisible, transform: transform, imageFile: layer.imageFile, parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.maskFile, maskEnabled: layer.maskEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment,
                 maskPlacement: layer.maskPlacement.map { placement -> LayerTransform in
@@ -28,7 +29,7 @@ actor CanvasResizer {
                     moved.origin.x += offset.x
                     moved.origin.y += offset.y
                     return moved
-                }, maskLinked: layer.maskLinked, shape: layer.shape, effects: layer.effects, text: layer.text))
+                }, maskLinked: layer.maskLinked, shape: layer.shape, effects: layer.effects, text: layer.text, gif: gif))
         }
         var images = snapshot.images
         // A colored extension is separate bottom-layer content. The old canvas
@@ -68,6 +69,7 @@ actor CanvasResizer {
                 transform: LayerTransform(origin: .zero, size: CGSize(width: options.width, height: options.height)),
                 imageFile: "\(id.uuidString).png"), at: 0)
         }
-        return ProjectSnapshot(manifest: manifest, images: images, masks: snapshot.masks)
+        return ProjectSnapshot(manifest: manifest, images: images, masks: snapshot.masks,
+                               animations: snapshot.animations)
     }
 }

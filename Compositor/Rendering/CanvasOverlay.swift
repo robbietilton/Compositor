@@ -95,6 +95,20 @@ struct TransformOverlayGeometry: Equatable {
                 session.viewport.viewPoint(from: end, documentSize: document.size), edit.settings.progressiveRadial)
     }
 
+    /// RGB Split's center in view coordinates while its panel is open on Radial.
+    var rgbSplitCenter: CGPoint? {
+        guard let edit = session.filterEdit, edit.kind == .rgbSplit, edit.settings.rgbSplitRadial,
+              let center = edit.settings.rgbSplitCenter, let document = session.document else { return nil }
+        return session.viewport.viewPoint(from: center, documentSize: document.size)
+    }
+
+    /// Volumetric Light's light in view coordinates while its panel is open.
+    var volumetricLight: CGPoint? {
+        guard let edit = session.filterEdit, edit.kind == .volumetricLight,
+              let center = edit.settings.volumetric.center, let document = session.document else { return nil }
+        return session.viewport.viewPoint(from: center, documentSize: document.size)
+    }
+
     // MARK: Marching ants level of detail
     //
     // A Magic Wand outline on detailed artwork can have hundreds of thousands of edges, one per pixel step. Stroked in
@@ -190,6 +204,7 @@ struct TransformOverlayGeometry: Equatable {
         drawLayoutGrid(in: context)
         drawGuides(in: context, bounds: bounds)
         if let line = progressiveLine { drawProgressiveLine(line, in: context) }
+        if let center = rgbSplitCenter ?? volumetricLight { drawRGBSplitCenter(center, in: context) }
         else if session.tool == .crop { drawCrop(in: context, bounds: bounds) }
         else if let line = gradientLine { drawGradientLine(line, in: context) }
         else { drawTransformHandles(in: context) }
@@ -400,6 +415,21 @@ struct TransformOverlayGeometry: Equatable {
                 width: radius * 2, height: max(0, rect.height - radius * 2))))
         }
         return regions
+    }
+    /// A crosshair in a ring, where RGB Split spreads out from, or where Volumetric Light's light is.
+    private func drawRGBSplitCenter(_ center: CGPoint, in context: CGContext) {
+        context.saveGState()
+        for (width, color) in [(3.0, PlatformColor.black.withAlphaComponent(0.7)), (1.0, PlatformColor.white)] {
+            context.setStrokeColor(color.cgColor)
+            context.setLineWidth(width)
+            context.strokeEllipse(in: CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14))
+            context.move(to: CGPoint(x: center.x - 12, y: center.y)); context.addLine(to: CGPoint(x: center.x - 4, y: center.y))
+            context.move(to: CGPoint(x: center.x + 4, y: center.y)); context.addLine(to: CGPoint(x: center.x + 12, y: center.y))
+            context.move(to: CGPoint(x: center.x, y: center.y - 12)); context.addLine(to: CGPoint(x: center.x, y: center.y - 4))
+            context.move(to: CGPoint(x: center.x, y: center.y + 4)); context.addLine(to: CGPoint(x: center.x, y: center.y + 12))
+            context.strokePath()
+        }
+        context.restoreGState()
     }
     /// Progressive Blur's line: a solid handle where it's sharp, a hollow one where it's fully blurred, and for a radial
     /// one the circle it reaches full blur at.

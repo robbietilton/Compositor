@@ -22,6 +22,24 @@ nonisolated struct ImportedImage: @unchecked Sendable {
     func file(for id: UUID) -> String { "\(id.uuidString).\(isHDR ? "exr" : "png")" }
 }
 
+nonisolated struct GIFTimelineFrame: Identifiable, @unchecked Sendable {
+    /// Editable timeline identity; inserted copies can refer to the same composed source frame.
+    let index: Int
+    let thumbnail: CGImage
+    let duration: TimeInterval
+    var id: Int { index }
+}
+
+nonisolated enum GIFTimelineLimits {
+    static let maxFrames = 4_096
+    // Reserve original source identities, with space for a full timeline of inserted copies.
+    static let frameIdentityLimit = maxFrames * 2
+    static let thumbnailSide = 96
+    static let thumbnailPixelBudget = 16_000_000
+    static let defaultFrameDuration: TimeInterval = 0.1
+    static let minimumFrameDuration: TimeInterval = 0.02
+}
+
 /// A folder brought in as images: the ones directly inside it, not its subfolders'.
 nonisolated enum ImageFolder {
     /// A plain folder: not a file, and not a package such as a Compositor project.
@@ -45,12 +63,14 @@ nonisolated enum ImageFolder {
 }
 
 nonisolated enum ImageImportError: LocalizedError {
-    case unreadable, unsupported, tooLarge
+    case unreadable, unsupported, tooLarge, tooManyFrames, locked
     var errorDescription: String? {
         switch self {
         case .unreadable: "The image could not be read. It may be damaged or unavailable."
-        case .unsupported: "Choose a JPEG, PNG, HEIC, HEIF, TIFF, WebP, or Photoshop (PSD) file."
+        case .unsupported: "Choose a JPEG, PNG, GIF, HEIC, HEIF, TIFF, WebP, PDF, or Photoshop (PSD) file."
+        case .locked: "This PDF is password-protected. Save an unlocked copy, then import that."
         case .tooLarge: "This import exceeds the current \(DocumentLimits.documentBudgetMegapixels)-megapixel document budget or \(DocumentLimits.maxSide.formatted())-pixel side limit."
+        case .tooManyFrames: "This animation has more than \(GIFTimelineLimits.maxFrames.formatted()) frames, which exceeds the current timeline limit."
         }
     }
 }
@@ -94,6 +114,40 @@ actor ImageImporter {
         #endif
     }
 
+    /// Pages make a new canvas at this resolution: sharp enough to print, and a Letter page 2550 × 3300.
+    static let pdfResolution: Double = 300
+
+    /// A PDF's pages drawn into pixels, one image a page in page order: each fitted to `fitting` (the canvas) when there
+    /// is one, as an SVG is, otherwise at `pdfResolution`. Text and vectors become pixels, and the paper stays
+    /// see-through, as in Photoshop.
+    func decodePDF(_ url: URL, fitting: CGSize?, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> [ImportedImage] {
+        guard let document = CGPDFDocument(url as CFURL), document.numberOfPages > 0 else { throw ImageImportError.unreadable }
+        guard !document.isEncrypted || document.isUnlocked else { throw ImageImportError.locked }
+        let name = url.deletingPathExtension().lastPathComponent
+        var remaining = remainingPixels
+        return try (1...document.numberOfPages).map { number in
+            guard let page = document.page(at: number) else { throw ImageImportError.unreadable }
+            let box = page.getBoxRect(.cropBox)
+            let size = abs(page.rotationAngle % 180) == 90 ? CGSize(width: box.height, height: box.width) : box.size
+            let scale = fitting.map { min($0.width / size.width, $0.height / size.height) } ?? Self.pdfResolution / 72
+            let width = Int((size.width * scale).rounded()), height = Int((size.height * scale).rounded())
+            guard width >= 1, height >= 1, width <= DocumentLimits.maxSide, height <= DocumentLimits.maxSide,
+                  width * height <= remaining else { throw ImageImportError.tooLarge }
+            remaining -= width * height
+            guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+            else { throw ImageImportError.unreadable }
+            // The page's own transform places its crop box and turns it upright; it never enlarges, so it's given the
+            // page at its size in points, and the resolution is a scale before it.
+            context.scaleBy(x: CGFloat(width) / size.width, y: CGFloat(height) / size.height)
+            context.concatenate(page.getDrawingTransform(.cropBox, rect: CGRect(origin: .zero, size: size), rotate: 0, preserveAspectRatio: true))
+            context.drawPDFPage(page)
+            guard let image = context.makeImage() else { throw ImageImportError.unreadable }
+            return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image),
+                                 name: document.numberOfPages == 1 ? name : "Page \(number)")
+        }
+    }
+
     /// `flattenedPhotoshop`: a PSD or PSB with no layer records (only a background), read as its merged image.
     func decode(_ url: URL, remainingPixels: Int = DocumentLimits.documentPixelBudget, flattenedPhotoshop: Bool = false) throws -> ImportedImage {
         try autoreleasepool {
@@ -101,10 +155,12 @@ actor ImageImporter {
                   let identifier = CGImageSourceGetType(source) as String?,
                   let type = UTType(identifier) else { throw ImageImportError.unreadable }
             let photoshop = flattenedPhotoshop ? [UTType.photoshopImage, .photoshopLargeImage] : []
-            guard ([UTType.jpeg, .png, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR] + photoshop).contains(where: { type.conforms(to: $0) }) else {
+            guard ([UTType.jpeg, .png, .gif, .heic, .heif, .tiff, .webP, .openEXR, .radianceHDR] + photoshop).contains(where: { type.conforms(to: $0) }) else {
                 throw ImageImportError.unsupported
             }
-            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            // Still decoding uses frame zero; editable animation imports retain their source through GIFDecoder.
+            guard CGImageSourceGetCount(source) > 0,
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                   let width = properties[kCGImagePropertyPixelWidth] as? Int,
                   let height = properties[kCGImagePropertyPixelHeight] as? Int,
                   width > 0, height > 0 else { throw ImageImportError.unreadable }
@@ -142,6 +198,20 @@ actor ImageImporter {
             }
             return ImportedImage(image: image, thumbnail: thumbnail, name: url.deletingPathExtension().lastPathComponent)
         }
+    }
+
+    func importGIF(_ url: URL, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> (asset: ImportedImage, animation: GIFAnimation) {
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0, size <= GIFSource.byteLimit else { throw ImageImportError.tooLarge }
+        let source = try GIFDecoder.source(Data(contentsOf: url), name: url.deletingPathExtension().lastPathComponent)
+        guard source.width * source.height <= remainingPixels else { throw ImageImportError.tooLarge }
+        var animation = GIFAnimation(source: source)
+        animation.timing.uniformDelay = GIFFrameTiming.defaultUniformDelay(for: source.frames)
+        return (try GIFDecoder.frame(animation, index: 0, name: url.deletingPathExtension().lastPathComponent), animation)
+    }
+
+    func decodeGIFFrame(_ animation: GIFAnimation, index: Int, name: String) throws -> ImportedImage {
+        try GIFDecoder.frame(animation, index: index, name: name)
     }
 
     func loadPhotoshop(_ url: URL, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> PSDDocument {

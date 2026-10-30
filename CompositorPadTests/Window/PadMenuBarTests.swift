@@ -150,9 +150,12 @@ import UIKit
                                                  "Flip Canvas Horizontal", "Flip Canvas Vertical"])
         let filter = try #require(bar.menu(titled: "Filter"))
         #expect(elements(filter).first?.title == "Last Filter")
-        #expect(filter.commands.map(\.title) == ["Gaussian Blur…", "Motion Blur…", "Progressive Blur…", "Add Noise…", "Vignette…",
-                                                 "Bloom / Glow…", "Dither…", "Scanlines…", "Tonal Contrast…", "Lens Correction…",
-                                                 "Camera Raw Filter…", "Remove Background…"])
+        // In the Mac's groups: those that can also be adjustment layers, in that menu's order, then the rest.
+        #expect(filter.children.map { item in if case .menu(let group) = item { group.commands.map(\.title) } else { [] } }
+                == [[], ["Gaussian Blur…", "Motion Blur…", "Progressive Blur…", "Sharpen…", "Add Noise…", "Vignette…",
+                         "Bloom / Glow…", "RGB Split…", "Lens Effects…", "Tonal Contrast…"],
+                    ["Dither…", "Scanlines…", "Volumetric Light…", "Rim Light…", "Lens Correction…", "Camera Raw Filter…",
+                     "Remove Background…"]])
         let fill = try #require(bar.menu(titled: "Edit")?.commands.last)
         // Those with an editor open; the rest are dimmed.
         for command in filter.commands + image.commands.filter({ ["Black & White…", "Color Balance…", "Exposure…", "Gradient Map…",
@@ -182,6 +185,11 @@ import UIKit
         let bar = MenuBarModel.built(by: AppDelegate())
         let layer = try #require(bar.menu(titled: "Layer"))
         #expect(layer.submenus.map(\.title) == ["New Adjustment Layer"])
+        // The Image menu's adjustments, then the Filter menu's filters, as the Mac groups them.
+        let adjustments = try #require(layer.submenus.first)
+        #expect(adjustments.children.map { item in if case .menu(let group) = item { group.commands.map(\.title) } else { [] } }
+                == [AdjustmentKind.imageAdjustments.map { $0.rawValue + ($0.isEditable ? "…" : "") },
+                    AdjustmentKind.filters.map { $0.rawValue + "…" }])
         let commands = Array(layer.commands.dropFirst(AdjustmentKind.allCases.count))
         #expect(commands.map(\.title) == ["Edit Adjustment…", "Transform Layer", "Duplicate Layer", "Create Clipping Mask",
                                           "Group Selected Layers", "Ungroup Layers", "Move Out of Folder", "New Blank Layer",

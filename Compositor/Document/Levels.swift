@@ -155,8 +155,9 @@ extension EditorSession {
         }
         commitTransform(); cancelCrop(); cancelLasso()
         guard let layer = activeLayer, let document else { return }
+        pauseGIFForEditing(for: layer.id)
         do {
-            let edit = try LevelsEdit(layer: layer, selection: selection?.clip(canvas: document.size))
+            let edit = try LevelsEdit(layer: pixelEditingLayer(for: layer), selection: selection?.clip(canvas: document.size))
             levels = edit
             let job = edit.previewJob
             edit.histogramTask = Task { @MainActor [weak self, weak edit] in
@@ -227,13 +228,11 @@ extension EditorSession {
                 return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: "Levels")
             }.value
             guard let index = document?.layers.firstIndex(where: { $0.id == edit.layerID }),
-                  let current = document?.layers[index], current.asset?.image === edit.original.image,
-                  current.transform == edit.transform else { return }
+                  let current = document?.layers[index], displayedAsset(for: current)?.image === edit.original.image,
+                  pixelEditTransformMatches(current, transform: edit.transform) else { return }
+            let edited = try layerByEditingPixels(current, asset: asset, transform: current.transform, mask: current.mask)
             beginEdit("Levels")
-            document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name, isVisible: current.isVisible,
-                transform: current.transform, parentID: current.parentID, isGroup: false,
-                opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID,
-                effects: current.effects)
+            document?.layers[index] = edited
             endEdit()
         } catch { brushError = error.localizedDescription }
     }

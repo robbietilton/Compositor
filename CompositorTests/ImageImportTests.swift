@@ -113,12 +113,6 @@ struct ImageImportTests {
             _ = try await ImageImporter.shared.decode(invalid)
             Issue.record("Invalid image should fail")
         } catch ImageImportError.unreadable { }
-        let gif = try fixture(.gif)
-        defer { try? FileManager.default.removeItem(at: gif) }
-        do {
-            _ = try await ImageImporter.shared.decode(gif)
-            Issue.record("Unsupported image should fail")
-        } catch ImageImportError.unsupported { }
     }
 
     @Test func importPlacementAndPartialFailure() async throws {

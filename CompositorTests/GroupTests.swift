@@ -187,4 +187,52 @@ struct GroupTests {
         #expect(session.document?.layers.map(\.id) == [outsideBase, between, childSource])
         #expect(session.document?.layers.first { $0.id == childSource }?.maskSourceID == nil)
     }
+
+    @Test func panelSearchAndTypeFilterNarrowTheRows() throws {
+        let session = EditorSession()
+        session.createDocument(width: 50, height: 50)
+        session.addBlankLayer()
+        let blank = try #require(session.activeLayerID)
+        session.renameLayer(blank, to: "Sky")
+        session.addAdjustment(.levels)
+        session.adjustmentEditingID = nil // The Levels editor would block the layers that follow.
+        let adjustment = try #require(session.activeLayerID)
+        session.addGroup()
+        let folder = try #require(session.activeLayerID)
+        session.renameLayer(folder, to: "Portraits")
+        session.addBlankLayer()
+        let inside = try #require(session.activeLayerID)
+        session.renameLayer(inside, to: "Portrait")
+        let everything = session.filteredLayerRows
+        #expect(everything.map(\.depth) == [0, 1, 0, 0])
+
+        // The search looks inside closed folders too, and matches part of a name.
+        session.toggleGroupExpansion(folder)
+        session.layerSearchText = "port"
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [folder, inside])
+        session.layerSearchText = " sky "
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [blank])
+
+        // The type toggles narrow by kind, on their own and together with the search.
+        session.layerSearchText = ""
+        // A matching folder brings everything inside it along.
+        session.layerTypeFilter = [.folder, .adjustment]
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [folder, inside, adjustment])
+        session.layerSearchText = "sky"
+        #expect(session.filteredLayerRows.isEmpty)
+        session.layerSearchText = ""
+        session.layerTypeFilter = [.image]
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [inside, blank])
+        // Selected narrows to the selection, and follows it.
+        session.layerTypeFilter = [.selected]
+        session.selectLayer(blank)
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [blank])
+        session.selectLayer(adjustment)
+        #expect(session.filteredLayerRows.map { $0.layer.id } == [adjustment])
+        // With everything off the whole list is back, folders as collapsed as they were.
+        session.toggleGroupExpansion(folder)
+        session.layerTypeFilter = []
+        #expect(session.filteredLayerRows.map(\.depth) == [0, 1, 0, 0])
+        #expect(session.filteredLayerRows.map { $0.layer.id } == session.layerRows.map { $0.layer.id })
+    }
 }

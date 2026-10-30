@@ -49,7 +49,7 @@ struct SizeDraftTests {
     /// Scrubbing stays within a side's limit and, resampling, the surface's; relative sizes count from the current one.
     @Test func scrubbingStaysWithinTheLimits() {
         var image = ImageSizeDraft(width: 1000, height: 500, resolution: 100)
-        #expect(image.scrubRange(widthAxis: true) == 2...sqrt(200_000_000))
+        #expect(image.scrubRange(widthAxis: true) == 2...20_000)
         #expect(image.scrubSensitivity(widthAxis: true) == 1)
         image.locked = false
         #expect(image.scrubRange(widthAxis: false) == 1...30_000)

@@ -118,6 +118,34 @@ import UniformTypeIdentifiers
         await close(tab)
     }
 
+    /// A PDF dragged in from Files comes in as the import picker brings one in, its page a layer, as on the Mac.
+    @Test func aDroppedPDFComesInAsAPicked() async throws {
+        let (window, tab) = try await window(width: 400, height: 300)
+        let data = NSMutableData()
+        var page = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let consumer = try #require(CGDataConsumer(data: data as CFMutableData))
+        let context = try #require(CGContext(consumer: consumer, mediaBox: &page, nil))
+        context.beginPDFPage(nil)
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 50, width: 50, height: 50))
+        context.endPDFPage()
+        context.closePDF()
+        let pdf = data as Data
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.pdf.identifier, visibility: .all) { completion in
+            completion(pdf, nil)
+            return nil
+        }
+        provider.suggestedName = "Flyer"
+        await window.receive([provider])
+
+        #expect(tab.session.importError == nil)
+        #expect(tab.session.document?.layers.count == 2)
+        // Fitted to the canvas, as a picked PDF is.
+        #expect(tab.session.activeLayer?.asset?.image.width == 400)
+        await close(tab)
+    }
+
     /// Into an empty tab, the first photo sets the canvas and the project gets a file named after it.
     @Test func anEmptyTabTakesItsCanvasFromThePhoto() async throws {
         let window = EditorWindowController()

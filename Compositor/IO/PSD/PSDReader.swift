@@ -398,6 +398,7 @@ nonisolated enum PSDReader {
             record.maskEnabled = !layer.maskDisabled
             record.maskLinked = layer.maskLinked
             if !isGroup { record.adjustment = PSDAdjustments.parse(layer.extra) }
+            if isGroup { record.artboard = PSDText.artboard(extra: layer.extra) }
             if record.adjustment != nil { record.kind = .adjustment }
             result.append(record)
         }

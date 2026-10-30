@@ -27,6 +27,8 @@ nonisolated final class LiveMaskRenderer {
     /// The part of the document `bounds` shows, when the context isn't laid out in document pixels (the canvas), so
     /// Grain's and Add Noise's patterns stay with the document.
     var adjustmentRegion: ((CGRect) -> CGRect)?
+    /// The document's size, which Lens Effects measures itself by when `bounds` shows only part of it.
+    var adjustmentDocument: CGSize?
     /// Pixels per unit of `bounds` for the surfaces made along the way (a clipping stack, a coverage): the screen's, on
     /// the canvas, so they're as sharp as what they're drawn into.
     var resolution: CGFloat = 1
@@ -40,8 +42,8 @@ nonisolated final class LiveMaskRenderer {
         guard let settings = adjustment(id), let original = context.makeImage() else { return }
         let region = adjustmentRegion?(bounds) ?? bounds, scale = adjustmentScale
         let deep = sixteenBit && original.bitsPerComponent == 16
-        guard var adjusted = try? deep ? settings.applySixteenBit(original, region: region, scale: scale)
-                                       : settings.apply(original, region: region, scale: scale) else { return }
+        guard var adjusted = try? deep ? settings.applySixteenBit(original, region: region, scale: scale, document: adjustmentDocument)
+                                       : settings.apply(original, region: region, scale: scale, document: adjustmentDocument) else { return }
         // In a blend mode the adjustment blends at 8 bits.
         if blendMode(id) != .normal {
             // Blend colors at full coverage, then restore the original alpha.

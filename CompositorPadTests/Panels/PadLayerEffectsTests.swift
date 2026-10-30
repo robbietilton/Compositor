@@ -722,7 +722,9 @@ import UIKit
             controller.perform(action, with: nil)
         default:
             let button = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New adjustment layer" })
-            let levels = try #require(button.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "Levels" })
+            // In the first of the menu's groups, as on the Mac.
+            let levels = try #require(button.menu?.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { $0 as? UIAction }
+                .first { $0.title == "Levels" })
             levels.performWithSender(nil, target: nil)
         }
         try await eventually {
@@ -1148,7 +1150,7 @@ import UIKit
         #expect(undo.undoActionName == "" && undo.undoMenuItemTitle == "Undo")
         #expect(undo.redoActionName == "" && undo.redoMenuItemTitle == "Redo")
         slider?.sendActions(for: .touchUpInside)
-        #expect(undo.undoMenuItemTitle == "Undo Import Image" && undo.redoMenuItemTitle == "Redo Layer Opacity")
+        #expect(undo.undoMenuItemTitle == "Undo Import" && undo.redoMenuItemTitle == "Redo Layer Opacity")
     }
 
     /// Beside an effect's panel the toolbar's Undo and Redo take a finger, as the Layers panel and the tools do, but

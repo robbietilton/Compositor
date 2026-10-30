@@ -420,6 +420,45 @@ struct FilterTests {
         #expect(diagonal(23, 17) > 0 && diagonal(17, 23) > 0 && diagonal(17, 17) == 0)
     }
 
+    /// RGB Split fans a white square into a spectrum along its angle, red ahead and blue behind; Blur stretches it
+    /// further; Radial leaves its center sharp.
+    @Test func rgbSplitSpreadsASpectrumAlongItsAngle() throws {
+        guard MetalDispersion.shared != nil else { return }
+        let context = try BrushRaster.context(width: 61, height: 61, mask: false)
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 28, y: 28, width: 5, height: 5))
+        let square = try #require(context.makeImage())
+        func split(_ change: (inout FilterSettings) -> Void) throws -> (Int, Int) -> [Int] {
+            var settings = FilterSettings()
+            change(&settings)
+            let image = try PixelFilter.run(FilterJob(kind: .rgbSplit, image: square, settings: settings, scale: 1,
+                                                      selection: nil, mapping: .identity))
+            let read = try #require(CGContext(data: nil, width: 61, height: 61, bitsPerComponent: 8, bytesPerRow: 244,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            read.draw(image, in: CGRect(x: 0, y: 0, width: 61, height: 61))
+            let bytes = Array(UnsafeBufferPointer(start: try #require(read.data).assumingMemoryBound(to: UInt8.self), count: 61 * 61 * 4))
+            return { x, y in (0..<4).map { Int(bytes[(y * 61 + x) * 4 + $0]) } } // rows top-down
+        }
+        /// A channel added up over a run of pixels along row (or column) 30.
+        func total(_ read: (Int, Int) -> [Int], _ channel: Int, _ range: ClosedRange<Int>, vertical: Bool = false) -> Int {
+            range.reduce(0) { $0 + (vertical ? read(30, $1) : read($1, 30))[channel] }
+        }
+        let flat = try split { $0.rgbSplitDistance = 8 }
+        #expect(total(flat, 0, 34...41) > total(flat, 2, 34...41) * 2, "red ahead")
+        #expect(total(flat, 2, 19...26) > total(flat, 0, 19...26) * 2, "blue behind")
+        #expect(total(flat, 3, 34...41) > 0 && flat(30, 40)[3] == 0, "along the angle only")
+        let upright = try split { $0.rgbSplitDistance = 8; $0.rgbSplitAngle = 90 }
+        #expect(total(upright, 0, 19...26, vertical: true) > total(upright, 2, 19...26, vertical: true) * 2, "red up on screen")
+        let streaked = try split { $0.rgbSplitDistance = 4; $0.rgbSplitBlur = 16 }
+        // Past where the split alone reaches (8 pixels from the square's edge, at 40.5), the blur's streak carries on.
+        #expect(total(streaked, 3, 41...44) > 0 && total(flat, 3, 41...44) == 0, "blur stretches it further")
+        let radial = try split { $0.rgbSplitDistance = 8; $0.rgbSplitRadial = true; $0.rgbSplitCenter = CGPoint(x: 30.5, y: 30.5)
+                                 $0.rgbSplitReach = 30 }
+        #expect(radial(30, 30) == [255, 255, 255, 255], "the center stays sharp")
+        #expect(try split { $0.rgbSplitDistance = 0 }(30, 30) == [255, 255, 255, 255])
+    }
+
     @Test func addNoiseChangesColorButNeverAlphaAndMonochromaticKeepsGrays() throws {
         // Left half opaque mid gray, right half transparent.
         let context = try BrushRaster.context(width: 32, height: 8, mask: false)

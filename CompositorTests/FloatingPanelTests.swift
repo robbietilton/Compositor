@@ -64,7 +64,8 @@ struct FloatingPanelTests {
         switch kind {
         case .levels: controller.show(title: "Levels", content: LevelsSheet(session: session))
         case .hsv: controller.show(title: "Hue/Saturation", content: HueSaturationSheet(session: session))
-        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise:
+        case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
+             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
             controller.show(title: kind.rawValue, content: FilterSheet(session: session))
         case .invert: return   // filtered out above: no editor, so no panel to test
         }

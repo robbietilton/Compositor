@@ -365,6 +365,18 @@ struct SelectionTests {
         #expect(session.marqueeKind == .rectangle)
     }
 
+    /// Space held mid-drag moves the Marquee: its starting corner goes with the far one, so the box keeps its size.
+    @Test func movingTheMarqueeAnchorMovesTheBoxWithoutResizingIt() throws {
+        let session = makeSession()
+        session.selectTool(.marquee)
+        session.beginLasso(at: CGPoint(x: 10, y: 10), mode: .replace)
+        session.dragMarquee(to: CGPoint(x: 30, y: 25), square: false, fromCenter: false)
+        session.moveMarqueeAnchor(to: CGPoint(x: 40, y: 50))
+        session.dragMarquee(to: CGPoint(x: 60, y: 65), square: false, fromCenter: false)
+        session.finishLasso()
+        #expect(session.selection?.path.boundingBoxOfPath == CGRect(x: 40, y: 50, width: 20, height: 15))
+    }
+
     /// Option on the Marquee subtracts; unlike the Transform tool, it must not draw from the center.
     @Test func optionDraggingTheMarqueeSubtractsWithoutDrawingFromTheCenter() throws {
         let session = makeSession()

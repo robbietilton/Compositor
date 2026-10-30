@@ -228,8 +228,8 @@ import UIKit
         session.cancelText()
     }
 
-    /// The digits set the opacity of the brush, or with the Move tool the layer's, as on the Mac: two typed quickly set
-    /// an exact value. Not with a tool that has none.
+    /// The digits set the opacity of the brush, or with the Move tool or a selection tool the layer's, as on the Mac: two
+    /// typed quickly set an exact value. Not with a tool that has none.
     @Test func theDigitsSetTheOpacity() throws {
         let (controller, tab) = try window()
         let session = tab.session
@@ -240,8 +240,14 @@ import UIKit
 
         session.selectTool(.move)
         press(try command("7", in: controller), in: controller)
+        press(try command("0", in: controller), in: controller)
         #expect(abs((session.activeLayer?.opacity ?? 0) - 0.7) < 0.001)
+        // The selection tools set the layers' opacity too, as on the Mac.
         session.selectTool(.marquee)
+        press(try command("3", in: controller), in: controller)
+        press(try command("0", in: controller), in: controller)
+        #expect(abs((session.activeLayer?.opacity ?? 0) - 0.3) < 0.001)
+        session.selectTool(.crop)
         #expect(!takes(try command("3", in: controller), in: controller))
     }
 

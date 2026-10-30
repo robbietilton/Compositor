@@ -7,7 +7,8 @@ final class ProjectTab: Identifiable {
     let id = UUID()
     let session: EditorSession
     let controller: ProjectController
-    let defaultName: String
+    /// Shown until the project is saved: Untitled, the opened file's name, or a Photoshop artboard's.
+    var defaultName: String
     var title: String { session.projectURL?.deletingPathExtension().lastPathComponent ?? defaultName }
     init(name: String) {
         defaultName = name
@@ -30,6 +31,7 @@ final class ProjectWorkspace {
     }
     init() {
         let first = ProjectTab(name: "Untitled")
+        defer { attach(first) }
         first.session.skipsInitialClipboardCanvasSize = true
         tabs = [first]; selectedID = first.id
         first.controller.workspace = self
@@ -50,9 +52,30 @@ final class ProjectWorkspace {
         if reuseEmpty, tabs.count == 1, current.session.document == nil { return current }
         let tab = ProjectTab(name: freeUntitledName)
         tab.controller.workspace = self; tab.controller.window = window
+        attach(tab)
         tabs.append(tab); selectedID = tab.id
         return tab
     }
+    /// Gives `tab` the way to open a Photoshop file's artboards, each as a document in a tab of its own: the first in
+    /// `tab` while it's still empty, the rest in new tabs named for them.
+    private func attach(_ tab: ProjectTab) {
+        tab.session.opensArtboard = { [weak self, weak tab] document, name in
+            guard let self, let tab else { return }
+            let target: ProjectTab
+            if tab.session.document == nil, tabs.contains(where: { $0 === tab }) {
+                target = tab
+                target.defaultName = name
+            } else {
+                target = ProjectTab(name: name)
+                target.controller.workspace = self; target.controller.window = window
+                attach(target)
+                tabs.append(target)
+            }
+            selectedID = target.id
+            await target.session.importArtboard(document, named: name)
+        }
+    }
+
     /// Reorders a tab by dragging it in the strip. Chrome, not a document edit, so it never touches undo.
     /// `index` is where the tab should land in the final order, clamped to the array's bounds.
     func moveTab(_ id: UUID, to index: Int) {
@@ -108,6 +131,7 @@ final class ProjectWorkspace {
         }
         // Load into an unattached session, so a failed open never leaves a broken tab.
         let tab = ProjectTab(name: url.deletingPathExtension().lastPathComponent)
+        attach(tab)
         tab.controller.window = window
         guard await tab.controller.open(url) else { return false }
         // The textures its first frame draws from are made before the tab shows, away from the main thread, and go to
@@ -234,10 +258,19 @@ final class ProjectWorkspace {
         } else { target = addTab(reuseEmpty: false) }
         guard target.session.document == nil || target.session.canEditLayers else { return }
         let included = ids.reduce(into: Set(ids)) { $0.formUnion(sourceTab.session.descendantIDs(of: $1)) }
-        var copied = sourceDocument.layers.filter { included.contains($0.id) }
+        var copied = sourceDocument.layers.filter { included.contains($0.id) }.map { layer in
+            var copy = layer
+            copy.asset = snapshot.images[layer.id]
+            copy.gifAnimation = snapshot.animations[layer.id]
+            return copy
+        }
         let used = target.session.document?.layers.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) } ?? 0
         let added = copied.reduce(0) { $0 + ($1.asset.map { $0.image.width * $0.image.height } ?? 0) }
         guard used + added <= DocumentLimits.documentPixelBudget else { target.session.importError = "The copied layers exceed this project’s \(DocumentLimits.documentBudgetMegapixels)-megapixel limit."; return }
+        guard target.session.canRetainGIFSources(in: (target.session.document?.layers ?? []) + copied) else {
+            target.session.importError = "The copied GIFs exceed this project’s animation memory limit."
+            return
+        }
         isManaging = true
         sourceTab.session.isProjectBusy = true
         target.session.isProjectBusy = true
@@ -251,6 +284,14 @@ final class ProjectWorkspace {
                 if copied[i].adjustment != nil { copied[i].maskSourceID = nil; continue }
                 let layerID = copied[i].id
                 copied[i].asset = try await Task.detached(priority: .userInitiated) { try LiveMaskBaker.bake(snapshot, target: layerID) }.value
+                if copied[i].gifAnimation != nil {
+                    // An omitted live-mask source is baked into the displayed frame; keep that raster result
+                    // and its current mask, rather than replacing it with an unclipped frame during playback.
+                    if let record = snapshot.manifest.layers.first(where: { $0.id == layerID }) {
+                        copied[i].mask = snapshot.mask(for: record)
+                    }
+                    copied[i].gifAnimation = nil
+                }
                 copied[i].maskSourceID = nil
             }
             let mapping = Dictionary(uniqueKeysWithValues: copied.map { ($0.id, UUID()) })
@@ -278,7 +319,8 @@ final class ProjectWorkspace {
                 mask?.placement?.origin.x += center.x-anchor.x; mask?.placement?.origin.y += center.y-anchor.y
                 return ImageLayer(id: mapping[layer.id]!, asset: layer.asset, name: layer.name, isVisible: layer.isVisible,
                     transform: transform, parentID: layer.parentID.flatMap { mapping[$0] }, isGroup: layer.isGroup,
-                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text)
+                    opacity: layer.opacity, blendMode: layer.blendMode, mask: mask, maskSourceID: layer.maskSourceID.flatMap { mapping[$0] }, adjustment: layer.adjustment, shape: layer.shape, effects: layer.effects, text: layer.text,
+                    gifAnimation: layer.gifAnimation)
             }
             target.session.isProjectBusy = false
             target.session.beginEdit("Copy Layers from Project")

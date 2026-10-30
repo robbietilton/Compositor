@@ -162,6 +162,12 @@ extension EditorSession {
         lassoDraft = draft
     }
 
+    /// Moves the Marquee being drawn without resizing it, its starting corner now at `anchor` (Space held mid-drag).
+    func moveMarqueeAnchor(to anchor: CGPoint) {
+        guard lassoDraft?.anchor != nil, anchor.x.isFinite, anchor.y.isFinite else { return }
+        lassoDraft?.anchor = anchor
+    }
+
     /// Adds an outline point; points closer than a quarter pixel are skipped.
     func extendLasso(to point: CGPoint) {
         guard var draft = lassoDraft, point.x.isFinite, point.y.isFinite else { return }

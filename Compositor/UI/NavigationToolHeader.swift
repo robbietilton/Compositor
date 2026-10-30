@@ -13,8 +13,7 @@ struct NavigationToolHeader: View {
             if session.tool == .zoom {
                 TextField("Zoom", text: $zoomText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 72)
-                    .multilineTextAlignment(.trailing)
+                    .frame(width: ToolHeaderStyle.fiveDigits)
                     .focused($editingZoom)
                     .onSubmit { releaseFocus() }
                     .onExitCommand { releaseFocus() }

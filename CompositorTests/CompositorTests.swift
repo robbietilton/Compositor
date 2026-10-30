@@ -161,6 +161,51 @@ struct CompositorTests {
         #expect(viewport.followsFit)
     }
 
+    /// A canvas that's opened or imported fits the window but stops at 100%, so a small image shows at its real size;
+    /// View › Fit (⌘0) still fills the window, and a window resize keeps whichever fit it was.
+    @Test func openingStopsAtActualPixelsButFitFillsTheWindow() {
+        var viewport = CanvasViewport()
+        viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 2, documentSize: nil)
+        let small = CGSize(width: 400, height: 300), large = CGSize(width: 6000, height: 4000)
+        viewport.fit(documentSize: small)
+        #expect(viewport.zoom == 1)
+        viewport.resize(to: CGSize(width: 1200, height: 900), backingScale: 2, documentSize: small)
+        #expect(viewport.zoom == 1)
+        viewport.fit(documentSize: small, enlarging: true)
+        #expect(viewport.zoom > 1)
+        viewport.resize(to: CGSize(width: 1400, height: 1000), backingScale: 2, documentSize: small)
+        #expect(viewport.zoom > 1)
+        viewport.fit(documentSize: large)
+        #expect(viewport.zoom < 1, "a large image still fits")
+    }
+
+    /// Image Size keeps the zoom, so the change shows on screen, rather than fitting the window again.
+    @Test func imageSizeKeepsTheZoom() async throws {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 2, documentSize: nil)
+        session.createDocument(width: 600, height: 400, emptyLayer: true)
+        let zoom = session.viewport.zoom
+        let resized = try await ImageResizer.shared.resize(try #require(session.projectSnapshot()),
+                                                           to: ImageSizeOptions(width: 300, height: 200, resolution: 72))
+        session.applyImageSize(resized)
+        #expect(session.document?.size == CGSize(width: 300, height: 200))
+        #expect(session.viewport.zoom == zoom)
+        #expect(session.viewport.pan == .zero)
+    }
+
+    /// Canvas Size keeps the zoom too, so added or trimmed canvas shows as such.
+    @Test func canvasSizeKeepsTheZoom() async throws {
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 1000, height: 800), backingScale: 2, documentSize: nil)
+        session.createDocument(width: 600, height: 400, emptyLayer: true)
+        let zoom = session.viewport.zoom
+        let resized = try await CanvasResizer.shared.resize(try #require(session.projectSnapshot()),
+                                                            to: CanvasSizeOptions(width: 300, height: 200))
+        session.applyDocumentSize(resized, actionName: "Canvas Size", keepingZoom: true)
+        #expect(session.document?.size == CGSize(width: 300, height: 200))
+        #expect(session.viewport.zoom == zoom)
+    }
+
     @Test func limitsAndNewDocumentReset() {
         let session = EditorSession()
         session.viewport.resize(to: CGSize(width: 800, height: 600), backingScale: 2, documentSize: nil)

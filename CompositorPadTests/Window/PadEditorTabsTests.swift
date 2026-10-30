@@ -129,7 +129,9 @@ import UIKit
         default:
             for panel in views(LayersPanelView.self, in: controller.view) { panel.updatePropertiesIfNeeded() }
             let button = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New adjustment layer" })
-            let levels = try #require(button.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "Levels" })
+            // In the first of the menu's groups, as on the Mac.
+            let levels = try #require(button.menu?.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { $0 as? UIAction }
+                .first { $0.title == "Levels" })
             levels.performWithSender(nil, target: nil)
         }
     }

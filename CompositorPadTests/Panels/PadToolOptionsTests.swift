@@ -135,6 +135,25 @@ import UIKit
         let lineKinds = try #require(views(UISegmentedControl.self, in: bar).first)
         let lineSwatch = try #require(views(ColorSwatchButton.self, in: bar).first)
         #expect(inOrder(lineKinds, lineSwatch, width))
+        // Its slider runs 1–50, as the Mac's; typing reaches further.
+        #expect(views(UISlider.self, in: width).first.map { [$0.minimumValue, $0.maximumValue] } == [1, 50])
+    }
+
+    /// Each ratio the Crop bar offers but Free holds the frame to a shape, Canvas to the canvas's own: a name the session
+    /// didn't know would leave the frame free.
+    @Test func everyRatioTheCropBarOffersHoldsTheFrame() throws {
+        let session = try session()
+        session.selectTool(.crop)
+        let bar = bar(for: session, width: 1032)
+        let ratio = try #require(views(PopUpButton.self, in: bar).first { $0.accessibilityLabel == "Ratio" })
+        let titles = (ratio.menu?.children ?? []).flatMap { ($0 as? UIMenu)?.children ?? [$0] }.map(\.title)
+        #expect(titles == ["Free", "Canvas", "1:1", "4:3", "16:9", "2.39:1", "3:4", "9:16"])
+        for title in titles {
+            ratio.onChoose(title)
+            #expect((session.cropRatio == nil) == (title == "Free"), "\(title)")
+        }
+        ratio.onChoose("Canvas")
+        #expect(session.cropRatio == 4.0 / 3)
     }
 
     /// A live field, which applies each keystroke that makes a number, keeps what's being typed when the value it

@@ -33,6 +33,21 @@ import UIKit
         #expect(session.history.undoName == "Canvas Size")
     }
 
+    /// Canvas Size keeps the zoom, so the canvas added or trimmed shows as such, as on the Mac and as Image Size does,
+    /// rather than fitting the window again.
+    @Test func canvasSizeKeepsTheZoom() async throws {
+        let (window, session) = try window()
+        session.viewport.resize(to: CGSize(width: 400, height: 300), backingScale: 1, documentSize: nil)
+        session.zoom(to: 0.5)
+        let dialog = try #require(window.canvasSizeDialog())
+        dialog.loadViewIfNeeded()
+        dialog.setDimension(150, widthAxis: true)
+        dialog.confirm()
+        await window.resizing?.value
+        #expect(session.document?.width == 150)
+        #expect(session.viewport.zoom == 0.5)
+    }
+
     /// Relative to the current size, in percent and locked, a new width takes the height with it; a size that can't be
     /// used can't be applied, and Cancel lets the project go.
     @Test func canvasSizeWorksRelativeInPercent() throws {

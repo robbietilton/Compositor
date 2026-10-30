@@ -70,6 +70,32 @@ import Testing
         #expect(differences(smoothing: false) > 0)
     }
 
+    /// A line being dragged out is drawn in the Style and Cap it will be made with, dashed and square-capped here, not
+    /// as a solid round-capped line.
+    @Test func aLineDrawsItsStyleAndCap() throws {
+        let session = session()
+        session.shapeKind = .line
+        session.shapeLineWidth = 6
+        session.shapeLineStyle = .dashed
+        session.shapeLineCap = .square
+        session.beginShape(at: CGPoint(x: 40, y: 60))
+        session.dragShape(to: CGPoint(x: 240, y: 100), square: false, fromCenter: false)
+        let ends = try #require(session.shapeLineEnds)
+        func stroked(_ style: ShapeLineStyle, _ cap: ShapeLineCap) -> (CGContext) -> Void {
+            { context in
+                context.setStrokeColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+                context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+                context.strokeShapeLine(from: ends.start, to: ends.end, width: 6, style: style, cap: cap)
+            }
+        }
+        let drawn = pixels { session.drawShapeDraft(scale: 1, center: { $0 }, in: $0) }
+        func differences(_ style: ShapeLineStyle, _ cap: ShapeLineCap) -> Int {
+            zip(drawn, pixels(of: stroked(style, cap))).filter { $0 != $1 }.count
+        }
+        #expect(differences(.dashed, .square) == 0)
+        #expect(differences(.solid, .round) > 0)
+    }
+
     /// The shape's bitmap is just big enough for it, a line's width and a little around.
     @Test func theShapesImageIsJustBigEnough() throws {
         let session = session()

@@ -25,6 +25,7 @@
 				<string>com.adobe.photoshop-large-image</string>
 				<string>public.camera-raw-image</string>
 				<string>public.svg-image</string>
+				<string>com.adobe.pdf</string>
 			</array>
 		</dict>
 		<dict>

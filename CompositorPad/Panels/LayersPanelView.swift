@@ -158,9 +158,15 @@ final class LayersPanelView: UIView, UICollectionViewDelegate, UICollectionViewD
         effects.showsMenuAsPrimaryAction = true
         let adjustments = footerButton("circle.lefthalf.filled", "New adjustment layer", enabled: { $0.canEditLayers && $0.document != nil },
                                        action: nil)
-        // The Mac's list, titled as its Layers panel titles them.
-        adjustments.menu = UIMenu(children: AdjustmentKind.allCases.map { kind in
-            UIAction(title: kind.rawValue) { [weak self] _ in self?.session?.addAdjustment(kind) }
+        // The Mac's list, titled and grouped as its Layers panel has them: the Image menu's adjustments, then the Filter
+        // menu's filters. A kind the iPad has no editor for yet is listed dimmed, as the Layer menu lists it; Invert has
+        // nothing to set.
+        adjustments.menu = UIMenu(children: [AdjustmentKind.imageAdjustments, AdjustmentKind.filters].map { group in
+            UIMenu(options: .displayInline, children: group.map { kind in
+                UIAction(title: kind.rawValue, attributes: AdjustmentEditors.kinds.contains(kind) || !kind.isEditable ? [] : .disabled) {
+                    [weak self] _ in self?.session?.addAdjustment(kind)
+                }
+            })
         })
         adjustments.showsMenuAsPrimaryAction = true
         let delete = footerButton("trash", "Delete", enabled: { $0.canEditLayers && $0.activeLayer != nil }) { $0.deleteLayerOrMask() }

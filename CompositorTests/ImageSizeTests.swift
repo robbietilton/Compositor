@@ -6,6 +6,27 @@ import Testing
 
 @MainActor
 struct ImageSizeTests {
+    @Test func unlockedScrubReachesSizesAboveOneHundredMegapixels() {
+        let range = ImageSizeDraft.scrubPixelRange(pixels: 4000, other: 6000, locked: false)
+        #expect(range.contains(20_000))
+        #expect(range.upperBound == Double(DocumentLimits.maxSide))
+        let limited = ImageSizeDraft.scrubPixelRange(pixels: 6000, other: 20_000, locked: false)
+        #expect(limited.upperBound == Double(DocumentLimits.maxSurfacePixels) / 20_000)
+    }
+
+    @Test func lockedScrubRespectsBothSurfaceAndSideLimits() {
+        let range = ImageSizeDraft.scrubPixelRange(pixels: 8000, other: 6000, locked: true)
+        #expect(range.contains(16_000))
+        let height = range.upperBound * 6000 / 8000
+        #expect(abs(range.upperBound * height - Double(DocumentLimits.maxSurfacePixels)) < 0.001)
+        let wide = ImageSizeDraft.scrubPixelRange(pixels: 8000, other: 1000, locked: true)
+        #expect(wide.upperBound == Double(DocumentLimits.maxSide))
+        let tall = ImageSizeDraft.scrubPixelRange(pixels: 1000, other: 8000, locked: true)
+        #expect(tall.upperBound * 8 == Double(DocumentLimits.maxSide))
+        #expect(tall.lowerBound == 1)
+        #expect(wide.lowerBound == 8)
+    }
+
     @Test func resizePreservesLayerIdentityAndUndoRestoresSource() async throws {
         let url = try ImageImportTests().fixture(.png)
         defer { try? FileManager.default.removeItem(at: url) }

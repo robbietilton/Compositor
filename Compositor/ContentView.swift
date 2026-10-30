@@ -82,7 +82,7 @@ struct ContentView: View {
             if !session.canvasOnly { toolHeaders }
             HStack(spacing: 0) {
                 if !session.canvasOnly {
-                    toolRail
+                    ToolRail(session: session)
                     Divider()
                 }
                 VStack(spacing: 0) {
@@ -118,6 +118,32 @@ struct ContentView: View {
                             }
                         }
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
+                    }
+                    if !session.canvasOnly,
+                       let gifLayerID = session.gifTimelineLayerID,
+                       session.activeLayerID == gifLayerID,
+                       session.document?.layers.contains(where: { $0.id == gifLayerID }) == true,
+                       !session.gifTimelineFrames.isEmpty {
+                        Divider()
+                        GIFTimeline(frames: session.gifTimelineFrames,
+                                    selectedFrameIndex: session.gifTimelineSelectedFrameIndex,
+                                    isPlaying: session.gifTimelineIsPlaying,
+                                    canPlay: session.gifTimelineCanPlay,
+                                    timing: session.gifTimelineTiming,
+                                    canEditFrames: session.gifTimelineCanEditFrames,
+                                    canEditTiming: session.gifTimelineCanEditTiming,
+                                    onSelectFrame: { index in
+                                        guard session.activeLayerID == gifLayerID else { return }
+                                        await session.selectGIFTimelineFrame(index)
+                                    },
+                                    onTogglePlayback: { session.toggleGIFPlayback(for: gifLayerID) },
+                                    onStopPlayback: { session.stopGIFPlayback(for: gifLayerID) },
+                                    onChangeTiming: { session.setGIFFrameTiming($0, for: gifLayerID) },
+                                    onDuplicateFrame: { await session.duplicateGIFFrame(at: $0, for: gifLayerID) },
+                                    onDeleteFrame: { await session.deleteGIFFrames(at: [$0], for: gifLayerID) })
+                            .id(gifLayerID)
+                            .frame(height: 110)
+                            .releasesFocusOnCommit(session)
                     }
                 }
                 if !session.canvasOnly {
@@ -299,40 +325,6 @@ struct ContentView: View {
     private func requestNewCanvas() {
         if let applicationDelegate { Task { await applicationDelegate.projects.newCanvas() } }
         else { session.clearProject() }
-    }
-    private var toolRail: some View {
-        // Scrolls when the window is too short for every tool, rather than pushing the bars above and below away.
-        IndicatorlessScrollView {
-        VStack(spacing: 10) {
-            ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
-                Button { session.selectTool(tool) } label: {
-                    Group {
-                        if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
-                        else if tool == .wand, session.wandMode == .object { ObjectSelectionToolIcon().frame(width: 18, height: 18) }
-                        // The Marquee's icon follows its shape: a dashed circle in Ellipse mode.
-                        else { Image(systemName: tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)).font(.system(size: 17)) }
-                    }
-                    .frame(width: 36, height: 36)
-                        .background(session.tool == tool ? Color.white.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 7))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
-                .foregroundStyle(.primary)
-                .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
-            }
-            ColorPaletteControls(session: session).padding(.top, 8)
-        }
-        .padding(.top, 16).padding(.bottom, 12)
-        .frame(width: 56)
-        }
-        .frame(width: 56)
     }
     private var welcome: some View {
         NewCanvasSheet(session: session,

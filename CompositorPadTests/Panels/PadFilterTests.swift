@@ -410,20 +410,37 @@ import UIKit
         try await eventually { controller.presentedViewController == nil }
     }
 
-    /// New Adjustment Layer offers every kind, each with its editor on iPad, titled as the Mac's Layers panel titles them.
+    /// New Adjustment Layer lists every kind, titled and grouped as the Mac's Layers panel has them, the Image menu's
+    /// adjustments and then the Filter menu's filters: each with its editor on iPad, and the ones without an editor yet
+    /// dimmed, in the Layers panel as in the Layer menu.
     @Test func everyAdjustmentKindIsOffered() async throws {
         let (window, controller, _) = try await shownWindow()
         defer { window.isHidden = true }
+        let withoutEditor: [AdjustmentKind] = [.progressiveBlur, .sharpen, .rgbSplit, .lensEffects]
         for kind in AdjustmentKind.allCases {
             let new = UICommand(title: kind.rawValue, action: #selector(EditorWindowController.newAdjustmentLayer(_:)),
                                 propertyList: kind.rawValue)
-            #expect(controller.canPerformAction(new.action, withSender: new), "\(kind)")
+            #expect(controller.canPerformAction(new.action, withSender: new) == !withoutEditor.contains(kind), "\(kind)")
         }
-        #expect(AdjustmentEditors.kinds == Set(AdjustmentKind.allCases.filter(\.isEditable)))
+        #expect(AdjustmentEditors.kinds == Set(AdjustmentKind.allCases.filter(\.isEditable)).subtracting(withoutEditor))
+        // The filters the iPad has an editor for are adjustment layers it can edit too.
+        #expect(AdjustmentEditors.kinds.isSuperset(of: [.bloomGlow, .vignette, .tonalContrast]))
         let menu = try #require(views(UIButton.self, in: controller.view).first { $0.accessibilityLabel == "New adjustment layer" }?.menu)
-        let items = menu.children.compactMap { $0 as? UIAction }
-        #expect(items.map(\.title) == AdjustmentKind.allCases.map(\.rawValue))
-        #expect(items.allSatisfy { !$0.attributes.contains(.disabled) })
+        let groups = menu.children.compactMap { ($0 as? UIMenu)?.children.compactMap { $0 as? UIAction } }
+        #expect(groups.map { $0.map(\.title) } == [AdjustmentKind.imageAdjustments.map(\.rawValue), AdjustmentKind.filters.map(\.rawValue)])
+        #expect(Set(groups.joined().map(\.title)) == Set(AdjustmentKind.allCases.map(\.rawValue)))
+        #expect(groups.joined().filter { $0.attributes.contains(.disabled) }.map(\.title) == withoutEditor.map(\.rawValue))
+    }
+
+    /// The iPad app sends nothing anywhere: Volumetric Light's depth model, which the Mac downloads the first time it's
+    /// needed, is never fetched, and the fog keeps to its own guess.
+    @Test func theDepthModelIsNeverFetched() async throws {
+        URLProtocol.registerClass(RequestRecorder.self)
+        defer { URLProtocol.unregisterClass(RequestRecorder.self) }
+        RequestRecorder.reset()
+        #expect(await DepthModel.prepare() == false)
+        #expect(!DepthModel.isReady)
+        #expect(RequestRecorder.requested.isEmpty, "\(RequestRecorder.requested)")
     }
 
     // MARK: The slider filters
@@ -1322,4 +1339,20 @@ import UIKit
             try await eventually { controller.presentedViewController == nil }
         }
     }
+}
+
+/// Takes every request made through the shared URL session, writes down where it went, and answers it with an error.
+private final class RequestRecorder: URLProtocol {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var urls: [URL] = []
+    static var requested: [URL] { lock.withLock { urls } }
+    static func reset() { lock.withLock { urls = [] } }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        lock.withLock { urls.append(request.url ?? URL(fileURLWithPath: "/")) }
+        return true
+    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    override func stopLoading() {}
 }

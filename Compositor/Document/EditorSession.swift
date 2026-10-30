@@ -5,6 +5,7 @@ struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.isVisible == rhs.isVisible && lhs.transform == rhs.transform
             && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.text == rhs.text && lhs.effects == rhs.effects
+            && lhs.gifAnimation == rhs.gifAnimation
     }
     let id: UUID
     var asset: ImportedImage?
@@ -18,6 +19,8 @@ struct ImageLayer: Identifiable, Equatable {
     var blendMode: LayerBlendMode = .normal
     var maskSourceID: UUID?
     var mask: LayerMask?
+    /// Masks scoped to frames in an imported GIF. The frames remain part of this one layer.
+    var gifAnimation: GIFAnimation? = nil
     var adjustment: LayerAdjustment?
     /// Set on layers the Shape tool made; see `liveShape`.
     var shape: LayerShape?
@@ -40,7 +43,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.name = name
     }
 
-    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, effects: LayerEffects? = nil, text: LayerText? = nil) {
+    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, effects: LayerEffects? = nil, text: LayerText? = nil, gifAnimation: GIFAnimation? = nil) {
         self.id = id
         self.asset = asset
         self.name = name
@@ -51,6 +54,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.opacity = opacity
         self.blendMode = blendMode
         self.mask = mask
+        self.gifAnimation = gifAnimation
         self.maskSourceID = maskSourceID
         self.adjustment = adjustment
         self.shape = shape
@@ -71,9 +75,10 @@ extension ImageLayer {
         return text + " · " + percent.formatted(.number.precision(.fractionLength(0...1))) + "%"
     }
 
-    /// The tag after the size of a layer keeping 16 bits a channel, or light brighter than white (`DeepLayer`); nil
-    /// once it's rasterized to 8.
+    /// The tag after the size of an animated GIF layer, or of a layer keeping 16 bits a channel or light brighter than
+    /// white (`DeepLayer`), which goes once it's rasterized to 8.
     var depthLabel: String? {
+        if gifAnimation != nil { return "GIF" }
         guard let asset, asset.deep != nil, liveText == nil, adjustment == nil, !isGroup else { return nil }
         return asset.isHDR ? "HDR" : "16-Bit"
     }
@@ -118,14 +123,103 @@ enum NavigationTool: String, CaseIterable {
     /// Tools that hold Option to sample a color, as the Eyedropper does, as in Photoshop. Clone Stamp's Option sets its
     /// source.
     var samplesColorWithOption: Bool { self == .brush || self == .spotHealing || self == .gradient }
-    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
+    var symbol: String { self == .type ? "textformat" : self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.raised" : "magnifyingglass" }
     var label: String { self == .type ? "Type (T)" : self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic (W) · Tab switches Wand and Object" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+}
+
+private struct GIFLayerTimelineState {
+    // History owns deleted animations until Undo expires; previews must not retain their source bytes forever.
+    weak var source: GIFSource?
+    let geometry: GIFFrameGeometry?
+    var selectedFrameIndex: Int
+    var sourceFrameIndex: Int
+    var displayedAsset: ImportedImage?
+    var isPlaying = false
 }
 
 @Observable
 final class EditorSession {
     var skipsInitialClipboardCanvasSize = false
     var document: CanvasDocument?
+    /// Runtime animation data keyed by the imported layer, so switching layers restores that GIF's timeline.
+    private var gifTimelinesByLayerID: [UUID: GIFLayerTimelineState] = [:]
+    private func gifTimeline(for layer: ImageLayer) -> GIFLayerTimelineState? {
+        guard let animation = layer.gifAnimation else { return nil }
+        if let state = gifTimelinesByLayerID[layer.id],
+           state.source === animation.source, state.geometry == animation.geometry,
+           animation.sourceFrameIndex(for: state.selectedFrameIndex) == state.sourceFrameIndex { return state }
+        return GIFLayerTimelineState(source: animation.source, geometry: animation.geometry, selectedFrameIndex: animation.selectedFrameIndex,
+                                    sourceFrameIndex: animation.sourceFrameIndex(for: animation.selectedFrameIndex) ?? animation.selectedFrameIndex,
+                                    displayedAsset: layer.asset)
+    }
+    var gifTimelineLayerID: UUID? {
+        guard let layer = activeLayer, layer.gifAnimation?.source.frames.isEmpty == false else { return nil }
+        return layer.id
+    }
+    var gifTimelineFrames: [GIFTimelineFrame] {
+        guard let animation = activeLayer?.gifAnimation else { return [] }
+        return animation.frames.map { frame in
+            GIFTimelineFrame(index: frame.index, thumbnail: animation.framePixels[frame.index]?.thumbnail ?? frame.thumbnail,
+                             duration: frame.duration)
+        }
+    }
+    var gifTimelineTiming: GIFFrameTiming { activeLayer?.gifAnimation?.timing ?? GIFFrameTiming() }
+    var gifTimelineSelectedFrameIndex: Int {
+        activeLayer.flatMap { gifTimeline(for: $0)?.selectedFrameIndex } ?? 0
+    }
+    var gifTimelineCanEditFrames: Bool { canEditLayers && !gifTimelineIsLoadingFrame }
+    /// Timing belongs to the layer and does not depend on the frame being decoded.
+    var gifTimelineCanEditTiming: Bool { canEditLayers }
+    var gifTimelineIsPlaying: Bool {
+        activeLayer.flatMap { gifTimeline(for: $0)?.isPlaying } ?? false
+    }
+    var gifTimelineCanPlay: Bool { gifTimelineFrames.count > 1 }
+    private var isLoadingGIFFrame = false {
+        didSet {
+            if !isLoadingGIFFrame {
+                let waiters = projectWaiters
+                projectWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+                resumeFileRequests()
+            }
+        }
+    }
+    /// Only timeline controls observe decoding, so they re-enable when it finishes without dimming shared controls.
+    var gifTimelineIsLoadingFrame: Bool { isLoadingGIFFrame }
+    @ObservationIgnored private var gifFrameSelectionRequestID: UUID?
+
+    /// Frame navigation stays in runtime state; pixel edits are immutable assets stored on the animation.
+    func displayedAsset(for layer: ImageLayer) -> ImportedImage? {
+        guard let timeline = gifTimeline(for: layer) else { return layer.asset }
+        return layer.gifAnimation?.framePixels[timeline.selectedFrameIndex] ?? timeline.displayedAsset ?? layer.asset
+    }
+
+    func displayedLayer(for layer: ImageLayer) -> ImageLayer {
+        guard gifTimeline(for: layer) != nil, let asset = displayedAsset(for: layer) else { return layer }
+        var displayed = layer
+        displayed.asset = asset
+        return displayed
+    }
+
+    func selectedGIFFrameIndex(for layerID: UUID) -> Int? {
+        document?.layers.first(where: { $0.id == layerID }).flatMap { gifTimeline(for: $0)?.selectedFrameIndex }
+    }
+
+    /// The duplicate shares the clicked frame's raw preview, but owns a new pixel and mask edit target.
+    func selectDuplicatedGIFFrame(_ index: Int, for layer: ImageLayer) {
+        guard var timeline = gifTimeline(for: layer),
+              let sourceIndex = layer.gifAnimation?.sourceFrameIndex(for: index) else { return }
+        timeline.selectedFrameIndex = index
+        timeline.sourceFrameIndex = sourceIndex
+        gifTimelinesByLayerID[layer.id] = timeline
+    }
+
+    func currentGIFAnimation(for layer: ImageLayer) -> GIFAnimation? {
+        guard var animation = layer.gifAnimation else { return nil }
+        animation.selectedFrameIndex = gifTimeline(for: layer)?.selectedFrameIndex ?? animation.selectedFrameIndex
+        return animation
+    }
+
     var canvasFocusRequest = 0
     var showsSampleRing = true
     var adjustmentOriginal: LayerAdjustment?
@@ -192,13 +286,16 @@ final class EditorSession {
         for waiter in waiters { waiter.resume() }
     }
     func waitForProjectAccess() async {
-        while isProjectBusy {
+        while isProjectBusy || isLoadingGIFFrame {
             await withCheckedContinuation { projectWaiters.append($0) }
         }
     }
     var viewport = CanvasViewport()
     var tool: NavigationTool = .move
     var collapsedGroupIDs: Set<UUID> = []
+    /// The Layers panel's search text and type filter (see LayerType). Panel state, not saved with the project.
+    var layerSearchText = ""
+    var layerTypeFilter: Set<LayerType> = []
     var cropRect: CGRect?
     var cropRatioChoice = "Free"
     var cropError: String?
@@ -219,6 +316,8 @@ final class EditorSession {
     @ObservationIgnored var brushAnchor: CGPoint?
     /// The pointer itself, so a smoothed stroke can catch up to it when the button is released.
     @ObservationIgnored var brushPointer: CGPoint?
+    /// The pen's latest pressure in this stroke; 1 for a mouse. Events that carry none (the release) keep it.
+    @ObservationIgnored var brushPressure: CGFloat = 1
     @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?
     /// The last rounded rectangle drawn for a transform in progress, by layer, with the size it was drawn at.
     @ObservationIgnored var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
@@ -267,6 +366,9 @@ final class EditorSession {
     var shapeSmoothing = false
     /// A Line shape's thickness in document pixels.
     var shapeLineWidth: Double = 4
+    /// A Line shape's dash pattern and the finish on its ends (and on each dash).
+    var shapeLineStyle = ShapeLineStyle.solid
+    var shapeLineCap = ShapeLineCap.square
     /// The shape being dragged out with the Shape tool, before it becomes a layer.
     var shapeDraft: ShapeDraft?
     var selectionModeChoice = SelectionMode.replace
@@ -576,7 +678,7 @@ final class EditorSession {
             return
         }
         // An unlinked mask, when selected, transforms on its own; linked, layer and mask move together.
-        let maskAlone = isMaskSelected && layer.mask?.isLinked == false
+        let maskAlone = isMaskSelected && selectedMask(for: layer)?.isLinked == false
         transformEdit = TransformEdit(layerID: layer.id, draft: maskAlone ? layer.maskTransform : layer.transform,
                                       persistent: persistent, mask: maskAlone)
     }
@@ -675,12 +777,12 @@ final class EditorSession {
         return layer.transform
     }
     /// Whether transforming places only the active layer's mask (an unlinked mask selected in the Layers panel).
-    var transformTargetsMask: Bool { transformEdit.map(\.mask) ?? (isMaskSelected && activeLayer?.mask?.isLinked == false) }
+    var transformTargetsMask: Bool { transformEdit.map(\.mask) ?? (isMaskSelected && activeLayer.flatMap { selectedMask(for: $0)?.isLinked } == false) }
     /// Where `layer`'s transform handles sit: the pending edit's draft — the layer's or its mask's — else the layer.
     func editedTransform(for layer: ImageLayer) -> LayerTransform {
         if transformEdit?.layerID == layer.id { return transformEdit!.draft }
         if transformEdit == nil, layer.id == activeLayerID, transformsAsGroup, let box = groupTransformBox { return box }
-        return layer.id == activeLayerID && transformTargetsMask ? layer.maskTransform : layer.transform
+        return layer.id == activeLayerID && transformTargetsMask ? (selectedMask(for: layer)?.placement ?? layer.transform) : layer.transform
     }
     /// A layer's transform under the pending edit: the draft for the edited layer, carried along with the box for
     /// each layer of a group; nil when the edit doesn't move it.
@@ -758,14 +860,22 @@ final class EditorSession {
     var opacityEditLayerID: UUID?
     var blendPreview: (layerID: UUID, mode: LayerBlendMode)?
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
-    var isMaskSelected = false { didSet { if !isMaskSelected { viewsMaskAlone = false } } }
+    var isMaskSelected = false {
+        didSet {
+            if !isMaskSelected {
+                viewsMaskAlone = false
+            }
+        }
+    }
     /// Option-click on a mask thumbnail: the canvas shows the targeted mask by itself, in grayscale, so it can be
     /// painted with nothing else in the way, as in Photoshop. Targeting the layer's pixels, or another layer, ends it.
     var viewsMaskAlone = false
     /// The layer whose mask the canvas is showing by itself; nil for the ordinary composite.
     var maskAloneLayer: ImageLayer? {
-        guard viewsMaskAlone, isMaskSelected, let layer = activeLayer, layer.mask != nil else { return nil }
-        return layer
+        guard viewsMaskAlone, isMaskSelected, let layer = activeLayer, let mask = selectedMask(for: layer) else { return nil }
+        var displayed = displayedLayer(for: layer)
+        displayed.mask = mask
+        return displayed
     }
     var selectedLayerIDs: Set<UUID> = []
     var activeLayerID: UUID? {
@@ -828,9 +938,14 @@ final class EditorSession {
 
     /// `coalescing`: what the edit carries on, such as the color picker it came from (see `DocumentHistory.end`).
     func endEdit(coalescing group: AnyObject? = nil) {
+        if let before = history.endingEditBefore { keepLayerDepths(since: before) }
         history.end(document: document, selection: activeLayerID, coalescing: group)
+        gifTimelinesByLayerID = gifTimelinesByLayerID.filter { $0.value.source != nil }
     }
     var activeLayer: ImageLayer? { document?.layers.first { $0.id == activeLayerID } }
+    func selectedMask(for layer: ImageLayer) -> LayerMask? {
+        layer.mask
+    }
     /// How the Layers panel looks: grayed for what lasts (a dialog, a pending transform, crop or gradient, a long
     /// operation), but not for what only lasts while the mouse is down (a stroke, a move or Auto Select drag, moving
     /// pixels) or for a moment's work, which flashed the whole panel gray for a frame. `canEditLayers` still blocks
@@ -841,8 +956,11 @@ final class EditorSession {
             && transformEdit?.persistent != true && cropRect == nil && gradientEdit == nil
             && hueSaturation == nil && levels == nil && filterEdit == nil && adjustmentEditingID == nil
     }
-    var canEditLayers: Bool {
-        textDraft == nil && transformEdit == nil && cropRect == nil && gradientEdit == nil && canEditBesideCanvasEdits
+    var canEditLayers: Bool { transformEdit == nil && canEditLayersOnceTransformCommitted }
+    /// As `canEditLayers`, but for a command that commits a pending transform first, so a move in progress doesn't
+    /// stop it.
+    var canEditLayersOnceTransformCommitted: Bool {
+        textDraft == nil && cropRect == nil && gradientEdit == nil && canEditBesideCanvasEdits
     }
     /// `canEditLayers`, but with text being typed, a transform, a crop or a gradient waiting for Apply open on the
     /// canvas: none of them changes a layer's effects, and each is applied to the layer as it is then, so the effect
@@ -917,6 +1035,26 @@ final class EditorSession {
         beginEdit(document?.layers[index].isVisible == true ? "Hide Layer" : "Show Layer")
         defer { endEdit() }
         document?.layers[index].isVisible.toggle()
+    }
+
+    /// Hide Layer / Show Layer, from the menus: the selected layers all hidden, or with the active one hidden, all
+    /// shown, as one undo step.
+    func toggleSelectedLayersVisibility() {
+        guard canEditLayers, let active = activeLayer else { return }
+        let ids = selectedLayerIDs.union([active.id])
+        let visible = !active.isVisible
+        beginEdit(visibilityTitle)
+        defer { endEdit() }
+        guard let layers = document?.layers else { return }
+        document?.layers = layers.map { layer in
+            var layer = layer
+            if ids.contains(layer.id) { layer.isVisible = visible }
+            return layer
+        }
+    }
+    /// The menus' name for `toggleSelectedLayersVisibility`.
+    var visibilityTitle: String {
+        (activeLayer?.isVisible == false ? "Show " : "Hide ") + (selectedLayerIDs.count > 1 ? "Layers" : "Layer")
     }
 
     /// Photoshop's eye swipe: pressing an eye shows or hides that layer, and dragging over other eyes gives them the
@@ -1006,7 +1144,7 @@ final class EditorSession {
         while !pendingImports.isEmpty {
           let request = pendingImports.removeFirst()
           let psdOnly = request.files.allSatisfy { PSDReader.matches($0.0) }
-          beginEdit(psdOnly ? "Import Photoshop File" : "Import Images")
+          beginEdit(psdOnly ? "Import Photoshop File" : "Import")
           // No document: the first successful image determines the canvas, regardless of drop point.
           let point = document == nil ? nil : request.point
           for (url, scoped) in request.files {
@@ -1023,8 +1161,8 @@ final class EditorSession {
             do {
                 guard url.isFileURL else { throw ImageImportError.unsupported }
                 let usedPixels = document?.layers.reduce(0) { total, layer in
-                    guard let image = layer.asset?.image else { return total }
-                    return total + image.width * image.height
+                    total + (layer.asset.map { $0.image.width * $0.image.height } ?? 0)
+                        + (layer.gifAnimation?.framePixels.values.reduce(0) { $0 + $1.image.width * $1.image.height } ?? 0)
                 } ?? 0
                 if RawImporter.matches(url) {
                     guard let size = RawImporter.pixelSize(url) else { throw ImageImportError.unreadable }
@@ -1048,11 +1186,34 @@ final class EditorSession {
                     let asset = try await ImageImporter.shared.decodeSVG(url, fitting: document?.size,
                                                                          remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
                     insert(asset, centeredAt: point)
+                } else if UTType(filenameExtension: url.pathExtension)?.conforms(to: .gif) == true {
+                    let imported = try await ImageImporter.shared.importGIF(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                    var candidate = ImageLayer(asset: imported.asset, origin: .zero)
+                    candidate.gifAnimation = imported.animation
+                    guard canRetainGIFSources(in: (document?.layers ?? []) + [candidate]) else { throw ImageImportError.tooLarge }
+                    insert(imported.asset, centeredAt: point, gifAnimation: imported.animation)
+                } else if UTType(filenameExtension: url.pathExtension)?.conforms(to: .pdf) == true {
+                    // Every page, each its own layer with page 1 on top, fitted to the canvas. A new canvas is the
+                    // first page at 300 DPI, so it keeps the page's print size.
+                    let pages = try await ImageImporter.shared.decodePDF(url, fitting: document?.size,
+                                                                         remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                    if document == nil, let first = pages.first {
+                        document = CanvasDocument(width: first.image.width, height: first.image.height,
+                                                  resolution: ImageImporter.pdfResolution)
+                        viewport.fit(documentSize: document!.size)
+                    }
+                    for page in pages.reversed() { insert(page, centeredAt: point) }
                 } else if PSDReader.matches(url) {
                     beginPSDReading(title: "Open “\(url.lastPathComponent)”?", confirmTitle: "Import")
                     let imported: PSDImport
                     do {
                         let parsed = try await ImageImporter.shared.loadPhotoshop(url, remainingPixels: DocumentLimits.documentPixelBudget - usedPixels)
+                        // Artboards each open as a document of their own, in tabs the workspace makes.
+                        if let boards = parsed.artboards(), !boards.isEmpty, let opensArtboard {
+                            endPSDReading()
+                            for board in boards { await opensArtboard(board.document, board.name) }
+                            continue
+                        }
                         psdProfile = parsed.cmykProfile
                         // Only a background: Photoshop writes no layer records, just the merged image, so that is
                         // what comes in, as one layer.
@@ -1093,8 +1254,8 @@ final class EditorSession {
         }
     }
 
-    func insert(_ asset: ImportedImage, centeredAt point: CGPoint? = nil) {
-        beginEdit("Import Image")
+    func insert(_ asset: ImportedImage, centeredAt point: CGPoint? = nil, gifAnimation: GIFAnimation? = nil) {
+        beginEdit("Import")
         defer { endEdit() }
         if document == nil {
             document = CanvasDocument(width: asset.image.width, height: asset.image.height)
@@ -1105,12 +1266,81 @@ final class EditorSession {
         var layer = ImageLayer(asset: asset, origin: CGPoint(
             x: floor(center.x - CGFloat(asset.image.width) / 2),
             y: floor(center.y - CGFloat(asset.image.height) / 2)))
+        layer.gifAnimation = gifAnimation
         layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
         if let parent = layer.parentID { collapsedGroupIDs.remove(parent) }
         self.document?.layers.append(layer)
         activeLayerID = layer.id
     }
 
+    func clearGIFTimeline() {
+        gifTimelinesByLayerID.removeAll()
+        isLoadingGIFFrame = false
+        gifFrameSelectionRequestID = nil
+    }
+
+    func toggleGIFPlayback(for layerID: UUID) {
+        guard activeLayerID == layerID,
+              let layer = activeLayer,
+              var timeline = gifTimeline(for: layer), gifTimelineCanPlay || timeline.isPlaying else { return }
+        timeline.isPlaying.toggle()
+        gifTimelinesByLayerID[layerID] = timeline
+    }
+
+    func stopGIFPlayback(for layerID: UUID) {
+        guard var timeline = gifTimelinesByLayerID[layerID], timeline.isPlaying else { return }
+        timeline.isPlaying = false
+        gifTimelinesByLayerID[layerID] = timeline
+    }
+
+    func pauseGIFForEditing(for layerID: UUID) {
+        stopGIFPlayback(for: layerID)
+        guard activeLayerID == layerID, activeLayer?.gifAnimation != nil else { return }
+        // An in-flight playback decode must not change the target underneath a new stroke.
+        gifFrameSelectionRequestID = nil
+        isLoadingGIFFrame = false
+    }
+
+    func selectGIFTimelineFrame(_ index: Int) async {
+        guard let layerID = gifTimelineLayerID,
+              let layer = activeLayer, let animation = layer.gifAnimation, let timeline = gifTimeline(for: layer),
+              animation.containsFrame(index),
+              document?.layers.contains(where: { $0.id == layerID }) == true,
+              canEditLayers || isLoadingGIFFrame else { return }
+        guard index != timeline.selectedFrameIndex || isLoadingGIFFrame else { return }
+
+        let requestID = UUID()
+        gifFrameSelectionRequestID = requestID
+        isLoadingGIFFrame = true
+        defer {
+            if gifFrameSelectionRequestID == requestID {
+                isLoadingGIFFrame = false
+                gifFrameSelectionRequestID = nil
+            }
+        }
+
+        do {
+            // Cache the source pixels separately so undoing an edit can reveal the original frame.
+            var sourceAnimation = animation
+            sourceAnimation.framePixels = [:]
+            let asset = try await ImageImporter.shared.decodeGIFFrame(sourceAnimation, index: index, name: layer.name)
+            guard !Task.isCancelled, gifFrameSelectionRequestID == requestID,
+                  let currentLayer = document?.layers.first(where: { $0.id == layerID }),
+                  var currentTimeline = gifTimeline(for: currentLayer),
+                  currentLayer.gifAnimation?.sourceFrameIndex(for: index) == animation.sourceFrameIndex(for: index),
+                  currentTimeline.source === animation.source, currentTimeline.geometry == animation.geometry else { return }
+            currentTimeline.selectedFrameIndex = index
+            currentTimeline.sourceFrameIndex = animation.sourceFrameIndex(for: index) ?? index
+            currentTimeline.displayedAsset = asset
+            gifTimelinesByLayerID[layerID] = currentTimeline
+            refreshCanvasPreview?()
+        } catch {
+            guard gifFrameSelectionRequestID == requestID else { return }
+            importError = "Couldn’t read GIF frame \(index + 1): \(error.localizedDescription)"
+        }
+    }
+
+    /// The UI task owns playback's lifetime. Only per-layer runtime previews change, together after decoding.
     /// Puts the sheet up before the file is read, so a big PSD doesn't leave the click unanswered.
     /// `finishPSDReading` fills it in, or takes it away when there is nothing to report.
     func beginPSDReading(title: String, confirmTitle: String) {
@@ -1154,6 +1384,37 @@ final class EditorSession {
         let continuation = conversionContinuation
         conversionContinuation = nil
         continuation?.resume(returning: confirmed)
+    }
+
+    /// Opens each artboard of a Photoshop file as a document of its own; set by the workspace, which makes the tabs.
+    /// Without it (no workspace), a file with artboards imports as one canvas, as one without them does.
+    @ObservationIgnored var opensArtboard: ((PSDDocument, String) async -> Void)?
+    /// The layer list's Export Layers as PNGs…; set by the project controller, which shows the panels.
+    @ObservationIgnored var exportsLayers: (() async -> Void)?
+    /// While Volumetric Light's depth model is downloading or loading, the first time it's used (`DepthModel`).
+    var preparingDepth = false
+    /// Set while Convert to 8-Bit ends its edit, so `keepLayerDepths` lets it make 16-bit layers 8-bit.
+    @ObservationIgnored var convertsToEightBit = false
+
+    /// One Photoshop artboard's layers as this tab's document, after the conversion report when there's anything in it.
+    func importArtboard(_ parsed: PSDDocument, named name: String) async {
+        do {
+            beginPSDReading(title: "Open “\(name)”?", confirmTitle: "Import")
+            let imported: PSDImport
+            do {
+                let assets = try await ImageImporter.shared.photoshopAssets(parsed)
+                imported = try PSDDocumentBuilder.makeImport(parsed, assets: assets)
+            } catch {
+                endPSDReading()
+                throw error
+            }
+            guard await finishPSDReading(imported.conversions) else { return }
+            let startsDocument = document == nil
+            try insertPhotoshop(imported, named: name)
+            if startsDocument, let profile = parsed.cmykProfile { proofProfile = CMYK.adopt(profile) }
+        } catch {
+            importError = [importError, "\(name): \(error.localizedDescription)"].compactMap { $0 }.joined(separator: "\n\n")
+        }
     }
 
     func insertPhotoshop(_ imported: PSDImport, named: String, centeredAt point: CGPoint? = nil) throws {
@@ -1203,6 +1464,7 @@ final class EditorSession {
         var document = CanvasDocument(width: width, height: height, resolution: (1...9600).contains(resolution) ? resolution : 72)
         let layer = emptyLayer ? Self.firstLayer(size: document.size, background: background) : nil
         if let layer { document.layers = [layer] }
+        clearGIFTimeline()
         self.document = document
         activeLayerID = layer?.id
         renamingLayerID = nil
@@ -1226,7 +1488,7 @@ final class EditorSession {
 
     func fit() {
         guard let document else { return }
-        viewport.fit(documentSize: document.size)
+        viewport.fit(documentSize: document.size, enlarging: true)
     }
 
     func zoom(to value: CGFloat, anchor: CGPoint? = nil) {

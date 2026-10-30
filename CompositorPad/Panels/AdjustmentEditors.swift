@@ -98,7 +98,7 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
     /// Whether the editor picks colors for `target`: a filter's, an adjustment's or an effect's.
     static func picks(_ target: ColorPickerTarget) -> Bool {
         switch target {
-        case .vignette, .gradientMap, .dither, .effect: true
+        case .vignette, .gradientMap, .dither, .rimLight, .volumetricLight, .effect: true
         case .palette, .text, .dialog: false
         }
     }
@@ -149,6 +149,8 @@ class AdjustmentEditorController: UIViewController, UIColorPickerViewControllerD
         colorPicker.hsb.setRGB(picked)
         shownColor = colorPicker.color
         session.previewVignetteColor()
+        session.previewRimLightColor()
+        session.previewVolumetricLightColor()
         session.previewGradientMapColor()
         session.previewDitherColor()
         session.previewEffectColor()

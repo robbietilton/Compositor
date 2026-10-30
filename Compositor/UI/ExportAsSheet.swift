@@ -1,8 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// File › Export As…: the flattened canvas as a PNG, a JPEG or a one-page PDF, at its own size or scaled, previewed
-/// as it will be written. A light take on Photoshop's Export As: one image, the settings that matter, and its size.
+/// File › Export As…: the flattened canvas, or frame timelines driving it, sized and previewed as written.
 struct ExportAsSheet: View {
     let raster: ExportRaster
     /// The same flattened at 16 bits a channel, when the document has a 16-bit layer to keep.
@@ -10,21 +9,36 @@ struct ExportAsSheet: View {
     /// The same flattened in half floats, when the document has an HDR layer: what an EXR is written from, the only
     /// format offered that keeps light brighter than white. Without one, EXR isn't offered.
     let hdrRaster: ExportRaster?
-    private var formats: [ExportFormat] { ExportFormat.allCases.filter { $0 != .exr || hdrRaster != nil } }
+    /// The document's layers, which Channel Pack and GIF read; without it, neither is offered.
+    let snapshot: ProjectSnapshot?
+    private var formats: [ExportFormat] {
+        ExportFormat.allCases.filter { ($0 != .exr || hdrRaster != nil) && (($0 != .channelPack && $0 != .gif) || snapshot != nil) }
+    }
     let session: EditorSession
     let finish: ((data: Data, format: ExportFormat)?) -> Void
     @State private var format: ExportFormat
     @State private var options: JPEGOptions
+    @State private var gifOptions: GIFExportOptions
     @State private var width: Int
     @State private var height: Int
+    /// Channel Pack's red, green, blue and alpha, in that order.
+    @State private var channels: [ChannelPack.Source]
+    /// Each document's last Channel Pack choices, while the app is open.
+    @MainActor private static var channelChoices: [UUID: [ChannelPack.Source]] = [:]
     /// JPEG's quality from the last export, which the next one starts from.
     private static let qualityKey = "jpegExportQuality"
 
-    init(raster: ExportRaster, deepRaster: ExportRaster? = nil, hdrRaster: ExportRaster? = nil, session: EditorSession,
-         format: ExportFormat, finish: @escaping ((data: Data, format: ExportFormat)?) -> Void) {
+    init(raster: ExportRaster, deepRaster: ExportRaster? = nil, hdrRaster: ExportRaster? = nil, snapshot: ProjectSnapshot? = nil,
+         session: EditorSession, format: ExportFormat, finish: @escaping ((data: Data, format: ExportFormat)?) -> Void) {
         self.raster = raster
+        self.snapshot = snapshot
         self.deepRaster = deepRaster
         self.hdrRaster = hdrRaster
+        let layers = snapshot?.manifest.layers ?? []
+        let remembered = snapshot.flatMap { Self.channelChoices[$0.manifest.documentID] }?
+            .filter { if case .layer(let id) = $0 { layers.contains { $0.id == id } } else { true } }
+        _channels = State(initialValue: remembered?.count == 4 ? remembered!
+                          : ChannelPack.Channel.allCases.map { ChannelPack.defaultSource(for: $0, in: layers) })
         self.session = session
         self.finish = finish
         var start = JPEGOptions()
@@ -32,7 +46,8 @@ struct ExportAsSheet: View {
             start.quality = min(1, max(0, saved))
         }
         _options = State(initialValue: start)
-        _format = State(initialValue: format == .exr && hdrRaster == nil ? .png : format)
+        _gifOptions = State(initialValue: GIFExportOptions())
+        _format = State(initialValue: (format == .exr && hdrRaster == nil) || (format == .channelPack && snapshot == nil) ? .png : format)
         _width = State(initialValue: raster.image.width)
         _height = State(initialValue: raster.image.height)
     }
@@ -41,20 +56,25 @@ struct ExportAsSheet: View {
     struct Settings: Equatable {
         var format: ExportFormat
         var options: JPEGOptions
+        var gifOptions: GIFExportOptions
         var width: Int
         var height: Int
         var sixteenBit: Bool
         /// In this CMYK profile's inks, for print (JPEG, TIFF and PDF); nil for RGB.
         var cmyk: CMYKProfile?
+        /// Channel Pack's sources; empty for the other formats.
+        var channels: [ChannelPack.Source] = []
     }
     struct Encoded {
+        let id = UUID()
         let settings: Settings
         let data: Data
         let preview: CGImage
+        var durations: [TimeInterval] = []
     }
     private var settings: Settings {
-        Settings(format: format, options: options, width: width, height: height, sixteenBit: sixteenBit && format == .png && deepRaster != nil,
-                 cmyk: cmyk && takesCMYK ? profile : nil)
+        Settings(format: format, options: options, gifOptions: gifOptions, width: width, height: height, sixteenBit: sixteenBit && format == .png && deepRaster != nil,
+                 cmyk: cmyk && takesCMYK ? profile : nil, channels: format == .channelPack ? channels : [])
     }
     /// The formats that can be written in a printer's inks.
     private var takesCMYK: Bool { format == .jpeg || format == .tiff || format == .pdf }
@@ -66,6 +86,10 @@ struct ExportAsSheet: View {
     @State private var sixteenBit = false
     @State private var result: Encoded?
     @State private var error: String?
+    @State private var gifProgress: (completed: Int, total: Int)?
+    @State private var gifPreviewImage: CGImage?
+    @State private var gifPreviewIndex = 0
+    @State private var isGIFPreviewPlaying = true
     private var isReady: Bool { result?.settings == settings && error == nil }
     /// The preview's zoom, 1 being 100%; nil fits the whole image.
     @State private var zoom: Double?
@@ -80,6 +104,18 @@ struct ExportAsSheet: View {
             HStack(spacing: 8) {
                 Text("Export As").font(.title2.bold())
                 Spacer()
+                if format == .gif, let result, result.durations.count > 1 {
+                    Button {
+                        if !isGIFPreviewPlaying, gifPreviewIndex == result.durations.count - 1, !gifOptions.loopsForever {
+                            gifPreviewIndex = 0
+                            gifPreviewImage = result.preview
+                        }
+                        isGIFPreviewPlaying.toggle()
+                    } label: { Image(systemName: isGIFPreviewPlaying ? "pause.fill" : "play.fill").foregroundStyle(.white) }
+                        .disabled(!isReady)
+                        .help(isGIFPreviewPlaying ? "Pause the animation preview." : "Play the animation preview.")
+                        .accessibilityLabel(isGIFPreviewPlaying ? "Pause animation preview" : "Play animation preview")
+                }
                 Button("Fit") { zoom = nil }.disabled(zoom == nil)
                     .help("Show the whole image (⌘0)")
                 Button { zoomBy(1) } label: { Image(systemName: "plus.magnifyingglass") }
@@ -93,13 +129,14 @@ struct ExportAsSheet: View {
             ZStack {
                 Color(white: 0.12)
                 if let result {
-                    JPEGPreview(image: result.preview, pixelWidth: result.settings.width, pixelHeight: result.settings.height, zoom: $zoom)
+                    JPEGPreview(image: result.settings.format == .gif ? gifPreviewImage ?? result.preview : result.preview,
+                                pixelWidth: result.settings.width, pixelHeight: result.settings.height, zoom: $zoom)
                 }
                 if !isReady && error == nil {
                     ProgressView().padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
             }.frame(width: JPEGPreview.frame.width, height: JPEGPreview.frame.height).clipped()
-                .help("Drag or scroll to move around; double-click switches between Fit and 100%")
+                .help("Enabled masks apply here, as on the canvas. Drag or scroll to move around; double-click switches between Fit and 100%.")
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
                     Text("Format")
@@ -158,56 +195,114 @@ struct ExportAsSheet: View {
                         }
                     }
                 }
+                if format == .channelPack {
+                    ForEach(Array(ChannelPack.Channel.allCases.enumerated()), id: \.offset) { index, channel in
+                        GridRow {
+                            Text(channel.rawValue)
+                            channelPicker(index, channel: channel)
+                        }
+                    }
+                }
                 if format == .pdf {
                     GridRow {
                         Text("Page")
                         Text(pageSize).foregroundStyle(.secondary)
                     }
                 }
-                // JPEG and ink have no transparency, and a PDF's page shows through it, so they fill it with a color.
-                if format == .jpeg || format == .pdf || (format == .tiff && cmyk) {
+                if format == .gif {
+                    GridRow {
+                        Text("Loop")
+                        Picker("Loop", selection: $gifOptions.loopsForever) {
+                            Text("Forever").tag(true)
+                            Text("Once").tag(false)
+                        }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                            .disabled(!gifHasAnimation)
+                    }
+                    GridRow {
+                        Text("Transparency")
+                        Toggle("Keep transparent areas", isOn: $gifOptions.keepsTransparency)
+                            .help("GIF keeps fully transparent or opaque pixels; soft edges use a 50% threshold.")
+                    }
+                    GridRow {
+                        Text("Frames")
+                        Text(gifSummary).foregroundStyle(.secondary)
+                    }
+                }
+                // JPEG has no transparency, and a PDF's page shows through it, so both fill it with a color.
+                if format == .jpeg || format == .pdf || (format == .tiff && cmyk) || (format == .gif && !gifOptions.keepsTransparency) {
                     GridRow {
                         Text("Background")
-                        DialogColorSwatch(title: "Export Background", color: matte, session: session)
+                        DialogColorSwatch(title: "Export Background", color: format == .gif ? gifMatte : matte, session: session)
                             .help("Color that fills transparent areas")
                     }
                 }
             }
             HStack(spacing: 12) {
-                Text(format == .exr ? "Brighter than white kept · Transparency kept"
+                Text(format == .channelPack ? "Each channel from a layer, read as grayscale · PNG"
+                     : format == .gif ? "Up to 256 colors · sRGB" : format == .exr ? "Brighter than white kept · Transparency kept"
                      : takesCMYK && cmyk ? "CMYK – \(profile?.name ?? "No profile")"
                      : format == .png || format == .tiff ? "Transparency kept · sRGB" : "sRGB")
                     .foregroundStyle(.secondary)
                 Spacer()
-                if let error { Text(error).foregroundStyle(.red) }
-                else if isReady, let result {
+                if isReady, let result {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(result.data.count), countStyle: .file)).monospacedDigit()
-                } else { Text("Updating…").foregroundStyle(.secondary) }
+                } else if error == nil {
+                    Text(format == .gif ? gifProgress.map { "Encoding frame \(min($0.completed + 1, $0.total)) of \($0.total)…" } ?? "Updating…" : "Updating…")
+                        .foregroundStyle(.secondary).monospacedDigit()
+                }
                 Button("Cancel") { DialogColorSwatch.closePicker(session); finish(nil) }.configuredNativeShortcut(.escape)
                 Button("Export…") {
                     DialogColorSwatch.closePicker(session)
                     if format == .jpeg { UserDefaults.standard.set(options.quality, forKey: Self.qualityKey) }
+                    if format == .channelPack, let snapshot { Self.channelChoices[snapshot.manifest.documentID] = channels }
                     if let result { finish((result.data, result.settings.format)) }
                 }
                     .configuredNativeShortcut(.return)
                     .disabled(!isReady)
             }
+            if let error { Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).frame(maxWidth: JPEGPreview.frame.width, alignment: .leading) }
         }
         .padding(24)
-        .onAppear { session.previewZoom = { command in
-            switch command {
-            case .zoomIn: zoomBy(1)
-            case .zoomOut: zoomBy(-1)
-            case .fit: zoom = nil
-            case .actual: zoom = 1
+        .onAppear {
+            setScale(Double(width) / Double(raster.image.width))
+            session.previewZoom = { command in
+                switch command {
+                case .zoomIn: zoomBy(1)
+                case .zoomOut: zoomBy(-1)
+                case .fit: zoom = nil
+                case .actual: zoom = 1
+                }
             }
-        } }
+        }
         .onDisappear { session.previewZoom = nil }
+        .onChange(of: format) { setScale(Double(width) / Double(raster.image.width)) }
         .task(id: settings) {
             let requested = settings
             error = nil
+            gifProgress = nil
             do {
                 try await Task.sleep(for: .milliseconds(200))
+                if requested.format == .gif, let snapshot {
+                    let encoded = try await GIFExporter.shared.encode(snapshot, width: requested.width, height: requested.height,
+                        options: requested.gifOptions) { completed, total in
+                            await MainActor.run {
+                                if settings == requested { gifProgress = (completed, total) }
+                            }
+                        }
+                    try Task.checkCancellation()
+                    gifPreviewIndex = 0
+                    gifPreviewImage = encoded.preview
+                    isGIFPreviewPlaying = true
+                    result = Encoded(settings: requested, data: encoded.data, preview: encoded.preview, durations: encoded.durations)
+                    return
+                }
+                if requested.format == .channelPack, let snapshot {
+                    let packed = try await ImageExporter.shared.channelPack(snapshot, sources: requested.channels,
+                                                                            width: requested.width, height: requested.height)
+                    try Task.checkCancellation()
+                    result = Encoded(settings: requested, data: packed.data, preview: packed.preview)
+                    return
+                }
                 let source = requested.format == .exr ? hdrRaster ?? raster : requested.sixteenBit ? deepRaster ?? raster : raster
                 let sized = try await ImageExporter.shared.resized(source, width: requested.width, height: requested.height)
                 let data: Data, preview: CGImage
@@ -218,15 +313,19 @@ struct ExportAsSheet: View {
                 case .tiff:
                     let matte = CGColor(srgbRed: requested.options.red, green: requested.options.green, blue: requested.options.blue, alpha: 1)
                     (data, preview) = try await ImageExporter.shared.tiffData(sized, cmyk: requested.cmyk, matte: matte)
-                case .png: (data, preview) = (try await ImageExporter.shared.pngData(sized), sized.image)
+                case .png, .channelPack: (data, preview) = (try await ImageExporter.shared.pngData(sized), sized.image)
                 // Shown as everything is, brighter than white as white.
                 case .exr: (data, preview) = (try await ImageExporter.shared.exrData(sized), try DeepLayer.dithered(sized.image))
                 case .pdf:
                     let background = CGColor(srgbRed: requested.options.red, green: requested.options.green,
                                              blue: requested.options.blue, alpha: 1)
-                    (data, preview) = (try await ImageExporter.shared.pdfData(sized, background: background, cmyk: requested.cmyk),
-                                       try requested.cmyk.map { try CMYK.convert(sized.image, to: $0, over: background) }
-                                           ?? ImageExporter.shared.flattened(sized, over: background))
+                    data = try await ImageExporter.shared.pdfData(sized, background: background, cmyk: requested.cmyk)
+                    if let cmyk = requested.cmyk {
+                        preview = try CMYK.convert(sized.image, to: cmyk, over: background)
+                    } else {
+                        preview = try await ImageExporter.shared.flattened(sized, over: background)
+                    }
+                case .gif: return
                 }
                 try Task.checkCancellation()
                 result = Encoded(settings: requested, data: data, preview: preview)
@@ -237,6 +336,42 @@ struct ExportAsSheet: View {
                 self.error = error.localizedDescription
             }
         }
+        .task(id: GIFPreviewRequest(resultID: result?.id, isPlaying: isGIFPreviewPlaying, isReady: isReady)) {
+            guard isReady, isGIFPreviewPlaying, let result, result.settings.format == .gif,
+                  result.durations.count > 1 else { return }
+            do {
+                try await GIFPreviewPlayback.play(durations: result.durations, startingAt: gifPreviewIndex,
+                                                   loops: result.settings.gifOptions.loopsForever) { index in
+                    let image = try await GIFExporter.shared.preview(result.data, index: index)
+                    try Task.checkCancellation()
+                    gifPreviewIndex = index
+                    gifPreviewImage = image
+                }
+                isGIFPreviewPlaying = false
+            } catch is CancellationError {
+                // A setting changed, playback paused, or the dialog closed.
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private struct GIFPreviewRequest: Equatable {
+        let resultID: UUID?
+        let isPlaying: Bool
+        let isReady: Bool
+    }
+    private var gifSchedule: GIFExportSchedule? { snapshot.flatMap { try? GIFExportSchedule($0, options: gifOptions) } }
+    private var gifHasAnimation: Bool {
+        guard let snapshot else { return false }
+        return snapshot.gifExportLayers.contains { (snapshot.animations[$0.id]?.frames.count ?? 0) > 1 }
+    }
+    private var gifSummary: String {
+        guard !(snapshot?.gifExportLayers ?? []).isEmpty else { return "1 frame · Still canvas" }
+        guard let schedule = gifSchedule else { return "—" }
+        let count = "\(schedule.frames.count) \(schedule.frames.count == 1 ? "frame" : "frames")"
+        let durations = schedule.durations
+        return "\(count) · \(durations.reduce(0, +).formatted(.number.precision(.fractionLength(0...2)))) s"
     }
 
     /// RGB or CMYK: one small menu, as few need CMYK. The profile CMYK goes through is View › CMYK › Profile's, named in
@@ -259,7 +394,7 @@ struct ExportAsSheet: View {
         catch { self.error = error.localizedDescription }
     }
 
-    /// TIFF, PDF, and EXR with an HDR layer: a menu beside PNG and JPEG, blue with the chosen one's name while it's chosen,
+    /// Animation formats, TIFF, PDF, and EXR with an HDR layer: a menu beside PNG and JPEG, blue with the chosen one's name while it's chosen,
     /// as the selected segment beside it would be.
     @ViewBuilder private var moreFormats: some View {
         let others = formats.filter { $0 != .png && $0 != .jpeg }
@@ -271,8 +406,23 @@ struct ExportAsSheet: View {
             .pickerStyle(.inline).labelsHidden()
         }
         .menuStyle(.button).fixedSize()
-        .help("Other formats: TIFF and PDF\(others.contains(.exr) ? ", and EXR to keep light brighter than white" : "")")
+        .help("Other formats: TIFF, PDF and GIF\(others.contains(.exr) ? ", EXR to keep light brighter than white" : ""), and Channel Pack for game textures")
         if chosen { menu.buttonStyle(.borderedProminent) } else { menu.buttonStyle(.bordered) }
+    }
+
+    /// A channel's source: one of the document's layers or groups, top first, or solid black or white.
+    private func channelPicker(_ index: Int, channel: ChannelPack.Channel) -> some View {
+        let layers = snapshot?.manifest.layers ?? []
+        return Picker(channel.rawValue, selection: $channels[index]) {
+            Text("Black").tag(ChannelPack.Source.black)
+            Text("White").tag(ChannelPack.Source.white)
+            Divider()
+            ForEach(layers.reversed().filter { $0.adjustment == nil }, id: \.id) { layer in
+                Text(layer.name).tag(ChannelPack.Source.layer(layer.id))
+            }
+        }
+        .labelsHidden().frame(width: 260)
+        .help("What fills the \(channel.rawValue.lowercased()) channel: a layer or group read as grayscale, or solid black or white")
     }
 
     private func sizeField(_ value: Int, set: @escaping (Int) -> Void) -> some View {
@@ -283,7 +433,8 @@ struct ExportAsSheet: View {
     private func setWidth(_ value: Int) { setScale(Double(value) / Double(raster.image.width)) }
     private func setHeight(_ value: Int) { setScale(Double(value) / Double(raster.image.height)) }
     private func setScale(_ scale: Double) {
-        let largest = min(Double(DocumentLimits.maxSide) / Double(max(raster.image.width, raster.image.height)),
+        let maximumSide = DocumentLimits.maxSide
+        let largest = min(Double(maximumSide) / Double(max(raster.image.width, raster.image.height)),
                           (Double(DocumentLimits.maxSurfacePixels) / Double(raster.image.width * raster.image.height)).squareRoot())
         let clamped = min(largest, max(0.01, scale.isFinite ? scale : 1))
         width = max(1, Int((Double(raster.image.width) * clamped).rounded()))
@@ -303,6 +454,10 @@ struct ExportAsSheet: View {
     private var matte: Binding<PaletteColor> {
         Binding(get: { PaletteColor(red: options.red, green: options.green, blue: options.blue) },
                 set: { options.red = $0.red; options.green = $0.green; options.blue = $0.blue })
+    }
+    private var gifMatte: Binding<PaletteColor> {
+        Binding(get: { PaletteColor(red: gifOptions.red, green: gifOptions.green, blue: gifOptions.blue) },
+                set: { gifOptions.red = $0.red; gifOptions.green = $0.green; gifOptions.blue = $0.blue })
     }
 }
 

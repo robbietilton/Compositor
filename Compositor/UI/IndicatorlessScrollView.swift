@@ -40,7 +40,8 @@ struct IndicatorlessScrollView<Content: View>: NSViewRepresentable {
 
         func updateDocumentSize() {
             let height = host.fittingSize.height
-            let size = NSSize(width: 56, height: height)
+            // As wide as the scroll view, so contents of any width (one column of tools or two) fit it.
+            let size = NSSize(width: contentView.bounds.width, height: height)
             if host.frame.size != size { host.setFrameSize(size) }
             verticalScrollElasticity = height > contentView.bounds.height + 1 ? .allowed : .none
         }

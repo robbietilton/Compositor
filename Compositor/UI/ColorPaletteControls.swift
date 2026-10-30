@@ -4,7 +4,7 @@ import AppKit
 struct ColorPaletteControls: View {
     let session: EditorSession
     @State private var choosingMaskBackground: Bool?
-    @State private var pickerPanel = ColorPickerPanelController()
+    private var pickerPanel: ColorPickerPanelController { .shared }
     private let swatchSize: CGFloat = 24
     private let swatchOffset: CGFloat = 12
     var body: some View {

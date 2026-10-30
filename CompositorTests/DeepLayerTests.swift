@@ -291,14 +291,26 @@ struct DeepLayerTests {
         #expect(share > 0.8, "\(mode): \(Int(share * 100))% of the stroke's pixels finer than 8 bits")
     }
 
-    /// Dither's result is a few levels by design; read between three runs it came out in colors. It rasterizes.
-    @Test func ditherRasterizes() async throws {
+    /// Dither works at 8 bits (its result is a few levels by design), but the layer stays 16-bit: where it dithered, its
+    /// 8-bit values are taken; outside its selection the 16-bit pixels are kept exactly. Convert to 8-Bit alone makes a
+    /// layer 8-bit.
+    @Test func eightBitFiltersKeepTheLayerSixteenBit() async throws {
         let (session, url) = try await importedSession()
         defer { try? FileManager.default.removeItem(at: url) }
+        let before = try row(try #require(session.activeLayer?.asset?.deep))
+        session.selectTool(.marquee)
+        session.beginLasso(at: .zero, mode: .replace)
+        session.dragMarquee(to: CGPoint(x: Self.width / 2, y: Self.height), square: false, fromCenter: false)
+        session.finishLasso()
         session.beginFilter(.dither)
         session.updateFilter(FilterSettings(), preview: true)
         await session.commitFilter()
-        #expect(session.activeLayer?.asset?.deep == nil)
+        let deep = try #require(session.activeLayer?.asset?.deep, "still 16-bit")
+        let after = try row(deep)
+        #expect(after[(Self.width / 2)...] == before[(Self.width / 2)...], "untouched pixels keep their 16 bits")
+        #expect(after[..<(Self.width / 2)].allSatisfy { $0 % 257 == 0 }, "dithered pixels are its 8-bit values")
+        session.convertLayers(toSixteenBit: false)
+        #expect(session.activeLayer?.asset?.deep == nil, "Convert to 8-Bit still makes it 8-bit")
     }
 
     /// An adjustment layer over a 16-bit layer, on its own or clipped to it, works at 16 bits in a 16-bit export: a
@@ -415,8 +427,8 @@ struct DeepLayerTests {
         let session = EditorSession()
         session.createDocument(width: Self.width, height: Self.height)
         session.addBlankLayer()
-        #expect(session.activeLayer?.asset == nil && session.canConvertLayerDepth)
-        session.convertLayerDepth()
+        #expect(session.activeLayer?.asset == nil && session.canConvertToSixteenBit && !session.canConvertToEightBit)
+        session.convertLayers(toSixteenBit: true)
         #expect(session.activeLayer?.depthLabel == "16-Bit")
         // A gentle gradient: black to a dark gray, only 16 8-bit levels across the canvas.
         session.foregroundColor = .black
@@ -431,20 +443,46 @@ struct DeepLayerTests {
         let deep = try #require(try DeepLayer.flattened(asset), "the gradient kept the layer 16-bit")
         let values = try row(deep)
         #expect(Set(values).count > 100, "a smooth gradient: \(Set(values).count) distinct values, not 16 levels")
-        session.convertLayerDepth()
+        session.convertLayers(toSixteenBit: false)
         #expect(session.activeLayer?.asset?.deep == nil && session.activeLayer?.depthLabel == nil)
         session.undo()
         #expect(session.activeLayer?.asset?.deep != nil, "undo brings the 16 bits back")
+    }
+
+    /// With several layers selected, Convert to 16-Bit / 8-Bit converts them all, and those in a selected folder, in one
+    /// step; layers already at that depth, and ones not selected, are left as they are.
+    @Test func convertingSeveralLayersConvertsThemAllInOneStep() throws {
+        let session = EditorSession()
+        session.createDocument(width: Self.width, height: Self.height)
+        for _ in 0..<4 { session.addBlankLayer() }
+        let ids = try #require(session.document?.layers.map(\.id))
+        session.selectLayer(ids[1])
+        session.convertLayers(toSixteenBit: true)
+        session.selectLayers([ids[2]], primary: ids[2])
+        session.groupSelectedLayers()
+        let folder = try #require(session.activeLayerID)
+        session.selectLayers([ids[1], folder], primary: folder)
+        #expect(session.canConvertToSixteenBit && session.canConvertToEightBit, "a mix of 8- and 16-bit")
+        session.convertLayers(toSixteenBit: true)
+        func deep(_ id: UUID) -> Bool { session.document?.layers.first { $0.id == id }?.asset?.deep != nil }
+        #expect(deep(ids[1]) && deep(ids[2]) && !deep(ids[0]) && !deep(ids[3]), "the selection and the folder's layer")
+        #expect(!session.canConvertToSixteenBit)
+        session.undo()
+        #expect(deep(ids[1]) && !deep(ids[2]), "one undo step")
+        session.redo()
+        session.selectLayers([ids[1], folder], primary: folder)
+        session.convertLayers(toSixteenBit: false)
+        #expect(!deep(ids[1]) && !deep(ids[2]))
     }
 
     /// An 8-bit layer converted to 16 bits keeps its pixels exactly; a steep Levels afterwards is then worked at 16 bits.
     @Test func eightBitLayersConvertToSixteenBits() async throws {
         let (session, url) = try await importedSession()
         defer { try? FileManager.default.removeItem(at: url) }
-        session.convertLayerDepth()
+        session.convertLayers(toSixteenBit: false)
         let eight = try #require(session.activeLayer?.asset)
         #expect(eight.deep == nil)
-        session.convertLayerDepth()
+        session.convertLayers(toSixteenBit: true)
         let sixteen = try #require(session.activeLayer?.asset)
         let deep = try #require(sixteen.deep)
         #expect(try row(deep) == row(try DeepLayer.image(eight.image)), "the same pixels, now 16-bit")
@@ -737,7 +775,8 @@ struct DeepLayerTests {
     @Test func hdrLayersConvertToSixteenBits() async throws {
         let (session, url, _) = try await hdrSession()
         defer { try? FileManager.default.removeItem(at: url) }
-        session.convertHDRToSixteenBit()
+        #expect(session.canConvertToSixteenBit && session.canConvertToEightBit, "an HDR layer can go either way")
+        session.convertLayers(toSixteenBit: true)
         let asset = try #require(session.activeLayer?.asset)
         #expect(asset.deep != nil && !asset.isHDR && session.activeLayer?.depthLabel == "16-Bit")
         #expect(try row(try #require(asset.deep)).last == 65535, "highlights clipped to white")

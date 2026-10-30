@@ -155,6 +155,43 @@ actor ImageExporter {
         return try pngData(raster)
     }
 
+    /// Export Layers as PNGs: the layer `id` on its own, as it looks in the document, trimmed to its pixels. Nil when it
+    /// has none, as an adjustment layer or an empty one.
+    func layerPNGData(_ snapshot: ProjectSnapshot, layer id: UUID) throws -> Data? {
+        let raster = try render(Self.isolating(id, in: snapshot))
+        guard let trimmed = ImageTrim.trimImage(raster.image, options: TrimOptions()) else { return nil }
+        return try pngData(ExportRaster(image: trimmed, resolution: raster.resolution))
+    }
+
+    /// `snapshot` with only the layer `id` showing: it, shown even if it's hidden; what's inside it, if it's a folder, and
+    /// the layers clipped to it, each as shown or hidden as it is; and the folders it's in, so their opacity and masks
+    /// still apply. Everything else is hidden.
+    static func isolating(_ id: UUID, in snapshot: ProjectSnapshot) -> ProjectSnapshot {
+        var manifest = snapshot.manifest
+        let parents = Dictionary(uniqueKeysWithValues: manifest.layers.map { ($0.id, $0.parentID) })
+        var folders: Set<UUID> = []
+        var parent = parents[id] ?? nil
+        while let folder = parent, folders.insert(folder).inserted { parent = parents[folder] ?? nil }
+        func isInside(_ layer: UUID) -> Bool {
+            var seen: Set<UUID> = []
+            var parent = parents[layer] ?? nil
+            while let folder = parent, seen.insert(folder).inserted {
+                if folder == id { return true }
+                parent = parents[folder] ?? nil
+            }
+            return false
+        }
+        let kept = Set(manifest.layers.map(\.id).filter { $0 == id || isInside($0) })
+        for index in manifest.layers.indices {
+            let layer = manifest.layers[index]
+            if layer.id == id || folders.contains(layer.id) { manifest.layers[index].isVisible = true }
+            else if !kept.contains(layer.id) && !(layer.maskSourceID.map(kept.contains) ?? false) {
+                manifest.layers[index].isVisible = false
+            }
+        }
+        return ProjectSnapshot(manifest: manifest, images: snapshot.images, masks: snapshot.masks, animations: snapshot.animations)
+    }
+
     /// The flattened canvas as a TIFF, compressed losslessly: transparency kept in RGB, or with `cmyk`, in that profile's
     /// inks over `matte`, the profile embedded, as print shops take it.
     func tiffData(_ raster: ExportRaster, cmyk: CMYKProfile? = nil, matte: CGColor = CGColor(gray: 1, alpha: 1)) throws -> (data: Data, preview: CGImage) {

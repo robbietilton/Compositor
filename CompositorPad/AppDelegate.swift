@@ -121,15 +121,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Last Filter first, as on the Mac, dimmed until the iPad repeats one; the filters it has no editor for yet are
         // dimmed by the window.
         let last: UIMenuElement = UIMenu(options: .displayInline, children: [UIAction(title: "Last Filter", attributes: .disabled) { _ in }])
-        let filters: [UIMenuElement] = FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment }.map { kind in
-            UICommand(title: kind.rawValue + "…", action: #selector(Window.applyFilter(_:)), propertyList: kind.rawValue)
+        // Those that can also be adjustment layers, in that menu's order, then the rest, as the Mac groups them.
+        let layered = AdjustmentKind.filters.compactMap(\.filterKind)
+        let others = FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment && !layered.contains($0) }
+        let filters: [UIMenuElement] = [layered, others].map { group in
+            UIMenu(options: .displayInline, children: group.map { kind in
+                UICommand(title: kind.rawValue + "…", action: #selector(Window.applyFilter(_:)), propertyList: kind.rawValue)
+            })
         }
         builder.insertSibling(UIMenu(title: "Filter", identifier: filter, children: [last] + filters), afterMenu: image)
         let layer = UIMenu.Identifier("com.wonderassembly.compositor.layer")
         builder.insertSibling(UIMenu(title: "Layer", identifier: layer, children: [
-            UIMenu(title: "New Adjustment Layer", children: AdjustmentKind.allCases.map { kind in
-                UICommand(title: kind.rawValue + (kind.isEditable ? "…" : ""), action: #selector(Window.newAdjustmentLayer(_:)),
-                          propertyList: kind.rawValue)
+            // The Image menu's adjustments, then the Filter menu's filters, as on the Mac.
+            UIMenu(title: "New Adjustment Layer", children: [AdjustmentKind.imageAdjustments, AdjustmentKind.filters].map { group in
+                UIMenu(options: .displayInline, children: group.map { kind in
+                    UICommand(title: kind.rawValue + (kind.isEditable ? "…" : ""), action: #selector(Window.newAdjustmentLayer(_:)),
+                              propertyList: kind.rawValue)
+                })
             }),
             UICommand(title: "Edit Adjustment…", action: #selector(Window.editAdjustment(_:))),
             UIMenu(options: .displayInline, children: [

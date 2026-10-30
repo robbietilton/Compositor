@@ -17,7 +17,7 @@ import Synchronization
     /// saying theirs out of order can't move a line back.
     nonisolated struct Counts: Equatable, Sendable {
         var width = 0, height = 0
-        /// The project's layers, once the manifest is read, and how many image and mask files they have.
+        /// The project's layers, once the manifest is read, and how many image, mask and edited GIF frame files they have.
         var layers: Int?
         var files = 0
         var layersDone = 0, thumbnailsDone = 0

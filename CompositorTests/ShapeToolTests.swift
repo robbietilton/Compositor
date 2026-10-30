@@ -172,4 +172,118 @@ struct ShapeToolTests {
         }
     }
 
+    /// Dashes are measured in line widths, caps included: a width-4 dashed line is 12 pixels on, 8 off.
+    @Test func dashedLinesBreakWhereThePatternSays() async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineWidth = 4
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 90, y: 20))
+        #expect(session.activeLayer?.liveShape?.style.lineStyle == nil, "a solid line saves as lines always have")
+        session.shapeLineStyle = .dashed
+        drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 90, y: 50))
+        #expect(session.activeLayer?.liveShape?.style.lineStyle == .dashed)
+        let pixel = try await pixels(session)
+        #expect(pixel(24, 20).alpha == 255, "solid all the way")
+        #expect(pixel(14, 50).alpha == 255 && pixel(24, 50).alpha == 0 && pixel(34, 50).alpha == 255)
+    }
+
+    /// A square cap fills the corners a round one leaves clear, and its layer grows to hold them at an angle.
+    @Test func squareCapsReachTheirCorners() async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineWidth = 10
+        #expect(session.shapeLineCap == .square, "new lines start square-capped")
+        session.shapeLineCap = .round
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 50, y: 20))
+        #expect(session.activeLayer?.liveShape?.style.lineCap == nil, "a round cap saves as lines always have")
+        session.shapeLineCap = .square
+        drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 50, y: 50))
+        #expect(session.activeLayer?.liveShape?.style.lineCap == .square)
+        let pixel = try await pixels(session)
+        #expect(pixel(5, 15).alpha == 0 && pixel(5, 45).alpha == 255, "only the square cap fills the corner")
+        #expect(pixel(54, 24).alpha == 0 && pixel(54, 54).alpha == 255)
+
+        drag(session, from: CGPoint(x: 60, y: 10), to: CGPoint(x: 80, y: 30))
+        let reach = 5 + (5 * CGFloat(2).squareRoot() - 5).rounded(.up)
+        let size = try #require(session.activeLayer?.transform.size)
+        #expect(abs(size.width - (20 + reach * 2)) < 0.001 && abs(size.height - (20 + reach * 2)) < 0.001)
+    }
+
+    @Test func lineStylesSurviveSavingAndNeedVersionFifteen() async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineStyle = .dotted
+        session.shapeLineCap = .square
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 90, y: 20))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("LineStyle-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let snapshot = try #require(session.projectSnapshot())
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        #expect(loaded.manifest.layers.last?.shape?.lineStyle == .dotted)
+        #expect(loaded.manifest.layers.last?.shape?.lineCap == .square)
+        var older = snapshot.manifest
+        older.version = 14
+        await #expect(throws: (any Error).self) {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: url)
+        }
+    }
+
+    /// A 1-pixel line stays one full-strength row or column with either cap, in its layer and in the finished image,
+    /// as it's drawn while dragging, rather than two half-strength ones.
+    @Test(arguments: [ShapeLineCap.square, .round]) func thinLinesStayOnThePixelGrid(cap: ShapeLineCap) async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineWidth = 1
+        session.shapeLineCap = cap
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 50, y: 20))
+        let origin = try #require(session.activeLayer?.transform.origin)
+        #expect(origin.x == origin.x.rounded() && origin.y == origin.y.rounded(), "the layer sits on whole pixels")
+        drag(session, from: CGPoint(x: 70, y: 10), to: CGPoint(x: 70, y: 50))
+        let pixel = try await pixels(session)
+        #expect(pixel(30, 20).alpha == 255 && pixel(30, 19).alpha == 0 && pixel(30, 21).alpha == 0)
+        #expect(pixel(70, 30).alpha == 255 && pixel(69, 30).alpha == 0 && pixel(71, 30).alpha == 0)
+    }
+
+    /// A 1-pixel dotted line's dots are whole pixels at full strength with square caps, and circles as strong as a
+    /// pixel-wide circle gets with round ones, rather than quarter-strength smudges.
+    @Test func onePixelDotsKeepTheirColor() throws {
+        for cap in ShapeLineCap.allCases {
+            let session = makeSession()
+            session.shapeKind = .line
+            session.shapeLineWidth = 1
+            session.shapeLineStyle = .dotted
+            session.shapeLineCap = cap
+            drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 60, y: 20))
+            let image = try #require(session.activeLayer?.asset?.image)
+            let context = try #require(CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+            let row = (0..<image.width).map { Int(bytes[$0 * 4 + 3]) }
+            let dots = stride(from: 0, to: row.count, by: 2).map { row[$0] }, gaps = stride(from: 1, to: row.count, by: 2).map { row[$0] }
+            #expect(dots.allSatisfy { cap == .square ? $0 == 255 : $0 > 150 }, "\(cap)")
+            #expect(gaps.allSatisfy { $0 == 0 }, "\(cap)")
+        }
+    }
+
+    /// Scaling a line stretches it as it looked while being scaled, rather than redrawing it at its old width.
+    @Test func aScaledLineStretchesInsteadOfKeepingItsWidth() async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineWidth = 4
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 90, y: 20))
+        session.beginTransform()
+        var transform = try #require(session.transformEdit?.draft)
+        transform.size.height *= 3
+        session.previewTransform(transform)
+        session.commitTransform()
+        let layer = try #require(session.activeLayer)
+        #expect(layer.liveShape == nil, "plain pixels from then on")
+        #expect(layer.transform.size.height == transform.size.height)
+        let pixel = try await pixels(session)
+        let column = (0..<80).filter { pixel(50, $0).alpha > 127 }
+        #expect(column.count >= 10, "about three times the 4-pixel width")
+    }
 }

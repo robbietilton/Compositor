@@ -53,6 +53,18 @@ struct LayerAppearanceTests {
         session.typeOpacityDigit(3, at: 30)
         #expect(session.document?.layers.first { $0.id == second }?.opacity == 0.5)
     }
+    @Test(arguments: [NavigationTool.marquee, .lasso, .wand])
+    func selectionToolNumberKeysSetSelectedLayersOpacity(tool: NavigationTool) throws {
+        let session = EditorSession()
+        session.createDocument(width: 4, height: 4)
+        session.insert(try asset(0.2))
+        let layer = try #require(session.activeLayerID)
+        session.selectTool(tool)
+        session.typeOpacityDigit(3, at: 10)
+        #expect(session.document?.layers.first { $0.id == layer }?.opacity == 0.3)
+        session.typeOpacityDigit(7, at: 10.2)
+        #expect(session.document?.layers.first { $0.id == layer }?.opacity == 0.37)
+    }
     private func asset(_ gray: CGFloat) throws -> ImportedImage {
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = try #require(CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8,

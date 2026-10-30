@@ -530,7 +530,7 @@ final class ToolOptionsBar: UIView {
         }, for: .primaryActionTriggered)
         add(swatch)
         if session.shapeKind == .line {
-            let width = SliderField(caption: "Width", unit: "px", sliderRange: 1...100, fieldRange: 1...5000, sensitivity: 1)
+            let width = SliderField(caption: "Width", unit: "px", sliderRange: 1...50, fieldRange: 1...5000, sensitivity: 1)
             width.onChange = { [weak self] in self?.session?.shapeLineWidth = min(5000, max(1, $0.rounded())) }
             add(width)
             refreshers.append { width.show($0.shapeLineWidth) }
@@ -650,8 +650,9 @@ final class ToolOptionsBar: UIView {
         }
     }
 
-    /// The frame's shapes in the Crop bar, as the Mac's has them.
-    static let cropRatios = ["Free", "Original", "1:1", "4:3", "3:4", "16:9", "9:16"]
+    /// The frame's shapes in the Crop bar, grouped by shape as the Mac's are: free and the canvas's own proportions,
+    /// square, wide, tall.
+    static let cropRatios = [["Free", "Canvas"], ["1:1"], ["4:3", "16:9", "2.39:1"], ["3:4", "9:16"]]
 
     /// The Mac's Crop bar: the frame's ratio and size, then Cancel and Apply Crop.
     private func buildCrop() {
@@ -676,7 +677,9 @@ final class ToolOptionsBar: UIView {
         add(OptionControls.row([cancel, apply]))
 
         refreshers.append { [weak self] session in
-            ratio.show([Self.cropRatios], chosen: session.cropRatioChoice)
+            // A ratio that isn't one of these is listed too, as the Mac lists one typed in as Custom.
+            let chosen = session.cropRatioChoice
+            ratio.show(Self.cropRatios + (Self.cropRatios.joined().contains(chosen) ? [] : [[chosen]]), chosen: chosen)
             size.text = session.cropRect.map { "\(Int($0.width)) × \(Int($0.height)) px" }
             size.isHidden = session.cropRect == nil
             cancel.isEnabled = session.cropRect != nil

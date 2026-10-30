@@ -145,7 +145,14 @@ extension EditorSession {
         for i in document?.layers.indices ?? 0..<0 {
             if let source = document?.layers[i].maskSourceID, removed.contains(source) {
                 document?.layers[i].maskSourceID = nil
-                if let asset = baked[document!.layers[i].id] { document?.layers[i].asset = asset }
+                if let asset = baked[document!.layers[i].id] {
+                    let layer = document!.layers[i]
+                    if layer.gifAnimation != nil {
+                        // Bake keeps the displayed frame as a still layer once its source is gone.
+                        document?.layers[i].gifAnimation = nil
+                    }
+                    document?.layers[i].asset = asset
+                }
             }
         }
         if activeLayerID.map({ removed.contains($0) }) == true {
@@ -177,10 +184,12 @@ extension EditorSession {
         }
         let records = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let live = LiveMaskRenderer(bounds: context.boundingBoxOfClipPath, source: { records[$0]?.maskSourceID }) { id, ctx in
-            guard let layer = records[id], let image = layer.asset?.image else { return }
+            guard let layer = records[id] else { return }
+            let displayed = self.displayedLayer(for: layer)
+            guard let image = displayed.asset?.image else { return }
             let opacity = layer.effectiveOpacity(in: records)
             let transform = self.displayedTransform(for: layer)
-            let mask = layer.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
+            let mask = displayed.mask?.clipImage(placement: self.displayedMaskPlacement(for: layer), over: transform, width: image.width, height: image.height)
             let effects = LayerEffectsRenderer.cached(image, mask: mask, effects: layer.effects)
             func drawLayer(_ mode: LayerBlendMode, _ target: CGContext) {
                 if let effects {
@@ -236,6 +245,61 @@ extension EditorSession {
         let below = siblings[index-1]
         guard !below.isGroup else { return }
         linkMask(source: below.maskSourceID ?? below.id, target: id)
+    }
+    /// The layers Create / Release Clipping Mask in the menus works on: the selected ones, or the active one.
+    private var clippingTargets: Set<UUID> {
+        selectedLayerIDs.union(activeLayerID.map { [$0] } ?? [])
+    }
+    /// Whether the menus' clipping command releases: every layer it works on is clipped already.
+    var releasesSelectedClipping: Bool {
+        let targets = clippingTargets
+        let layers = document?.layers.filter { targets.contains($0.id) } ?? []
+        return !layers.isEmpty && layers.allSatisfy { $0.maskSourceID != nil }
+    }
+    var selectedClippingTitle: String { releasesSelectedClipping ? "Release Clipping Mask" : "Create Clipping Mask" }
+    var canToggleSelectedClipping: Bool {
+        guard canEditLayers else { return false }
+        return releasesSelectedClipping || clippedSelection() != nil
+    }
+    /// Create Clipping Mask for the selected layers, as in Photoshop: each not yet clipped, from the bottom up, is
+    /// clipped to the layer below it, or that layer's base if it's clipped, so a run of selected layers all clip to the
+    /// layer under the lowest. Nil when one can't be: a folder, or one with no layer below it to clip to.
+    private func clippedSelection() -> [ImageLayer]? {
+        guard var layers = document?.layers else { return nil }
+        let targets = clippingTargets
+        guard !targets.isEmpty else { return nil }
+        for index in layers.indices where targets.contains(layers[index].id) && layers[index].maskSourceID == nil {
+            guard !layers[index].isGroup,
+                  let below = layers[..<index].last(where: { $0.parentID == layers[index].parentID }), !below.isGroup else { return nil }
+            layers[index].maskSourceID = below.maskSourceID ?? below.id
+        }
+        guard (try? LiveMaskGraph.validate(layers.map(\.hierarchyRecord))) != nil else { return nil }
+        return layers
+    }
+    /// The menus' Create / Release Clipping Mask: for every selected layer, as one step. Releasing a layer releases the
+    /// ones clipped above it to the same base too, as releasing one does.
+    func toggleSelectedClipping() {
+        guard canToggleSelectedClipping, let document else { return }
+        if releasesSelectedClipping {
+            var releases = Set<UUID>()
+            for target in document.layers where clippingTargets.contains(target.id) {
+                let siblings = document.layers.filter { $0.parentID == target.parentID }
+                guard let index = siblings.firstIndex(where: { $0.id == target.id }) else { continue }
+                releases.formUnion(siblings[index...].prefix { $0.id == target.id || $0.maskSourceID == target.maskSourceID }.map(\.id))
+            }
+            let layers = document.layers.map { layer in
+                var layer = layer
+                if releases.contains(layer.id) { layer.maskSourceID = nil }
+                return layer
+            }
+            beginEdit("Release Clipping Mask")
+            self.document?.layers = layers
+            endEdit()
+        } else if let layers = clippedSelection() {
+            beginEdit("Create Clipping Mask")
+            self.document?.layers = layers
+            endEdit()
+        }
     }
     /// A moved layer stops clipping when it no longer belongs to the contiguous stack above its base.
     static func releaseDetachedClipping(in layers: inout [ImageLayer]) {

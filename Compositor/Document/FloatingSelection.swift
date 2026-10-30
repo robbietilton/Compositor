@@ -87,7 +87,8 @@ extension EditorSession {
                                                          sixteenBit: pixels.bitsPerComponent > 8)
                 return (warped.image, warped.transform)
             } ?? (image: pixels, transform: edit.draft)
-            let merged = try FloatingMerge.merge(placed.image, transform: placed.transform, into: source)
+            let merged = try FloatingMerge.merge(placed.image, transform: placed.transform, into: pixelEditingLayer(for: source))
+            let edited = try layerByEditingPixels(source, asset: merged.asset, transform: merged.transform, mask: merged.mask)
             let moved: DocumentSelection?
             if let corners = edit.corners {
                 let placement = BrushRaster.pixelToDocument(floating.original, width: Int(floating.pixelSize.width),
@@ -106,10 +107,7 @@ extension EditorSession {
             }
             document?.layers.removeAll { $0.id == edit.layerID }
             guard let index = document?.layers.firstIndex(where: { $0.id == source.id }) else { throw ProjectError.invalid }
-            document?.layers[index] = ImageLayer(id: source.id, asset: merged.asset, name: source.name, isVisible: source.isVisible,
-                transform: merged.transform, parentID: source.parentID, isGroup: false,
-                opacity: source.opacity, blendMode: source.blendMode, mask: merged.mask, maskSourceID: source.maskSourceID,
-                effects: source.effects)
+            document?.layers[index] = edited
             document?.selection = moved
             activeLayerID = source.id
         } catch {

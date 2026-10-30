@@ -84,7 +84,7 @@ extension EditorSession {
     /// only the mask goes; otherwise every selected layer does, in one undo step.
     func deleteLayerOrMask() {
         if selectedEffect != nil { removeSelectedEffect(); return }
-        if isMaskSelected, activeLayer?.mask != nil, selectedLayerIDs.count <= 1 { deleteLayerMask() }
+        if isMaskSelected, activeLayer.flatMap({ selectedMask(for: $0) }) != nil, selectedLayerIDs.count <= 1 { deleteLayerMask() }
         else { deleteSelectedLayers() }
     }
 
@@ -98,17 +98,19 @@ extension EditorSession {
         guard document != nil, textDraft == nil, let layer = activeLayer, !isProjectBusy, !isImporting, brushStroke == nil, pixelMove == nil,
               renamingLayerID == nil, !showsNewDocument, !showsImporter, selectedLayerIDs.count == 1, !layer.isGroup || isMaskSelected,
               document?.effectiveVisibleIDs.contains(layer.id) == true, selection?.isEmpty != true else { return false }
-        return isMaskSelected ? layer.mask?.isEnabled == true : layer.asset != nil
+        return isMaskSelected ? selectedMask(for: layer)?.isEnabled == true : layer.asset != nil
     }
 
     func invertPixels() async {
         guard canInvert else { return }
         commitTransform()
         if gradientEdit != nil { await commitGradient() }
-        guard canInvert, let document, let layer = activeLayer,
-              let index = document.layers.firstIndex(where: { $0.id == layer.id }) else { return }
+        guard canInvert, let document, let active = activeLayer,
+              let index = document.layers.firstIndex(where: { $0.id == active.id }) else { return }
+        pauseGIFForEditing(for: active.id)
+        let layer = pixelEditingLayer(for: active)
         let mask = isMaskSelected
-        guard var image = mask ? layer.mask?.asset.image : layer.asset?.image else { return }
+        guard var image = mask ? selectedMask(for: layer)?.asset.image : layer.asset?.image else { return }
         finishHeldDrags()
         isProjectBusy = true
         defer { isProjectBusy = false }
@@ -120,7 +122,7 @@ extension EditorSession {
                                                      height: layer.asset?.image.height ?? Int(layer.size.height.rounded()))
             }
             let job = PixelInvert.Job(image: image, isMask: mask,
-                pixelToDocument: BrushRaster.pixelToDocument(mask ? layer.maskTransform : layer.transform, width: image.width, height: image.height), selection: clip)
+                pixelToDocument: BrushRaster.pixelToDocument(mask ? (selectedMask(for: layer)?.placement ?? layer.transform) : layer.transform, width: image.width, height: image.height), selection: clip)
             // A 16-bit layer inverts through `DeepLayer.run`, keeping its precision.
             let deep = mask ? nil : try layer.asset.flatMap { try DeepLayer.flattened($0) }
             let asset: ImportedImage
@@ -138,17 +140,13 @@ extension EditorSession {
                              : ImportedImage(image: result, thumbnail: try PixelInvert.thumbnail(of: result), name: layer.name)
             }
             // Only write over the layer the invert was computed from.
-            guard let current = self.document?.layers[safe: index], current.id == layer.id,
-                  current.asset?.image === layer.asset?.image, current.mask?.asset.image === layer.mask?.asset.image else { return }
+            guard let current = self.document?.layers[safe: index], current.id == layer.id else { return }
+            guard pixelEditTargetMatches(current, original: layer), current.mask?.asset.image === layer.mask?.asset.image else { return }
+            let edited = mask ? nil : try layerByEditingPixels(current, asset: asset, transform: current.transform, mask: current.mask)
             beginEdit(mask ? "Invert Mask" : "Invert")
             if mask {
                 self.document?.layers[index].mask = current.mask.map { $0.replacing(asset) } ?? LayerMask(asset: asset)
-            } else {
-                self.document?.layers[index] = ImageLayer(id: current.id, asset: asset, name: current.name,
-                    isVisible: current.isVisible, transform: current.transform, parentID: current.parentID, isGroup: false,
-                    opacity: current.opacity, blendMode: current.blendMode, mask: current.mask, maskSourceID: current.maskSourceID,
-                    effects: current.effects)
-            }
+            } else if let edited { self.document?.layers[index] = edited }
             endEdit()
             brushRevision += 1
         } catch { brushError = error.localizedDescription }

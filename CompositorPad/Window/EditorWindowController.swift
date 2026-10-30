@@ -795,7 +795,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         let (urls, unreadable) = await ItemProviderFiles.urls(from: providers, suggestedNames: true)
         await bringIn(urls, into: tab, at: point)
         if unreadable {
-            let message = "Some items couldn’t be read. Bring in JPEG, PNG, HEIC, HEIF, TIFF, WebP, OpenEXR, Radiance HDR, camera RAW, or Photoshop (PSD) images from Photos or Files."
+            let message = "Some items couldn’t be read. Bring in JPEG, PNG, GIF, HEIC, HEIF, TIFF, WebP, OpenEXR, Radiance HDR, camera RAW, PDF, or Photoshop (PSD) images from Photos or Files."
             session.importError = [session.importError, message].compactMap { $0 }.joined(separator: "\n\n")
         }
     }
@@ -871,10 +871,10 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     // MARK: Drag and drop
 
-    /// Images and projects dropped on the window, as on the Mac: images into the project in front, centered where they
-    /// land on the canvas; projects in tabs of their own.
+    /// Images, PDFs and projects dropped on the window, as on the Mac: images and PDFs into the project in front,
+    /// centered where they land on the canvas; projects in tabs of their own.
     func dropInteraction(_ interaction: UIDropInteraction, canHandle session: any UIDropSession) -> Bool {
-        session.hasItemsConforming(toTypeIdentifiers: [UTType.image.identifier, UTType.compositorProject.identifier])
+        session.hasItemsConforming(toTypeIdentifiers: [UTType.image.identifier, UTType.pdf.identifier, UTType.compositorProject.identifier])
     }
 
     func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: any UIDropSession) -> UIDropProposal {
@@ -1011,7 +1011,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
             }
             self?.resizing = Task { [weak self] in
                 defer { session.isProjectBusy = false }
-                do { session.applyDocumentSize(try await CanvasResizer.shared.resize(snapshot, to: options), actionName: "Canvas Size") }
+                do {
+                    // Keeping the zoom, so added or trimmed canvas shows as such, as on the Mac.
+                    session.applyDocumentSize(try await CanvasResizer.shared.resize(snapshot, to: options), actionName: "Canvas Size",
+                                              keepingZoom: true)
+                }
                 catch { self?.showError("Couldn’t change canvas size", error) }
             }
         }

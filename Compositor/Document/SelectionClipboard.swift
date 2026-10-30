@@ -37,7 +37,7 @@ extension EditorSession {
 
     var canCopyPixels: Bool {
         guard canEditLayers, let layer = activeLayer, !layer.isGroup || isMaskSelected, selection?.isEmpty != true else { return false }
-        return isMaskSelected ? layer.mask != nil : layer.asset != nil
+        return isMaskSelected ? selectedMask(for: layer) != nil : layer.asset != nil
     }
 
     /// The active layer's pixels (or mask as opaque gray) exactly as they sit on the canvas,
@@ -48,19 +48,19 @@ extension EditorSession {
         let clip = try selection?.clip(canvas: document.size)
         if clip != nil, clip?.coverage == nil { return nil }
         guard let region = selectionCopyRegion() else { return nil }
-        let deep = sixteenBit && !mask ? try layer.asset.flatMap { try DeepLayer.flattened($0) } : nil
+        let deep = sixteenBit && !mask ? try displayedAsset(for: layer).flatMap { try DeepLayer.flattened($0) } : nil
         let context = deep == nil ? try BrushRaster.context(width: Int(region.width), height: Int(region.height), mask: false)
                                   : try DeepLayer.context(width: Int(region.width), height: Int(region.height),
                                                           hdr: deep.map(DeepLayer.isHDR) ?? false)
         context.translateBy(x: -region.minX, y: -region.minY)
         clip?.apply(to: context)
         let transform = displayedTransform(for: layer)
-        if mask, let owned = layer.mask {
+        if mask, let owned = selectedMask(for: layer) {
             let placement = displayedMaskPlacement(for: layer)
             context.setFillColor(gray: placement == nil ? 0 : LayerMask.background(of: owned.asset.thumbnail), alpha: 1)
             context.fill(region)
             LayerRenderer.drawCoverage(owned.asset.image, transform: placement ?? transform, in: context)
-        } else if !mask, let image = deep ?? layer.asset?.image {
+        } else if !mask, let image = deep ?? displayedAsset(for: layer)?.image {
             LayerRenderer.draw(image, transform: transform, center: transform.center, in: context)
         } else { return nil }
         guard let image = context.makeImage() else { throw ExportError.render }
@@ -246,20 +246,43 @@ extension EditorSession {
         let included = descendantIDs(of: layer.id).union([layer.id])
         let originals = (document?.layers ?? []).filter { included.contains($0.id) }
         guard (document?.layers.count ?? 0) + originals.count <= 10_000 else { return nil }
+        guard canRetainGIFSources(in: (document?.layers ?? []) + originals) else { return nil }
         let mapping = Dictionary(uniqueKeysWithValues: originals.map { ($0.id, UUID()) })
         let copies = originals.map { original in
-            ImageLayer(id: mapping[original.id]!, asset: original.asset,
+            ImageLayer(id: mapping[original.id]!, asset: displayedAsset(for: original),
                 name: original.name + (original.id == layer.id ? " copy" : ""), isVisible: original.isVisible,
                 transform: original.transform, parentID: original.parentID.map { mapping[$0] ?? $0 },
                 isGroup: original.isGroup, opacity: original.opacity, blendMode: original.blendMode,
                 mask: original.mask, maskSourceID: original.maskSourceID.map { mapping[$0] ?? $0 },
-                adjustment: original.adjustment, shape: original.shape, effects: original.effects, text: original.text)
+                adjustment: original.adjustment, shape: original.shape, effects: original.effects, text: original.text,
+                gifAnimation: currentGIFAnimation(for: original))
         }
         document?.layers.insert(contentsOf: copies, at: index + 1)
         for original in originals where collapsedGroupIDs.contains(original.id) {
             collapsedGroupIDs.insert(mapping[original.id]!)
         }
         return mapping[layer.id]
+    }
+
+    /// Each animation layer embeds its source and rebuilds its thumbnails on opening, even when runtime data is shared.
+    func canRetainGIFSources(in layers: [ImageLayer]) -> Bool {
+        var bytes = 0, thumbnailPixels = 0
+        if layers.contains(where: { $0.gifAnimation?.framePixels.isEmpty == false }) {
+            let pixels = layers.reduce(0) { total, layer in
+                total + (layer.asset.map { $0.image.width * $0.image.height } ?? 0)
+                    + (layer.gifAnimation?.framePixels.values.reduce(0) { $0 + $1.image.width * $1.image.height } ?? 0)
+            }
+            guard pixels <= DocumentLimits.documentPixelBudget else { return false }
+        }
+        for layer in layers {
+            guard let source = layer.gifAnimation?.source else { continue }
+            let pixels = source.frames.reduce(0) { $0 + $1.thumbnail.width * $1.thumbnail.height }
+            guard source.data.count <= GIFSource.totalByteLimit - bytes,
+                  pixels <= GIFSource.totalThumbnailPixelBudget - thumbnailPixels else { return false }
+            bytes += source.data.count
+            thumbnailPixels += pixels
+        }
+        return true
     }
 
     /// Option-drag in the Layers panel: a copy of the layer placed where it was dropped (inside `parent`,

@@ -117,11 +117,19 @@ nonisolated struct ImageSizeDraft {
             let multiplier = unit == .centimeters ? 2.54 : 1.0
             return pixels * multiplier / 9600...pixels * multiplier
         }
+        let pixelRange = Self.scrubPixelRange(pixels: pixels, other: other, locked: locked)
+        return displayed(pixelRange.lowerBound, widthAxis: widthAxis)...displayed(pixelRange.upperBound, widthAxis: widthAxis)
+    }
+
+    /// How far scrubbing a side of `pixels` can take it, in pixels, with the other side `other`: no side past
+    /// `DocumentLimits.maxSide` and no image past `DocumentLimits.maxSurfacePixels`, the other side following when locked.
+    static func scrubPixelRange(pixels: Double, other: Double, locked: Bool) -> ClosedRange<Double> {
         let minimum = locked ? max(1, pixels / other) : 1.0
-        let dimensionLimit = locked ? min(30_000, 30_000 * pixels / other) : 30_000.0
-        let areaLimit = locked ? sqrt(100_000_000 * pixels / other) : 100_000_000 / other
-        let maximum = max(minimum, min(dimensionLimit, areaLimit))
-        return displayed(minimum, widthAxis: widthAxis)...displayed(maximum, widthAxis: widthAxis)
+        let sideLimit = Double(DocumentLimits.maxSide)
+        let surfaceLimit = Double(DocumentLimits.maxSurfacePixels)
+        let dimensionLimit = locked ? min(sideLimit, sideLimit * pixels / other) : sideLimit
+        let areaLimit = locked ? sqrt(surfaceLimit * pixels / other) : surfaceLimit / other
+        return minimum...max(minimum, min(dimensionLimit, areaLimit))
     }
 
     /// How much a point of scrubbing changes the width or height, in the unit chosen.

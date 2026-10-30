@@ -68,9 +68,10 @@ A minimal manifest with one full-canvas image layer:
 Break one of these and Compositor refuses the whole file **without any message**: the open canvas just stays as it was. If nothing updates, check these first.
 
 - **Image files are named after their layer.** A layer with `"id": "6F1D…"` must use `"imageFile": "6F1D….png"`, and a mask `"maskFile": "6F1D….mask.png"`, with the ID in uppercase as written in the manifest. One ID per layer, unique in the project.
-- **Images are 8-bit PNGs** in `images/`. Layer images are RGBA; masks are 8-bit grayscale (white shows the layer, black hides it).
+- **Images are 8-bit PNGs** in `images/`. Layer images are RGBA; masks are 8-bit grayscale (white shows the layer, black hides it). Anything else becomes a PNG first: a JPEG, WebP or PSD is converted, and a PDF is rendered a page at a time (the app uses 300 DPI) into one layer per page, page 1 on top, the last in the `layers` array.
 - **Blend modes are spelled exactly** as Compositor names them: `Normal`, `Darken`, `Multiply`, `Color Burn`, `Linear Burn`, `Lighten`, `Screen`, `Color Dodge`, `Linear Dodge (Add)`, `Overlay`, `Soft Light`, `Hard Light`, `Vivid Light`, `Linear Light`, `Pin Light`, `Hard Mix`, `Difference`, `Exclusion`, `Subtract`, `Divide`, `Hue`, `Saturation`, `Color`, `Luminosity`.
 - **Every layer the manifest names has its image in place**, and the manifest is valid JSON.
+- **A line's `lineStyle` and `lineCap` need a manifest `version` of at least 15**, and only a `shape` of kind `Line` may carry them: `lineStyle` is `Solid`, `Dashed`, `Long Dash` or `Dotted`, and `lineCap` is `Square` or `Round`.
 
 ## Writing safely while the project is open
 
@@ -128,7 +129,7 @@ An adjustment layer has an `adjustment` object and no `imageFile`, and it affect
 ```
 
 - `ranges` and `channels` run RGB, then red, green, blue. Curve points run from x 0 to x 255, in increasing x.
-- `kind` is one of `Hue/Saturation`, `Levels`, `Curves`, `Exposure`, `Gradient Map`, `Grain`, `Invert`, `Black & White`, `Color Balance`, `Gaussian Blur`, `Motion Blur`, `Add Noise`.
+- `kind` is one of `Hue/Saturation`, `Levels`, `Curves`, `Exposure`, `Gradient Map`, `Grain`, `Invert`, `Black & White`, `Color Balance`, `Gaussian Blur`, `Motion Blur`, `Add Noise`, from manifest `version` 16 `Progressive Blur`, `Bloom / Glow` and `RGB Split`, from 18 `Vignette`, `Lens Effects` and `Tonal Contrast`, and from 19 `Sharpen`, whose settings go in a `filterLayerSettings` object (fields and ranges in [project-format.md](project-format.md), versions 16, 18, 19 and 20).
 - For Hue/Saturation, set `hue`, `saturation` and `lightness` on the adjustment itself. Color Balance takes a `colorBalanceSettings` object (`shadowCyanRed`, `shadowMagentaGreen`, `shadowYellowBlue`, and the same for `mid` and `highlight`, each −100 to 100, plus `preserveLuminosity`).
 - For the other kinds, the easiest way to get the exact shape is to add one in Compositor, save, and copy it from that project's manifest.
 
@@ -136,3 +137,9 @@ An adjustment layer has an `adjustment` object and no `imageFile`, and it affect
 
 - Folders, text layers, layer effects and everything else the format holds: [project-format.md](project-format.md).
 - Limits: canvases up to 30,000 pixels on a side; layers and masks count toward a memory budget that scales with the Mac.
+
+## GIF layers
+
+Use version 17 or later and add a `gif` object with `sourceFile: "<id>.gif"` and a zero-based `selectedFrameIndex` to an ordinary image layer. Embed the original GIF under `images/`, and keep `imageFile: "<id>.png"` as the selected frame's unmasked pixels. Save assets before replacing the manifest.
+
+Preserve existing geometry, frame order, edited frames and timing when editing a package; the layer's one mask applies to every frame, so never bake it into frame pixels. See [project-format.md](project-format.md) (version 17) for the fields and limits.

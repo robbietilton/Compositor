@@ -78,6 +78,46 @@ nonisolated struct PSDRecord: @unchecked Sendable {
     var shapeNotes: [String] = []
     /// Parsed Photoshop type, when the `TySh` block maps onto an editable text layer.
     var text: PSDText.Source?
+    /// An artboard folder's rectangle on the canvas.
+    var artboard: CGRect?
+}
+
+extension PSDDocument {
+    /// A file with artboards as one document per artboard, in the file's order (the bottom of Photoshop's Layers panel
+    /// first, which is usually the first artboard made): each the artboard's size, with its layers moved
+    /// so the artboard's corner is the canvas's and no artboard folder around them. Nil for a file without artboards.
+    /// Layers outside every artboard belong to none, so none of the documents has them.
+    nonisolated func artboards() -> [(name: String, document: PSDDocument)]? {
+        let boards = layers.filter { $0.isGroup && $0.artboard != nil }
+        guard !boards.isEmpty else { return nil }
+        let ids = Set(boards.map(\.id))
+        let parents = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0.parentID) })
+        func board(of id: UUID) -> UUID? {
+            var next = parents[id] ?? nil
+            while let parent = next {
+                if ids.contains(parent) { return parent }
+                next = parents[parent] ?? nil
+            }
+            return nil
+        }
+        return boards.compactMap { artboard in
+            guard let rect = artboard.artboard?.integral else { return nil }
+            let width = Int(rect.width), height = Int(rect.height)
+            guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
+                  width * height <= DocumentLimits.maxSurfacePixels else { return nil }
+            let shift = CGAffineTransform(translationX: -rect.minX, y: -rect.minY)
+            let inside = layers.filter { board(of: $0.id) == artboard.id }.map { record -> PSDRecord in
+                var moved = record
+                if moved.parentID == artboard.id { moved.parentID = nil }
+                moved.bounds = moved.isGroup ? CGRect(x: 0, y: 0, width: width, height: height) : moved.bounds.applying(shift)
+                moved.maskBounds = moved.maskBounds.applying(shift)
+                if let anchor = moved.text?.documentAnchor { moved.text?.documentAnchor = anchor.applying(shift) }
+                return moved
+            }
+            return (artboard.name, PSDDocument(width: width, height: height, resolution: resolution, cmykProfile: cmykProfile,
+                                               layers: inside))
+        }
+    }
 }
 
 nonisolated enum PSDLayerKind: Equatable, Sendable {

@@ -194,6 +194,8 @@ import UIKit
         // A layer being painted: its grid as the stroke leaves it, through its own mask where its old pixels were.
         func painted(_ layer: ImageLayer, stroke: BrushStroke, opacity: Double) -> CIImage? {
             let gridRect = CGRect(x: 0, y: 0, width: stroke.width, height: stroke.height)
+            // The stroke captures the selected GIF frame; the document layer keeps its first-frame asset.
+            let asset = stroke.layer.asset
             let placedApart = stroke.isMask && stroke.layer.mask?.placement != nil
             // A mask on its own placement paints in its own grid; the layer draws where it is.
             let transform = placedApart ? session.displayedTransform(for: layer) : stroke.paintTransform
@@ -219,8 +221,8 @@ import UIKit
             // Painting a mask placed apart: the layer where it is, through the mask as the stroke leaves it.
             if placedApart {
                 let pixels: CIImage?
-                if let raster = layer.asset?.raster { pixels = placement.place(raster, transform: transform) }
-                else { pixels = layer.asset.flatMap { placement.place($0.image, transform: transform) } }
+                if let raster = asset?.raster { pixels = placement.place(raster, transform: transform) }
+                else { pixels = asset.flatMap { placement.place($0.image, transform: transform) } }
                 guard var image = pixels else { return nil }
                 if let preview = stroke.placedMaskPreview(placement: stroke.paintTransform) {
                     guard let mask = placement.place(transient: preview, transform: transform, mask: true) else { return nil }
@@ -232,8 +234,8 @@ import UIKit
             if stroke.isMask {
                 guard let mask = maskGrid(stroke) else { return nil }
                 let pixels: CIImage?
-                if let raster = layer.asset?.raster { pixels = placement.renderer.image(raster) }
-                else { pixels = layer.asset.flatMap { placement.renderer.image($0.image) } }
+                if let raster = asset?.raster { pixels = placement.renderer.image(raster) }
+                else { pixels = asset.flatMap { placement.renderer.image($0.image) } }
                 guard let pixels else { return nil }
                 grid = GPUBlend.masked(inGrid(pixels, stroke: stroke), by: mask)
             } else if let edit = session.gradientEdit, edit.raster === stroke {
@@ -336,13 +338,17 @@ import UIKit
                 }
                 return GPUBlend.faded(above.composited(over: below), opacity)
             }
-            guard layer.asset != nil || session.filterEdit?.previewImage(for: layer.id) != nil else { return nil }
+            // A GIF layer as the frame shown: one picked in its timeline, or edited, isn't its asset.
+            let displayedLayer = session.displayedLayer(for: layer)
+            let displayedAsset = displayedLayer.asset
+            let displayedMask = displayedLayer.mask
+            guard displayedAsset != nil || session.filterEdit?.previewImage(for: layer.id) != nil else { return nil }
             // A distortion in progress, with effects: them, warped into the shape.
             if layer.effects?.visible.isEmpty == false, let edit = session.transformEdit, !edit.mask, edit.corners != nil,
-               let effects = session.effectsPreviews.preview(for: layer,
-                    mask: layer.mask?.clipImage(placement: session.displayedMaskPlacement(for: layer), over: layer.transform,
-                        width: layer.asset?.image.width ?? Int(layer.size.width.rounded()),
-                        height: layer.asset?.image.height ?? Int(layer.size.height.rounded()), limit: 2048),
+               let effects = session.effectsPreviews.preview(for: displayedLayer,
+                    mask: displayedMask?.clipImage(placement: session.displayedMaskPlacement(for: layer), over: layer.transform,
+                        width: displayedAsset?.image.width ?? Int(layer.size.width.rounded()),
+                        height: displayedAsset?.image.height ?? Int(layer.size.height.rounded()), limit: 2048),
                     transform: layer.transform, maskPlacement: session.displayedMaskPlacement(for: layer),
                     completion: { [weak self] in self?.needsRedraw() }),
                let warped = session.distortedEffects(for: layer, effects: effects.image, inset: effects.inset) {
@@ -350,10 +356,10 @@ import UIKit
                 return GPUBlend.faded(image, opacity)
             }
             // Without: taken into the shape here in perspective, and its mask with it.
-            if let target = session.distortShape(for: layer), let image = layer.asset?.image,
-               layer.mask.map({ $0.placement == nil && $0.isLinked }) ?? true,
+            if let target = session.distortShape(for: layer), let image = displayedAsset?.image,
+               displayedMask.map({ $0.placement == nil && $0.isLinked }) ?? true,
                var warped = placement.warp(image, transform: target.transform, corners: target.corners) {
-                if let mask = layer.mask?.enabledImage {
+                if let mask = displayedMask?.enabledImage {
                     guard let shape = placement.warp(mask, transform: target.transform, corners: target.corners, mask: true)
                     else { unsupported = true; return nil }
                     warped = GPUBlend.masked(warped, by: shape)
@@ -370,21 +376,21 @@ import UIKit
             let transform = session.displayedTransform(for: layer)
             // A mask placed apart from its layer is resampled into the layer's grid.
             let mask: CGImage? = {
-                guard let owned = layer.mask else { return nil }
+                guard let owned = displayedMask else { return nil }
                 if let distorted = session.maskDistortPreview(for: layer) { return distorted }
                 guard let maskPlacement = session.displayedMaskPlacement(for: layer) else { return owned.enabledImage }
                 let drawn = max(transform.size.width, transform.size.height) * placement.scale
                 let steady = pow(2, ceil(log2(max(64, drawn))))
                 return owned.clipImage(placement: maskPlacement, over: transform,
-                    width: layer.asset?.image.width ?? Int(transform.size.width.rounded()),
-                    height: layer.asset?.image.height ?? Int(transform.size.height.rounded()),
+                    width: displayedAsset?.image.width ?? Int(transform.size.width.rounded()),
+                    height: displayedAsset?.image.height ?? Int(transform.size.height.rounded()),
                     limit: session.transformEdit != nil ? min(2048, steady) : steady)
             }()
             // A filter's or an adjustment's preview, shown in place of the layer's pixels.
             let previewed = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id)
                 ?? session.hueSaturation?.previewImage(for: layer.id)
-            if layer.asset != nil,
-               let effects = session.effectsPreviews.preview(for: layer, pixels: previewed, mask: mask, transform: transform,
+            if displayedAsset != nil,
+               let effects = session.effectsPreviews.preview(for: displayedLayer, pixels: previewed, mask: mask, transform: transform,
                     maskPlacement: session.displayedMaskPlacement(for: layer), completion: { [weak self] in
                         self?.needsRedraw()
                     }) {
@@ -395,7 +401,7 @@ import UIKit
             let placed: CIImage?
             if let shaped = session.shapeTransformPreview(for: layer, transform: transform) {
                 placed = placement.place(shaped, transform: transform)
-            } else if let asset = layer.asset, previewed == nil, hasHDR || adjustedIDs.contains(layer.id),
+            } else if let asset = displayedAsset, previewed == nil, hasHDR || adjustedIDs.contains(layer.id),
                       let full = DeepLayer.canvasImage(asset) {
                 // A 16-bit or HDR layer from its own pixels, so an adjustment over it previews as it will export: smooth,
                 // and bringing HDR highlights into view. The screen still shows anything brighter than white as white.
@@ -406,9 +412,9 @@ import UIKit
                 // 8-bit copy the layer keeps anyway, which looks the same on screen. Held to a budget, that cache would
                 // let the iPad follow the Mac here.
                 placed = placement.place(full, transform: transform)
-            } else if let raster = layer.asset?.raster, previewed == nil {
+            } else if let raster = displayedAsset?.raster, previewed == nil {
                 placed = placement.place(raster, transform: transform)
-            } else if let image = previewed ?? layer.asset?.image {
+            } else if let image = previewed ?? displayedAsset?.image {
                 placed = placement.place(image, transform: transform)
             } else { return nil }
             guard var image = placed else { unsupported = true; return nil }
@@ -420,8 +426,17 @@ import UIKit
         }
         // An adjustment re-colors what's under it, through its own mask and its folders' masks, at its opacity.
         func adjusted(_ below: CIImage, by layer: ImageLayer, adjustment: LayerAdjustment, folders: Bool) -> CIImage? {
-            guard var changed = GPUAdjustment.apply(adjustment, to: below, scale: placement.scale, mapping: placement.mapping,
-                                                    hdr: hasHDR)
+            // Lens Effects works on what's below as pixels, as the export does: the canvas places layers with nearest sampling,
+            // which its spikes' rotations would carry through, keeping hard bright pixels the export smooths.
+            var source = below
+            if adjustment.kind == .lensEffects {
+                let page = CGRect(origin: .zero, size: document.size).applying(placement.mapping)
+                source = placement.renderer.keep(below.cropped(to: page)) ?? below
+            }
+            // Vignette frames the canvas, and Lens Effects measures itself by it, as the export does. With nothing under
+            // it, an RGB Split has nothing to split, and is nothing too, where the Mac would fall back to Core Graphics.
+            guard var changed = GPUAdjustment.apply(adjustment, to: source, scale: placement.scale, mapping: placement.mapping,
+                                                    hdr: hasHDR, document: document.size) ?? (below.extent.isEmpty ? below : nil)
             else { return nil }
             let mode = session.displayedBlendMode(for: layer)
             if mode != .normal {

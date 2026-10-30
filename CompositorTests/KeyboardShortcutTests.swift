@@ -88,4 +88,17 @@ extension KeyboardShortcutTests {
         let v = try key("v", 9)
         #expect(settings.canvasEvent(v) === v, "other keys still reach the canvas")
     }
+
+    /// A key that types a non-Latin letter (here Russian и, on the B key) reads as the Latin letter of the same key, so
+    /// tool shortcuts work on any layout; a Latin key is left alone.
+    @Test func nonLatinLayoutsReachTheShortcutsOnTheSameKeys() throws {
+        func key(_ typed: String, code: UInt16) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                          context: nil, characters: typed, charactersIgnoringModifiers: typed,
+                                          isARepeat: false, keyCode: code))
+        }
+        let latin = try #require(LatinKeys.character(for: 11, shift: false))
+        #expect(LatinKeys.event(try key("и", code: 11)).charactersIgnoringModifiers == latin)
+        #expect(LatinKeys.event(try key("b", code: 11)).charactersIgnoringModifiers == "b")
+    }
 }
