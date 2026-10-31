@@ -145,9 +145,16 @@ struct CompositorApp: App {
                         Toggle("Navigator (300% and above)", isOn: $showsNavigator)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
-                        Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },
-                                                                          set: { session.showsTransformControls = $0 }))
-                            .configuredKeyboardShortcut("h").disabled(session.tool != .move || session.document == nil)
+                        // ⌘H: the Move tool's transform box there, the selection's outline everywhere else.
+                        if session.tool == .move {
+                            Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },
+                                                                              set: { session.showsTransformControls = $0 }))
+                                .configuredKeyboardShortcut("h").disabled(session.document == nil)
+                        } else {
+                            Toggle("Show Selection Edges", isOn: Binding(get: { session.showsSelectionEdges },
+                                                                           set: { session.showsSelectionEdges = $0 }))
+                                .configuredKeyboardShortcut("h").disabled(session.selection?.isEmpty != false)
+                        }
                         Divider()
                         // Print: the canvas as the chosen CMYK profile will print it, tucked in a submenu as few need it. No
                         // shortcuts (Photoshop's ⌘Y sits by ⌘U and would be hit by mistake); Search Commands finds them.
@@ -203,7 +210,7 @@ struct CompositorApp: App {
                                 .disabled(!session.canClearGuides)
                         }
                     }
-                    // ⌘H toggles the Move tool's transform controls instead of hiding the app, so Hide keeps its
+                    // ⌘H toggles the transform controls or selection edges instead of hiding the app, so Hide keeps its
                     // place in the app menu without the shortcut.
                     CommandGroup(replacing: .appVisibility) {
                         Button("Hide Compositor") { NSApp.hide(nil) }

@@ -119,6 +119,12 @@ extension EditorSession {
     var selection: DocumentSelection? { document?.selection }
     var canEditSelection: Bool { canEditLayers }
 
+    /// View › Show Selection Edges (⌘H): off hides the marching ants of the current selection only.
+    var showsSelectionEdges: Bool {
+        get { selection == nil || hiddenSelectionEdges != selection }
+        set { hiddenSelectionEdges = newValue ? nil : selection }
+    }
+
     /// Shift adds, Option (with or without Shift) subtracts; otherwise the options-bar mode.
     func selectionMode(shift: Bool, option: Bool) -> SelectionMode {
         option ? .subtract : shift ? .add : selectionModeChoice
