@@ -17,28 +17,45 @@ nonisolated enum ExportError: LocalizedError {
 actor ImageExporter {
     static let shared = ImageExporter()
 
+    /// How far an export has come, said on the exporter's thread for whoever shows it.
+    nonisolated enum Progress: Sendable, Equatable {
+        /// The image is about to be composed of `total` layers: those drawn, visible and not folders.
+        case composing(total: Int)
+        /// The first `done` of them are composed, in order.
+        case composed(done: Int)
+        /// The image is composed, and is being encoded.
+        case encoding
+    }
+
+    /// `snapshot` flattened, at its own size or, for a preview, `scale` of it: drawn at that size, not shrunk from the
+    /// whole.
     /// `sixteenBit`: flattened at 16 bits a channel, drawing 16-bit layers from their 16-bit pixels (`DeepLayer`),
     /// for a 16-bit PNG. Layers, clipping stacks and adjustment layers come through at full precision; effects and
     /// blend modes that need their own surface pass through 8 bits on the way.
     /// `hdr` (with `sixteenBit`): flattened in half floats instead, keeping HDR layers' light brighter than white, for an
     /// EXR.
-    func render(_ snapshot: ProjectSnapshot, sixteenBit: Bool = false, hdr: Bool = false) throws -> ExportRaster {
+    /// `progress` is told how far it has come as it goes.
+    func render(_ snapshot: ProjectSnapshot, scale: CGFloat = 1, sixteenBit: Bool = false, hdr: Bool = false,
+                progress: (@Sendable (Progress) -> Void)? = nil) throws -> ExportRaster {
         let width = snapshot.manifest.width, height = snapshot.manifest.height
         guard (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height),
               width * height <= DocumentLimits.maxSurfacePixels else { throw ExportError.tooLarge }
-        return try autoreleasepool {
-            let hdr = hdr && sixteenBit
+        let scale = min(1, scale)
+        let pixelWidth = max(1, Int((CGFloat(width) * scale).rounded())), pixelHeight = max(1, Int((CGFloat(height) * scale).rounded()))
+        let hdr = hdr && sixteenBit
+        let rendering = Timing.begin("Render")
+        let raster = try autoreleasepool {
             guard let space = hdr ? DeepLayer.hdrSpace : CGColorSpace(name: CGColorSpace.sRGB),
-                  let context = CGContext(data: nil, width: width, height: height,
-                                          bitsPerComponent: sixteenBit ? 16 : 8, bytesPerRow: width * (sixteenBit ? 8 : 4), space: space,
+                  let context = CGContext(data: nil, width: pixelWidth, height: pixelHeight,
+                                          bitsPerComponent: sixteenBit ? 16 : 8, bytesPerRow: pixelWidth * (sixteenBit ? 8 : 4), space: space,
                                           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
                                               | (sixteenBit ? CGBitmapInfo.byteOrder16Little.rawValue : 0)
                                               | (hdr ? CGBitmapInfo.floatComponents.rawValue : 0)) else {
                 throw ExportError.render
             }
-            context.clear(CGRect(x: 0, y: 0, width: width, height: height))
-            context.translateBy(x: 0, y: CGFloat(height))
-            context.scaleBy(x: 1, y: -1)
+            context.clear(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+            context.translateBy(x: 0, y: CGFloat(pixelHeight))
+            context.scaleBy(x: CGFloat(pixelWidth) / CGFloat(width), y: -CGFloat(pixelHeight) / CGFloat(height))
             let records = Dictionary(uniqueKeysWithValues: snapshot.manifest.layers.map { ($0.id, $0) })
             for layer in snapshot.manifest.layers {
                 guard layer.imageFile == nil || snapshot.images[layer.id] != nil,
@@ -66,6 +83,9 @@ actor ImageExporter {
                 if SeparableBlend.needsSurface(mode), SeparableBlend.draw(mode, in: target, body: { drawLayer(.normal, $0) }) { return }
                 drawLayer(mode, target)
             }
+            // The surfaces made along the way are as sharp as the image they go into.
+            live.resolution = CGFloat(pixelWidth) / CGFloat(width)
+            live.adjustmentScale = live.resolution
             live.sixteenBit = sixteenBit
             live.hdr = hdr
             live.adjustment = { records[$0]?.adjustment }
@@ -75,23 +95,39 @@ actor ImageExporter {
                     FolderMaskClip(image: image, transform: layer.transform).apply(center: layer.transform.center, in: ctx)
                 }
             }
-            live.prepareStacks(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
-            FolderMaskClip.draw(LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id), parent: { records[$0]?.parentID }, clip: { id in
+            let visible = LayerHierarchy.visibleLayers(snapshot.manifest.layers).map(\.id)
+            live.prepareStacks(visible, parent: { records[$0]?.parentID }, blend: { records[$0]?.blendMode ?? .normal })
+            progress?(.composing(total: visible.count))
+            var composed = 0
+            FolderMaskClip.draw(visible, parent: { records[$0]?.parentID }, clip: { id in
                 guard let folder = records[id], let image = snapshot.mask(for: folder)?.enabledImage else { return nil }
                 let clip = FolderMaskClip(image: image, transform: folder.transform)
                 return { clip.apply(center: folder.transform.center, in: $0) }
-            }, in: context) { live.drawComposite($0, in: context) }
+            }, in: context) { id in
+                live.drawComposite(id, in: context)
+                composed += 1
+                progress?(.composed(done: composed))
+            }
             guard let image = context.makeImage() else { throw ExportError.render }
             return ExportRaster(image: image, resolution: snapshot.manifest.resolution ?? 72)
         }
+        Timing.end(rendering, "\(pixelWidth)×\(pixelHeight)" + (hdr ? ", HDR" : sixteenBit ? ", 16-bit" : ""))
+        return raster
     }
 
     /// The Space-bar preview, saved in the project's QuickLook folder: the flattened image on white, a JPEG up to
     /// 1,024 px on the long side, about 100–200 KB. Nil for canvases too large to flatten on every save.
     func quickLookImages(_ snapshot: ProjectSnapshot) -> QuickLookImages? {
+        let making = Timing.begin("QuickLook preview")
+        let longSide = max(snapshot.manifest.width, snapshot.manifest.height)
+        // Drawn no smaller than half size, where a layer at its own size draws straight, then shrunk; the reductions a
+        // smaller one needs aren't kept, as nothing draws this again.
         guard snapshot.manifest.width * snapshot.manifest.height <= 50_000_000,
-              let raster = try? render(snapshot),
+              let raster = try? DownsampleCache.$keeps.withValue(false, operation: {
+                  try render(snapshot, scale: max(0.5, 1024 / CGFloat(longSide)))
+              }),
               let preview = try? scaledJPEG(raster.image, longSide: 1024) else { return nil }
+        Timing.end(making)
         return QuickLookImages(preview: preview)
     }
 
@@ -112,8 +148,11 @@ actor ImageExporter {
         }
     }
 
-    func pngData(_ snapshot: ProjectSnapshot) throws -> Data {
-        try pngData(render(snapshot))
+    /// `snapshot` flattened and encoded as PNG. `progress` is told how far it has come as it goes.
+    func pngData(_ snapshot: ProjectSnapshot, progress: (@Sendable (Progress) -> Void)? = nil) throws -> Data {
+        let raster = try render(snapshot, progress: progress)
+        progress?(.encoding)
+        return try pngData(raster)
     }
 
     /// Export Layers as PNGs: the layer `id` on its own, as it looks in the document, trimmed to its pixels. Nil when it
@@ -157,25 +196,33 @@ actor ImageExporter {
     /// inks over `matte`, the profile embedded, as print shops take it.
     func tiffData(_ raster: ExportRaster, cmyk: CMYKProfile? = nil, matte: CGColor = CGColor(gray: 1, alpha: 1)) throws -> (data: Data, preview: CGImage) {
         try Task.checkCancellation()
+        let encoding = Timing.begin("Encode TIFF")
         let image = try cmyk.map { try CMYK.convert(raster.image, to: $0, over: matte) } ?? raster.image
         let data = try encode(image, type: .tiff, properties: [
             kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution,
             kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5], // LZW
         ] as CFDictionary)
+        Timing.end(encoding, Timing.bytes(data.count))
         return (data, image)
     }
 
-    /// An HDR flattening (`render(_:sixteenBit:hdr:)`) as OpenEXR, highlights kept.
+    /// An HDR flattening (`render` with `sixteenBit` and `hdr`) as OpenEXR, highlights kept.
     func exrData(_ raster: ExportRaster) throws -> Data {
-        try encode(raster.image, type: .openEXR, properties: [
+        let encoding = Timing.begin("Encode EXR")
+        let data = try encode(raster.image, type: .openEXR, properties: [
             kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution
         ] as CFDictionary)
+        Timing.end(encoding, Timing.bytes(data.count))
+        return data
     }
 
     func pngData(_ raster: ExportRaster) throws -> Data {
-        try encode(raster.image, type: .png, properties: [
+        let encoding = Timing.begin("Encode PNG")
+        let data = try encode(raster.image, type: .png, properties: [
             kCGImagePropertyDPIWidth: raster.resolution, kCGImagePropertyDPIHeight: raster.resolution
         ] as CFDictionary)
+        Timing.end(encoding, Timing.bytes(data.count))
+        return data
     }
 
     /// The flattened canvas at another size, for Export As: resampled at high quality, keeping its resolution, so a
@@ -211,10 +258,14 @@ actor ImageExporter {
         return data as Data
     }
 
-    /// `cmyk`: in that profile's inks, for print, the profile embedded.
-    func jpeg(_ raster: ExportRaster, options: JPEGOptions, cmyk: CMYKProfile? = nil) throws -> JPEGResult {
+    /// `raster` over the options' color and encoded as JPEG at their quality, with a preview of it decoded. `cmyk`: in
+    /// that profile's inks, for print, the profile embedded. `progress` is told as it encodes.
+    func jpeg(_ raster: ExportRaster, options: JPEGOptions, cmyk: CMYKProfile? = nil,
+              progress: (@Sendable (Progress) -> Void)? = nil) throws -> JPEGResult {
         try Task.checkCancellation()
-        return try autoreleasepool {
+        progress?(.encoding)
+        let encoding = Timing.begin("Encode JPEG")
+        let result = try autoreleasepool {
             let image = raster.image
             guard let context = CGContext(data: nil, width: image.width, height: image.height,
                 bitsPerComponent: 8, bytesPerRow: image.width * 4,
@@ -243,6 +294,8 @@ actor ImageExporter {
                   ] as CFDictionary) else { throw ExportError.encode }
             return JPEGResult(data: data, preview: preview)
         }
+        Timing.end(encoding, "quality \(Int((options.quality * 100).rounded()))%, \(Timing.bytes(result.data.count))")
+        return result
     }
 
     /// The picture over a solid color, as a page with that background shows it.
@@ -273,6 +326,7 @@ actor ImageExporter {
     /// `background` fills the page under the picture; nil leaves it clear, as a viewer then shows its own paper.
     /// `cmyk`: the picture in that profile's inks, over `background` (or white paper), for print.
     func pdfData(_ raster: ExportRaster, background: CGColor? = nil, cmyk: CMYKProfile? = nil) throws -> Data {
+        let encoding = Timing.begin("Encode PDF")
         let pointsPerPixel = 72 / (raster.resolution > 0 ? raster.resolution : 72)
         var page = CGRect(x: 0, y: 0, width: CGFloat(raster.image.width) * pointsPerPixel,
                           height: CGFloat(raster.image.height) * pointsPerPixel)
@@ -291,6 +345,7 @@ actor ImageExporter {
         }
         context.endPDFPage()
         context.closePDF()
+        Timing.end(encoding, Timing.bytes(data.length))
         return data as Data
     }
 

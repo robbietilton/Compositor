@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#endif
+import CoreGraphics
+import Foundation
 
 nonisolated enum LiveMaskGraph {
     static func validate(_ layers: [ProjectLayerRecord]) throws {
@@ -105,6 +109,7 @@ extension EditorSession {
         let removed = ids.reduce(into: Set<UUID>()) { $0.formUnion(descendantIDs(of: $1).union([$1])) }
         let targets = (document?.layers ?? []).filter { !removed.contains($0.id) && $0.maskSourceID.map(removed.contains) == true }.map(\.id)
         guard !targets.isEmpty else { return false }
+        #if os(macOS)
         let alert = NSAlert()
         alert.messageText = ids.count == 1 ? "This layer supplies a live mask" : "These layers supply live masks"
         alert.informativeText = "Bake keeps the current masked appearance in the dependent layers’ pixels. Remove Links reveals their pixels. You can undo either choice."
@@ -114,6 +119,10 @@ extension EditorSession {
         let response = alert.runModal()
         if response == .alertThirdButtonReturn { finishDeletingLayers(ids, baked: [:]); return true }
         guard response == .alertFirstButtonReturn, let snapshot = projectSnapshot() else { return true }
+        #else
+        // Nothing asks yet on iPadOS: the dependent layers keep looking as they do, which undo can take back.
+        guard let snapshot = projectSnapshot() else { return true }
+        #endif
         isProjectBusy = true
         Task {
             defer { isProjectBusy = false }

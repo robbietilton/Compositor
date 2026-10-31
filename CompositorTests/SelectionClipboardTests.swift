@@ -2,7 +2,7 @@ import AppKit
 import Testing
 @testable import Compositor
 
-/// Serialized: every test in this process shares its one pasteboard (`EditorSession.pasteboard`, private to the process,
+/// Serialized: every test in this process shares its one pasteboard (`SystemPasteboard.pasteboard`, private to the process,
 /// so other test processes running in parallel can't copy over it).
 @MainActor @Suite(.serialized)
 struct SelectionClipboardTests {
@@ -62,7 +62,7 @@ struct SelectionClipboardTests {
     @Test(arguments: [8, 16])
     func pastingAnImageOnTheNewCanvasScreenMakesTheCanvas(bits: Int) async throws {
         let session = EditorSession()
-        let pasteboard = EditorSession.pasteboard
+        let pasteboard = SystemPasteboard.pasteboard
         pasteboard.clearContents()
         pasteboard.setData(try png(width: 320, height: 200, bits: bits), forType: .png)
         #expect(session.document == nil && session.canPasteImageAsNewCanvas)
@@ -77,7 +77,7 @@ struct SelectionClipboardTests {
     /// A size copied as text goes into the size field, image or not.
     @Test func aSizeOnTheClipboardIsLeftForTheField() throws {
         let session = EditorSession()
-        let pasteboard = EditorSession.pasteboard
+        let pasteboard = SystemPasteboard.pasteboard
         pasteboard.clearContents()
         pasteboard.setString("1920", forType: .string)
         #expect(!session.canPasteImageAsNewCanvas)

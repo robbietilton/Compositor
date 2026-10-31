@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import CoreImage
 
 /// Shared plumbing for whole-image adjustments: unmanaged Core Image rendering, selection

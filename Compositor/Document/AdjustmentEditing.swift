@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 extension EditorSession {
     /// Uses the ordinary color editors, but sends their changes to layer metadata.

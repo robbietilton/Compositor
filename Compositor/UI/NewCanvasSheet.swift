@@ -121,9 +121,14 @@ struct NewCanvasSheet: View {
                     .accessibilityLabel("Preset sizes")
                 }
             }
-            HStack(spacing: 16) {
+            HStack(alignment: .sizeFieldCenter, spacing: 16) {
                 dimension("Width", text: $width, field: .width)
-                Image(systemName: "multiply").foregroundStyle(.tertiary).padding(.top, 20)
+                Button { (width, height) = (height, width) } label: {
+                    Image(systemName: "arrow.left.arrow.right").frame(width: 28, height: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .help("Swap width and height")
+                .accessibilityLabel("Swap width and height").accessibilityIdentifier("swapSize")
                 dimension("Height", text: $height, field: .height)
             }
             // The settings are pills, each changed the same way: click to step to the next choice.
@@ -210,8 +215,17 @@ struct NewCanvasSheet: View {
                 Text(unit.rawValue).foregroundStyle(.secondary)
             }
             .padding(12).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
+            .alignmentGuide(.sizeFieldCenter) { $0[VerticalAlignment.center] }
         }
     }
+}
+
+private extension VerticalAlignment {
+    /// The middle of the size fields, below their labels, which the swap button between them lines up with.
+    nonisolated struct SizeFieldCenter: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat { context[VerticalAlignment.center] }
+    }
+    static let sizeFieldCenter = VerticalAlignment(SizeFieldCenter.self)
 }
 
 /// A setting that steps through its few values when clicked, shown as plain text that gains a soft pill on hover.
@@ -232,34 +246,4 @@ private struct CyclePill: View {
         .onHover { hovering = $0 }
         .help(help)
     }
-}
-
-/// New Canvas sizes: common screens and resolutions, in pixels, upright as the device is usually held.
-struct CanvasPreset: Identifiable, Hashable {
-    let title: String
-    let width: Int
-    let height: Int
-    var id: String { title }
-    /// Resolutions, Apple screens, then social formats; the menu divides them.
-    static let groups: [[CanvasPreset]] = [
-        [
-            CanvasPreset(title: "4K", width: 3840, height: 2160),
-            CanvasPreset(title: "1440p", width: 2560, height: 1440),
-            CanvasPreset(title: "1080p", width: 1920, height: 1080),
-        ],
-        [
-            CanvasPreset(title: "iPhone 18 Pro", width: 1206, height: 2622),
-            CanvasPreset(title: "iPhone 18 Pro Max", width: 1320, height: 2868),
-            CanvasPreset(title: "MacBook Pro 14\"", width: 3024, height: 1964),
-            CanvasPreset(title: "MacBook Pro 16\"", width: 3456, height: 2234),
-            CanvasPreset(title: "Studio Display", width: 5120, height: 2880),
-        ],
-        [
-            CanvasPreset(title: "Instagram Square", width: 1080, height: 1080),
-            CanvasPreset(title: "Instagram Portrait", width: 1080, height: 1350),
-            CanvasPreset(title: "Instagram Story", width: 1080, height: 1920),
-            CanvasPreset(title: "YouTube Thumb", width: 1080, height: 608),
-        ],
-    ]
-    static let all = groups.flatMap { $0 }
 }

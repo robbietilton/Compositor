@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import Testing

@@ -78,4 +78,50 @@ import Testing
             // A flat synthetic fixture may correctly contain no recognizable subject.
         }
     }
+    @Test func removeBackgroundAppliesAfterASettingChangesWithPreviewOff() async throws {
+        let s = EditorSession(); s.createDocument(width: 256, height: 256)
+        let ctx = try BrushRaster.context(width: 256, height: 256, mask: false)
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 256, height: 256))
+        ctx.setFillColor(CGColor(srgbRed: 0.9, green: 0.1, blue: 0.1, alpha: 1))
+        ctx.fillEllipse(in: CGRect(x: 64, y: 64, width: 128, height: 128))
+        let image = try #require(ctx.makeImage())
+        s.insert(ImportedImage(image: image, thumbnail: image, name: "Disc"))
+        let count = s.history.undoCount
+        s.beginFilter(.removeBackground)
+        let edit = try #require(s.filterEdit)
+        await edit.previewTask?.value
+        #expect(edit.preparedPreview != nil && edit.previewError == nil)
+        // Preview off, then Quality to Advanced, as the panel's toggle and picker do. Refine moves while that is
+        // worked out, and its slider sends the new value again as it's dragged and when it's let go.
+        s.updateFilter(edit.settings, preview: false)
+        var advanced = edit.settings
+        advanced.backgroundQuality = .advanced
+        s.updateFilter(advanced, preview: false)
+        advanced.refineEdges += 4
+        s.updateFilter(advanced, preview: false)
+        s.updateFilter(advanced, preview: false)
+        await edit.previewTask?.value
+        s.updateFilter(advanced, preview: false)
+        await edit.previewTask?.value
+        // OK is enabled: nothing is being worked out and there is no error.
+        #expect(!edit.preparing && edit.previewError == nil)
+        await s.commitFilter()
+        #expect(s.filterEdit == nil && s.history.undoCount == count + 1)
+        #expect(s.activeLayer?.mask != nil)
+    }
+    @Test func fillIsPreparedOnceWhenPreviewTurnsOffMeanwhile() async throws {
+        let s = try fixture()
+        s.beginFilter(.contentAwareFill)
+        let edit = try #require(s.filterEdit)
+        #expect(edit.preparing)
+        // Preview off while the fill is still being worked out, as the panel's toggle does.
+        s.updateFilter(edit.settings, preview: false)
+        await edit.previewTask?.value
+        // That fill is ready and is the one OK applies: it isn't worked out a second time.
+        let prepared = try #require(edit.preparedPreview)
+        #expect(!edit.preparing && edit.previewTask == nil)
+        await s.commitFilter()
+        #expect(s.filterEdit == nil && s.activeLayer?.asset?.image === prepared)
+    }
 }

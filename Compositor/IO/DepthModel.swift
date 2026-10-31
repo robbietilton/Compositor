@@ -44,7 +44,12 @@ nonisolated enum DepthModel {
 
     /// Loads the model, downloading and compiling it the first time. True once it's ready; false if it couldn't be
     /// had (no connection, a file that doesn't match), to be tried again next time.
+    /// Always false on the iPad, whose app sends nothing anywhere: the model is never fetched there, and the fog keeps
+    /// to its own guess.
     @discardableResult static func prepare() async -> Bool {
+        #if os(iOS)
+        return false
+        #else
         let task: Task<Bool, Never> = state.lock.withLock {
             if state.model != nil { return Task { true } }
             if let loading = state.loading { return loading }
@@ -55,6 +60,7 @@ nonisolated enum DepthModel {
         let ready = await task.value
         state.lock.withLock { state.loading = nil }
         return ready
+        #endif
     }
 
     private static func load() async -> Bool {

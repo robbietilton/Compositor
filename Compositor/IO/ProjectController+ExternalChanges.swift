@@ -46,7 +46,7 @@ extension ProjectController {
             guard let digest = await Task.detached(priority: .utility, operation: { try? ProjectDigest.compute(for: url) }).value,
                   digest != externalChanges.knownDigest else { continue }
             // Wait for an edit in progress to finish rather than pulling the document out from under it.
-            guard session.canStartProjectOperation, session.transformEdit == nil, workspace?.isManaging != true else {
+            guard !session.hasEditInProgress, workspace?.isManaging != true else {
                 scheduleRecheck(); return
             }
             if session.isModified {
@@ -78,7 +78,7 @@ extension ProjectController {
         defer { session.isProjectBusy = false }
         // Loading runs off the main thread, as an open does. A package that fails to load, half written or
         // mid-sync, leaves the open document alone; the next change on disk is checked afresh.
-        guard let snapshot = try? await ProjectStore.shared.load(from: url) else { return }
+        guard let snapshot = try? await ProjectStore.shared.load(from: url, encoded: encoded) else { return }
         guard session.projectURL == url, session.document != nil else { return }
         session.reloadProject(snapshot)
         // Remember the package as loaded, not as first seen: it may have changed again while a sheet was up.

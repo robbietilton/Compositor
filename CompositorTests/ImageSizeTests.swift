@@ -7,21 +7,21 @@ import Testing
 @MainActor
 struct ImageSizeTests {
     @Test func unlockedScrubReachesSizesAboveOneHundredMegapixels() {
-        let range = ImageSizeSheet.scrubPixelRange(pixels: 4000, other: 6000, locked: false)
+        let range = ImageSizeDraft.scrubPixelRange(pixels: 4000, other: 6000, locked: false)
         #expect(range.contains(20_000))
         #expect(range.upperBound == Double(DocumentLimits.maxSide))
-        let limited = ImageSizeSheet.scrubPixelRange(pixels: 6000, other: 20_000, locked: false)
+        let limited = ImageSizeDraft.scrubPixelRange(pixels: 6000, other: 20_000, locked: false)
         #expect(limited.upperBound == Double(DocumentLimits.maxSurfacePixels) / 20_000)
     }
 
     @Test func lockedScrubRespectsBothSurfaceAndSideLimits() {
-        let range = ImageSizeSheet.scrubPixelRange(pixels: 8000, other: 6000, locked: true)
+        let range = ImageSizeDraft.scrubPixelRange(pixels: 8000, other: 6000, locked: true)
         #expect(range.contains(16_000))
         let height = range.upperBound * 6000 / 8000
         #expect(abs(range.upperBound * height - Double(DocumentLimits.maxSurfacePixels)) < 0.001)
-        let wide = ImageSizeSheet.scrubPixelRange(pixels: 8000, other: 1000, locked: true)
+        let wide = ImageSizeDraft.scrubPixelRange(pixels: 8000, other: 1000, locked: true)
         #expect(wide.upperBound == Double(DocumentLimits.maxSide))
-        let tall = ImageSizeSheet.scrubPixelRange(pixels: 1000, other: 8000, locked: true)
+        let tall = ImageSizeDraft.scrubPixelRange(pixels: 1000, other: 8000, locked: true)
         #expect(tall.upperBound * 8 == Double(DocumentLimits.maxSide))
         #expect(tall.lowerBound == 1)
         #expect(wide.lowerBound == 8)

@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 /// The Blur tool's modes. Smudge and Liquify push the active layer's pixels around under the brush.
 /// The Brush tool's modes.
@@ -220,7 +221,7 @@ extension EditorSession {
         pauseGIFForEditing(for: active.id)
         let layer = pixelEditingLayer(for: active)
         guard let image = layer.asset?.image else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         do {
             let stroke = try WarpStroke(layer: layer, image: image, deep: try layer.asset.flatMap { try DeepLayer.flattened($0) },
                                         transform: displayedTransform(for: layer),

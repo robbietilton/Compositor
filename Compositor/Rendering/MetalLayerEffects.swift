@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import Metal
 
 /// Layer effects on the GPU: the outline's reach and the shadow's blur are the two heavy passes, and both are

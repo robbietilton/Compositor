@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import CoreText
 
 /// Filter › Dither's looks, grouped as the panel's menu lists them. The order matches `DitherPixels.h`.
@@ -159,7 +163,7 @@ nonisolated struct DitherSettings: Equatable, Sendable {
     /// Each distinct character drawn into a cell of monospaced text, `lineHeight` tall and one character wide, on a
     /// shared baseline as a terminal lays them out, sorted from least ink to most.
     private static func glyphs(_ characters: String, lineHeight: Int) -> (maps: [UInt8], coverage: [Float], width: Int, height: Int) {
-        let font = NSFont.monospacedSystemFont(ofSize: CGFloat(lineHeight) / 1.2, weight: .bold)
+        let font = PlatformFont.monospacedSystemFont(ofSize: CGFloat(lineHeight) / 1.2, weight: .bold)
         let height = lineHeight
         let width = max(1, Int(("M" as NSString).size(withAttributes: [.font: font]).width.rounded()))
         let baseline = ((CGFloat(height) - (font.ascender - font.descender)) / 2 - font.descender).rounded()
@@ -171,7 +175,7 @@ nonisolated struct DitherSettings: Equatable, Sendable {
                 guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
                                               space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
                 let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(character), attributes: [
-                    .font: font, .foregroundColor: NSColor.white,
+                    .font: font, .foregroundColor: PlatformColor.white,
                 ]))
                 context.textPosition = CGPoint(x: ((CGFloat(width) - CTLineGetTypographicBounds(line, nil, nil, nil)) / 2).rounded(), y: baseline)
                 CTLineDraw(line, context)

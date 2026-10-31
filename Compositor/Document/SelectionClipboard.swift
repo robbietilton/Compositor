@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import UniformTypeIdentifiers
 
 /// Pixels copied from the canvas, with where they came from so Paste can put them back in place.
@@ -19,11 +20,6 @@ struct CopiedLayer {
 }
 
 extension EditorSession {
-    /// The pasteboard Copy and Paste use: the system's, except under tests, where each test process gets one of its own,
-    /// so tests running in parallel processes don't copy over each other's pixels.
-    static let pasteboard: NSPasteboard = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
-        ? .general : .withUniqueName()
-
     /// Whole-pixel bounds of what Copy takes: the selection, or the whole canvas without one.
     /// Path boolean operations leave tiny float noise (59.9999999), so round with a tolerance
     /// rather than letting it add a whole pixel.
@@ -99,7 +95,7 @@ extension EditorSession {
     func copyMergedSelection() {
         guard canCopyMerged else { return }
         do {
-            guard let copied = try renderMergedPixels() else { NSSound.beep(); return }
+            guard let copied = try renderMergedPixels() else { Platform.beep(); return }
             store(copied)
         } catch { brushError = error.localizedDescription }
     }
@@ -113,28 +109,22 @@ extension EditorSession {
     func copySelection() {
         guard canCopyPixels || canCopyLayer, let layer = activeLayer else { return }
         guard canCopyPixels else {
-            let pasteboard = Self.pasteboard
-            pasteboard.clearContents()
-            pasteboard.setString(layer.id.uuidString, forType: NSPasteboard.PasteboardType("com.compositor.copied-layer"))
+            let changeCount = SystemPasteboard.writeLayer(layer.id)
             pixelClipboard = nil
-            copiedLayer = CopiedLayer(ids: copiedLayerIDs(), changeCount: pasteboard.changeCount)
+            copiedLayer = CopiedLayer(ids: copiedLayerIDs(), changeCount: changeCount)
             return
         }
         do {
-            guard let copied = try renderSelectedPixels(from: layer, mask: isMaskSelected) else { NSSound.beep(); return }
+            guard let copied = try renderSelectedPixels(from: layer, mask: isMaskSelected) else { Platform.beep(); return }
             store(copied)
-            if canCopyLayer { copiedLayer = CopiedLayer(ids: copiedLayerIDs(), changeCount: Self.pasteboard.changeCount) }
+            if canCopyLayer { copiedLayer = CopiedLayer(ids: copiedLayerIDs(), changeCount: SystemPasteboard.changeCount) }
         } catch { brushError = error.localizedDescription }
     }
 
     /// Keeps pixels for Paste and puts them on the system pasteboard as PNG.
     private func store(_ copied: (image: CGImage, region: CGRect)) {
-        let pasteboard = Self.pasteboard
-        pasteboard.clearContents()
-        if let png = NSBitmapImageRep(cgImage: copied.image).representation(using: .png, properties: [:]) {
-            pasteboard.setData(png, forType: .png)
-        }
-        pixelClipboard = PixelClipboard(image: copied.image, origin: copied.region.origin, changeCount: pasteboard.changeCount)
+        let changeCount = SystemPasteboard.writeImage(copied.image)
+        pixelClipboard = PixelClipboard(image: copied.image, origin: copied.region.origin, changeCount: changeCount)
         copiedLayer = nil
     }
 
@@ -147,23 +137,21 @@ extension EditorSession {
 
     var canPaste: Bool {
         guard document != nil, canEditLayers else { return false }
-        if let pixelClipboard, Self.pasteboard.changeCount == pixelClipboard.changeCount { return true }
-        return Self.pasteboard.canReadObject(forClasses: [NSImage.self], options: nil)
+        if let pixelClipboard, SystemPasteboard.changeCount == pixelClipboard.changeCount { return true }
+        return SystemPasteboard.hasImage
     }
 
     /// Cmd-V: pastes as a new layer above the active one. Pixels copied here go back exactly
     /// where they came from; images copied in other apps are centered.
     func paste() {
         guard canPaste, let document else { return }
-        let pasteboard = Self.pasteboard
-        if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
+        if let clip = pixelClipboard, SystemPasteboard.changeCount == clip.changeCount {
             addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
-        } else if let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
-                  let image = try? Self.sRGBCopy(of: external) {
+        } else if let external = SystemPasteboard.image(), let image = try? Self.sRGBCopy(of: external) {
             let origin = CGPoint(x: floor((document.size.width - CGFloat(image.width)) / 2),
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))
             addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste")
-        } else { NSSound.beep() }
+        } else { Platform.beep() }
     }
 
     /// Cmd-V on the New canvas screen with an image on the clipboard rather than a size copied as text: a canvas the
@@ -171,32 +159,29 @@ extension EditorSession {
     /// (the clipboard also holds their icon, as an image).
     var canPasteImageAsNewCanvas: Bool {
         guard document == nil, !isProjectBusy, !isImporting else { return false }
-        let pasteboard = Self.pasteboard
-        if let text = pasteboard.string(forType: .string), CanvasDocument.validDimension(text) != nil { return false }
-        return !copiedImageFiles(pasteboard).isEmpty || pasteboard.availableType(from: [.png, .tiff]) != nil
+        if let text = SystemPasteboard.string, CanvasDocument.validDimension(text) != nil { return false }
+        return !copiedImageFiles().isEmpty || SystemPasteboard.hasImageData
     }
 
     func pasteImageAsNewCanvas() async {
         guard canPasteImageAsNewCanvas else { return }
-        let pasteboard = Self.pasteboard
-        let files = copiedImageFiles(pasteboard)
+        let files = copiedImageFiles()
         if !files.isEmpty { await importImages(files); return }
         // Image data alone: through a file, so it's read as any imported image is (16 bits kept, color converted).
-        guard let type = pasteboard.availableType(from: [.png, .tiff]), let data = pasteboard.data(forType: type) else { return }
+        guard let copied = SystemPasteboard.imageData() else { return }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let file = folder.appendingPathComponent("Pasted Image").appendingPathExtension(type == .png ? "png" : "tiff")
+        let file = folder.appendingPathComponent("Pasted Image").appendingPathExtension(copied.pathExtension)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try data.write(to: file)
+            try copied.data.write(to: file)
         } catch { importError = error.localizedDescription; return }
         await importImages([file])
     }
 
     /// Image files copied in the Finder.
-    private func copiedImageFiles(_ pasteboard: NSPasteboard) -> [URL] {
-        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { url in
+    private func copiedImageFiles() -> [URL] {
+        SystemPasteboard.fileURLs().filter { url in
             UTType(filenameExtension: url.pathExtension).map { $0.conforms(to: .image) || url.pathExtension.lowercased() == "psd" } ?? false
         }
     }
@@ -209,7 +194,7 @@ extension EditorSession {
         guard selection != nil else { duplicateActiveLayer(); return }
         guard !layer.isGroup else { return }
         do {
-            guard let copied = try renderSelectedPixels(from: layer, mask: isMaskSelected) else { NSSound.beep(); return }
+            guard let copied = try renderSelectedPixels(from: layer, mask: isMaskSelected) else { Platform.beep(); return }
             addPixelLayer(copied.image, at: copied.region.origin, name: nextLayerName(), editName: "Layer via Copy")
         } catch { brushError = error.localizedDescription }
     }
@@ -322,14 +307,21 @@ extension EditorSession {
         layer.name = name
         layer.shape = shape
         layer.text = text
-        layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
-        let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
-        finishOpacityEdit()
+        let place = newLayerPlace(in: document)
+        layer.parentID = place.parentID
+        finishHeldDrags()
         beginEdit(editName)
-        self.document?.layers.insert(layer, at: index)
+        self.document?.layers.insert(layer, at: place.index)
         if dropsSelection { self.document?.selection = nil }
         activeLayerID = layer.id
         endEdit()
+    }
+
+    /// Where a new layer goes in `document`: just above the active layer, in its folder, or into the folder that's
+    /// active.
+    func newLayerPlace(in document: CanvasDocument) -> (index: Int, parentID: UUID?) {
+        (document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count,
+         activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID)
     }
 
     func nextLayerName() -> String {

@@ -9,7 +9,7 @@ extension EditorSession {
               timing.isValid(for: Set(animation.frameReferences.map(\.index))), timing != animation.timing else { return }
         // A timing edit can stop playback, but must let a pending manual frame selection finish.
         if gifTimelineIsPlaying { pauseGIFForEditing(for: layerID) }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Change GIF Delays")
         document?.layers[layerIndex].gifAnimation?.timing = timing
         endEdit()
@@ -45,7 +45,7 @@ extension EditorSession {
             brushError = ProjectError.tooLarge.localizedDescription
             return
         }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Duplicate GIF Frame")
         document?.layers[layerIndex] = current
         selectDuplicatedGIFFrame(newIndex, for: current)
@@ -84,7 +84,7 @@ extension EditorSession {
         edited.selectedFrameIndex = nextIndex
         current.gifAnimation = edited
         current.asset = asset
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(frameIndices.count == 1 ? "Delete GIF Frame" : "Delete GIF Frames")
         document?.layers[layerIndex] = current
         endEdit()

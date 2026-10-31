@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 
 nonisolated enum TextAlignment: String, Codable, CaseIterable, Sendable {
     case left = "Left", center = "Center", right = "Right"
@@ -255,7 +259,7 @@ extension EditorSession {
         tool = .type
         // A click puts new text's first baseline on the pointer, starting at it, as Photoshop's does. A fixed line height leaves its
         // extra room above the letters, so the baseline sits the font's descent up from the bottom of the line.
-        let descent = abs((Self.textAttributes(style)[.font] as? NSFont)?.descender ?? 0)
+        let descent = abs((Self.textAttributes(style)[.font] as? PlatformFont)?.descender ?? 0)
         let baseline = LayerTextStyle.padding + style.lineHeight - descent
         let origin = target?.origin ?? CGPoint(x: point.x - LayerTextStyle.padding, y: point.y - baseline)
         textDraft = TextDraft(documentID: document.id, layerID: target?.id, origin: origin, transform: target?.transform, style: style)
@@ -275,39 +279,20 @@ extension EditorSession {
         guard canEditLayers else { textDraft = pending; return false }
         var succeeded = false
         defer { if !succeeded { textDraft = pending } }
-        if draft.layerID == nil, draft.style.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            succeeded = true
-            return true
+        // Text whose layer has gone stays open.
+        if let id = draft.layerID, document?.layers.first(where: { $0.id == id }).map({ $0.liveText != nil && $0.asset != nil }) != true {
+            return false
         }
         do {
-            let image = try Self.textImage(draft.style)
-            let text = LayerText(style: draft.style, image: image)
-            if let id = draft.layerID {
-                guard let index = document?.layers.firstIndex(where: { $0.id == id }),
-                      let layer = document?.layers[index], layer.liveText != nil, let asset = layer.asset else { return false }
-                if layer.liveText?.style == draft.style && (draft.transform == nil || draft.transform == layer.transform) { succeeded = true; return true }
-                let thumbnail = try PixelInvert.thumbnail(of: image)
-                var transform = draft.transform ?? layer.transform
-                // Keep the transformed upper-left corner and the user's scale, rotation and flips.
-                let anchor = transform.point(.zero)
-                if draft.transform == nil || draft.style.boxSize == nil {
-                    transform.size = CGSize(width: CGFloat(image.width) * transform.size.width / CGFloat(asset.image.width),
-                                            height: CGFloat(image.height) * transform.size.height / CGFloat(asset.image.height))
-                    let moved = transform.point(.zero)
-                    transform.origin.x += anchor.x - moved.x
-                    transform.origin.y += anchor.y - moved.y
-                }
-                guard transform.isValid else { throw ProjectError.tooLarge }
-                beginEdit("Edit Text")
-                if layer.mask?.placement == nil { document?.layers[index].mask?.placement = layer.maskTransform }
-                document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
-                document?.layers[index].text = text
-                document?.layers[index].transform = transform
-                endEdit()
-            } else {
-                addPixelLayer(image, at: draft.origin, name: Self.layerName(for: draft.style.content), editName: "New Text Layer",
-                              dropsSelection: false, text: text)
+            guard let applied = try applyingText(draft) else {
+                succeeded = true
+                return true
             }
+            finishHeldDrags()
+            beginEdit(applied.name)
+            document = applied.document
+            if activeLayerID != applied.activeLayerID { activeLayerID = applied.activeLayerID }
+            endEdit()
             succeeded = true
             textDefaults = draft.style
             textDefaults.colorRuns = nil
@@ -319,6 +304,47 @@ extension EditorSession {
             brushError = error.localizedDescription
             return false
         }
+    }
+
+    /// The project as Done leaves it with `draft`: the document, the layer selected then, and the name of the step to
+    /// undo. Nil when Done changes nothing: new text with nothing typed, text as it was, or text that can't go in.
+    func applyingText(_ draft: TextDraft) throws -> (document: CanvasDocument, activeLayerID: UUID?, name: String)? {
+        guard var document, document.id == draft.documentID, draft.style.isValid else { return nil }
+        if draft.layerID == nil, draft.style.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+        let image = try Self.textImage(draft.style)
+        let text = LayerText(style: draft.style, image: image)
+        guard let id = draft.layerID else {
+            let name = Self.layerName(for: draft.style.content)
+            var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: try PixelInvert.thumbnail(of: image), name: name),
+                                   origin: draft.origin)
+            layer.name = name
+            layer.text = text
+            let place = newLayerPlace(in: document)
+            layer.parentID = place.parentID
+            document.layers.insert(layer, at: place.index)
+            return (document, layer.id, "New Text Layer")
+        }
+        guard let index = document.layers.firstIndex(where: { $0.id == id }) else { return nil }
+        let layer = document.layers[index]
+        guard layer.liveText != nil, let asset = layer.asset else { return nil }
+        if layer.liveText?.style == draft.style && (draft.transform == nil || draft.transform == layer.transform) { return nil }
+        let thumbnail = try PixelInvert.thumbnail(of: image)
+        var transform = draft.transform ?? layer.transform
+        // Keep the transformed upper-left corner and the user's scale, rotation and flips.
+        let anchor = transform.point(.zero)
+        if draft.transform == nil || draft.style.boxSize == nil {
+            transform.size = CGSize(width: CGFloat(image.width) * transform.size.width / CGFloat(asset.image.width),
+                                    height: CGFloat(image.height) * transform.size.height / CGFloat(asset.image.height))
+            let moved = transform.point(.zero)
+            transform.origin.x += anchor.x - moved.x
+            transform.origin.y += anchor.y - moved.y
+        }
+        guard transform.isValid else { throw ProjectError.tooLarge }
+        if layer.mask?.placement == nil { document.layers[index].mask?.placement = layer.maskTransform }
+        document.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
+        document.layers[index].text = text
+        document.layers[index].transform = transform
+        return (document, activeLayerID, "Edit Text")
     }
 
     @discardableResult
@@ -350,7 +376,7 @@ extension EditorSession {
         guard style.red != color.red || style.green != color.green || style.blue != color.blue || style.colorRuns != nil else { return true }
         style.setColor(color, in: NSRange(location: 0, length: 0))
         guard style.isValid, let image = try? Self.textImage(style), let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit("Fill Text")
         document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
         document?.layers[index].text = LayerText(style: style, image: image)
@@ -380,6 +406,21 @@ extension EditorSession {
         if var draft = textDraft, draft.style != original { draft.style = original; textDraft = draft }
     }
 
+    /// An arrow key held with Option, for the text's spacing.
+    enum SpacingArrow { case left, right, up, down }
+    /// Option with an arrow sets the spacing, as in Photoshop: left and right the tracking, up and down the leading,
+    /// up closing the lines up and down opening them out, counting from whatever Auto works out to. Shift (`large`)
+    /// makes each step ten.
+    func stepTextSpacing(_ arrow: SpacingArrow, large: Bool) {
+        let step: CGFloat = large ? 10 : 1
+        switch arrow {
+        case .left: changeTextStyle { $0.tracking -= step }
+        case .right: changeTextStyle { $0.tracking += step }
+        case .up: changeTextStyle { $0.leading = max(1, $0.lineHeight - step) }
+        case .down: changeTextStyle { $0.leading = $0.lineHeight + step }
+        }
+    }
+
     func changeTextStyle(_ change: (inout LayerTextStyle) -> Void) {
         if textDraft == nil, activeLayer?.liveText != nil { editActiveText() }
         if var draft = textDraft {
@@ -403,15 +444,15 @@ extension EditorSession {
     nonisolated static func textAttributes(_ style: LayerTextStyle) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = style.alignment == .left ? .left : style.alignment == .center ? .center : .right
-        let font = NSFont(name: style.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
+        let font = PlatformFont(name: style.fontName, size: style.fontSize) ?? PlatformFont.systemFont(ofSize: style.fontSize)
         // Leading is the line's whole height, so the lines close up (and eventually overlap) as it comes down,
         // exactly as Photoshop's does. Auto is 120% of the size.
         _ = font
         paragraph.minimumLineHeight = style.lineHeight
         paragraph.maximumLineHeight = style.lineHeight
         paragraph.lineBreakMode = .byWordWrapping
-        return [.font: NSFont(name: style.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize),
-                .foregroundColor: NSColor(srgbRed: style.red, green: style.green, blue: style.blue, alpha: 1),
+        return [.font: PlatformFont(name: style.fontName, size: style.fontSize) ?? PlatformFont.systemFont(ofSize: style.fontSize),
+                .foregroundColor: PlatformColor(srgbRed: style.red, green: style.green, blue: style.blue, alpha: 1),
                 .paragraphStyle: paragraph, .kern: style.tracking]
     }
 
@@ -422,7 +463,7 @@ extension EditorSession {
         let string = attributedText(style)
         let padding = LayerTextStyle.padding
         let measured = string.boundingRect(with: CGSize(width: 100_000, height: 100_000),
-                                           options: [.usesLineFragmentOrigin, .usesFontLeading])
+                                           options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
         let line = ceil(style.lineHeight)
         return CGSize(width: max(16, ceil(measured.width + padding * 2 + style.fontSize * 0.1)),
                       height: max(16, ceil(max(measured.height, line) + padding * 2)))
@@ -432,11 +473,11 @@ extension EditorSession {
     static func attributedText(_ style: LayerTextStyle) -> NSMutableAttributedString {
         let string = NSMutableAttributedString(string: style.content, attributes: textAttributes(style))
         for run in style.fontRuns ?? [] where Self.containsTextRun(run.location, run.length, in: string.length) {
-            let font = NSFont(name: run.fontName, size: style.fontSize) ?? NSFont.systemFont(ofSize: style.fontSize)
+            let font = PlatformFont(name: run.fontName, size: style.fontSize) ?? PlatformFont.systemFont(ofSize: style.fontSize)
             string.addAttribute(.font, value: font, range: NSRange(location: run.location, length: run.length))
         }
         for run in style.colorRuns ?? [] where Self.containsTextRun(run.location, run.length, in: string.length) {
-            string.addAttribute(.foregroundColor, value: NSColor(srgbRed: run.red, green: run.green, blue: run.blue, alpha: 1),
+            string.addAttribute(.foregroundColor, value: PlatformColor(srgbRed: run.red, green: run.green, blue: run.blue, alpha: 1),
                                 range: NSRange(location: run.location, length: run.length))
         }
         return string
@@ -455,9 +496,8 @@ extension EditorSession {
         guard width.isFinite, height.isFinite, width >= 1, height >= 1,
               width <= DocumentLimits.maxSideExtent, height <= DocumentLimits.maxSideExtent, width * height <= DocumentLimits.maxSurfaceExtent else { throw ProjectError.tooLarge }
         let context = try BrushRaster.context(width: Int(width), height: Int(height), mask: false)
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        Platform.pushGraphicsContext(context)
+        defer { Platform.popGraphicsContext() }
         let storage = NSTextStorage(attributedString: string)
         let layout = NSLayoutManager()
         let container = NSTextContainer(size: CGSize(width: max(1, width - 2 * padding), height: max(1, height - 2 * padding)))

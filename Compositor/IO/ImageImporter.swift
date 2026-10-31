@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import CoreGraphics
 import CoreImage
 import ImageIO
@@ -89,6 +91,7 @@ actor ImageImporter {
     /// An SVG drawn once into pixels, by macOS's own SVG renderer: fitted to `fitting` (the canvas) when there is one,
     /// otherwise at the size the file declares. It comes in as an ordinary image layer, so it doesn't stay vector.
     func decodeSVG(_ url: URL, fitting: CGSize?, remainingPixels: Int = DocumentLimits.documentPixelBudget) throws -> ImportedImage {
+        #if os(macOS)
         guard let svg = NSImage(contentsOf: url), svg.size.width > 0, svg.size.height > 0 else { throw ImageImportError.unreadable }
         let scale = fitting.map { min($0.width / svg.size.width, $0.height / svg.size.height) } ?? 1
         let width = max(1, Int((svg.size.width * scale).rounded())), height = max(1, Int((svg.size.height * scale).rounded()))
@@ -105,6 +108,10 @@ actor ImageImporter {
         NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else { throw ImageImportError.unreadable }
         return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: url.deletingPathExtension().lastPathComponent)
+        #else
+        // iPadOS has no SVG renderer to hand.
+        throw ImageImportError.unsupported
+        #endif
     }
 
     /// Pages make a new canvas at this resolution: sharp enough to print, and a Letter page 2550 × 3300.

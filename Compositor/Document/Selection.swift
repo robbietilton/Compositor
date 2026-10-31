@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import CoreImage
 
 /// A document-space selection outline, clipped to the canvas. `nil` on the document

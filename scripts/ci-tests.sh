@@ -10,12 +10,17 @@
 set -uo pipefail
 
 DERIVED="${1:-DerivedData}"
+# The tests that time themselves hold to their bounds anywhere but here (ContentFillTests.timed). xcodebuild hands the
+# app it tests only the variables named TEST_RUNNER_<name>, as <name>, so GITHUB_ACTIONS goes on under that name.
+[[ -n "${GITHUB_ACTIONS:-}" ]] && export TEST_RUNNER_GITHUB_ACTIONS="$GITHUB_ACTIONS"
 XCTESTRUN=$(ls "$DERIVED"/Build/Products/*.xctestrun 2>/dev/null | head -1)
 [[ -n "$XCTESTRUN" ]] || { echo "No .xctestrun in $DERIVED — run build-for-testing first."; exit 1; }
 
 FILTER_SUITES=(CameraRawTests CameraRawSliderTests HueSaturationTests ImageAdjustmentTests LevelsTests FilterTests
   ScanlinesTests FinishingFilterTests)
-WINDOW_SUITES=(FloatingPanelTests SliderSnapTests)
+# ContentFillTests fills on every core: beside the parallel clones it held them up for the better part of a minute,
+# and one timed out launching, so it runs with the window suites, one at a time.
+WINDOW_SUITES=(FloatingPanelTests SliderSnapTests ContentFillTests)
 # About half of the rest, alternating down the suites by size so neither half gets all the big ones.
 FIRST_SUITES=(PSDRoundTripTests LayerTests SelectionTests SelectionEditTests TransformTests TiledLayerTests
   AdjustmentLayerTests GuideTests SelectionClipboardTests ImageImportTests CompositorTests ExternalChangeTests

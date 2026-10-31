@@ -149,7 +149,7 @@ extension EditorSession {
             for layer in item.members { moves[layer.id] = whole }
         }
         guard !moves.isEmpty, let document else { return }
-        finishOpacityEdit()
+        finishHeldDrags()
         beginEdit(name)
         for index in document.layers.indices {
             let layer = document.layers[index]

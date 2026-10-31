@@ -23,6 +23,9 @@ xcuserdata/
 .claude/settings.local.json
 BUILD_PLAN.md
 
+# Xcode settings personal to this machine, such as the signing team
+Config/CompositorPad.local.xcconfig
+
 # Local HDR plans and agent handoffs: HDR_FULL_PLAN.md, HDR_EDITING_PLAN.md, HDR_LIGHT_PLAN.md
 /HDR_*.md
 

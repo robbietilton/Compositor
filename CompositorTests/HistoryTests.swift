@@ -80,6 +80,28 @@ struct HistoryTests {
         #expect(session.document?.size == CGSize(width: 300, height: 400))
     }
 
+    /// A save made while an edit is open takes the project as the last finished edit left it, which is what the
+    /// revision it records holds; once the edit ends, the save takes the project as it stands.
+    @Test func aSaveDuringAnOpenEditTakesTheLastFinishedEdit() throws {
+        let session = EditorSession()
+        session.createDocument(width: 100, height: 200)
+        session.addBlankLayer()
+        let finished = session.document, active = session.activeLayerID, revision = session.history.currentRevision
+        session.beginEdit("Layer Setup")
+        session.addBlankLayer()
+        session.beginEdit("Nested")
+        session.addBlankLayer()
+        session.endEdit()
+        #expect(session.history.beforeOpenEdit?.document == finished)
+        #expect(session.history.currentRevision == revision)
+        let during = try #require(session.saveSnapshot())
+        #expect(during.manifest.layers.map(\.id) == finished?.layers.map(\.id))
+        #expect(during.manifest.activeLayerID == active)
+        session.endEdit()
+        #expect(session.history.beforeOpenEdit == nil)
+        #expect(session.saveSnapshot()?.manifest.layers.count == 3)
+    }
+
     @Test func historyBlockedDuringImportsAndDialogs() {
         let session = EditorSession()
         session.createDocument(width: 40, height: 40)

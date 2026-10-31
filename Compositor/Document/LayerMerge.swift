@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 
 extension EditorSession {
     /// What ⌘E merges, in stacking order, and where the result goes; nil when there is nothing to merge.
@@ -48,7 +49,7 @@ extension EditorSession {
         if subset.contains(where: { $0.asset?.deep != nil }) {
             // With a 16-bit layer in it, the merge is drawn at 16 bits from each 16-bit layer's own pixels, and the
             // result is a 16-bit layer (`DeepLayer`).
-            guard let made = try? mergedSixteenBit(subset, document: document, canvas: canvas, name: plan.name) else { NSSound.beep(); return }
+            guard let made = try? mergedSixteenBit(subset, document: document, canvas: canvas, name: plan.name) else { Platform.beep(); return }
             (asset, placed) = made
         } else {
             let flat = CanvasDocument(id: document.id, width: document.width, height: document.height,
@@ -57,7 +58,7 @@ extension EditorSession {
             drawLiveComposite(flat, in: context)
             guard let full = context.makeImage(),
                   let trimmed = try? PixelFilter.trimmed(full, placed: canvas),
-                  let thumbnail = try? PixelAdjust.thumbnail(of: trimmed.image) else { NSSound.beep(); return }
+                  let thumbnail = try? PixelAdjust.thumbnail(of: trimmed.image) else { Platform.beep(); return }
             (asset, placed) = (ImportedImage(image: trimmed.image, thumbnail: thumbnail, name: plan.name), trimmed.transform)
         }
         var merged = ImageLayer(asset: asset, origin: placed.origin)
@@ -70,8 +71,8 @@ extension EditorSession {
         let slot = layers.firstIndex { $0.id == plan.anchor } ?? layers.count
         let insertion = slot - layers[..<slot].filter { plan.removed.contains($0.id) }.count
         next.insert(merged, at: min(max(0, insertion), next.count))
-        guard (try? LayerHierarchy.validate(next.map(\.hierarchyRecord))) != nil else { NSSound.beep(); return }
-        finishOpacityEdit()
+        guard (try? LayerHierarchy.validate(next.map(\.hierarchyRecord))) != nil else { Platform.beep(); return }
+        finishHeldDrags()
         beginEdit(plan.action)
         self.document?.layers = next
         activeLayerID = merged.id

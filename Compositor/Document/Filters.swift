@@ -1,4 +1,5 @@
-import AppKit
+import CoreGraphics
+import Foundation
 import CoreImage
 import Observation
 
@@ -187,6 +188,8 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.exposure = exposure.normalized
         result.gradientMap = gradientMap.normalized
         result.grain = grain.normalized
+        result.blackWhite = blackWhite.normalized
+        result.colorBalance = colorBalance.normalized
         result.dither = dither.normalized
         result.scanlines = scanlines.normalized
         result.lens = lens.normalized
@@ -782,7 +785,7 @@ extension EditorSession {
     /// `repeating` is Last Filter: the settings go on as they are, without a preview or the panel.
     func beginFilter(_ kind: FilterKind, repeating: Bool = false) {
         if kind == .contentAwareFill && !canContentAwareFill { return }
-        guard filterEdit == nil, hueSaturation == nil, kind == .vignette ? canVignette : canAdjustColors else { NSSound.beep(); return }
+        guard filterEdit == nil, hueSaturation == nil, kind == .vignette ? canVignette : canAdjustColors else { Platform.beep(); return }
         if gradientEdit != nil {
             Task { await commitGradient(); beginFilter(kind) }
             return
@@ -865,7 +868,7 @@ extension EditorSession {
         return lastFilter == .vignette ? canVignette : canAdjustColors
     }
     func repeatLastFilter() async {
-        guard let kind = lastFilter, canRepeatLastFilter else { NSSound.beep(); return }
+        guard let kind = lastFilter, canRepeatLastFilter else { Platform.beep(); return }
         if gradientEdit != nil { await commitGradient() }
         beginFilter(kind, repeating: true)
         guard let edit = filterEdit, edit.repeating else { return }
@@ -901,6 +904,7 @@ extension EditorSession {
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
         guard let edit = filterEdit, !edit.committing else { return }
+        let changed = settings.normalized != edit.settings
         edit.settings = settings.normalized
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
@@ -910,8 +914,11 @@ extension EditorSession {
         }
         if previewAdjustmentEditing(preview: preview) { return }
         if edit.kind.isAutomatic, edit.preparedPreview != nil, edit.preparedSettings == edit.settings { brushRevision += 1; return }
-        guard preview else {
-            edit.pending = nil; edit.preparedPreview = nil; brushRevision += 1
+        // OK waits for an automatic filter's preparation, so with Preview off a changed setting is still prepared, and
+        // an unchanged one leaves what is prepared or being prepared; the canvas just doesn't show it.
+        guard preview || (edit.kind.isAutomatic && changed) else {
+            if !edit.kind.isAutomatic { edit.pending = nil; edit.preparedPreview = nil }
+            brushRevision += 1
             return
         }
         edit.pending = edit.previewJob
@@ -931,28 +938,7 @@ extension EditorSession {
         edit.preparing = true
         edit.previewError = nil
         edit.previewTask = Task { @MainActor [weak self, weak edit] in
-            let result = await Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?, CameraRawTables.Brightness?) in
-                var run = job
-                // Measure once on the worker, then reuse it for every slider update in this session.
-                if run.kind == .cameraRaw, run.cameraRawBrightness == nil {
-                    run.cameraRawBrightness = CameraRawTables.brightness(of: run.image)
-                }
-                do {
-                    // An HDR layer previews from its HDR pixels, as OK makes it, shown clipped to white.
-                    if let hdrSource {
-                        let made = try PixelFilter.previewHDR(run, from: hdrSource)
-                        let scope = run.kind == .cameraRaw ? try CameraRawScope.preview(run).scope : nil
-                        return (try DeepLayer.dithered(made), scope, nil, run.cameraRawBrightness)
-                    }
-                    if run.kind == .cameraRaw {
-                        let made = try CameraRawScope.preview(run)
-                        return (made.image, made.scope, nil, run.cameraRawBrightness)
-                    }
-                    return (try PixelFilter.run(run), nil, nil, run.cameraRawBrightness)
-                } catch {
-                    return (nil, nil, error.localizedDescription, run.cameraRawBrightness)
-                }
-            }.value
+            let result = await Self.previewWork(job, hdrSource: hdrSource)
             guard let self, let edit, self.filterEdit === edit, !Task.isCancelled else {
                 if job.cameraRawUsesGPU { Task.detached(priority: .utility) { MetalCameraRawLookup.shared?.discardBuffers() } }
                 return
@@ -973,6 +959,36 @@ extension EditorSession {
             }
             self.renderFilterPreview(edit)
         }
+    }
+    /// What a preview shows, made off the main actor: the image, Camera Raw's scope, or why there is none, and what
+    /// Camera Raw's adaptive sliders read from the picture, measured here when the job doesn't carry it yet. Cancelling
+    /// the task that waits for it cancels the work, so a long fill that checks for cancellation stops rather than
+    /// running on unseen.
+    nonisolated static func previewWork(_ job: FilterJob, hdrSource: CGImage? = nil) async
+        -> (CGImage?, CameraRawScope?, String?, CameraRawTables.Brightness?) {
+        let work = Task.detached(priority: .userInitiated) { () -> (CGImage?, CameraRawScope?, String?, CameraRawTables.Brightness?) in
+            var run = job
+            // Measure once on the worker, then reuse it for every slider update in this session.
+            if run.kind == .cameraRaw, run.cameraRawBrightness == nil {
+                run.cameraRawBrightness = CameraRawTables.brightness(of: run.image)
+            }
+            do {
+                // An HDR layer previews from its HDR pixels, as OK makes it, shown clipped to white.
+                if let hdrSource {
+                    let made = try PixelFilter.previewHDR(run, from: hdrSource)
+                    let scope = run.kind == .cameraRaw ? try CameraRawScope.preview(run).scope : nil
+                    return (try DeepLayer.dithered(made), scope, nil, run.cameraRawBrightness)
+                }
+                if run.kind == .cameraRaw {
+                    let made = try CameraRawScope.preview(run)
+                    return (made.image, made.scope, nil, run.cameraRawBrightness)
+                }
+                return (try PixelFilter.run(run), nil, nil, run.cameraRawBrightness)
+            } catch {
+                return (nil, nil, error.localizedDescription, run.cameraRawBrightness)
+            }
+        }
+        return await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
     }
 
     func cancelFilter() {
