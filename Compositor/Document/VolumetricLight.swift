@@ -239,10 +239,8 @@ nonisolated enum VolumetricLighting {
                 "inputBVector": CIVector(x: 0, y: 0, z: gain, w: 0), "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 0)])
             .applyingFilter("CIColorClamp")
         }
-        // The outline firmed up: crisp, so the haze meets the subject cleanly rather than creeping onto it. Smoothed a
-        // touch first, so the small steps in Vision's mask (it's worked out small and enlarged) round off into the
-        // straight or curved edge they stand for.
-        let subject = scaled(blurred(soft, max(1, side * 0.0015)), 2.5, bias: -1.1)
+        // The outline comes crisp, and soft only through hair (`outline`).
+        let subject = soft
         // The backdrop is read from beyond the band the model's nearness bleeds into (the mask grown past it), then
         // spread back in under the subject and the band, each place an average of the backdrop near it.
         let beyond = scaled(blurred(subject, reach), -6, bias: 1)
@@ -289,20 +287,113 @@ nonisolated enum VolumetricLighting {
         if noSubject.contains(image) { return nil }
         return outlines.outline(for: image) {
             guard let general = try? SubjectRemoval.subjectMask(image) else { return nil }
-            guard let person = personMask(image) else { return general }
             let extent = CGRect(x: 0, y: 0, width: image.width, height: image.height)
             let raw: [CIImageOption: Any] = [.colorSpace: NSNull()]
-            let personImage = CIImage(cgImage: person, options: raw)
-            // Where a person is (and a little around, for their outline), their own mask; elsewhere the general one.
             let side = CGFloat(max(image.width, image.height))
-            let near = personImage.clampedToExtent().applyingGaussianBlur(sigma: side * 0.01).cropped(to: extent)
-                .applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 20, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 20, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 20, w: 0)]).applyingFilter("CIColorClamp")
-            let composed = personImage.applyingFilter("CIBlendWithMask", parameters: [
-                kCIInputBackgroundImageKey: CIImage(cgImage: general, options: raw), kCIInputMaskImageKey: near])
+            let generalImage = CIImage(cgImage: general, options: raw)
+            // The person's own mask, if Vision found the person the general mask did; on a small or dim figure it can
+            // come back faint or only in part, and then the general mask is the better outline throughout.
+            let person = personMask(image).flatMap { agrees($0, with: generalImage, extent: extent) ? $0 : nil }
+            var composed = generalImage
+            if let person {
+                // Where a person is (and a little around, for their outline), their own mask; elsewhere the general one.
+                let personImage = CIImage(cgImage: person, options: raw)
+                let near = personImage.clampedToExtent().applyingGaussianBlur(sigma: side * 0.01).cropped(to: extent)
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputRVector": CIVector(x: 20, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 20, z: 0, w: 0),
+                        "inputBVector": CIVector(x: 0, y: 0, z: 20, w: 0)]).applyingFilter("CIColorClamp")
+                composed = personImage.applyingFilter("CIBlendWithMask", parameters: [
+                    kCIInputBackgroundImageKey: generalImage, kCIInputMaskImageKey: near])
+            }
+            // Heads take the person's mask (or the general one) pulled onto the photo's own edges over a wide 30 px (as Remove Background's
+            // Refine does), which finds the strands of hair and clears the backdrop between them, kept within the
+            // general mask; its grays kept so the haze shows through. The rest of the person keeps the crisp outline.
+            if let heads = headsMask(image),
+               let strands = try? GuidedMatte.refine(mask: person ?? general, guide: image, radius: 30, limit: .greatestFiniteMagnitude) {
+                // Its faintest grays dropped: they're the haze of a halo around the hair, not strands.
+                let hair = CIImage(cgImage: strands, options: raw).applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: 1.4, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 1.4, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: 1.4, w: 0), "inputBiasVector": CIVector(x: -0.25, y: -0.25, z: -0.25, w: 0)])
+                    .applyingFilter("CIColorClamp")
+                    // Multiplied by the general mask, which stops cleanly just past the hair: the strands inside it stay,
+                    // and what the wide refine pulled onto the backdrop beyond it goes.
+                    .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: generalImage])
+                composed = hair.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: firmed(composed, side: side, extent: extent),
+                                                                               kCIInputMaskImageKey: CIImage(cgImage: heads, options: raw)])
+            } else {
+                composed = firmed(composed, side: side, extent: extent)
+            }
             return try? PixelAdjust.render(composed.cropped(to: extent), width: image.width, height: image.height, isMask: true)
         }
+    }
+
+    /// Whether the person's mask covers most of what the general mask found: at least 60% of it.
+    private static func agrees(_ person: CGImage, with general: CIImage, extent: CGRect) -> Bool {
+        let both = CIImage(cgImage: person, options: [.colorSpace: NSNull()])
+            .applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: general])
+        func mean(_ image: CIImage) -> Float {
+            var pixel = [Float](repeating: 0, count: 4)
+            PixelAdjust.ciContext.render(image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)]),
+                                         toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                                         format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        let found = mean(general)
+        return found > 0 && mean(both) / found >= 0.6
+    }
+
+    /// An outline made crisp, so the haze meets the subject cleanly rather than creeping onto it. Smoothed a touch first,
+    /// so the small steps in Vision's masks (they're worked out small and enlarged) round off into the straight or
+    /// curved edge they stand for.
+    private static func firmed(_ mask: CIImage, side: CGFloat, extent: CGRect) -> CIImage {
+        mask.clampedToExtent().applyingGaussianBlur(sigma: max(1, side * 0.0015)).cropped(to: extent)
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: 2.5, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 2.5, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: 2.5, w: 0), "inputBiasVector": CIVector(x: -1.1, y: -1.1, z: -1.1, w: 0)])
+            .applyingFilter("CIColorClamp")
+    }
+
+    /// Where the people's heads are in `image`, white, soft-edged: from their bodies' poses (eyes, ears, nose, or failing
+    /// those the neck and shoulders, so a head seen from behind counts too), an oval over each head sized by the
+    /// shoulders. Nil when no head is found.
+    private static func headsMask(_ image: CGImage) -> CGImage? {
+        let request = VNDetectHumanBodyPoseRequest()
+        guard (try? VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])) != nil,
+              let people = request.results, !people.isEmpty else { return nil }
+        let width = CGFloat(image.width), height = CGFloat(image.height)
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width,
+                                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
+        context.setFillColor(gray: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        var found = false
+        for person in people {
+            // Vision's points are 0–1 with y up, as this context's are.
+            func point(_ name: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+                guard let joint = try? person.recognizedPoint(name), joint.confidence > 0.2 else { return nil }
+                return CGPoint(x: joint.location.x * width, y: joint.location.y * height)
+            }
+            let face = [VNHumanBodyPoseObservation.JointName.nose, .leftEye, .rightEye, .leftEar, .rightEar].compactMap(point)
+            let neck = point(.neck)
+            let shoulders = [point(.leftShoulder), point(.rightShoulder)].compactMap { $0 }
+            let span = shoulders.count == 2 ? hypot(shoulders[0].x - shoulders[1].x, shoulders[0].y - shoulders[1].y) : nil
+            var center: CGPoint
+            if !face.isEmpty {
+                center = CGPoint(x: face.map(\.x).reduce(0, +) / CGFloat(face.count), y: face.map(\.y).reduce(0, +) / CGFloat(face.count))
+            } else if let neck, let span {
+                center = CGPoint(x: neck.x, y: neck.y + span * 0.55)
+            } else { continue }
+            let size = max(span ?? 0, neck.map { hypot($0.x - center.x, $0.y - center.y) * 2.2 } ?? 0, max(width, height) * 0.03)
+            // The oval reaches up and out for hair, and stops above the shoulders.
+            let oval = CGRect(x: center.x - size * 0.75, y: center.y - size * 0.45, width: size * 1.5, height: size * 1.4)
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fillEllipse(in: oval)
+            found = true
+        }
+        guard found, let ovals = context.makeImage() else { return nil }
+        let extent = CGRect(x: 0, y: 0, width: width, height: height)
+        let soft = CIImage(cgImage: ovals, options: [.colorSpace: NSNull()]).clampedToExtent()
+            .applyingGaussianBlur(sigma: max(width, height) * 0.02).cropped(to: extent)
+        return try? PixelAdjust.render(soft, width: image.width, height: image.height, isMask: true)
     }
 
     /// The people in `image`, white, at its size; nil when there are none.
