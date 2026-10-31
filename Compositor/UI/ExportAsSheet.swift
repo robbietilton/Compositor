@@ -28,6 +28,21 @@ struct ExportAsSheet: View {
     /// JPEG's quality from the last export, which the next one starts from.
     private static let qualityKey = "jpegExportQuality"
 
+    @State private var presets = ExportPresetStore.load()
+    @State private var savingPreset = false
+    @State private var presetName = ""
+    @State private var limitPresetSize = false
+    @State private var presetEdge = 1600
+    @State private var presetError: String?
+    private var canSavePreset: Bool {
+        ExportPreset.Format(rawValue: format.rawValue) != nil && settings.cmyk == nil && !settings.sixteenBit
+    }
+    private var cleanPresetName: String { presetName.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var validPresetName: Bool {
+        !cleanPresetName.isEmpty && cleanPresetName.count <= 80
+            && !presets.contains { $0.name.localizedCaseInsensitiveCompare(cleanPresetName) == .orderedSame }
+    }
+
     init(raster: ExportRaster, deepRaster: ExportRaster? = nil, hdrRaster: ExportRaster? = nil, snapshot: ProjectSnapshot? = nil,
          session: EditorSession, format: ExportFormat, finish: @escaping ((data: Data, format: ExportFormat)?) -> Void) {
         self.raster = raster
@@ -137,6 +152,7 @@ struct ExportAsSheet: View {
                 }
             }.frame(width: JPEGPreview.frame.width, height: JPEGPreview.frame.height).clipped()
                 .help("Enabled masks apply here, as on the canvas. Drag or scroll to move around; double-click switches between Fit and 100%.")
+            presetControls
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
                     Text("Format")
@@ -275,7 +291,6 @@ struct ExportAsSheet: View {
             }
         }
         .onDisappear { session.previewZoom = nil }
-        .onChange(of: format) { setScale(Double(width) / Double(raster.image.width)) }
         .task(id: settings) {
             let requested = settings
             error = nil
@@ -353,6 +368,96 @@ struct ExportAsSheet: View {
             } catch {
                 self.error = error.localizedDescription
             }
+        }
+    }
+
+    private var presetControls: some View {
+        HStack {
+            Menu("Presets") {
+                if presets.isEmpty { Text("No saved presets") }
+                ForEach(presets) { preset in
+                    Button(preset.name) { applyPreset(preset) }
+                }
+                if !presets.isEmpty {
+                    Divider()
+                    Menu("Delete Preset") {
+                        ForEach(presets) { preset in
+                            Button(preset.name, role: .destructive) {
+                                storePresets(presets.filter { $0.id != preset.id })
+                            }
+                        }
+                    }
+                }
+            }.fixedSize()
+            Button("Save Preset…") {
+                presetName = ""
+                limitPresetSize = width != raster.image.width || height != raster.image.height
+                presetEdge = max(width, height)
+                savingPreset = true
+            }
+            .disabled(!canSavePreset)
+            .help("Save RGB PNG, JPEG, TIFF or PDF settings at 8 bits per channel. Printer profiles and animation settings are not included.")
+            .popover(isPresented: $savingPreset) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Save Export Preset").font(.headline)
+                    TextField("Name (unique, up to 80 characters)", text: $presetName)
+                    if !cleanPresetName.isEmpty && !validPresetName {
+                        Text("Use a unique name of up to 80 characters.").font(.callout).foregroundStyle(.orange)
+                    }
+                    Toggle("Limit longest edge", isOn: $limitPresetSize)
+                    if limitPresetSize {
+                        HStack {
+                            TextField("Pixels", value: $presetEdge, format: .number.grouping(.never)).frame(width: 90)
+                            Text("px · Smaller images keep their size")
+                        }
+                    } else {
+                        Text("Keep the original image dimensions.").foregroundStyle(.secondary)
+                    }
+                    Text("Saves format, JPEG quality and background color.").font(.callout).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Cancel") { savingPreset = false }
+                        Spacer()
+                        Button("Save") { savePreset() }
+                            .disabled(!validPresetName || (limitPresetSize && !(1...DocumentLimits.maxSide).contains(presetEdge)))
+                    }
+                }.textFieldStyle(.roundedBorder).padding(16).frame(width: 380)
+            }
+            Spacer()
+            if let presetError { Text(presetError).font(.callout).foregroundStyle(.red) }
+        }
+    }
+
+    private func applyPreset(_ preset: ExportPreset) {
+        guard let chosen = ExportFormat(rawValue: preset.format.rawValue) else { return }
+        DialogColorSwatch.closePicker(session)
+        format = chosen
+        cmyk = false
+        sixteenBit = false
+        options = JPEGOptions(quality: preset.quality, red: CGFloat(preset.red),
+                              green: CGFloat(preset.green), blue: CGFloat(preset.blue))
+        setScale(preset.scale(width: raster.image.width, height: raster.image.height))
+        zoom = nil
+    }
+
+    private func savePreset() {
+        guard canSavePreset, validPresetName, let chosen = ExportPreset.Format(rawValue: format.rawValue) else { return }
+        let preset = ExportPreset(name: cleanPresetName, format: chosen,
+                                  longestEdge: limitPresetSize ? presetEdge : nil,
+                                  quality: options.quality, red: Double(options.red),
+                                  green: Double(options.green), blue: Double(options.blue))
+        guard preset.isValid else { return }
+        if storePresets(presets + [preset]) { savingPreset = false }
+    }
+
+    @discardableResult private func storePresets(_ updated: [ExportPreset]) -> Bool {
+        do {
+            try ExportPresetStore.save(updated)
+            presets = updated
+            presetError = nil
+            return true
+        } catch {
+            presetError = "Could not save export presets."
+            return false
         }
     }
 
@@ -436,7 +541,8 @@ struct ExportAsSheet: View {
         let maximumSide = DocumentLimits.maxSide
         let largest = min(Double(maximumSide) / Double(max(raster.image.width, raster.image.height)),
                           (Double(DocumentLimits.maxSurfacePixels) / Double(raster.image.width * raster.image.height)).squareRoot())
-        let clamped = min(largest, max(0.01, scale.isFinite ? scale : 1))
+        let smallest = 1 / Double(max(raster.image.width, raster.image.height))
+        let clamped = min(largest, max(smallest, scale.isFinite ? scale : 1))
         width = max(1, Int((Double(raster.image.width) * clamped).rounded()))
         height = max(1, Int((Double(raster.image.height) * clamped).rounded()))
     }
