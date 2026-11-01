@@ -5,7 +5,8 @@ extension EditorSession {
     var canPaint: Bool {
         let targetMask = activeLayer.flatMap { selectedMask(for: $0) }
         // A folder has no pixels of its own, so only its mask can be painted.
-        return canEditLayers && selectedLayerIDs.count == 1 && (activeLayer?.isGroup == false || isMaskSelected) && selection?.isEmpty != true
+        return (tool != .brush || BrushLibrary.shared.brushes.first(where: { $0.id == selectedBrushPresetID })?.isRenderable != false)
+            && canEditLayers && selectedLayerIDs.count == 1 && (activeLayer?.isGroup == false || isMaskSelected) && selection?.isEmpty != true
             && activeLayerID.map { document?.effectiveVisibleIDs.contains($0) == true } == true
             && (!isMaskSelected || targetMask?.isEnabled == true)
             && (isMaskSelected || activeLayer?.adjustment == nil)
@@ -14,6 +15,9 @@ extension EditorSession {
     /// nothing about the target is in the way; while the editor is busy (a transform, a dialog) a press just waits.
     var paintRefusal: String? {
         guard canEditLayers, let layer = activeLayer, !canPaint else { return nil }
+        if tool == .brush, BrushLibrary.shared.brushes.first(where: { $0.id == selectedBrushPresetID })?.isRenderable == false {
+            return "This brush’s source is preserved, but its rendering settings have not been mapped yet. Choose a Compositor brush to paint."
+        }
         if selectedLayerIDs.count > 1 { return "Several layers are selected. Select just one to paint on it." }
         if layer.isGroup, !isMaskSelected {
             return "“\(layer.name)” is a folder, which has no pixels of its own. Paint on a layer inside it, or on the folder’s mask."
@@ -33,12 +37,12 @@ extension EditorSession {
         return nil
     }
     /// Tiled raster edit of the active layer's pixels or mask, within the shared pixel budgets.
-    func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false) throws -> BrushStroke {
+    func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false, seed: UInt64? = nil) throws -> BrushStroke {
         guard let document else { throw ProjectError.tooLarge }
         pauseGIFForEditing(for: layer.id)
         let sourceLayer = pixelEditingLayer(for: layer)
         let stroke = try BrushStroke(layer: sourceLayer, mask: isMaskSelected, settings: settings, canvas: document.size,
-                                     growsMask: growsMask)
+                                     growsMask: growsMask, seed: seed ?? UInt64.random(in: .min ... .max))
         func maskPixels(_ candidate: ImageLayer) -> Int {
             candidate.mask.map { $0.asset.image.width * $0.asset.image.height } ?? 0
         }
@@ -60,7 +64,7 @@ extension EditorSession {
         return stroke
     }
     /// `pressure` is a pen's, 0–1; nil for a mouse or trackpad, which presses fully.
-    func beginBrush(at point: CGPoint, pressure: CGFloat? = nil) {
+    func beginBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil, seed: UInt64? = nil, deferTaperRendering: Bool = false) {
         // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
         if tool == .blur, blurMode != .blur { beginWarp(at: point); return }
         guard tool == .brush || tool == .blur || (tool.isBrushTool && !isMaskSelected) else { return }
@@ -80,9 +84,13 @@ extension EditorSession {
             settings.erasing = tool == .brush && brushMode == .erase && !isMaskSelected
             settings.healingMode = spotHealingMode
             // The pressure buttons belong to the Brush; the other brush tools paint at full pressure.
-            if tool != .brush { settings.pressureSize = false; settings.pressureOpacity = false }
+            if tool != .brush {
+                settings.pressureSize = false; settings.pressureOpacity = false
+                settings.roundDynamics = RoundBrushDynamics(); settings.shapeTip = nil
+            }
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
-            let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
+            let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush, seed: seed)
+            stroke.defersTaperRendering = deferTaperRendering
             if let offset = sourceOffset {
                 guard let sample = cloneSample(document, for: stroke, offset: offset) else { return }
                 cloneOffset = offset
@@ -100,21 +108,35 @@ extension EditorSession {
             }
             stroke.isBlur = tool == .blur
             brushStroke = stroke
-            brushPressure = pressure ?? 1
-            try stroke.append(point, pressure: brushPressure)
+            brushInput = input ?? BrushInput(pressure: pressure)
+            try stroke.append(point, input: brushInput)
             brushAnchor = point
             brushPointer = point
             lastBrushPoint = (point, layer.id, isMaskSelected)
             brushRevision += 1
         } catch { cancelBrush(); brushError = error.localizedDescription }
     }
-    func continueBrush(at point: CGPoint, pressure: CGFloat? = nil) {
+    func continueBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil) {
         if let warpStroke { warpStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1; return }
         guard let brushStroke else { return }
+        if let input, input.deviceID != brushInput.deviceID { return }
+        let rawPrevious = brushPointer ?? point
         brushPointer = point
-        if let pressure { brushPressure = pressure }
-        guard let painted = smoothed(point) else { return }
-        do { try brushStroke.append(painted, pressure: brushPressure); lastBrushPoint?.point = painted; brushRevision += 1 }
+        let previousInput = brushInput
+        if let input { brushInput = input.monotonic(after: previousInput.timestamp) }
+        else if let pressure {
+            brushInput = BrushInput(pressure: pressure, tilt: brushInput.tilt, rotation: brushInput.rotation,
+                timestamp: brushInput.timestamp, deviceID: brushInput.deviceID)
+        }
+        let stabilization = brushStroke.settings.roundDynamics.stabilization ?? BrushStabilization()
+        if let pressure = brushInput.pressure, let previous = previousInput.pressure {
+            brushInput = BrushInput(pressure: previous + (pressure - previous) * (1 - 0.95 * stabilization.pressure),
+                tilt: brushInput.tilt, rotation: brushInput.rotation, timestamp: brushInput.timestamp, deviceID: brushInput.deviceID)
+        }
+        let filtered = stabilization.point(point, previous: brushAnchor ?? point, rawPrevious: rawPrevious, zoom: viewport.zoom)
+        // Smoothing filters position, never a stationary pressure/orientation change.
+        guard let painted = smoothed(filtered) ?? (brushInput != previousInput ? brushAnchor : nil) else { return }
+        do { try brushStroke.append(painted, input: brushInput); brushAnchor = painted; lastBrushPoint?.point = painted; brushRevision += 1 }
         catch { cancelBrush(); brushError = error.localizedDescription }
     }
     /// Where the brush actually is, with Smoothing on: it trails the pointer on a string, and only
@@ -122,13 +144,9 @@ extension EditorSession {
     /// is in screen points, so it feels the same however far the canvas is zoomed in. Nil while the
     /// string is still slack, which is the whole point: those jitters never reach the stroke.
     private func smoothed(_ point: CGPoint) -> CGPoint? {
-        guard tool == .brush, brushSettings.smoothing > 0, let anchor = brushAnchor else { return point }
-        let radius = brushSettings.smoothing / max(0.01, viewport.zoom)
-        let delta = CGPoint(x: point.x - anchor.x, y: point.y - anchor.y)
-        let distance = hypot(delta.x, delta.y)
-        guard distance > radius else { return nil }
-        let step = (distance - radius) / distance
-        let moved = CGPoint(x: anchor.x + delta.x * step, y: anchor.y + delta.y * step)
+        let smoothing = brushStroke?.settings.smoothing ?? brushSettings.smoothing
+        guard tool == .brush, smoothing > 0, let anchor = brushAnchor else { return point }
+        guard let moved = BrushStabilization.follow(point, from: anchor, radius: smoothing / max(0.01, viewport.zoom)) else { return nil }
         brushAnchor = moved
         return moved
     }
@@ -158,8 +176,8 @@ extension EditorSession {
         do {
             // Smoothing leaves the brush short of the pointer; the stroke ends where the hand did.
             if let pointer = brushPointer, let anchor = brushAnchor, pointer != anchor,
-               tool == .brush, brushSettings.smoothing > 0 {
-                try stroke.append(pointer, pressure: brushPressure)
+               tool == .brush, (stroke.settings.smoothing > 0 || stroke.settings.roundDynamics.stabilization?.isActive == true) {
+                try stroke.append(pointer, input: brushInput)
             }
             try stroke.flush()
             if stroke.settings.healing { try stroke.heal() }

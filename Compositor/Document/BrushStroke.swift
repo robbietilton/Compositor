@@ -1,5 +1,49 @@
 import AppKit
 
+/// Optional tablet channels; absence is never a fabricated tilt or barrel angle. Rotation is in radians.
+nonisolated struct BrushInput: Equatable, Sendable {
+    let pressure: CGFloat?
+    let tilt: CGPoint?
+    let rotation: CGFloat?
+    let timestamp: TimeInterval?
+    let deviceID: Int?
+    var effectivePressure: CGFloat { pressure ?? 1 }
+
+    init(pressure: CGFloat? = nil, tilt: CGPoint? = nil, rotation: CGFloat? = nil,
+         timestamp: TimeInterval? = nil, deviceID: Int? = nil) {
+        self.pressure = pressure.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
+        self.tilt = tilt.flatMap { $0.x.isFinite && $0.y.isFinite && abs($0.x) <= 1 && abs($0.y) <= 1 ? $0 : nil }
+        self.rotation = rotation.flatMap { $0.isFinite ? Self.wrappedAngle($0) : nil }
+        self.timestamp = timestamp.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        self.deviceID = deviceID
+    }
+    static func wrappedAngle(_ value: CGFloat) -> CGFloat { atan2(sin(value), cos(value)) }
+
+    func monotonic(after previous: TimeInterval?) -> BrushInput {
+        BrushInput(pressure: pressure, tilt: tilt, rotation: rotation,
+            timestamp: timestamp.map { max(previous ?? $0, $0) }, deviceID: deviceID)
+    }
+
+    func interpolated(to other: BrushInput, fraction: CGFloat) -> BrushInput {
+        let t = fraction.isFinite ? min(1, max(0, fraction)) : 0
+        func mix(_ a: CGFloat?, _ b: CGFloat?) -> CGFloat? {
+            guard let a, let b else { return nil }
+            return a + (b - a) * t
+        }
+        let time: TimeInterval?
+        if let timestamp, let end = other.timestamp { time = timestamp + (max(timestamp, end) - timestamp) * Double(t) }
+        else { time = nil }
+        guard deviceID == other.deviceID else { return BrushInput(timestamp: time) }
+        let angle: CGFloat?
+        if let rotation, let end = other.rotation { angle = rotation + Self.wrappedAngle(end - rotation) * t }
+        else { angle = nil }
+        let vector: CGPoint?
+        if let tilt, let end = other.tilt { vector = CGPoint(x: tilt.x + (end.x - tilt.x) * t, y: tilt.y + (end.y - tilt.y) * t) }
+        else { vector = nil }
+        return BrushInput(pressure: mix(pressure, other.pressure), tilt: vector, rotation: angle, timestamp: time, deviceID: deviceID)
+    }
+}
+
 nonisolated enum SpotHealingMode: String, CaseIterable, Sendable, Hashable {
     case contentAware = "Content-Aware"
     case createTexture = "Create Texture"
@@ -28,12 +72,23 @@ nonisolated struct BrushSettings: Sendable {
     /// pressure buttons do. A mouse or trackpad always presses fully.
     var pressureSize = false
     var pressureOpacity = false
+    var roundDynamics = RoundBrushDynamics()
+    var shapeTip: BrushShapeTip? = nil
+    var secondaryShapeTip: BrushShapeTip? = nil
+    var grainTip: BrushShapeTip? = nil
+
+    var usesStampDynamics: Bool {
+        roundDynamics.usesStamps || ((pressureSize || pressureOpacity) && !roundDynamics.pressureCurve.isIdentity)
+    }
 
     /// What a press of `pressure` (0–1) does to the tip: its size as a share of the full diameter, and its strength.
-    func dynamics(_ pressure: CGFloat) -> (scale: CGFloat, strength: CGFloat) {
-        let pressure = pressure.isFinite ? min(1, max(0, pressure)) : 1
+    func dynamics(_ pressure: CGFloat?) -> (scale: CGFloat, strength: CGFloat) {
+        let pressure = pressure.map { roundDynamics.pressureCurve.value($0) } ?? 1
+        let properties = roundDynamics.properties
+        let sizeFloor = min(1, (properties?.minimumSize ?? 1) / diameter)
+        let strength = pressureOpacity ? pressure : 1
         // Never smaller than a pixel across, so the lightest touch still leaves a line.
-        return (pressureSize ? max(pressure, min(1, 1 / diameter)) : 1, pressureOpacity ? pressure : 1)
+        return (pressureSize ? max(pressure, sizeFloor) : 1, max(min(1, (properties?.minimumOpacity ?? 0) / max(0.01, opacity)), strength))
     }
 }
 
@@ -121,8 +176,7 @@ nonisolated enum BrushRaster {
     /// Soft-brush falloff across the region between the hardness radius and the rim:
     /// a normalized Gaussian that fades across the whole radius and reaches zero at the rim.
     static func falloff(_ u: CGFloat) -> CGFloat {
-        let k: CGFloat = 2.5
-        return max(0, (exp(-k * u * u) - exp(-k)) / (1 - exp(-k)))
+        CGFloat(brush_tip_falloff(Double(u)))
     }
     static func pixelToDocument(_ transform: LayerTransform, width: Int, height: Int) -> CGAffineTransform {
         CGAffineTransform(translationX: transform.center.x, y: transform.center.y)
@@ -141,6 +195,18 @@ final class BrushStroke {
     let width: Int
     let height: Int
     let settings: BrushSettings
+    let seed: UInt64
+    private let grainMask: Data?
+    private let grainSide: Int
+    private let shapeMask: Data?
+    private let shapeSide: Int
+    private let shapeHasInk: Bool
+    private let secondaryMask: Data?
+    private let secondarySide: Int
+    private var carriedColor: SIMD3<Float>? = nil
+    private var pickupSelectionImage: CGImage?
+    private var pickupSelectionData: Data?
+    private var firstBarrel: CGFloat?
     let canvas: CGRect
     let pixelToDocument: CGAffineTransform
     let sourceRect: CGRect
@@ -193,14 +259,39 @@ final class BrushStroke {
     private var allocatedBounds: CGRect?
     private var previous: CGPoint?
     private var samples: [CGPoint] = []
-    /// The pen pressure at each of `samples`, 1 for a mouse.
-    private var pressures: [CGFloat] = []
-    private var previousPressure: CGFloat = 1
+    /// Bounded sample metadata survives until its curve segment is settled.
+    private(set) var inputSamples: [BrushInput] = []
+    private(set) var lastInput: BrushInput?
+    private var lastTimestamp: TimeInterval?
+    private var previousWalkInput = BrushInput()
     /// Coverage under the provisional tail; nil where the tile had no coverage yet.
     private var tailBackup: [Int: CGImage?] = [:]
+    private struct StampedCoverage {
+        var density: [Float]
+        var cap: [Float]
+        var pigment: [Float] = []
+        var edge: [Float] = []
+
+    }
+    private var stampedCoverage: [Int: StampedCoverage] = [:]
+    private var stampedTailBackup: [Int: StampedCoverage?] = [:]
+    private var travelled: CGFloat = 0
+    private(set) var dabIndex = 0
+    private var taperDabs: [(point: CGPoint, input: BrushInput, direction: CGPoint, distance: CGFloat)] = []
+    private var taperFinalized = false
+    /// Recorded previews need only the completed taper, never intermediate untapered pixels.
+    var defersTaperRendering = false
+    private static let maxDabs = 250_000
+    private var stampedPadding: CGFloat { hypot(pixelToDocument.a, pixelToDocument.b) + hypot(pixelToDocument.c, pixelToDocument.d) }
+    private var shapeExtent: CGFloat {
+        let rendering = settings.roundDynamics.renderingSettings
+        let primary = shapeMask == nil ? 1 : sqrt(2) * (1 + (settings.roundDynamics.shapeSettings.filtering == .none ? 0 : 1 / CGFloat(shapeSide)))
+        let secondary = secondarySide == 0 ? 0 : sqrt(2) * rendering.secondaryScale * (1 + 1 / CGFloat(secondarySide))
+        return max(primary, secondary) + sqrt(2) * 0.2 * rendering.wetEdges
+    }
     private var distanceToNext: CGFloat = 0
     private(set) var dirtyDocumentRect: CGRect?
-    private struct Tile { let rect: CGRect; let context: CGContext; var image: CGImage?; let base: CGImage? }
+    private struct Tile { let rect: CGRect; let context: CGContext; var image: CGImage?; let base: CGImage?; var basePixels: Data? = nil }
     private var tiles: [Int: Tile] = [:]
     private let gpu: MetalBrushCoverage?
     private var gpuTiles: [Int: MetalBrushCoverage.Tile] = [:]
@@ -218,8 +309,38 @@ final class BrushStroke {
 
     /// `growsMask`: a brush on a mask can paint anywhere on the canvas, as Photoshop's does, growing the mask past its
     /// layer. Other edits of a mask stay within it.
-    init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false) throws {
-        gpu = useGPU ? MetalBrushCoverage.shared : nil
+    init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false, seed: UInt64 = 0) throws {
+        var settings = settings
+        if let properties = settings.roundDynamics.properties, properties.isValid {
+            settings.diameter = min(properties.maximumSize, max(properties.minimumSize, settings.diameter))
+            settings.opacity = min(properties.maximumOpacity, max(properties.minimumOpacity, settings.opacity))
+        }
+        gpu = useGPU && !settings.usesStampDynamics ? MetalBrushCoverage.shared : nil
+        self.seed = seed
+        let shape = settings.roundDynamics.shapeSettings
+        let tip = shape.source == .custom ? shape.customTip : shape.source == .generated ? shape.generatedKind.make() : settings.shapeTip
+        guard shape.source == .procedural || tip?.isValid == true else {
+            throw NSError(domain: "BrushShape", code: 1, userInfo: [NSLocalizedDescriptionKey: "Selected shape image is missing or invalid. Choose a source in Shape settings."])
+        }
+        let maskData = shape.source == .procedural ? nil : tip?.mask(shape.source == .generated ? .luminance : shape.mask)
+        let rendering = settings.roundDynamics.renderingSettings
+        let secondary = rendering.dualSource == .generated ? rendering.secondary.make() : settings.secondaryShapeTip
+        guard rendering.dualSource == nil || secondary?.isValid == true else {
+            throw NSError(domain: "BrushRendering", code: 1, userInfo: [NSLocalizedDescriptionKey: "The selected secondary shape is missing or invalid."])
+        }
+        secondaryMask = rendering.dualSource == nil ? nil : secondary?.luminance
+        secondarySide = rendering.dualSource == nil ? 0 : secondary?.side ?? 0
+        let grain = settings.roundDynamics.grain
+        let texture = grain?.source == .generated ? BrushGrain.texture() : grain?.source == .custom ? grain?.custom : settings.grainTip
+        guard grain == nil || texture?.isValid == true else {
+            throw NSError(domain: "BrushGrain", code: 1, userInfo: [NSLocalizedDescriptionKey: "Selected grain image is missing or invalid. Choose a grain source."])
+        }
+        grainMask = grain == nil ? nil : texture?.luminance
+        grainSide = grain == nil ? 0 : texture?.side ?? 0
+        shapeMask = maskData
+        shapeHasInk = (maskData?.contains(where: { $0 != 0 }) ?? true)
+            || (rendering.classicDualNormal && rendering.dualSource != nil && secondary?.luminance.contains(where: { $0 != 0 }) == true)
+        shapeSide = shape.source == .procedural ? 0 : tip?.side ?? 0
         self.layer = layer
         isMask = mask
         self.settings = settings
@@ -252,7 +373,7 @@ final class BrushStroke {
               (1...DocumentLimits.maxSide).contains(originalWidth), (1...DocumentLimits.maxSide).contains(originalHeight),
               settings.diameter.isFinite, (1...Self.maxDiameter).contains(settings.diameter),
               settings.hardness.isFinite, (0...1).contains(settings.hardness),
-              settings.opacity.isFinite, (0.01...1).contains(settings.opacity) else { throw ProjectError.tooLarge }
+              settings.opacity.isFinite, (0.01...1).contains(settings.opacity), settings.roundDynamics.isValid else { throw ProjectError.tooLarge }
         let space = mask ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!
         let components: [CGFloat] = mask ? [settings.red, 1] : [settings.red, settings.green, settings.blue, 1]
         paintColor = CGColor(colorSpace: space, components: components)!
@@ -266,12 +387,12 @@ final class BrushStroke {
         let square = abs(pixelToDocument.b) < 1e-9 && abs(pixelToDocument.c) < 1e-9
             && scaleX > 1e-9 && abs(scaleX - scaleY) < 1e-9
         let gridDiameter = settings.diameter / scaleX
-        gridTip = gpu == nil && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
+        gridTip = gpu == nil && !settings.usesStampDynamics && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
             ? try Self.tip(diameter: gridDiameter, hardness: settings.hardness, falloff: falloff) : nil
         // Drawn through the tile transform, the stamp is rendered as finely as the layer's pixels: magnified onto
         // the finer grid of a scaled-down layer, it left blocky dabs that showed once the layer was scaled back up.
         let stampDiameter = settings.diameter / min(1, scaleX, scaleY)
-        stamp = gpu == nil && gridTip == nil && stampDiameter <= Self.stampLimit
+        stamp = gpu == nil && !settings.usesStampDynamics && gridTip == nil && stampDiameter <= Self.stampLimit
             ? try Self.tip(diameter: stampDiameter, hardness: settings.hardness, falloff: falloff) : nil
     }
 
@@ -300,24 +421,46 @@ final class BrushStroke {
     /// is first drawn as a provisional straight tail (the stroke never trails the cursor),
     /// then erased and replaced by the curve when the next sample arrives or on `flush()`.
     func append(_ point: CGPoint, pressure: CGFloat = 1) throws {
+        try append(point, input: BrushInput(pressure: pressure))
+    }
+    private func changesDab(from old: BrushInput, to new: BrushInput) -> Bool {
+        if old.effectivePressure != new.effectivePressure { return true }
+        let path = settings.roundDynamics.path
+        let shape = settings.roundDynamics.shapeSettings
+        func uses(_ input: StrokePathSettings.Input) -> Bool {
+            (path.lateralJitter > 0 && path.lateralInput == input) || (path.linearJitter > 0 && path.linearInput == input)
+        }
+        return ((uses(.tilt) || shape.inputStyle != .touch || shape.tiltRoundness > 0) && old.tilt != new.tilt)
+            || ((uses(.rotation) || shape.inputStyle == .barrel) && old.rotation != new.rotation)
+    }
+    func append(_ point: CGPoint, input: BrushInput) throws {
         guard point.x.isFinite, point.y.isFinite, abs(point.x) <= 10_000_000, abs(point.y) <= 10_000_000 else { return }
-        guard samples.last != point else { return }
-        let pressure = pressure.isFinite ? min(1, max(0, pressure)) : 1
-        if gpu != nil { try appendContinuous(point, pressure: pressure); return }
+        taperFinalized = false
+        let input = input.monotonic(after: lastTimestamp)
+        lastTimestamp = input.timestamp ?? lastTimestamp
+        lastInput = input
+        if firstBarrel == nil { firstBarrel = input.rotation }
+        if samples.last == point, let last = inputSamples.last, !changesDab(from: last, to: input) {
+            inputSamples[inputSamples.count - 1] = input
+            return
+        }
+        if gpu != nil { try appendContinuous(point, input: input); return }
         var changed = removeTail()
         samples.append(point)
-        pressures.append(pressure)
-        if samples.count > 4 { samples.removeFirst(); pressures.removeFirst() }
+        inputSamples.append(input)
+        if samples.count > 4 { samples.removeFirst(); inputSamples.removeFirst() }
         let count = samples.count
         if count == 1 {
-            try walk(to: point, pressure: pressure, changed: &changed)
+            try walk(to: point, input: input, changed: &changed)
         } else if count >= 3 {
             try curve(from: samples[count - 3], to: samples[count - 2],
                       before: samples[max(0, count - 4)], after: samples[count - 1],
-                      pressures: (pressures[count - 3], pressures[count - 2]), changed: &changed)
+                      inputs: (inputSamples[count - 3], inputSamples[count - 2]), changed: &changed)
         }
-        if count >= 2 { try drawTail(from: samples[count - 2], to: point, pressure: pressure, changed: &changed) }
-        try publish(changed)
+        if !(defersTaperRendering && settings.roundDynamics.hasTaper) {
+            if count >= 2 { try drawTail(from: samples[count - 2], to: point, input: input, changed: &changed) }
+            try publish(changed)
+        }
     }
 
     /// Replaces the provisional tail with the stroke's final curve piece. Safe to repeat.
@@ -328,25 +471,27 @@ final class BrushStroke {
         if count >= 2 {
             try curve(from: samples[count - 2], to: samples[count - 1],
                       before: samples[max(0, count - 3)], after: samples[count - 1],
-                      pressures: (pressures[count - 2], pressures[count - 1]), changed: &changed)
+                      inputs: (inputSamples[count - 2], inputSamples[count - 1]), changed: &changed)
             samples = [samples[count - 1]]
-            pressures = [pressures[count - 1]]
+            inputSamples = [inputSamples[count - 1]]
         }
+        if settings.roundDynamics.hasTaper { try finalizeTaper(changed: &changed) }
         try publish(changed)
     }
 
-    private func appendContinuous(_ point: CGPoint, pressure: CGFloat) throws {
+    private func appendContinuous(_ point: CGPoint, input: BrushInput) throws {
+        let pressure = input.effectivePressure
         samples.append(point)
-        pressures.append(pressure)
-        if samples.count > 4 { samples.removeFirst(); pressures.removeFirst() }
+        inputSamples.append(input)
+        if samples.count > 4 { samples.removeFirst(); inputSamples.removeFirst() }
         let n = samples.count
         var settled: [BrushSegment] = []
         if n == 1 { settled = [segment(point, point, pressure, pressure)] }
         else if n >= 3 {
             settled = continuousCurve(from: samples[n - 3], to: samples[n - 2],
-                before: samples[max(0, n - 4)], after: point, pressures: (pressures[n - 3], pressures[n - 2]))
+                before: samples[max(0, n - 4)], after: point, inputs: (inputSamples[n - 3], inputSamples[n - 2]))
         }
-        let tail = n >= 2 ? [segment(samples[n - 2], point, pressures[n - 2], pressure)] : []
+        let tail = n >= 2 ? [segment(samples[n - 2], point, inputSamples[n - 2].effectivePressure, pressure)] : []
         try renderContinuous(settled: settled, tail: tail)
     }
 
@@ -354,15 +499,16 @@ final class BrushStroke {
         let n = samples.count
         guard n >= 2 else { return }
         let settled = continuousCurve(from: samples[n - 2], to: samples[n - 1],
-            before: samples[max(0, n - 3)], after: samples[n - 1], pressures: (pressures[n - 2], pressures[n - 1]))
+            before: samples[max(0, n - 3)], after: samples[n - 1], inputs: (inputSamples[n - 2], inputSamples[n - 1]))
         try renderContinuous(settled: settled, tail: [])
         samples = [samples[n - 1]]
-        pressures = [pressures[n - 1]]
+        inputSamples = [inputSamples[n - 1]]
     }
 
     private func segment(_ a: CGPoint, _ b: CGPoint, _ pressureA: CGFloat, _ pressureB: CGFloat) -> BrushSegment {
         let radius = settings.diameter / 2
-        let start = settings.dynamics(pressureA), end = settings.dynamics(pressureB)
+        // A stationary segment is a dab at the latest pressure; the GPU otherwise samples only its start.
+        let start = settings.dynamics(a == b ? pressureB : pressureA), end = settings.dynamics(pressureB)
         return BrushSegment(line: SIMD4(Float(a.x), Float(a.y), Float(b.x), Float(b.y)),
                             dynamics: SIMD4(Float(radius * start.scale), Float(radius * end.scale),
                                             Float(start.strength), Float(end.strength)))
@@ -371,8 +517,8 @@ final class BrushStroke {
     /// Adaptive chord subdivision keeps the centerline within 0.2 document pixels
     /// of the spline. Straight movement requires just one segment even at 4K.
     private func continuousCurve(from start: CGPoint, to end: CGPoint, before: CGPoint, after: CGPoint,
-                                 pressures: (CGFloat, CGFloat)) -> [BrushSegment] {
-        func pressure(_ u: CGFloat) -> CGFloat { pressures.0 + (pressures.1 - pressures.0) * u }
+                                 inputs: (BrushInput, BrushInput)) -> [BrushSegment] {
+        func pressure(_ u: CGFloat) -> CGFloat { inputs.0.interpolated(to: inputs.1, fraction: u).effectivePressure }
         func knot(_ t: CGFloat, _ a: CGPoint, _ b: CGPoint) -> CGFloat { t + max(0.0001, sqrt(hypot(b.x - a.x, b.y - a.y))) }
         func mix(_ a: CGPoint, _ b: CGPoint, _ ta: CGFloat, _ tb: CGFloat, _ t: CGFloat) -> CGPoint {
             let wa = (tb - t) / (tb - ta), wb = (t - ta) / (tb - ta)
@@ -446,8 +592,9 @@ final class BrushStroke {
 
     /// Draws a straight tail to the cursor, first saving the coverage it can touch and the
     /// dab spacing state, so `removeTail()` can put both back exactly.
-    private func drawTail(from start: CGPoint, to end: CGPoint, pressure: CGFloat, changed: inout Set<Int>) throws {
-        let reach = settings.diameter / 2 + 2
+    private func drawTail(from start: CGPoint, to end: CGPoint, input: BrushInput, changed: inout Set<Int>) throws {
+        let path = settings.roundDynamics.path
+        let reach = settings.diameter * (shapeExtent / 2 + path.lateralJitter + path.linearJitter) + (settings.usesStampDynamics ? stampedPadding : 2)
         let box = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
             .insetBy(dx: -reach, dy: -reach).intersection(canvas)
         if !box.isNull, !box.isEmpty {
@@ -457,34 +604,42 @@ final class BrushStroke {
                 for y in Int(affected.minY) / Self.tileSize...Int(ceil(affected.maxY) - 1) / Self.tileSize {
                     for x in Int(affected.minX) / Self.tileSize...Int(ceil(affected.maxX) - 1) / Self.tileSize {
                         let key = y * columns + x
-                        tailBackup[key] = .some(coverage[key]?.makeImage())
+                        if settings.usesStampDynamics {
+                            // Direct pixel writes cannot use a shared CGContext image as an immutable backup.
+                            tailBackup[key] = .some(nil)
+                            stampedTailBackup[key] = .some(stampedCoverage[key])
+                        } else { tailBackup[key] = .some(coverage[key]?.makeImage()) }
                     }
                 }
             }
         }
-        let saved = (previous, distanceToNext, previousPressure)
-        try walk(to: end, pressure: pressure, changed: &changed)
-        (previous, distanceToNext, previousPressure) = saved
+        let saved = (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor)
+        let savedCount = taperDabs.count
+        try walk(to: end, input: input, speed: sampleSpeed(from: start, to: end, inputs: (previousWalkInput, input)), changed: &changed)
+        (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor) = saved
+        if taperDabs.count > savedCount { taperDabs.removeLast(taperDabs.count - savedCount) }
     }
 
     private func removeTail() -> Set<Int> {
         var restored = Set<Int>()
+        for (key, value) in stampedTailBackup { stampedCoverage[key] = value }
         for (key, image) in tailBackup {
             guard let context = coverage[key], let tile = tiles[key] else { continue }
             let local = CGRect(origin: .zero, size: tile.rect.size)
-            if let image { BrushRaster.draw(image, in: local, mask: true, context: context) }
-            else { context.setFillColor(gray: 0, alpha: 1); context.fill(local) }
+            if !settings.usesStampDynamics, let image { BrushRaster.draw(image, in: local, mask: true, context: context) }
+            else if stampedCoverage[key] == nil { context.setFillColor(gray: 0, alpha: 1); context.fill(local) }
             dirtyTiles[key] = local
             restored.insert(key)
         }
         tailBackup = [:]
+        stampedTailBackup = [:]
         return restored
     }
 
     /// Centripetal Catmull–Rom between `start` and `end`: it passes through every sample
     /// without the loops or overshoot uniform splines make at uneven mouse speeds.
     private func curve(from start: CGPoint, to end: CGPoint, before: CGPoint, after: CGPoint,
-                       pressures: (CGFloat, CGFloat), changed: inout Set<Int>) throws {
+                       inputs: (BrushInput, BrushInput), changed: inout Set<Int>) throws {
         func knot(_ t: CGFloat, _ a: CGPoint, _ b: CGPoint) -> CGFloat { t + max(0.0001, sqrt(hypot(b.x - a.x, b.y - a.y))) }
         func mix(_ a: CGPoint, _ b: CGPoint, _ ta: CGFloat, _ tb: CGFloat, _ t: CGFloat) -> CGPoint {
             let wa = (tb - t) / (tb - ta), wb = (t - ta) / (tb - ta)
@@ -492,12 +647,19 @@ final class BrushStroke {
         }
         let t0: CGFloat = 0, t1 = knot(t0, before, start), t2 = knot(t1, start, end), t3 = knot(t2, end, after)
         let pieces = max(1, Int(ceil(hypot(end.x - start.x, end.y - start.y) / 2)))
+        let dx = end.x - start.x, dy = end.y - start.y, lengthSquared = dx * dx + dy * dy
         for index in 1...pieces {
             let t = t1 + (t2 - t1) * CGFloat(index) / CGFloat(pieces)
             let a1 = mix(before, start, t0, t1, t), a2 = mix(start, end, t1, t2, t), a3 = mix(end, after, t2, t3, t)
             let b1 = mix(a1, a2, t0, t2, t), b2 = mix(a2, a3, t1, t3, t)
-            let pressure = pressures.0 + (pressures.1 - pressures.0) * CGFloat(index) / CGFloat(pieces)
-            try walk(to: index == pieces ? end : mix(b1, b2, t1, t2, t), pressure: pressure, changed: &changed)
+            let point = index == pieces ? end : mix(b1, b2, t1, t2, t)
+            var fraction = CGFloat(index) / CGFloat(pieces)
+            if settings.usesStampDynamics, lengthSquared > 0 {
+                // Keep a linear spatial pressure ramp linear despite spline easing or event density.
+                fraction = min(1, max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+            }
+            let input = inputs.0.interpolated(to: inputs.1, fraction: fraction)
+            try walk(to: point, input: input, speed: sampleSpeed(from: start, to: end, inputs: inputs), changed: &changed)
         }
     }
 
@@ -506,8 +668,30 @@ final class BrushStroke {
     static func spacingFraction(_ hardness: CGFloat) -> CGFloat { hardness >= 1 ? 0.015 : 0.025 }
 
     /// Lays evenly spaced dabs along a straight run from the previous dab position.
-    private func walk(to point: CGPoint, pressure: CGFloat = 1, changed: inout Set<Int>) throws {
-        let spacing = max(0.25, settings.diameter * Self.spacingFraction(settings.hardness))
+    private func sampleSpeed(from start: CGPoint, to end: CGPoint, inputs: (BrushInput, BrushInput)) -> CGFloat {
+        guard let a = inputs.0.timestamp, let b = inputs.1.timestamp, b > a else { return 0 }
+        return min(1_000_000, hypot(end.x - start.x, end.y - start.y) / CGFloat(b - a))
+    }
+
+    private func nextSpacing(input: BrushInput, speed: CGFloat) -> CGFloat {
+        let options = settings.roundDynamics, path = options.path
+        let base = max(0.25, settings.diameter * (options.spacing ?? Self.spacingFraction(settings.hardness)))
+        let jitter = path.spacingJitter * path.spacingInput.factor(input, curve: options.pressureCurve)
+        let extra = settings.diameter * jitter * brushRandomUnit(seed: seed, index: max(0, dabIndex - 1), channel: 100)
+        return max(0.25, (base + extra) * (1 + 4 * path.speedSpacing * min(1, speed / path.speedReference)))
+    }
+
+    private func walk(to point: CGPoint, input: BrushInput, speed: CGFloat = 0, changed: inout Set<Int>) throws {
+        func place(_ point: CGPoint, input: BrushInput, direction: CGPoint, distance: CGFloat) throws {
+            let options = settings.roundDynamics, path = options.path
+            let lateral = settings.diameter * path.lateralJitter * path.lateralInput.factor(input, curve: options.pressureCurve)
+                * (2 * brushRandomUnit(seed: seed, index: dabIndex, channel: 101) - 1)
+            let linear = settings.diameter * path.linearJitter * path.linearInput.factor(input, curve: options.pressureCurve)
+                * (2 * brushRandomUnit(seed: seed, index: dabIndex, channel: 102) - 1)
+            let shifted = CGPoint(x: point.x + direction.x * linear - direction.y * lateral,
+                                  y: point.y + direction.y * linear + direction.x * lateral)
+            try dab(shifted, input: input, direction: direction, distance: distance, changed: &changed)
+        }
         if let previous {
             let dx = point.x - previous.x, dy = point.y - previous.y
             let length = hypot(dx, dy)
@@ -515,18 +699,142 @@ final class BrushStroke {
                 var distance = distanceToNext
                 while distance <= length {
                     let along = distance / length
-                    try dab(CGPoint(x: previous.x + dx * along, y: previous.y + dy * along),
-                            pressure: previousPressure + (pressure - previousPressure) * along, changed: &changed)
-                    distance += spacing
+                    let sample = previousWalkInput.interpolated(to: input, fraction: along)
+                    try place(CGPoint(x: previous.x + dx * along, y: previous.y + dy * along), input: sample,
+                              direction: CGPoint(x: dx / length, y: dy / length), distance: travelled + distance)
+                    distance += nextSpacing(input: sample, speed: speed)
                 }
                 distanceToNext = distance - length
+                travelled += length
+            } else if changesDab(from: previousWalkInput, to: input) {
+                try place(point, input: input, direction: CGPoint(x: 1, y: 0), distance: travelled)
             }
         } else {
-            try dab(point, pressure: pressure, changed: &changed)
-            distanceToNext = spacing
+            try place(point, input: input, direction: CGPoint(x: 1, y: 0), distance: travelled)
+            distanceToNext = nextSpacing(input: input, speed: speed)
         }
         previous = point
-        previousPressure = pressure
+        previousWalkInput = input
+    }
+
+    private func pickupSelectionAmount(at point: CGPoint) -> Float {
+        guard let clip = selectionClip else { return 1 }
+        guard clip.rect.contains(point), let image = clip.coverage, image.bitsPerPixel == 8 else { return 0 }
+        if pickupSelectionImage !== image {
+            pickupSelectionImage = image
+            pickupSelectionData = image.dataProvider?.data as Data?
+        }
+        guard let bytes = pickupSelectionData else { return 0 }
+        let x = min(image.width - 1, max(0, Int((point.x - clip.rect.minX) / clip.rect.width * CGFloat(image.width))))
+        let y = min(image.height - 1, max(0, Int((point.y - clip.rect.minY) / clip.rect.height * CGFloat(image.height))))
+        let index = y * image.bytesPerRow + x
+        return index < bytes.count ? Float(bytes[index]) / 255 : 0
+    }
+
+    /// Reads evolving pigment rather than last-published tiles, so event batching cannot affect pickup.
+    private func pickupColor(at point: CGPoint, amount: Float) throws -> SIMD3<Float> {
+        let foreground = SIMD3(Float(settings.red), Float(settings.green), Float(settings.blue))
+        guard amount > 0, !isMask, !settings.erasing, canvas.contains(point) else { return foreground }
+        var carried = carriedColor ?? foreground
+        let pixel = point.applying(pixelToDocument.inverted())
+        let x = Int(floor(pixel.x)), y = Int(floor(pixel.y))
+        guard x >= 0, y >= 0, x < width, y < height else { return carried }
+        let columns = (width + Self.tileSize - 1) / Self.tileSize
+        let key = (y / Self.tileSize) * columns + x / Self.tileSize
+        try allocateTile(key, x: x / Self.tileSize, y: y / Self.tileSize)
+        guard let tile = tiles[key] else { return carried }
+        let i = (y - Int(tile.rect.minY)) * Int(tile.rect.width) + x - Int(tile.rect.minX)
+        var alpha: Float = 0
+        var color = SIMD3<Float>(repeating: 0)
+        if let base = tile.basePixels {
+            base.withUnsafeBytes { raw in
+                let bytes = raw.bindMemory(to: UInt8.self)
+                alpha = Float(bytes[i * 4 + 3]) / 255
+                if alpha > 0 { color = SIMD3(Float(bytes[i * 4]), Float(bytes[i * 4 + 1]), Float(bytes[i * 4 + 2])) / (255 * alpha) }
+            }
+        }
+        if let state = stampedCoverage[key] {
+            let density = state.density[i]
+            let a = renderingCoverage(state, at: i) * pickupSelectionAmount(at: point)
+            let pigment = state.pigment.isEmpty || density == 0 ? foreground
+                : SIMD3(state.pigment[3 * i], state.pigment[3 * i + 1], state.pigment[3 * i + 2]) / density
+            let combined = a + alpha * (1 - a)
+            if combined > 0 { color = (pigment * a + color * (alpha * (1 - a))) / combined }
+            alpha = combined
+        }
+        carried = carried * (1 - amount * alpha) + color * (amount * alpha)
+        carriedColor = carried
+        return carried
+    }
+
+    private func renderingCoverage(_ state: StampedCoverage, at index: Int) -> Float {
+        var alpha = min(1 - exp(-state.density[index]), state.cap.isEmpty ? 1 : state.cap[index]) * Float(settings.opacity)
+        if let threshold = settings.roundDynamics.renderingSettings.alphaThreshold { alpha = alpha > 0 && alpha >= Float(threshold) ? 1 : 0 }
+        return alpha
+    }
+
+    private func writeRenderingPixels(_ state: StampedCoverage, rgba: CGContext? = nil, rim: CGContext? = nil, gray: CGContext? = nil) {
+        let rendering = settings.roundDynamics.renderingSettings
+        state.density.withUnsafeBufferPointer { density in
+            state.cap.withUnsafeBufferPointer { cap in
+                state.pigment.withUnsafeBufferPointer { pigment in
+                    state.edge.withUnsafeBufferPointer { edge in
+                        brush_render_pixels(rgba?.data?.assumingMemoryBound(to: UInt8.self), rim?.data?.assumingMemoryBound(to: UInt8.self),
+                            gray?.data?.assumingMemoryBound(to: UInt8.self), state.density.count,
+                            density.baseAddress, cap.isEmpty ? nil : cap.baseAddress, pigment.isEmpty ? nil : pigment.baseAddress,
+                            edge.isEmpty ? nil : edge.baseAddress, Float(settings.red), Float(settings.green), Float(settings.blue),
+                            Float(settings.opacity), Float(rendering.burntEdges), Float(rendering.alphaThreshold ?? -1))
+                    }
+                }
+            }
+        }
+    }
+
+    private func renderingMask(_ state: StampedCoverage, tile: Tile) throws -> CGImage {
+        let mask = try BrushRaster.context(width: Int(tile.rect.width), height: Int(tile.rect.height), mask: true)
+        writeRenderingPixels(state, gray: mask)
+        guard let image = mask.makeImage() else { throw ExportError.render }
+        return image
+    }
+
+    private func renderingImage(_ state: StampedCoverage, tile: Tile) throws -> CGImage {
+        let rendering = settings.roundDynamics.renderingSettings
+        let w = Int(tile.rect.width), h = Int(tile.rect.height), rect = CGRect(origin: .zero, size: tile.rect.size)
+        let deposit = try BrushRaster.context(width: w, height: h, mask: false)
+        guard let pixels = deposit.data?.assumingMemoryBound(to: UInt8.self) else { throw ExportError.render }
+        let edge: CGContext? = rendering.burntEdges > 0 && !state.edge.isEmpty ? try BrushRaster.context(width: w, height: h, mask: false) : nil
+        writeRenderingPixels(state, rgba: deposit, rim: edge)
+        if let edge {
+            var alpha = [UInt8](repeating: 0, count: w * h)
+            layer_extract_alpha(pixels, deposit.bytesPerRow, &alpha, w, w, h)
+            guard let image = edge.makeImage() else { throw ExportError.render }
+            compositeRendering(image, mode: rendering.edgeBlend, in: deposit)
+            layer_unpremultiply_opaque(pixels, deposit.bytesPerRow, w, h)
+            layer_restore_alpha(pixels, deposit.bytesPerRow, alpha, w, w, h)
+        }
+        let result = try BrushRaster.context(width: w, height: h, mask: false)
+        result.clear(rect)
+        if let base = tile.base { BrushRaster.draw(base, in: rect, mask: false, context: result) }
+        guard let image = deposit.makeImage() else { throw ExportError.render }
+        compositeRendering(image, mode: rendering.strokeBlend, in: result)
+        if rendering.luminanceBlending, let combined = result.makeImage(), let pixels = result.data?.assumingMemoryBound(to: UInt8.self) {
+            var alpha = [UInt8](repeating: 0, count: w * h)
+            layer_extract_alpha(pixels, result.bytesPerRow, &alpha, w, w, h)
+            result.clear(rect)
+            if let base = tile.base { BrushRaster.draw(base, in: rect, mask: false, context: result) }
+            compositeRendering(combined, mode: .luminosity, in: result)
+            layer_unpremultiply_opaque(pixels, result.bytesPerRow, w, h)
+            layer_restore_alpha(pixels, result.bytesPerRow, alpha, w, w, h)
+        }
+        guard let image = result.makeImage() else { throw ExportError.render }
+        return image
+    }
+
+    private func compositeRendering(_ image: CGImage, mode: LayerBlendMode, in context: CGContext) {
+        let transform = LayerTransform(origin: .zero, size: CGSize(width: image.width, height: image.height))
+        if !SeparableBlend.draw(mode, in: context, body: { target in
+            LayerRenderer.draw(image, transform: transform, center: transform.center, in: target)
+        }) { LayerRenderer.draw(image, transform: transform, center: transform.center, blendMode: mode, in: context) }
     }
 
     private func publish(_ changed: Set<Int>) throws {
@@ -538,6 +846,14 @@ final class BrushStroke {
                 let dirty = (dirtyTiles[key] ?? local).integral.intersection(local)
                 dirtyTiles[key] = nil
                 guard !dirty.isNull, !dirty.isEmpty else { continue }
+                if let state = stampedCoverage[key], let data = coverage.data {
+                    state.density.withUnsafeBufferPointer { density in
+                        state.cap.withUnsafeBufferPointer { cap in
+                            brush_density_bytes(data.assumingMemoryBound(to: UInt8.self), coverage.bytesPerRow,
+                                density.baseAddress, cap.isEmpty ? nil : cap.baseAddress, coverage.width, coverage.height)
+                        }
+                    }
+                }
                 guard let mask = coverage.makeImage() else { throw ExportError.render }
                 tile.context.saveGState()
                 tile.context.clip(to: dirty)
@@ -564,8 +880,14 @@ final class BrushStroke {
                     // Erasing takes the coverage out of the layer's alpha, leaving the pixels under it transparent.
                     tile.context.saveGState()
                     tile.context.setBlendMode(.destinationOut)
-                    BrushRaster.fill(Self.eraseColor, coverage: mask, in: local, alpha: settings.opacity, context: tile.context)
+                    if settings.roundDynamics.renderingSettings.isActive, let state = stampedCoverage[key] {
+                        BrushRaster.fill(Self.eraseColor, coverage: try renderingMask(state, tile: tile), in: local, alpha: 1, context: tile.context)
+                    } else { BrushRaster.fill(Self.eraseColor, coverage: mask, in: local, alpha: settings.opacity, context: tile.context) }
                     tile.context.restoreGState()
+                } else if settings.roundDynamics.renderingSettings.isActive, let state = stampedCoverage[key] {
+                    if isMask {
+                        BrushRaster.fill(paintColor, coverage: try renderingMask(state, tile: tile), in: local, alpha: 1, context: tile.context)
+                    } else { BrushRaster.draw(try renderingImage(state, tile: tile), in: local, mask: false, context: tile.context) }
                 } else {
                     BrushRaster.fill(paintColor, coverage: mask, in: local, alpha: settings.opacity, context: tile.context)
                 }
@@ -631,7 +953,23 @@ final class BrushStroke {
     private static let eraseColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
     private static let healingWash = CGColor(srgbRed: 0.12, green: 0.12, blue: 0.12, alpha: 1)
 
-    private func dab(_ point: CGPoint, pressure: CGFloat = 1, changed: inout Set<Int>) throws {
+    private func dab(_ point: CGPoint, input: BrushInput, direction: CGPoint, distance: CGFloat = 0, changed: inout Set<Int>) throws {
+        let pressure = input.effectivePressure
+        if settings.usesStampDynamics {
+            guard dabIndex < Self.maxDabs else { throw ProjectError.tooLarge }
+            if settings.roundDynamics.hasTaper { taperDabs.append((point, input, direction, distance)) }
+            if !(defersTaperRendering && settings.roundDynamics.hasTaper) {
+                let options = settings.roundDynamics
+                let taper = input.pressure == nil ? options.touchTaper : options.pressureTaper
+                let response = options.tipAnimation == true ? taper?.response(distance: distance,
+                    total: max(travelled, settings.diameter * 2), input: input.pressure,
+                    classic: options.classicTaper == true) : nil
+                try dynamicDab(point, input: input, direction: direction, scale: response?.size ?? 1,
+                    index: dabIndex, distance: distance, opacityScale: response?.opacity ?? 1, changed: &changed)
+            }
+            dabIndex += 1
+            return
+        }
         let dynamics = settings.dynamics(pressure)
         guard dynamics.strength > 0 else { return }
         // A dab smaller or fainter than the full tip is drawn rather than blitted from the full-size one.
@@ -708,6 +1046,153 @@ final class BrushStroke {
         }
     }
 
+    /// Stateless per-dab angles make provisional tails and preview replay repeat exactly.
+    private func scatterAngle(index: Int, copy: Int) -> CGFloat {
+        (2 * brushRandomUnit(seed: seed, index: index, channel: copy) - 1) * settings.roundDynamics.scatter
+    }
+
+    private func dynamicDab(_ point: CGPoint, input: BrushInput, direction: CGPoint, scale: CGFloat, index: Int, distance: CGFloat = 0, opacityScale: CGFloat = 1, changed: inout Set<Int>) throws {
+        let options = settings.roundDynamics
+        let shape = options.shapeSettings
+        let rendering = options.renderingSettings
+        var response = settings.dynamics(input.pressure)
+        response.strength *= opacityScale
+        response.strength *= options.path.opacity(at: distance, diameter: settings.diameter)
+        guard options.flow > 0, response.strength > 0, scale > 0, shapeHasInk else { return }
+        let pigment = try pickupColor(at: point, amount: rendering.mode.pickup)
+        let radius = settings.diameter / 2 * response.scale * scale
+        let reach = radius * shapeExtent
+        let circle = CGRect(x: point.x - reach, y: point.y - reach, width: reach * 2, height: reach * 2)
+            .insetBy(dx: -stampedPadding, dy: -stampedPadding).intersection(canvas)
+        let affected = circle.applying(pixelToDocument.inverted()).integral
+            .intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        guard !circle.isNull, !affected.isNull, !affected.isEmpty else { return }
+        let columns = (width + Self.tileSize - 1) / Self.tileSize
+        let lowerCount = max(1, Int(ceil(CGFloat(options.count) * (1 - shape.countJitter))))
+        let count = lowerCount + min(options.count - lowerCount, Int(brushRandomUnit(seed: seed, index: index, channel: 200) * CGFloat(options.count - lowerCount + 1)))
+        let layerAngle = options.properties?.orientToScreen == false ? atan2(pixelToDocument.b, pixelToDocument.a) : 0
+        var orientation = layerAngle + shape.rotationResponse * atan2(direction.y, direction.x)
+        if shape.inputStyle != .touch, let tilt = input.tilt, hypot(tilt.x, tilt.y) > 0.0001 { orientation = layerAngle + atan2(tilt.y, tilt.x) }
+        if shape.inputStyle == .barrel, let rotation = input.rotation {
+            orientation += rotation - (shape.relativeBarrel ? firstBarrel ?? rotation : 0)
+        }
+        if shape.inputStyle == .barrel && shape.relativeToStroke == true { orientation += atan2(direction.y, direction.x) }
+        if shape.randomized { orientation += brushRandomUnit(seed: seed, index: 0, channel: 201) * 2 * .pi }
+        var roundness = options.roundness
+        if let pressure = input.pressure { roundness *= max(0.05, 1 - shape.pressureRoundness * options.pressureCurve.value(pressure)) }
+        if let tilt = input.tilt { roundness *= max(0.05, 1 - shape.tiltRoundness * min(1, hypot(tilt.x, tilt.y))) }
+        for copy in 0..<count {
+            let angle = options.angle + orientation + scatterAngle(index: index, copy: copy)
+            let co = cos(angle), si = sin(angle)
+            let horizontal = max(0.05, 1 - shape.horizontalJitter * shape.horizontalInput.factor(input, curve: options.pressureCurve) * brushRandomUnit(seed: seed, index: index, channel: 256 + copy * 2))
+            let vertical = max(0.05, 1 - shape.verticalJitter * shape.verticalInput.factor(input, curve: options.pressureCurve) * brushRandomUnit(seed: seed, index: index, channel: 257 + copy * 2))
+            let major = radius * horizontal * (shape.flipX ? -1 : 1)
+            let minor = radius * max(0.05, roundness) * vertical * (shape.flipY ? -1 : 1)
+            let ux = Float((co * pixelToDocument.a + si * pixelToDocument.b) / major)
+            let uy = Float((co * pixelToDocument.c + si * pixelToDocument.d) / major)
+            let vx = Float((-si * pixelToDocument.a + co * pixelToDocument.b) / minor)
+            let vy = Float((-si * pixelToDocument.c + co * pixelToDocument.d) / minor)
+            for row in Int(affected.minY) / Self.tileSize...Int(ceil(affected.maxY) - 1) / Self.tileSize {
+                for column in Int(affected.minX) / Self.tileSize...Int(ceil(affected.maxX) - 1) / Self.tileSize {
+                    let key = row * columns + column
+                    try allocateTile(key, x: column, y: row)
+                    guard let tile = tiles[key] else { continue }
+                    let touched = affected.intersection(tile.rect).offsetBy(dx: -tile.rect.minX, dy: -tile.rect.minY)
+                    if coverage[key] == nil {
+                        let context = try BrushRaster.context(width: Int(tile.rect.width), height: Int(tile.rect.height), mask: true)
+                        context.clear(CGRect(origin: .zero, size: tile.rect.size))
+                        coverage[key] = context
+                    }
+                    guard coverage[key] != nil else { throw ExportError.render }
+                    let count = Int(tile.rect.width * tile.rect.height)
+                    var state = stampedCoverage.removeValue(forKey: key)
+                        ?? StampedCoverage(density: [Float](repeating: 0, count: count),
+                            cap: options.grain?.mode == .texturized || settings.pressureOpacity || opacityScale < 1 || (options.pressureTaper?.opacity ?? 0) > 0 || (options.touchTaper?.opacity ?? 0) > 0 || options.path.falloff > 0 ? [Float](repeating: 0, count: count) : [])
+                    let origin = CGPoint(x: tile.rect.minX + 0.5, y: tile.rect.minY + 0.5).applying(pixelToDocument)
+                    let dx = origin.x - point.x, dy = origin.y - point.y
+                    let u0 = Float((co * dx + si * dy) / major), v0 = Float((-si * dx + co * dy) / minor)
+                    // Separate captured buffers: mutating two fields of a captured struct overlaps its access.
+                    var densityValues = state.density; state.density = []
+                    var capValues = state.cap; state.cap = []
+                    var pigmentValues = state.pigment; state.pigment = []
+                    var edgeValues = state.edge; state.edge = []
+                    if rendering.mode.pickup > 0 && pigmentValues.isEmpty { pigmentValues = [Float](repeating: 0, count: count * 3) }
+                    if rendering.burntEdges > 0 && edgeValues.isEmpty { edgeValues = [Float](repeating: 0, count: count) }
+                    let grain = options.grain ?? BrushGrain()
+                    let grainScale = grain.scale * (1 - grain.zoom) + settings.diameter * grain.zoom
+                    let gc = cos(grain.rotation) / grainScale, gs = sin(grain.rotation) / grainScale
+                    let shift: CGFloat = grain.mode == .moving ? 1 : 0
+                    let phase = grain.mode == .moving ? distance * grain.movement / grainScale : 0
+                    let grainIndex = grain.mode == .texturized ? 0 : index
+                    let jitter = grain.offsetJitter * CGFloat(brushRandomUnit(seed: seed, index: grainIndex, channel: 900))
+                    let gx = origin.x - point.x * shift, gy = origin.y - point.y * shift
+                    let depth = grain.depth * (1 - grain.depthJitter * CGFloat(brushRandomUnit(seed: seed, index: grainIndex, channel: 901)))
+                    let grainValues: [Double] = [Double(gc*gx+gs*gy+jitter+phase), Double(-gs*gx+gc*gy+jitter),
+                        Double(gc*pixelToDocument.a+gs*pixelToDocument.b), Double(gc*pixelToDocument.c+gs*pixelToDocument.d),
+                        Double(-gs*pixelToDocument.a+gc*pixelToDocument.b), Double(-gs*pixelToDocument.c+gc*pixelToDocument.d),
+                        Double(depth), Double(grain.brightness), Double(grain.contrast), Double(BrushGrain.Blend.allCases.firstIndex(of: grain.blend)!),
+                        grain.filtering == .none ? 0 : grain.filtering == .classic ? 1 : 2, grain.mode == .texturized ? 1 : 0]
+                    let render: (UnsafePointer<UInt8>?, UnsafePointer<UInt8>?, UnsafePointer<UInt8>?) -> Void = { tip, secondary, grain in
+                        densityValues.withUnsafeMutableBufferPointer { density in
+                            capValues.withUnsafeMutableBufferPointer { cap in
+                                pigmentValues.withUnsafeMutableBufferPointer { colors in
+                                    edgeValues.withUnsafeMutableBufferPointer { edges in
+                                        grainValues.withUnsafeBufferPointer { parameters in
+                                        brush_render_stamp(density.baseAddress, cap.isEmpty ? nil : cap.baseAddress,
+                                            colors.isEmpty ? nil : colors.baseAddress, edges.isEmpty ? nil : edges.baseAddress, Int(tile.rect.width),
+                                            Int(touched.minX), Int(touched.minY), Int(touched.maxX), Int(touched.maxY),
+                                            u0, v0, ux, uy, vx, vy, Float(self.settings.hardness), Float(options.flow), Float(response.strength),
+                                            tip, self.shapeSide, shape.filtering == .none ? 0 : shape.filtering == .classic ? 1 : 2,
+                                            rendering.mode.index, Float(rendering.wetEdges), pigment[0], pigment[1], pigment[2], secondary,
+                                            self.secondarySide, Float(rendering.secondaryScale), rendering.classicDualNormal ? 1 : 0,
+                                            grain, self.grainSide, parameters.baseAddress)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let primary: (UnsafePointer<UInt8>?) -> Void = { tip in
+                        let secondary: (UnsafePointer<UInt8>?) -> Void = { second in
+                            if let grainMask = self.grainMask { grainMask.withUnsafeBytes { render(tip, second, $0.bindMemory(to: UInt8.self).baseAddress) } }
+                            else { render(tip, second, nil) }
+                        }
+                        if let secondaryMask = self.secondaryMask { secondaryMask.withUnsafeBytes { secondary($0.bindMemory(to: UInt8.self).baseAddress) } }
+                        else { secondary(nil) }
+                    }
+                    if let shapeMask { shapeMask.withUnsafeBytes { primary($0.bindMemory(to: UInt8.self).baseAddress) } }
+                    else { primary(nil) }
+                    stampedCoverage[key] = StampedCoverage(density: densityValues, cap: capValues, pigment: pigmentValues, edge: edgeValues)
+                    dirtyTiles[key] = dirtyTiles[key].map { $0.union(touched) } ?? touched
+                    changed.insert(key)
+                }
+            }
+        }
+    }
+
+    /// End taper depends on completed length. The live path is provisional; flush replays the settled dabs once.
+    private func finalizeTaper(changed: inout Set<Int>) throws {
+        guard !taperFinalized else { return }
+        for (key, context) in coverage {
+            context.setFillColor(gray: 0, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: CGFloat(context.width), height: CGFloat(context.height)))
+            dirtyTiles[key] = CGRect(x: 0, y: 0, width: CGFloat(context.width), height: CGFloat(context.height))
+            changed.insert(key)
+        }
+        stampedCoverage = [:]
+        carriedColor = nil
+        for (index, dab) in taperDabs.enumerated() {
+            let options = settings.roundDynamics
+            let taper = dab.input.pressure == nil ? options.touchTaper : options.pressureTaper
+            let response = taper?.response(distance: dab.distance, total: travelled,
+                input: dab.input.pressure.map { options.pressureCurve.value($0) }, classic: options.classicTaper == true) ?? (size: 1, opacity: 1)
+            try dynamicDab(dab.point, input: dab.input, direction: dab.direction,
+                scale: options.taper(at: dab.distance, total: travelled) * response.size,
+                index: index, distance: dab.distance, opacityScale: response.opacity, changed: &changed)
+        }
+        taperFinalized = true
+    }
+
     private func allocateTile(_ key: Int, x: Int, y: Int) throws {
         guard tiles[key] == nil else { return }
         let size = Self.tileSize
@@ -747,7 +1232,9 @@ final class BrushStroke {
                 BrushRaster.draw(source, in: initialRect, mask: isMask, context: context)
             }
         }
-        tiles[key] = Tile(rect: rect, context: context, base: context.makeImage())
+        let original = settings.roundDynamics.renderingSettings.mode.pickup > 0 && !isMask
+            ? context.data.map { Data(bytes: $0, count: context.bytesPerRow * context.height) } : nil
+        tiles[key] = Tile(rect: rect, context: context, base: context.makeImage(), basePixels: original)
     }
 
     /// Replaces this edit with a gradient over the whole canvas (or the selection),

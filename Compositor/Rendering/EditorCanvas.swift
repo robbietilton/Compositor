@@ -1786,12 +1786,6 @@ final class CanvasView: NSView {
         brushPointer = convert(event.locationInWindow, from: nil)
         updateBrushCursor()
     }
-    /// A pen's pressure on a tablet, 0–1. A mouse, or a trackpad's Force Touch, has none: it paints at full pressure,
-    /// as it does in Photoshop.
-    static func penPressure(_ event: NSEvent) -> CGFloat? {
-        event.subtype == .tabletPoint ? CGFloat(event.pressure) : nil
-    }
-
     override func mouseDown(with event: NSEvent) {
         session.effectSelection = nil
         optionHeld = event.modifierFlags.contains(.option)
@@ -1890,10 +1884,10 @@ final class CanvasView: NSView {
             brushPointer = point
             // Shift paints a straight line on from where the last stroke ended, as in Photoshop.
             if event.modifierFlags.contains(.shift), let from = session.shiftLineStart() {
-                session.beginBrush(at: from, pressure: Self.penPressure(event))
-                session.continueBrush(at: pixel, pressure: Self.penPressure(event))
+                session.beginBrush(at: from, input: PenInput.shared.sample(event))
+                session.continueBrush(at: pixel, input: PenInput.shared.sample(event))
             } else {
-                session.beginBrush(at: pixel, pressure: Self.penPressure(event))
+                session.beginBrush(at: pixel, input: PenInput.shared.sample(event))
             }
             brushAxisAnchor = event.modifierFlags.contains(.shift) ? pixel : nil
             brushAxisHorizontal = nil
@@ -1921,6 +1915,17 @@ final class CanvasView: NSView {
             toolCursor.set()
         }
     }
+    override func tabletPoint(with event: NSEvent) {
+        guard PenInput.isTabletPoint(event), session.brushStroke != nil,
+              session.brushInput.deviceID == event.deviceID else { super.tabletPoint(with: event); return }
+        if event.window != nil, event.window === window { mouseDragged(with: event) }
+        else if let point = session.brushPointer {
+            // Native pressure-only events may have no window-relative cursor position.
+            session.continueBrush(at: point, input: PenInput.shared.sample(event))
+            synchronizeDisplay()
+        }
+    }
+
     override func mouseDragged(with event: NSEvent) {
         guard session.document != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
@@ -2047,7 +2052,7 @@ final class CanvasView: NSView {
                 brushAxisHorizontal = nil
             }
             brushLastPixel = pixel
-            session.continueBrush(at: pixel, pressure: Self.penPressure(event))
+            session.continueBrush(at: pixel, input: PenInput.shared.sample(event))
             synchronizeDisplay()
             return
         }
