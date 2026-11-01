@@ -16,7 +16,7 @@ struct BrushLibraryTests {
             && $0.roundDynamics.shapeSettings.customTip == nil && $0.roundDynamics.grain?.custom == nil })
         #expect(library.brushes[0].roundDynamics.shapeSettings.generatedKind == .ink)
         for brush in library.brushes {
-            let session = EditorSession(); session.createDocument(width: 160, height: 80); session.addBlankLayer()
+            let session = EditorSession(); session.createDocument(width: 160, height: 80); session.addBlankLayer(); session.selectTool(.brush)
             try session.activateBrushPreset(brush, library: library)
             session.beginBrush(at: CGPoint(x: 30, y: 40)); session.continueBrush(at: CGPoint(x: 130, y: 40))
             #expect(session.finishBrushImmediately() && session.brushError == nil)
