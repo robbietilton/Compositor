@@ -137,6 +137,23 @@ struct SelectionTests {
         #expect(session.showsSelectionEdges)
     }
 
+    /// ⌘H hides the outline and the guides together and brings both back; guides turned off with ⌘; stay off.
+    @Test func extrasHideTheOutlineAndGuidesTogether() throws {
+        let session = makeSession()
+        let guides = session.showsGuides
+        defer { session.showsGuides = guides }
+        session.showsGuides = true
+        lasso(session, square(10, 10, 20))
+        session.showsExtras = false
+        #expect(!session.showsSelectionEdges && !session.showsGuides && session.selection?.isEmpty == false)
+        session.showsExtras = true
+        #expect(session.showsSelectionEdges && session.showsGuides)
+        session.showsGuides = false
+        session.showsExtras = false
+        session.showsExtras = true
+        #expect(session.showsSelectionEdges && !session.showsGuides, "⌘H doesn't turn on guides ⌘; turned off")
+    }
+
     /// Select All then Inverse leaves nothing selected, as in Photoshop, so painting works everywhere again.
     @Test func inverseOfEverythingDeselects() throws {
         let session = makeSession()

@@ -12,6 +12,7 @@ struct EditorCanvas: NSViewRepresentable {
         _ = session.layoutGrid
         _ = session.gridAppearance
         _ = session.showsGuides
+        _ = session.extrasHideGuides
         _ = session.guideDrag
         _ = session.document?.guides
         view.synchronizeDisplay()

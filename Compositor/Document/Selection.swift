@@ -119,10 +119,21 @@ extension EditorSession {
     var selection: DocumentSelection? { document?.selection }
     var canEditSelection: Bool { canEditLayers }
 
-    /// View › Show Selection Edges (⌘H): off hides the marching ants of the current selection only.
+    /// Off hides the marching ants of the current selection only.
     var showsSelectionEdges: Bool {
         get { selection == nil || hiddenSelectionEdges != selection }
         set { hiddenSelectionEdges = newValue ? nil : selection }
+    }
+
+    /// View › Show Extras (⌘H, outside the Move tool): the selection's edges and the guides together, to see the
+    /// picture alone. On only while both are showing, so ⌘H hides whatever is showing and, pressed again, brings it
+    /// all back. Guides turned off with ⌘; stay off.
+    var showsExtras: Bool {
+        get { showsSelectionEdges && !extrasHideGuides }
+        set {
+            showsSelectionEdges = newValue
+            extrasHideGuides = !newValue
+        }
     }
 
     /// Shift adds, Option (with or without Shift) subtracts; otherwise the options-bar mode.
