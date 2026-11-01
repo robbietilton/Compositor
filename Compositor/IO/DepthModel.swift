@@ -5,22 +5,28 @@ import CryptoKit
 import Foundation
 import Vision
 
-/// How far away each part of a photo is, from DepthMini: a 2 MB model distilled from Depth Anything V2 Small
+/// How far away each part of a photo is, from DepthMini: a 2.6 MB model distilled from Depth Anything V2 Small
 /// (Apache-2.0), for Volumetric Light's fog. It isn't in the app: the first time it's needed it's downloaded (three
 /// files, checked against the fingerprints below), compiled and kept in Application Support. Until then, or without a
 /// connection, `depth` is nil and the fog falls back to its own guess.
 nonisolated enum DepthModel {
     /// Where the files are published, and what each must be. A new model gets a new folder, so an old copy is never
     /// mistaken for it.
-    static var source = URL(string: "https://github.com/robbietilton/Compositor/releases/download/depth-model-2/")!
-    static let version = "2"
+    static var source = URL(string: "https://github.com/robbietilton/Compositor/releases/download/depth-model-4/")!
+    static let version = "4"
     private static let files: [(name: String, path: String, sha256: String)] = [
-        ("Manifest.json", "Manifest.json", "7d798b4662f8a9981303e56ef19672c084c8a97cb4bafebc8ad92be189ae7a1b"),
-        ("model.mlmodel", "Data/com.apple.CoreML/model.mlmodel", "accb4c4482bd1aa57b3ad39bc4e4f9604b76c8901fd8689da8d92c6211768f00"),
-        ("weight.bin", "Data/com.apple.CoreML/weights/weight.bin", "79f1caf36183fb182f14dde56e9d33dfc3801bc511d60ca0f6bba6148b5cff5a"),
+        ("Manifest.json", "Manifest.json", "19446362b95858077b567712d4afdb11eaf62800cda930f8cded086a38539b18"),
+        ("model.mlmodel", "Data/com.apple.CoreML/model.mlmodel", "63b8e6372d888259aba8a4275513f27fc61efb24089c4f237dfe2984807fc0ea"),
+        ("weight.bin", "Data/com.apple.CoreML/weights/weight.bin", "3fb76b7db1c8c490f610bdfa7d6e749b7dd585ef6b50dfee6f2c2ff9690ef5c3"),
     ]
-    /// The model's input size; it squashes the whole picture to this.
-    static let side = 320
+    /// The sizes the model takes, width × height: square, 4:3 and 16:9 either way up.
+    static let shapes = [(512, 512), (512, 384), (512, 288), (384, 512), (288, 512)]
+
+    /// The shape nearest `image`'s proportions, so it's scaled to fit rather than squashed square.
+    static func shape(for image: CGImage) -> (width: Int, height: Int) {
+        let aspect = log(Double(image.width) / Double(max(1, image.height)))
+        return shapes.min { abs(log(Double($0.0) / Double($0.1)) - aspect) < abs(log(Double($1.0) / Double($1.1)) - aspect) }!
+    }
 
     /// The compiled model, kept between launches.
     static var folder: URL {
@@ -102,12 +108,14 @@ nonisolated enum DepthModel {
         let (model, cached) = state.lock.withLock { (state.model, state.cached) }
         guard let model else { return nil }
         if let cached, cached.image === image { return cached.depth }
-        // Squashed to the model's size at 8 bits first: Core ML takes a 16-bit or HDR layer's pixels no other way.
-        guard let small = pixels(of: image, width: side, height: side),
-              let input = try? MLFeatureValue(cgImage: small.image, pixelsWide: side, pixelsHigh: side, pixelFormatType: kCVPixelFormatType_32BGRA,
+        // Scaled to the nearest of the model's shapes at 8 bits first: Core ML takes a 16-bit or HDR layer's pixels no
+        // other way.
+        let (columns, rows) = shape(for: image)
+        guard let small = pixels(of: image, width: columns, height: rows),
+              let input = try? MLFeatureValue(cgImage: small.image, pixelsWide: columns, pixelsHigh: rows, pixelFormatType: kCVPixelFormatType_32BGRA,
                                               options: [.cropAndScale: VNImageCropAndScaleOption.scaleFill.rawValue]),
               let output = try? model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": input])),
-              let array = output.featureValue(for: "depth")?.multiArrayValue, array.count == side * side else { return nil }
+              let array = output.featureValue(for: "depth")?.multiArrayValue, array.count == columns * rows else { return nil }
         let values = MLShapedArray<Float>(converting: array).scalars
         guard let low = values.min(), let high = values.max(), high > low else { return nil }
         // Enlarged to the photo's shape, then onto its edges, its brightness the guide.
@@ -116,13 +124,13 @@ nonisolated enum DepthModel {
         guard let guide = pixels(of: image, width: width, height: height) else { return nil }
         var enlarged = [Float](repeating: 0, count: width * height)
         for y in 0..<height {
-            let fy = min(Float(side - 1), max(0, (Float(y) + 0.5) * Float(side) / Float(height) - 0.5))
-            let y0 = Int(fy), y1 = min(side - 1, y0 + 1), ty = fy - Float(y0)
+            let fy = min(Float(rows - 1), max(0, (Float(y) + 0.5) * Float(rows) / Float(height) - 0.5))
+            let y0 = Int(fy), y1 = min(rows - 1, y0 + 1), ty = fy - Float(y0)
             for x in 0..<width {
-                let fx = min(Float(side - 1), max(0, (Float(x) + 0.5) * Float(side) / Float(width) - 0.5))
-                let x0 = Int(fx), x1 = min(side - 1, x0 + 1), tx = fx - Float(x0)
-                let top = values[y0 * side + x0] * (1 - tx) + values[y0 * side + x1] * tx
-                let bottom = values[y1 * side + x0] * (1 - tx) + values[y1 * side + x1] * tx
+                let fx = min(Float(columns - 1), max(0, (Float(x) + 0.5) * Float(columns) / Float(width) - 0.5))
+                let x0 = Int(fx), x1 = min(columns - 1, x0 + 1), tx = fx - Float(x0)
+                let top = values[y0 * columns + x0] * (1 - tx) + values[y0 * columns + x1] * tx
+                let bottom = values[y1 * columns + x0] * (1 - tx) + values[y1 * columns + x1] * tx
                 enlarged[y * width + x] = ((top * (1 - ty) + bottom * ty) - low) / (high - low)
             }
         }

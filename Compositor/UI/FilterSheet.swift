@@ -225,7 +225,7 @@ struct FilterSheet: View {
                     Text(edit?.committing == true ? "Applying…" : "Working…")
                         .font(.callout).foregroundStyle(.secondary)
                 } else if edit?.kind == .volumetricLight, session.preparingDepth {
-                    // The first time only: the depth model is downloading (about 2 MB).
+                    // The first time only: the depth model is downloading (about 2.6 MB).
                     ProgressView().controlSize(.small)
                     Text("Getting depth…").font(.callout).foregroundStyle(.secondary)
                 } else if let edit, edit.preparing, edit.kind == .rimLight && !RimLighting.hasSubject(for: edit.hdrPreviewSource ?? edit.previewSource)
