@@ -30,12 +30,58 @@ nonisolated struct DocumentSelection: Equatable, @unchecked Sendable {
 }
 
 extension CGPath {
-    /// The outline without the hairline pieces Core Graphics leaves where two edges meet exactly, as a box's edge
-    /// clipped to the canvas meeting the selection's own: shapes a ten-millionth of a pixel wide that select nothing
-    /// but that the marching ants would trace. A piece goes if it covers under a quarter of a pixel.
+    /// The outline without the hairlines Core Graphics leaves where edges should meet exactly but miss by a millionth of a
+    /// pixel, as a box's edge clipped to the canvas meeting the selection's own. They select nothing, but the marching ants
+    /// trace them: pieces a hair wide, spurs running out along an edge and straight back, and cut-outs drawn as a second
+    /// outline over the first rather than merged into it. Straight edges go onto a 1/4096 px grid, so those that should
+    /// meet do; split where another edge's corner lies on them; and every pair running between the same two points in
+    /// opposite directions goes. Such a pair adds nothing to what's selected, so the fill stays as it was. What's left is
+    /// linked back into outlines; curved pieces are kept as they are.
     nonisolated var withoutSlivers: CGPath {
-        var pieces: [[CGPathElement]] = [], current: [CGPathElement] = []
-        var points: [[CGPoint]] = [], currentPoints: [CGPoint] = []
+        struct Point: Hashable, Comparable {
+            let x: Int64, y: Int64
+            static func < (a: Point, b: Point) -> Bool { a.x != b.x ? a.x < b.x : a.y < b.y }
+        }
+        struct Edge: Hashable { let from: Point, to: Point }
+        let grid: CGFloat = 4096
+        func onGrid(_ point: CGPoint) -> Point? {
+            let x = (point.x * grid).rounded(), y = (point.y * grid).rounded()
+            guard abs(x) < 1e15, abs(y) < 1e15 else { return nil }
+            return Point(x: Int64(x), y: Int64(y))
+        }
+
+        // Straight pieces become edges; anything with a curve is kept whole.
+        var edges: [Edge] = []
+        let curved = CGMutablePath()
+        var piece: [CGPathElement] = [], piecePoints: [CGPoint] = []
+        var straightCount = 0, unusable = false
+        func finishPiece() {
+            defer { piece = []; piecePoints = [] }
+            guard !piece.isEmpty else { return }
+            if piece.contains(where: { $0.type == .addQuadCurveToPoint || $0.type == .addCurveToPoint }) {
+                var at = 0
+                for element in piece {
+                    switch element.type {
+                    case .moveToPoint: curved.move(to: piecePoints[at]); at += 1
+                    case .addLineToPoint: curved.addLine(to: piecePoints[at]); at += 1
+                    case .addQuadCurveToPoint: curved.addQuadCurve(to: piecePoints[at + 1], control: piecePoints[at]); at += 2
+                    case .addCurveToPoint:
+                        curved.addCurve(to: piecePoints[at + 2], control1: piecePoints[at], control2: piecePoints[at + 1]); at += 3
+                    case .closeSubpath: curved.closeSubpath()
+                    @unknown default: break
+                    }
+                }
+                return
+            }
+            let corners = piecePoints.compactMap(onGrid)
+            guard corners.count == piecePoints.count else { unusable = true; return }
+            straightCount += corners.count
+            // Closed, as a fill treats every piece.
+            for (at, corner) in corners.enumerated() {
+                let next = corners[(at + 1) % corners.count]
+                if next != corner { edges.append(Edge(from: corner, to: next)) }
+            }
+        }
         applyWithBlock { pointer in
             let element = pointer.pointee
             let count = switch element.type {
@@ -45,37 +91,77 @@ extension CGPath {
             case .closeSubpath: 0
             @unknown default: 0
             }
-            if element.type == .moveToPoint, !current.isEmpty {
-                pieces.append(current); points.append(currentPoints)
-                current = []; currentPoints = []
+            if element.type == .moveToPoint { finishPiece() }
+            piece.append(element)
+            piecePoints += (0..<count).map { element.points[$0] }
+        }
+        finishPiece()
+        guard !unusable, straightCount > 0 else { return self }
+
+        // Split each edge where a corner of another lies on it. Corners sorted by x, so each edge checks only those
+        // within its own span.
+        let corners = Array(Set(edges.flatMap { [$0.from, $0.to] })).sorted()
+        var split: [Edge] = []
+        split.reserveCapacity(edges.count)
+        for edge in edges {
+            let low = min(edge.from.x, edge.to.x), high = max(edge.from.x, edge.to.x)
+            let dx = edge.to.x - edge.from.x, dy = edge.to.y - edge.from.y
+            let length = dx * dx + dy * dy
+            var start = 0, end = corners.count
+            while start < end {
+                let middle = (start + end) / 2
+                if corners[middle].x < low { start = middle + 1 } else { end = middle }
             }
-            current.append(element)
-            currentPoints += (0..<count).map { element.points[$0] }
+            var inside: [(along: Int64, point: Point)] = []
+            while start < corners.count, corners[start].x <= high {
+                let corner = corners[start]
+                start += 1
+                guard corner != edge.from, corner != edge.to,
+                      corner.y >= min(edge.from.y, edge.to.y), corner.y <= max(edge.from.y, edge.to.y) else { continue }
+                let rx = corner.x - edge.from.x, ry = corner.y - edge.from.y
+                let along = rx * dx + ry * dy
+                if dx * ry - dy * rx == 0, along > 0, along < length { inside.append((along, corner)) }
+            }
+            guard !inside.isEmpty else { split.append(edge); continue }
+            var from = edge.from
+            for stop in inside.sorted(by: { $0.along < $1.along }) {
+                split.append(Edge(from: from, to: stop.point))
+                from = stop.point
+            }
+            split.append(Edge(from: from, to: edge.to))
         }
-        if !current.isEmpty { pieces.append(current); points.append(currentPoints) }
-        // Area by the shoelace over every point, curve handles included: rough on curves, exact enough to tell a
-        // hairline from a shape.
-        let kept = pieces.indices.filter { index in
-            let corners = points[index]
-            guard corners.count >= 3 else { return false }
-            var twice: CGFloat = 0
-            for (a, b) in zip(corners, corners.dropFirst() + [corners[0]]) { twice += a.x * b.y - b.x * a.y }
-            return abs(twice) / 2 >= 0.25
+
+        // Opposite pairs cancel.
+        var remaining: [Edge: Int] = [:]
+        var cancelled = 0
+        for edge in split {
+            let back = Edge(from: edge.to, to: edge.from)
+            if let count = remaining[back], count > 0 {
+                remaining[back] = count - 1
+                cancelled += 1
+            } else {
+                remaining[edge, default: 0] += 1
+            }
         }
-        guard kept.count < pieces.count else { return self }
+        guard cancelled > 0 else { return self }
+
+        // Every corner still has as many edges in as out, so following them always leads back to the start.
+        var leaving: [Point: [Point]] = [:]
+        for (edge, count) in remaining where count > 0 {
+            leaving[edge.from, default: []] += Array(repeating: edge.to, count: count)
+        }
         let path = CGMutablePath()
-        for index in kept {
-            let corners = points[index]
-            var at = 0
-            for element in pieces[index] {
-                switch element.type {
-                case .moveToPoint: path.move(to: corners[at]); at += 1
-                case .addLineToPoint: path.addLine(to: corners[at]); at += 1
-                case .addQuadCurveToPoint: path.addQuadCurve(to: corners[at + 1], control: corners[at]); at += 2
-                case .addCurveToPoint: path.addCurve(to: corners[at + 2], control1: corners[at], control2: corners[at + 1]); at += 3
-                case .closeSubpath: path.closeSubpath()
-                @unknown default: break
+        path.addPath(curved)
+        for start in leaving.keys.sorted() {
+            while let first = leaving[start]?.popLast() {
+                var loop = [start], at = first
+                while at != start, let next = leaving[at]?.popLast() {
+                    loop.append(at)
+                    at = next
                 }
+                guard loop.count >= 3 else { continue }
+                path.addLines(between: loop.map { CGPoint(x: CGFloat($0.x) / grid, y: CGFloat($0.y) / grid) })
+                path.closeSubpath()
             }
         }
         return path

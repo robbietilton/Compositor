@@ -138,7 +138,8 @@ struct SelectionTests {
     }
 
     /// Taking away a box whose edge meets the selection's exactly, as a box dragged past the canvas edge does once clipped,
-    /// leaves no hairline of outline along that edge for the ants to trace. These pairs left one before.
+    /// leaves no hairline for the ants to trace: neither a piece of its own nor a spur running out along the edge and
+    /// back. These pairs left one before.
     @Test(arguments: [
         (CGPoint(x: 49.78979217943021, y: 43.54330466303824), CGPoint(x: 34.92413828494898, y: -9.377977037384703),
          CGPoint(x: 76.52049800780095, y: 39.0757224050528), CGPoint(x: 26.11377055953632, y: -31.636741687315578)),
@@ -148,22 +149,61 @@ struct SelectionTests {
          CGPoint(x: -3.203595466171535, y: -14.504050372682055), CGPoint(x: 91.25120852295342, y: 36.95755647054405)),
         (CGPoint(x: 60.31194159740437, y: 29.979655281967936), CGPoint(x: 36.49581073573158, y: 90.93939454902221),
          CGPoint(x: 89.7907549216597, y: 30.0856538534466), CGPoint(x: -25.08151063399525, y: 66.62374348930767)),
-]) func subtractingAlongAnEdgeLeavesNoHairline(box: CGPoint, to: CGPoint, cut: CGPoint, cutTo: CGPoint) throws {
+        (CGPoint(x: -17.29301365420453, y: 26.147567173397846), CGPoint(x: 43.70803815711665, y: -14.72283655670661),
+         CGPoint(x: 65.3070690463883, y: 1.3361279049343793), CGPoint(x: 9.755282700254142, y: -30.178942429392563)),
+        (CGPoint(x: -26.72778948280061, y: 4.297416056427288), CGPoint(x: 92.26766856046919, y: -37.746358726636),
+         CGPoint(x: 105.33729557383606, y: 48.25931253253097), CGPoint(x: 31.878872549870124, y: -37.17122527081534)),
+        // As the maintainer dragged it on a 1920 × 1080 canvas, where the spur ran 900 px along the top edge.
+        (CGPoint(x: -127, y: -106), CGPoint(x: 1138, y: 573), CGPoint(x: 237, y: 392), CGPoint(x: 1343, y: -415)),
+    ]) func subtractingAlongAnEdgeLeavesNoHairline(box: CGPoint, to: CGPoint, cut: CGPoint, cutTo: CGPoint) throws {
         let session = EditorSession()
-        session.createDocument(width: 100, height: 60, emptyLayer: true)
+        let large = max(box.x, to.x, cut.x, cutTo.x) > 200
+        session.createDocument(width: large ? 1920 : 100, height: large ? 1080 : 60, emptyLayer: true)
         session.selectTool(.marquee)
         marquee(session, from: box, to: to)
         marquee(session, from: cut, to: cutTo, mode: .subtract)
-        var pieces: [[CGPoint]] = []
-        session.selection?.path.applyWithBlock { element in
-            if element.pointee.type == .moveToPoint { pieces.append([]) }
-            if element.pointee.type != .closeSubpath { pieces[pieces.count - 1].append(element.pointee.points[0]) }
+        #expect(try strayEdges(#require(session.selection).path).isEmpty)
+    }
+
+    /// Edges of `path` the ants would draw that don't divide selected from unselected: a quarter pixel either side of
+    /// the middle of each, both are in or both are out.
+    private func strayEdges(_ path: CGPath) -> [(CGPoint, CGPoint)] {
+        var edges: [(CGPoint, CGPoint)] = [], start = CGPoint.zero, last = CGPoint.zero
+        path.applyWithBlock { element in
+            let point = element.pointee.type == .closeSubpath ? start : element.pointee.points[0]
+            switch element.pointee.type {
+            case .moveToPoint: start = point
+            case .addLineToPoint, .closeSubpath: if point != last { edges.append((last, point)) }
+            default: break
+            }
+            last = point
         }
-        let hairlines = pieces.filter { piece in
-            let xs = piece.map(\.x), ys = piece.map(\.y)
-            return xs.max()! - xs.min()! < 0.5 || ys.max()! - ys.min()! < 0.5
+        return edges.filter { from, to in
+            let length = hypot(to.x - from.x, to.y - from.y)
+            guard length > 0 else { return true }
+            let middle = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+            let normal = CGPoint(x: -(to.y - from.y) / length * 0.25, y: (to.x - from.x) / length * 0.25)
+            return path.contains(CGPoint(x: middle.x + normal.x, y: middle.y + normal.y), using: .winding)
+                == path.contains(CGPoint(x: middle.x - normal.x, y: middle.y - normal.y), using: .winding)
         }
-        #expect(hairlines.isEmpty, "\(hairlines)")
+    }
+
+    /// Boxes cut one after another from a selection touching the canvas's top and left, as the maintainer drew them on
+    /// a 1920 × 1080 canvas: the last, over the corner, came back drawn as a second outline over the first, the cut-away
+    /// stretches of the canvas edge still marching.
+    @Test func cuttingAwayAtACornerLeavesNoOutlineOverTheCut() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080, emptyLayer: true)
+        func box(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> CGPath {
+            CGPath(rect: CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), transform: nil)
+        }
+        session.applySelection(box(-177, -86, 1092, 598), mode: .replace, name: "Rectangular Marquee")
+        session.applySelection(box(330, -90, 643, 350), mode: .subtract, name: "Rectangular Marquee")
+        session.applySelection(box(795, 0, 931, 295), mode: .subtract, name: "Rectangular Marquee")
+        session.applySelection(box(-46, -245, 214, 271), mode: .subtract, name: "Rectangular Marquee")
+        let path = try #require(session.selection).path
+        #expect(strayEdges(path).isEmpty, "\(strayEdges(path))")
+        #expect(try coverage(session, 100, 100) == 0 && coverage(session, 100, 300) == 255 && coverage(session, 250, 10) == 255)
     }
 
     /// ⌘H hides the outline and the guides together and brings both back; guides turned off with ⌘; stay off.
