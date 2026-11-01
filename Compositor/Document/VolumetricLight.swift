@@ -22,6 +22,9 @@ nonisolated struct VolumetricLightSettings: Equatable, Sendable {
     /// Depth Contrast, 0–100: how far the depth is spread out (`DepthMap.equalized`), so depths bunched together, like
     /// a distant city, get haze in steps rather than all alike. 0 keeps the model's own spacing.
     var depthContrast: Double = 0
+    /// On, the subject always stands clear of the haze; off, it takes its own depth and so its share of the haze, a
+    /// figure far off misted like everything at its distance.
+    var keepsSubjectClear = true
 
     var isIdentity: Bool { intensity == 0 && haze == 0 }
 
@@ -65,7 +68,8 @@ nonisolated enum VolumetricLighting {
         let scene = try prepared.scene(source: source, extent: extent, keeps: keeps) {
             try Self.scene(image, source: source, extent: extent, keeps: keeps)
         }
-        let depth = prepared.depth(source: source, extent: extent, contrast: settings.depthContrast, keeps: keeps) {
+        let depth = prepared.depth(source: source, extent: extent, contrast: settings.depthContrast, keepsSubjectClear: settings.keepsSubjectClear,
+                                   keeps: keeps) {
             // How far away each part is, once the depth model is here (`DepthModel`), the subject's edge taken from its
             // outline (`outline`).
             (DepthModel.depth(for: source)?.equalized(Float(settings.depthContrast / 100))).map {
@@ -73,7 +77,7 @@ nonisolated enum VolumetricLighting {
                     CIImage(cgImage: $0, options: [.colorSpace: NSNull()])
                         .transformed(by: CGAffineTransform(scaleX: extent.width / CGFloat(source.width), y: extent.height / CGFloat(source.height)))
                         .cropped(to: extent)
-                }, extent: extent), distances: $0.values.map { 1 - $0 }.sorted())
+                }, extent: extent, keepsSubjectClear: settings.keepsSubjectClear), distances: $0.values.map { 1 - $0 }.sorted())
             }
         }
         let beams = try prepared.beams(source: source, extent: extent, key: BeamsKey(light: light, settings: settings), keeps: keeps) {
@@ -172,7 +176,7 @@ nonisolated enum VolumetricLighting {
         private var image: CGImage?
         private var extent = CGRect.null
         private var scene: Scene?
-        private var depth: (contrast: Double, value: (image: CIImage, distances: [Float])?)?
+        private var depth: (contrast: Double, keepsSubjectClear: Bool, value: (image: CIImage, distances: [Float])?)?
         private var beams: (key: BeamsKey, image: CIImage)?
 
         /// Starts over when the image changes.
@@ -188,14 +192,14 @@ nonisolated enum VolumetricLighting {
             lock.lock(); if image === source { scene = made }; lock.unlock()
             return made
         }
-        func depth(source: CGImage, extent: CGRect, contrast: Double, keeps: Bool,
+        func depth(source: CGImage, extent: CGRect, contrast: Double, keepsSubjectClear: Bool, keeps: Bool,
                    make: () -> (image: CIImage, distances: [Float])?) -> (image: CIImage, distances: [Float])? {
             guard keeps else { return make() }
             lock.lock(); forImage(source, extent); let hit = depth; lock.unlock()
-            if let hit, hit.contrast == contrast, hit.value != nil || !DepthModel.isReady { return hit.value }
+            if let hit, hit.contrast == contrast, hit.keepsSubjectClear == keepsSubjectClear, hit.value != nil || !DepthModel.isReady { return hit.value }
             let made = make()
             // Without the model yet, nothing's kept, so its depth is picked up once it's here.
-            lock.lock(); if image === source, made != nil { depth = (contrast, made) }; lock.unlock()
+            lock.lock(); if image === source, made != nil { depth = (contrast, keepsSubjectClear, made) }; lock.unlock()
             return made
         }
         func beams(source: CGImage, extent: CGRect, key: BeamsKey, keeps: Bool, make: () throws -> CIImage) rethrows -> CIImage {
@@ -223,10 +227,10 @@ nonisolated enum VolumetricLighting {
 
     /// The depth the haze goes by, over `extent`: 1 near, 0 far. The model's map is soft at the subject's edge, where
     /// its nearness bleeds out into a band around it, so there the subject's mask decides instead: inside the mask the
-    /// subject is near, and the band around it takes the depth of the backdrop just beyond it, worked out from around it
+    /// subject is near (or with `keepsSubjectClear` off, at its own depth), and the band around it takes the depth of the backdrop just beyond it, worked out from around it
     /// (as Rim Light finds the backdrop); the two meet through the mask's own soft edge, hair and all. Further off, the
     /// model's map as it is.
-    static func composedDepth(_ predicted: DepthMap, subject: CIImage?, extent: CGRect) -> CIImage {
+    static func composedDepth(_ predicted: DepthMap, subject: CIImage?, extent: CGRect, keepsSubjectClear: Bool = true) -> CIImage {
         let side = max(extent.width, extent.height)
         func blurred(_ image: CIImage, _ sigma: CGFloat) -> CIImage {
             image.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
@@ -251,8 +255,18 @@ nonisolated enum VolumetricLighting {
         // Near the subject, the backdrop's depth; further out, the model's.
         let closeness = scaled(blurred(subject, reach * 1.5), 4)
         let around = behind.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: depth, kCIInputMaskImageKey: closeness])
-        let near = depth.applyingFilter("CIColorClamp", parameters: ["inputMinComponents": CIVector(x: 0.9, y: 0.9, z: 0.9, w: 0)])
-        return near.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: around, kCIInputMaskImageKey: subject])
+        // The subject itself: kept near, clear of the haze; or at its own depth, the model's averaged over it, so a
+        // figure far down a street is hazed as far while a near one stays clear. Averaged locally, so people apart from
+        // each other each keep their own.
+        let inside: CIImage
+        if keepsSubjectClear {
+            inside = depth.applyingFilter("CIColorClamp", parameters: ["inputMinComponents": CIVector(x: 0.9, y: 0.9, z: 0.9, w: 0)])
+        } else {
+            let span = side * 0.08
+            inside = scaled(scaled(blurred(subject, span), 1, bias: 0.001).applyingFilter("CIDivideBlendMode", parameters: [
+                kCIInputBackgroundImageKey: blurred(depth.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: subject]), span)]), 1)
+        }
+        return inside.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: around, kCIInputMaskImageKey: subject])
             .cropped(to: extent)
     }
 
@@ -262,7 +276,7 @@ nonisolated enum VolumetricLighting {
         guard let depth = DepthModel.depth(for: source)?.equalized(Float(settings.normalized.depthContrast / 100)) else { return nil }
         let extent = CGRect(x: 0, y: 0, width: source.width, height: source.height)
         let subject = outline(source).map { CIImage(cgImage: $0, options: [.colorSpace: NSNull()]) }
-        let map = composedDepth(depth, subject: subject, extent: extent)
+        let map = composedDepth(depth, subject: subject, extent: extent, keepsSubjectClear: settings.keepsSubjectClear)
         let opaque = map.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                                                                       "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1)])
         let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
