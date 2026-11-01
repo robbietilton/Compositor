@@ -55,6 +55,13 @@ brew install --cask robbietilton-compositor
 - Type tool (T): inline multiline editing in draggable, resizable paragraph boxes; font, size, color, alignment and spacing in the tool header; transform text and use it as a clipping mask
 - Eyedropper and a full color picker
 
+### Brushes
+- Editable Flat Marker, Default Painting Brush and Pencil starters, with a searchable brush library and bulk deletion
+- Brush editor with a drawing preview on white or black; custom shapes and generated tips, spacing, jitter, taper, flow and grain
+- Glaze and blending modes, wet and burnt edges, blend modes, alpha threshold and secondary tips
+- Editable pressure curves, separate pen and touch taper, stabilization, and tilt/barrel rotation mappings on compatible tablets
+- Experimental Procreate brush and set import, preserving originals; supported shapes and grain can use explicit native approximations, with missing assets and unsupported features reported
+
 ### Adjustments and filters
 - Camera Raw filter: light, color, curves, color mixer, color grading, detail, optics and geometry, in a panel beside the canvas; each section resets to its defaults from its header
 - Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Black & White, Color Balance and Invert
