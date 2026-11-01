@@ -29,6 +29,59 @@ nonisolated struct DocumentSelection: Equatable, @unchecked Sendable {
     }
 }
 
+extension CGPath {
+    /// The outline without the hairline pieces Core Graphics leaves where two edges meet exactly, as a box's edge
+    /// clipped to the canvas meeting the selection's own: shapes a ten-millionth of a pixel wide that select nothing
+    /// but that the marching ants would trace. A piece goes if it covers under a quarter of a pixel.
+    nonisolated var withoutSlivers: CGPath {
+        var pieces: [[CGPathElement]] = [], current: [CGPathElement] = []
+        var points: [[CGPoint]] = [], currentPoints: [CGPoint] = []
+        applyWithBlock { pointer in
+            let element = pointer.pointee
+            let count = switch element.type {
+            case .moveToPoint, .addLineToPoint: 1
+            case .addQuadCurveToPoint: 2
+            case .addCurveToPoint: 3
+            case .closeSubpath: 0
+            @unknown default: 0
+            }
+            if element.type == .moveToPoint, !current.isEmpty {
+                pieces.append(current); points.append(currentPoints)
+                current = []; currentPoints = []
+            }
+            current.append(element)
+            currentPoints += (0..<count).map { element.points[$0] }
+        }
+        if !current.isEmpty { pieces.append(current); points.append(currentPoints) }
+        // Area by the shoelace over every point, curve handles included: rough on curves, exact enough to tell a
+        // hairline from a shape.
+        let kept = pieces.indices.filter { index in
+            let corners = points[index]
+            guard corners.count >= 3 else { return false }
+            var twice: CGFloat = 0
+            for (a, b) in zip(corners, corners.dropFirst() + [corners[0]]) { twice += a.x * b.y - b.x * a.y }
+            return abs(twice) / 2 >= 0.25
+        }
+        guard kept.count < pieces.count else { return self }
+        let path = CGMutablePath()
+        for index in kept {
+            let corners = points[index]
+            var at = 0
+            for element in pieces[index] {
+                switch element.type {
+                case .moveToPoint: path.move(to: corners[at]); at += 1
+                case .addLineToPoint: path.addLine(to: corners[at]); at += 1
+                case .addQuadCurveToPoint: path.addQuadCurve(to: corners[at + 1], control: corners[at]); at += 2
+                case .addCurveToPoint: path.addCurve(to: corners[at + 2], control1: corners[at], control2: corners[at + 1]); at += 3
+                case .closeSubpath: path.closeSubpath()
+                @unknown default: break
+                }
+            }
+        }
+        return path
+    }
+}
+
 extension DocumentSelection {
     /// Four Gaussian standard deviations retain the visible falloff outside the outline.
     var coverageBounds: CGRect {
@@ -266,7 +319,7 @@ extension EditorSession {
             guard let current = selection else { return }
             result = current.path.subtracting(clipped, using: .winding)
         }
-        setSelection(DocumentSelection(path: result, antialiased: selectionAntialiased), name: name)
+        setSelection(DocumentSelection(path: result.withoutSlivers, antialiased: selectionAntialiased), name: name)
     }
 
     func setSelection(_ value: DocumentSelection?, name: String) {
@@ -361,7 +414,7 @@ extension EditorSession {
             ? current.path.union(band, using: .winding)
                 .intersection(CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil), using: .winding)
             : current.path.subtracting(band, using: .winding)
-        setSelection(DocumentSelection(path: result, antialiased: current.antialiased, feather: current.feather), name: name)
+        setSelection(DocumentSelection(path: result.withoutSlivers, antialiased: current.antialiased, feather: current.feather), name: name)
     }
 
     func selectAll() {
@@ -377,7 +430,7 @@ extension EditorSession {
     func invertSelection() {
         guard let document, let current = selection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
-        let inverse = DocumentSelection(path: canvas.subtracting(current.path, using: .winding), antialiased: current.antialiased,
+        let inverse = DocumentSelection(path: canvas.subtracting(current.path, using: .winding).withoutSlivers, antialiased: current.antialiased,
                                         feather: current.feather)
         // The inverse of everything is no selection at all, as in Photoshop — not an invisible empty one that
         // quietly stops every brush.
