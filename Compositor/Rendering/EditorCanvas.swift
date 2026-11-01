@@ -7,6 +7,7 @@ struct EditorCanvas: NSViewRepresentable {
     func updateNSView(_ view: CanvasView, context: Context) {
         view.consumeFocusRequest(session.canvasFocusRequest)
         _ = session.showsTransformControls // observed here so ⌘H redraws the transform box at once
+        _ = session.hiddenSelectionEdges // and the selection's outline
         _ = session.showsGrid
         _ = session.layoutGrid
         _ = session.gridAppearance
@@ -2572,7 +2573,7 @@ final class CanvasView: NSView {
 
     /// Marching ants animate only while a visible selection exists.
     private func updateAntsTimer() {
-        let active = session.selection?.isEmpty == false && window != nil
+        let active = session.selection?.isEmpty == false && session.showsSelectionEdges && window != nil
         if active, antsTimer == nil {
             let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in
                 // A redraw still pending skips this tick: a slow outline stutters rather than queuing redraws forever.

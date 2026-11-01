@@ -123,6 +123,20 @@ struct SelectionTests {
         #expect(session.lassoDraft == nil)
     }
 
+    /// ⌘H hides the outline but keeps the selection; a different selection, or none, shows outlines again.
+    @Test func hiddenEdgesKeepTheSelectionAndAnyNewOneShows() throws {
+        let session = makeSession()
+        lasso(session, square(10, 10, 20))
+        session.showsSelectionEdges = false
+        #expect(!session.showsSelectionEdges && session.selection?.isEmpty == false)
+        lasso(session, square(40, 40, 20))
+        #expect(session.showsSelectionEdges, "a new selection shows its outline")
+        session.showsSelectionEdges = false
+        session.deselect()
+        session.selectAll()
+        #expect(session.showsSelectionEdges)
+    }
+
     /// Select All then Inverse leaves nothing selected, as in Photoshop, so painting works everywhere again.
     @Test func inverseOfEverythingDeselects() throws {
         let session = makeSession()

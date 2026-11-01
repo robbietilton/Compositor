@@ -298,6 +298,9 @@ final class EditorSession {
     /// The Move tool's transform box and handles (⌘H). Hidden, a drag anywhere just moves the layer;
     /// a pending ⌘T transform still shows its box.
     var showsTransformControls = ToolDefaults.bool("transformControls", true) { didSet { ToolDefaults.set(showsTransformControls, "transformControls") } }
+    /// The selection whose outline ⌘H hid (outside the Move tool). It still limits painting and adjustments; any other
+    /// selection, or none, shows its outline again, so a new one is never invisible.
+    var hiddenSelectionEdges: DocumentSelection?
     /// The copies an Option-drag made, and what was selected before it, so Escape can take them away again.
     @ObservationIgnored var transformDuplicate: (copies: [UUID], source: Set<UUID>, primary: UUID?)?
     var showsBrushPalette = false

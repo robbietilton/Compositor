@@ -288,27 +288,29 @@ nonisolated enum VolumetricLighting {
         if noSubject.contains(image) { return nil }
         return outlines.outline(for: image) {
             guard let general = try? SubjectRemoval.subjectMask(image) else { return nil }
-            guard let person = personMask(image) else {
-                let extent = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-                let firm = firmed(CIImage(cgImage: general, options: [.colorSpace: NSNull()]), side: CGFloat(max(image.width, image.height)), extent: extent)
-                return try? PixelAdjust.render(firm, width: image.width, height: image.height, isMask: true)
-            }
             let extent = CGRect(x: 0, y: 0, width: image.width, height: image.height)
             let raw: [CIImageOption: Any] = [.colorSpace: NSNull()]
-            let personImage = CIImage(cgImage: person, options: raw)
-            // Where a person is (and a little around, for their outline), their own mask; elsewhere the general one.
             let side = CGFloat(max(image.width, image.height))
-            let near = personImage.clampedToExtent().applyingGaussianBlur(sigma: side * 0.01).cropped(to: extent)
-                .applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: 20, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 20, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: 20, w: 0)]).applyingFilter("CIColorClamp")
-            var composed = personImage.applyingFilter("CIBlendWithMask", parameters: [
-                kCIInputBackgroundImageKey: CIImage(cgImage: general, options: raw), kCIInputMaskImageKey: near])
-            // Heads take the person's mask pulled onto the photo's own edges over a wide 30 px (as Remove Background's
+            let generalImage = CIImage(cgImage: general, options: raw)
+            // The person's own mask, if Vision found the person the general mask did; on a small or dim figure it can
+            // come back faint or only in part, and then the general mask is the better outline throughout.
+            let person = personMask(image).flatMap { agrees($0, with: generalImage, extent: extent) ? $0 : nil }
+            var composed = generalImage
+            if let person {
+                // Where a person is (and a little around, for their outline), their own mask; elsewhere the general one.
+                let personImage = CIImage(cgImage: person, options: raw)
+                let near = personImage.clampedToExtent().applyingGaussianBlur(sigma: side * 0.01).cropped(to: extent)
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputRVector": CIVector(x: 20, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 20, z: 0, w: 0),
+                        "inputBVector": CIVector(x: 0, y: 0, z: 20, w: 0)]).applyingFilter("CIColorClamp")
+                composed = personImage.applyingFilter("CIBlendWithMask", parameters: [
+                    kCIInputBackgroundImageKey: generalImage, kCIInputMaskImageKey: near])
+            }
+            // Heads take the person's mask (or the general one) pulled onto the photo's own edges over a wide 30 px (as Remove Background's
             // Refine does), which finds the strands of hair and clears the backdrop between them, kept within the
             // general mask; its grays kept so the haze shows through. The rest of the person keeps the crisp outline.
             if let heads = headsMask(image),
-               let strands = try? GuidedMatte.refine(mask: person, guide: image, radius: 30, limit: .greatestFiniteMagnitude) {
+               let strands = try? GuidedMatte.refine(mask: person ?? general, guide: image, radius: 30, limit: .greatestFiniteMagnitude) {
                 // Its faintest grays dropped: they're the haze of a halo around the hair, not strands.
                 let hair = CIImage(cgImage: strands, options: raw).applyingFilter("CIColorMatrix", parameters: [
                     "inputRVector": CIVector(x: 1.4, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: 1.4, z: 0, w: 0),
@@ -316,7 +318,7 @@ nonisolated enum VolumetricLighting {
                     .applyingFilter("CIColorClamp")
                     // Multiplied by the general mask, which stops cleanly just past the hair: the strands inside it stay,
                     // and what the wide refine pulled onto the backdrop beyond it goes.
-                    .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: CIImage(cgImage: general, options: raw)])
+                    .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: generalImage])
                 composed = hair.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: firmed(composed, side: side, extent: extent),
                                                                                kCIInputMaskImageKey: CIImage(cgImage: heads, options: raw)])
             } else {
@@ -324,6 +326,21 @@ nonisolated enum VolumetricLighting {
             }
             return try? PixelAdjust.render(composed.cropped(to: extent), width: image.width, height: image.height, isMask: true)
         }
+    }
+
+    /// Whether the person's mask covers most of what the general mask found: at least 60% of it.
+    private static func agrees(_ person: CGImage, with general: CIImage, extent: CGRect) -> Bool {
+        let both = CIImage(cgImage: person, options: [.colorSpace: NSNull()])
+            .applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: general])
+        func mean(_ image: CIImage) -> Float {
+            var pixel = [Float](repeating: 0, count: 4)
+            PixelAdjust.ciContext.render(image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)]),
+                                         toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                                         format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        let found = mean(general)
+        return found > 0 && mean(both) / found >= 0.6
     }
 
     /// An outline made crisp, so the haze meets the subject cleanly rather than creeping onto it. Smoothed a touch first,
