@@ -3,20 +3,15 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.0</title>
-      <pubDate>Mon, 02 Nov 2026 20:08:37 +0000</pubDate>
-      <sparkle:version>59</sparkle:version>
-      <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
+      <title>Version 1.6.1</title>
+      <pubDate>Mon, 02 Nov 2026 20:53:05 +0000</pubDate>
+      <sparkle:version>60</sparkle:version>
+      <sparkle:shortVersionString>1.6.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.0</link>
-      <changes><![CDATA[New: Filter › Volumetric Light. Haze that thickens with distance, using depth from a model trained for Compositor
-16-bit and HDR layers keep their depth through 8-bit edits
-Hide/Show, clipping masks, number-key opacity and Convert to 16-Bit / 8-Bit work on every selected layer
-Right-click layers to export each as a trimmed PNG
-Space moves a Marquee while drawing, ⌘H hides the selection outline and guides, and the status bar shows the selection's size
-Edit panels open beside the canvas, where you last moved one, and painting is faster
-Fixed: Undo closing the image you opened, stray marching ants along the canvas edge, and Image Size scrubbing past limits]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.0/Compositor.dmg" sparkle:edSignature="OV1hfeay/k92w15zSw1f3V2GplpwFKuRXH2s7Werg+ExLNf3wHwVfC2rUsdGCKZMz8SqNpYD+7XP5XiuN01zAg==" length="8776843" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.1</link>
+      <changes><![CDATA[Volumetric Light waits for its depth model the first time, instead of showing a rough guess first
+Edit panels open centered on the edge of the layers panel]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.1/Compositor.dmg" sparkle:edSignature="5GpM+04jz5UDKMPXndMJ04XP4mWEAhdkTJkBl4r7i8zU5XgppjJIDyXCWfyjrahvG7MdvnfRsaVw/zmVfsfWCA==" length="8778422" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
