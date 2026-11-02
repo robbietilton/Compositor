@@ -68,6 +68,40 @@ struct LayerExportTests {
         #expect(try await ImageExporter.shared.layerPNGData(snapshot, layer: empty) == nil, "nothing to export")
     }
 
+    @Test func layerExportRastersTrimToItsPixelsAndDepthFollows() async throws {
+        let red = UUID(), deep = UUID(), empty = UUID(), folder = UUID()
+        var folderRecord = ProjectLayerRecord(id: folder, name: "Folder", isVisible: true,
+            transform: LayerTransform(origin: .zero, size: CGSize(width: 10, height: 10)), imageFile: nil)
+        folderRecord.isGroup = true
+        var deepImage = ImportedImage(image: try solid(CGColor(red: 1, green: 0, blue: 0, alpha: 1)),
+                                      thumbnail: try solid(.black), name: "Deep")
+        deepImage.deep = try solid(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        let images = [
+            red: ImportedImage(image: try solid(CGColor(red: 1, green: 0, blue: 0, alpha: 1)), thumbnail: try solid(.black), name: "Red"),
+            deep: deepImage,
+            empty: ImportedImage(image: try solid(.black, alpha: 0), thumbnail: try solid(.black), name: "Empty"),
+        ]
+        let snapshot = ProjectSnapshot(manifest: ProjectManifest(documentID: UUID(), width: 10, height: 10, activeLayerID: red, layers: [
+            record(red, "Red", at: CGPoint(x: 1, y: 1), CGSize(width: 2, height: 3)),
+            record(deep, "Deep", at: .zero, CGSize(width: 4, height: 2)),
+            record(empty, "Empty", at: .zero, CGSize(width: 10, height: 10)),
+            folderRecord,
+        ]), images: images)
+
+        let rasters = try #require(await ImageExporter.shared.layerExportRasters(snapshot, layer: red))
+        #expect(rasters.raster.image.width == 2 && rasters.raster.image.height == 3, "trimmed to the layer's pixels")
+        #expect(rasters.deep == nil && rasters.hdr == nil, "no 16-bit layer in this export, so no depth offered")
+
+        let deepRasters = try #require(await ImageExporter.shared.layerExportRasters(snapshot, layer: deep))
+        #expect(deepRasters.deep?.image.width == 4 && deepRasters.deep?.image.height == 2,
+                "the 16-bit flattening trimmed to the same box")
+        #expect(deepRasters.hdr == nil, "light brighter than white nowhere, so no EXR offered")
+
+        #expect(try await ImageExporter.shared.layerExportRasters(snapshot, layer: empty) == nil, "nothing to export")
+        #expect(try await ImageExporter.shared.layerExportRasters(snapshot, layer: folder) == nil,
+                "a folder with nothing shown in it")
+    }
+
     @Test func layerNamesBecomeFileNames() {
         #expect(ProjectController.fileName("Logo / Dark: v2") == "Logo - Dark- v2")
         #expect(ProjectController.fileName("  ") == "Layer")

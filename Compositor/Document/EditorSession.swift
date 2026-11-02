@@ -1244,6 +1244,8 @@ final class EditorSession {
     @ObservationIgnored var opensArtboard: ((PSDDocument, String) async -> Void)?
     /// The layer list's Export Layers as PNGs…; set by the project controller, which shows the panels.
     @ObservationIgnored var exportsLayers: (() async -> Void)?
+    /// The layer list's Export Layer As…, the Export As sheet for the one layer; set by the project controller too.
+    @ObservationIgnored var exportsLayerAs: (() async -> Void)?
     /// While Volumetric Light's depth model is downloading or loading, the first time it's used (`DepthModel`).
     var preparingDepth = false
     /// Set while Convert to 8-Bit ends its edit, so `keepLayerDepths` lets it make 16-bit layers 8-bit.

@@ -116,12 +116,35 @@ actor ImageExporter {
         try pngData(render(snapshot))
     }
 
+    /// The layer `id` on its own, trimmed to its pixels, at every depth an Export As of it can be written at: the 8-bit
+    /// raster, and the 16-bit and HDR flattenings beside it when any layer in the export has such pixels, so the sheet
+    /// can offer a 16-bit PNG and an EXR as the canvas's does. Nil when the layer has no pixels, as an adjustment layer
+    /// or an empty one.
+    struct LayerExportRasters {
+        let raster: ExportRaster
+        let deep: ExportRaster?
+        let hdr: ExportRaster?
+    }
+
+    func layerExportRasters(_ snapshot: ProjectSnapshot, layer id: UUID) throws -> LayerExportRasters? {
+        let isolated = Self.isolating(id, in: snapshot)
+        let full = try render(isolated)
+        guard let rect = ImageTrim.calculateTrimRect(in: full.image, options: TrimOptions()) else { return nil }
+        func cropped(_ raster: ExportRaster) -> ExportRaster {
+            ExportRaster(image: raster.image.cropping(to: rect) ?? raster.image, resolution: raster.resolution)
+        }
+        let images = isolated.manifest.layers.filter(\.isVisible).compactMap { snapshot.images[$0.id] }
+        var deep: ExportRaster?, hdr: ExportRaster?
+        if images.contains(where: { $0.deep != nil }) { deep = cropped(try render(isolated, sixteenBit: true)) }
+        if images.contains(where: \.isHDR) { hdr = cropped(try render(isolated, sixteenBit: true, hdr: true)) }
+        return LayerExportRasters(raster: cropped(full), deep: deep, hdr: hdr)
+    }
+
     /// Export Layers as PNGs: the layer `id` on its own, as it looks in the document, trimmed to its pixels. Nil when it
     /// has none, as an adjustment layer or an empty one.
     func layerPNGData(_ snapshot: ProjectSnapshot, layer id: UUID) throws -> Data? {
-        let raster = try render(Self.isolating(id, in: snapshot))
-        guard let trimmed = ImageTrim.trimImage(raster.image, options: TrimOptions()) else { return nil }
-        return try pngData(ExportRaster(image: trimmed, resolution: raster.resolution))
+        guard let rasters = try layerExportRasters(snapshot, layer: id) else { return nil }
+        return try pngData(rasters.raster)
     }
 
     /// `snapshot` with only the layer `id` showing: it, shown even if it's hidden; what's inside it, if it's a folder, and

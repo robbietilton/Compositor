@@ -254,6 +254,12 @@ struct NativeLayerList: NSViewRepresentable {
             exportItem.isEnabled = validateMenuItem(exportItem)
             menu.addItem(exportItem)
 
+            // 14. Export Layer As…: the one layer in the Export As sheet, with the formats and size the canvas's has.
+            let exportAsItem = NSMenuItem(title: "Export Layer As…", action: #selector(exportLayerAsAction), keyEquivalent: "")
+            exportAsItem.target = self
+            exportAsItem.isEnabled = validateMenuItem(exportAsItem)
+            menu.addItem(exportAsItem)
+
             return menu
         }
 
@@ -291,6 +297,9 @@ struct NativeLayerList: NSViewRepresentable {
                 return session.canEditLayers && session.activeLayer != nil
             case #selector(exportLayersAction):
                 return session.canStartProjectOperation && session.activeLayer != nil && session.exportsLayers != nil
+            case #selector(exportLayerAsAction):
+                return session.canStartProjectOperation && session.activeLayer != nil
+                    && session.selectedLayerIDs.count <= 1 && session.exportsLayerAs != nil
             default:
                 if menuItem.submenu != nil && menuItem.title == "Add Mask" {
                     return session.canEditMask && session.activeLayer?.mask == nil
@@ -301,6 +310,11 @@ struct NativeLayerList: NSViewRepresentable {
 
         @objc func exportLayersAction(_ sender: Any?) {
             guard let export = session.exportsLayers else { return }
+            Task { await export() }
+        }
+
+        @objc func exportLayerAsAction(_ sender: Any?) {
+            guard let export = session.exportsLayerAs else { return }
             Task { await export() }
         }
 

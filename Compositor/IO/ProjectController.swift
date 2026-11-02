@@ -16,6 +16,7 @@ final class ProjectController {
     init(session: EditorSession) {
         self.session = session
         session.exportsLayers = { [weak self] in await self?.exportLayers() }
+        session.exportsLayerAs = { [weak self] in await self?.exportLayerAs() }
     }
 
     private func begin() -> Bool {
@@ -133,6 +134,47 @@ final class ProjectController {
         return cleaned.isEmpty || cleaned.hasPrefix(".") ? "Layer" + cleaned : cleaned
     }
 
+    /// The layer list's Export Layer As…: the one selected layer in the Export As sheet, its formats, size and preview
+    /// as the canvas's, trimmed to the layer's pixels and named after it.
+    func exportLayerAs() async {
+        guard let window, session.document != nil, begin() else { return }
+        defer { session.isProjectBusy = false }
+        guard let snapshot = session.projectSnapshot() else { return }
+        guard session.selectedLayerIDs.count <= 1, let id = session.selectedLayerIDs.first ?? session.activeLayerID,
+              let layer = snapshot.manifest.layers.first(where: { $0.id == id }) else { return }
+        do {
+            guard let rasters = try await ImageExporter.shared.layerExportRasters(snapshot, layer: id) else {
+                let alert = NSAlert()
+                alert.messageText = "“\(layer.name)” has nothing to export"
+                alert.informativeText = "A layer with no visible pixels, such as an adjustment layer, isn’t saved as an image."
+                alert.addButton(withTitle: "OK")
+                _ = await show(alert)
+                return
+            }
+            let chosen: (data: Data, format: ExportFormat)? = await withCheckedContinuation { continuation in
+                let sheet = NSWindow()
+                sheet.styleMask = [.titled, .fullSizeContentView]
+                sheet.title = "Export Layer As"
+                sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
+                    raster: rasters.raster, deepRaster: rasters.deep, hdrRaster: rasters.hdr, snapshot: nil, session: session,
+                    format: lastExportFormat) { chosen in
+                    window.endSheet(sheet)
+                    sheet.orderOut(nil)
+                    // Release the hosted view and its closure after dismissal.
+                    sheet.contentViewController = nil
+                    continuation.resume(returning: chosen)
+                })
+                window.beginSheet(sheet)
+            }
+            guard let chosen else { return }
+            lastExportFormat = chosen.format
+            guard let url = await savePanel(for: chosen.format, named: layer.name) else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            try await ImageExporter.shared.write(chosen.data, to: url)
+        } catch { await showError("Couldn’t export layer", error: error) }
+    }
+
     private func run(_ panel: NSSavePanel) async -> Bool {
         if let window { return await panel.beginSheetModal(for: window) == .OK }
         return await panel.begin() == .OK
@@ -179,14 +221,15 @@ final class ProjectController {
     /// The format Export As last used, offered first next time.
     private var lastExportFormat = ExportFormat.png
 
-    /// Where an export goes: the project's name, with the format's extension.
-    private func savePanel(for format: ExportFormat) async -> URL? {
+    /// Where an export goes: the project's name, or the layer's when one is exported, with the format's extension.
+    private func savePanel(for format: ExportFormat, named: String? = nil) async -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format.type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.title = "Export " + format.rawValue
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+        panel.nameFieldStringValue = (named.map(Self.fileName)
+            ?? session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
             + "." + (format.type.preferredFilenameExtension ?? format.rawValue.lowercased())
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
