@@ -225,7 +225,7 @@ struct FilterSheet: View {
                     Text(edit?.committing == true ? "Applying…" : "Working…")
                         .font(.callout).foregroundStyle(.secondary)
                 } else if edit?.kind == .volumetricLight, session.preparingDepth {
-                    // The first time only: the depth model is downloading (about 2 MB).
+                    // The first time only: the depth model is downloading (about 2.6 MB).
                     ProgressView().controlSize(.small)
                     Text("Getting depth…").font(.callout).foregroundStyle(.secondary)
                 } else if let edit, edit.preparing, edit.kind == .rimLight && !RimLighting.hasSubject(for: edit.hdrPreviewSource ?? edit.previewSource)
@@ -424,6 +424,8 @@ struct FilterSheet: View {
             .help("How far from the light the beams reach")
         control("Shafts", \.volumetric.shafts, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
             .help("How much the beams break up into separate shafts")
+        Toggle("Keep Subject Clear", isOn: flag(\.volumetric.keepsSubjectClear))
+            .help("Keep the subject clear of the haze; off, it's hazed by its own distance, so a figure far off is misted")
     }
 
     @ViewBuilder private var rimLightControls: some View {

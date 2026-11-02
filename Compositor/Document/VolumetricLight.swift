@@ -22,6 +22,9 @@ nonisolated struct VolumetricLightSettings: Equatable, Sendable {
     /// Depth Contrast, 0–100: how far the depth is spread out (`DepthMap.equalized`), so depths bunched together, like
     /// a distant city, get haze in steps rather than all alike. 0 keeps the model's own spacing.
     var depthContrast: Double = 0
+    /// On, the subject always stands clear of the haze; off, it takes its own depth and so its share of the haze, a
+    /// figure far off misted like everything at its distance.
+    var keepsSubjectClear = true
 
     var isIdentity: Bool { intensity == 0 && haze == 0 }
 
@@ -65,7 +68,8 @@ nonisolated enum VolumetricLighting {
         let scene = try prepared.scene(source: source, extent: extent, keeps: keeps) {
             try Self.scene(image, source: source, extent: extent, keeps: keeps)
         }
-        let depth = prepared.depth(source: source, extent: extent, contrast: settings.depthContrast, keeps: keeps) {
+        let depth = prepared.depth(source: source, extent: extent, contrast: settings.depthContrast, keepsSubjectClear: settings.keepsSubjectClear,
+                                   keeps: keeps) {
             // How far away each part is, once the depth model is here (`DepthModel`), the subject's edge taken from its
             // outline (`outline`).
             (DepthModel.depth(for: source)?.equalized(Float(settings.depthContrast / 100))).map {
@@ -73,7 +77,7 @@ nonisolated enum VolumetricLighting {
                     CIImage(cgImage: $0, options: [.colorSpace: NSNull()])
                         .transformed(by: CGAffineTransform(scaleX: extent.width / CGFloat(source.width), y: extent.height / CGFloat(source.height)))
                         .cropped(to: extent)
-                }, extent: extent), distances: $0.values.map { 1 - $0 }.sorted())
+                }, extent: extent, keepsSubjectClear: settings.keepsSubjectClear), distances: $0.values.map { 1 - $0 }.sorted())
             }
         }
         let beams = try prepared.beams(source: source, extent: extent, key: BeamsKey(light: light, settings: settings), keeps: keeps) {
@@ -172,7 +176,7 @@ nonisolated enum VolumetricLighting {
         private var image: CGImage?
         private var extent = CGRect.null
         private var scene: Scene?
-        private var depth: (contrast: Double, value: (image: CIImage, distances: [Float])?)?
+        private var depth: (contrast: Double, keepsSubjectClear: Bool, value: (image: CIImage, distances: [Float])?)?
         private var beams: (key: BeamsKey, image: CIImage)?
 
         /// Starts over when the image changes.
@@ -188,14 +192,14 @@ nonisolated enum VolumetricLighting {
             lock.lock(); if image === source { scene = made }; lock.unlock()
             return made
         }
-        func depth(source: CGImage, extent: CGRect, contrast: Double, keeps: Bool,
+        func depth(source: CGImage, extent: CGRect, contrast: Double, keepsSubjectClear: Bool, keeps: Bool,
                    make: () -> (image: CIImage, distances: [Float])?) -> (image: CIImage, distances: [Float])? {
             guard keeps else { return make() }
             lock.lock(); forImage(source, extent); let hit = depth; lock.unlock()
-            if let hit, hit.contrast == contrast, hit.value != nil || !DepthModel.isReady { return hit.value }
+            if let hit, hit.contrast == contrast, hit.keepsSubjectClear == keepsSubjectClear, hit.value != nil || !DepthModel.isReady { return hit.value }
             let made = make()
             // Without the model yet, nothing's kept, so its depth is picked up once it's here.
-            lock.lock(); if image === source, made != nil { depth = (contrast, made) }; lock.unlock()
+            lock.lock(); if image === source, made != nil { depth = (contrast, keepsSubjectClear, made) }; lock.unlock()
             return made
         }
         func beams(source: CGImage, extent: CGRect, key: BeamsKey, keeps: Bool, make: () throws -> CIImage) rethrows -> CIImage {
@@ -223,10 +227,10 @@ nonisolated enum VolumetricLighting {
 
     /// The depth the haze goes by, over `extent`: 1 near, 0 far. The model's map is soft at the subject's edge, where
     /// its nearness bleeds out into a band around it, so there the subject's mask decides instead: inside the mask the
-    /// subject is near, and the band around it takes the depth of the backdrop just beyond it, worked out from around it
+    /// subject is near (or with `keepsSubjectClear` off, at its own depth), and the band around it takes the depth of the backdrop just beyond it, worked out from around it
     /// (as Rim Light finds the backdrop); the two meet through the mask's own soft edge, hair and all. Further off, the
     /// model's map as it is.
-    static func composedDepth(_ predicted: DepthMap, subject: CIImage?, extent: CGRect) -> CIImage {
+    static func composedDepth(_ predicted: DepthMap, subject: CIImage?, extent: CGRect, keepsSubjectClear: Bool = true) -> CIImage {
         let side = max(extent.width, extent.height)
         func blurred(_ image: CIImage, _ sigma: CGFloat) -> CIImage {
             image.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
@@ -251,8 +255,18 @@ nonisolated enum VolumetricLighting {
         // Near the subject, the backdrop's depth; further out, the model's.
         let closeness = scaled(blurred(subject, reach * 1.5), 4)
         let around = behind.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: depth, kCIInputMaskImageKey: closeness])
-        let near = depth.applyingFilter("CIColorClamp", parameters: ["inputMinComponents": CIVector(x: 0.9, y: 0.9, z: 0.9, w: 0)])
-        return near.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: around, kCIInputMaskImageKey: subject])
+        // The subject itself: kept near, clear of the haze; or at its own depth, the model's averaged over it, so a
+        // figure far down a street is hazed as far while a near one stays clear. Averaged locally, so people apart from
+        // each other each keep their own.
+        let inside: CIImage
+        if keepsSubjectClear {
+            inside = depth.applyingFilter("CIColorClamp", parameters: ["inputMinComponents": CIVector(x: 0.9, y: 0.9, z: 0.9, w: 0)])
+        } else {
+            let span = side * 0.08
+            inside = scaled(scaled(blurred(subject, span), 1, bias: 0.001).applyingFilter("CIDivideBlendMode", parameters: [
+                kCIInputBackgroundImageKey: blurred(depth.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: subject]), span)]), 1)
+        }
+        return inside.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: around, kCIInputMaskImageKey: subject])
             .cropped(to: extent)
     }
 
@@ -262,7 +276,7 @@ nonisolated enum VolumetricLighting {
         guard let depth = DepthModel.depth(for: source)?.equalized(Float(settings.normalized.depthContrast / 100)) else { return nil }
         let extent = CGRect(x: 0, y: 0, width: source.width, height: source.height)
         let subject = outline(source).map { CIImage(cgImage: $0, options: [.colorSpace: NSNull()]) }
-        let map = composedDepth(depth, subject: subject, extent: extent)
+        let map = composedDepth(depth, subject: subject, extent: extent, keepsSubjectClear: settings.keepsSubjectClear)
         let opaque = map.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                                                                       "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1)])
         let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
@@ -323,6 +337,11 @@ nonisolated enum VolumetricLighting {
                                                                                kCIInputMaskImageKey: CIImage(cgImage: heads, options: raw)])
             } else {
                 composed = firmed(composed, side: side, extent: extent)
+            }
+            // Hands and arms take Vision's mask worked out again on crops around them, which separates the fingers, and
+            // an arm from the body, where the whole photo's masks fill the gaps in (`limbGaps`).
+            if let gaps = limbGaps(image, outline: composed, extent: extent) {
+                composed = gaps.applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: composed])
             }
             return try? PixelAdjust.render(composed.cropped(to: extent), width: image.width, height: image.height, isMask: true)
         }
@@ -395,6 +414,76 @@ nonisolated enum VolumetricLighting {
         let soft = CIImage(cgImage: ovals, options: [.colorSpace: NSNull()]).clampedToExtent()
             .applyingGaussianBlur(sigma: max(width, height) * 0.02).cropped(to: extent)
         return try? PixelAdjust.render(soft, width: image.width, height: image.height, isMask: true)
+    }
+
+    /// What to take away from `outline`, white: the gaps between the people's fingers, and between their arms and
+    /// bodies, that Vision finds on a crop around each hand (from the wrist and elbow of their poses) and between each
+    /// elbow and hip, where they're many more of its pixels than in the whole photo. Each crop takes away only what's
+    /// narrow (on a crop Vision can drop a wide part of the body, a chest behind a fist, which stays), and only within
+    /// an oval inside it, soft-edged: its own edges cut through the body, and Vision is unsure there. Nil when no arm
+    /// is found.
+    private static func limbGaps(_ image: CGImage, outline: CIImage, extent: CGRect) -> CIImage? {
+        let request = VNDetectHumanBodyPoseRequest()
+        guard (try? VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])) != nil,
+              let people = request.results, !people.isEmpty else { return nil }
+        let height = extent.height
+        var gaps: CIImage?
+        func look(around center: CGPoint, half: CGFloat, narrow: CGFloat) {
+            let box = CGRect(x: center.x - half, y: center.y - half, width: half * 2, height: half * 2).integral.intersection(extent)
+            // CGImage crops count down from the top.
+            guard !box.isEmpty, let crop = image.cropping(to: CGRect(x: box.minX, y: height - box.maxY, width: box.width, height: box.height)),
+                  let found = foregroundMask(crop),
+                  let oval = CIFilter(name: "CIRadialGradient", parameters: [
+                      "inputCenter": CIVector(cgPoint: center), "inputRadius0": half * 0.6, "inputRadius1": half * 0.75,
+                      "inputColor0": CIColor.white, "inputColor1": CIColor.black])?.outputImage?.cropped(to: extent) else { return }
+            let seen = CIImage(cgImage: found, options: [.colorSpace: NSNull()])
+                .transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY)).composited(over: CIImage(color: .white).cropped(to: extent))
+            let kept = narrowGaps(in: outline, seen: seen, narrow: narrow, extent: extent)
+                .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: oval])
+            gaps = gaps.map { kept.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: $0]) } ?? kept
+        }
+        for person in people {
+            // Vision's points are 0–1 with y up, as Core Image's are.
+            func point(_ name: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+                guard let joint = try? person.recognizedPoint(name), joint.confidence > 0.2 else { return nil }
+                return CGPoint(x: joint.location.x * extent.width, y: joint.location.y * height)
+            }
+            for (wristName, elbowName, hipName) in [(VNHumanBodyPoseObservation.JointName.leftWrist, VNHumanBodyPoseObservation.JointName.leftElbow,
+                                                     VNHumanBodyPoseObservation.JointName.leftHip), (.rightWrist, .rightElbow, .rightHip)] {
+                guard let w = point(wristName), let e = point(elbowName) else { continue }
+                let forearm = hypot(w.x - e.x, w.y - e.y)
+                guard forearm > 8 else { continue }
+                // The hand reaches on past the wrist, about half a forearm.
+                look(around: CGPoint(x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4), half: forearm * 0.8, narrow: forearm * 0.12)
+                // Between the elbow and the hip, where an arm hanging by the body leaves a gap.
+                if let h = point(hipName) {
+                    look(around: CGPoint(x: (e.x + h.x) / 2, y: (e.y + h.y) / 2), half: max(forearm * 0.8, hypot(e.x - h.x, e.y - h.y) * 0.8),
+                         narrow: forearm * 0.12)
+                }
+            }
+        }
+        return gaps
+    }
+
+    /// What `seen` leaves out of `outline`, white, but only what's narrow, no wider than about twice `narrow`: what's
+    /// wide survives shrinking then growing back, grown back further than it shrank so its rim, which the shrinking
+    /// rounds off, goes with it; the rest is narrow.
+    static func narrowGaps(in outline: CIImage, seen: CIImage, narrow: CGFloat, extent: CGRect) -> CIImage {
+        let cut = outline.applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: seen])
+            .applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: outline])
+        let wide = cut.clampedToExtent().applyingFilter("CIMorphologyMinimum", parameters: ["inputRadius": narrow])
+            .applyingFilter("CIMorphologyMaximum", parameters: ["inputRadius": narrow * 1.6]).cropped(to: extent)
+        return wide.applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: cut])
+    }
+
+    /// Vision's subject mask for `image`, white over the subject, at its size; nil when it finds none. Not Remove
+    /// Background's (`SubjectRemoval.subjectMask`), whose cache holds the whole photo's.
+    private static func foregroundMask(_ image: CGImage) -> CGImage? {
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        guard (try? handler.perform([request])) != nil, let result = request.results?.first, !result.allInstances.isEmpty,
+              let buffer = try? result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler) else { return nil }
+        return try? PixelAdjust.render(CIImage(cvPixelBuffer: buffer), width: image.width, height: image.height, isMask: true)
     }
 
     /// The people in `image`, white, at its size; nil when there are none.

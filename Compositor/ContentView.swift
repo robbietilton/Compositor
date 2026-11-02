@@ -345,6 +345,9 @@ struct ContentView: View {
                 Text(session.viewport.zoom, format: .percent.precision(.fractionLength(0...1)))
                     .frame(width: 62, alignment: .leading).accessibilityIdentifier("zoomStatus")
                 Text("\(document.width) × \(document.height) px").accessibilityIdentifier("canvasDimensions")
+                if let size = session.selectionSize {
+                    Text("Selection \(size.width) × \(size.height) px").accessibilityIdentifier("selectionDimensions")
+                }
                 Text("sRGB · Transparent")
             } else { Text("Ready when you are") }
             Spacer()

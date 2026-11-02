@@ -414,8 +414,15 @@ final class EditorSession {
             ToolDefaults.set(gridAppearance.opacity, "gridOpacity")
         }
     }
-    /// User guides. Hidden extras do not snap.
-    var showsGuides = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(showsGuides, "guides") } }
+    /// User guides, as View › Show › Guides (⌘;) and ⌘H leave them. Hidden guides do not snap. Turning them on, or making
+    /// a guide, also brings them back from ⌘H.
+    var showsGuides: Bool {
+        get { guidesOn && !extrasHideGuides }
+        set { guidesOn = newValue; extrasHideGuides = false }
+    }
+    private var guidesOn = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(guidesOn, "guides") } }
+    /// ⌘H's hold on the guides, for the session only, so ⌘; keeps its own setting underneath.
+    var extrasHideGuides = false
     /// F: the canvas alone on black, filling the screen, with every panel and bar put away. F again brings them back.
     var canvasOnly = false
     /// Nothing in progress for Escape to cancel (a transform, crop, lasso, shape, gradient, stroke or text), so in
