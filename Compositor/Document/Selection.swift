@@ -258,6 +258,18 @@ extension EditorSession {
     var selection: DocumentSelection? { document?.selection }
     var canEditSelection: Bool { canEditLayers }
 
+    /// The size the status bar shows, in whole pixels: the Marquee being drawn, else the box around the selection
+    /// within the canvas. Nil with neither.
+    var selectionSize: (width: Int, height: Int)? {
+        if let draft = lassoDraft, draft.anchor != nil, draft.points.count == 4 {
+            let xs = draft.points.map(\.x), ys = draft.points.map(\.y)
+            return (Int((xs.max()! - xs.min()!).rounded()), Int((ys.max()! - ys.min()!).rounded()))
+        }
+        guard let document, let selection, !selection.isEmpty else { return nil }
+        let box = selection.path.boundingBoxOfPath.intersection(CGRect(origin: .zero, size: document.size)).integral
+        return box.isEmpty ? nil : (Int(box.width), Int(box.height))
+    }
+
     /// Off hides the marching ants of the current selection only.
     var showsSelectionEdges: Bool {
         get { selection == nil || hiddenSelectionEdges != selection }

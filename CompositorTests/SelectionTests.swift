@@ -124,6 +124,22 @@ struct SelectionTests {
     }
 
     /// ⌘H hides the outline but keeps the selection; a different selection, or none, shows outlines again.
+    /// The status bar's selection size: the Marquee as it's drawn, then the box around the selection, cut to the canvas.
+    @Test func selectionSizeFollowsTheMarqueeAndStaysOnTheCanvas() {
+        let session = makeSession()
+        #expect(session.selectionSize == nil)
+        session.selectTool(.marquee)
+        session.beginLasso(at: CGPoint(x: 10, y: 20), mode: .replace)
+        session.dragMarquee(to: CGPoint(x: 50, y: 35), square: false, fromCenter: false)
+        #expect(session.selectionSize?.width == 40 && session.selectionSize?.height == 15)
+        session.finishLasso()
+        #expect(session.selectionSize?.width == 40 && session.selectionSize?.height == 15)
+        lasso(session, square(70, -20, 60))
+        #expect(session.selectionSize?.width == 30 && session.selectionSize?.height == 40, "cut to the canvas")
+        session.deselect()
+        #expect(session.selectionSize == nil)
+    }
+
     @Test func hiddenEdgesKeepTheSelectionAndAnyNewOneShows() throws {
         let session = makeSession()
         lasso(session, square(10, 10, 20))
