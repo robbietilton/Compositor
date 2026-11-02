@@ -129,16 +129,16 @@ struct FloatingPanelTests {
         second.close()
     }
 
-    /// A panel opens the first time inside the canvas's right edge, centered on it top to bottom, so the picture's
-    /// middle stays in view.
-    @Test func aPanelFirstOpensAtTheCanvasRightEdge() throws {
+    /// A panel opens the first time centered on the canvas's right edge, where the layers panel begins, and on the
+    /// canvas top to bottom, so the picture's middle stays in view.
+    @Test func aPanelFirstOpensOnTheCanvasRightEdge() throws {
         let window = try #require(NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible && !($0 is NSPanel) })
         let canvas = try #require(FloatingPanelController.canvasRect(in: window))
         let controller = FloatingPanelController(name: "testFirstPlacement-\(UUID().uuidString)")
         controller.show(title: "Gaussian Blur", content: Text("Blur").frame(width: 200, height: 100))
         settle()
         let panel = try #require(NSApp.windows.first { $0.identifier == controller.identifier })
-        #expect(abs(panel.frame.maxX - (canvas.maxX - 16)) < 2, "inside the right edge: \(panel.frame) vs \(canvas)")
+        #expect(abs(panel.frame.midX - canvas.maxX) < 2, "centered on the right edge: \(panel.frame) vs \(canvas)")
         #expect(abs(panel.frame.midY - canvas.midY) < 2, "centered top to bottom: \(panel.frame) vs \(canvas)")
         controller.close()
     }

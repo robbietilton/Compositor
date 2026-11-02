@@ -7,13 +7,14 @@ private extension NSRect {
 
 /// Where a panel opens the first time (or each time, for docked styles).
 enum FloatingPanelPlacement: Sendable {
-    /// Inside the canvas's right edge, centered on it top to bottom, or the last position the user left the panel.
+    /// Straddling the canvas's right edge, where the layers panel begins, centered on the canvas top to bottom, or the
+    /// last position the user left the panel.
     case automatic
     /// Full height of the main document window, flush against its right edge.
     case dockedToMainWindowRight
 }
 
-/// A movable, non-modal panel for tool dialogs: it never dims the editor, opens inside the canvas's right edge the
+/// A movable, non-modal panel for tool dialogs: it never dims the editor, opens over the canvas's right edge the
 /// first time, so the picture's middle stays in view, and reopens wherever it was last left (for the app session).
 /// The close button reports through `onClose` so callers can treat it as Cancel.
 @MainActor
@@ -80,7 +81,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                                                           y: saved.corner.y - size.height, width: size.width, height: size.height)))
             } else if let canvas = documentWindow().flatMap(Self.canvasRect) {
                 let size = panel.frame.size
-                panel.setFrameOrigin(Self.onScreen(NSRect(x: canvas.maxX - Self.inset - size.width, y: canvas.midY - size.height / 2,
+                panel.setFrameOrigin(Self.onScreen(NSRect(x: canvas.maxX - size.width / 2, y: canvas.midY - size.height / 2,
                                                           width: size.width, height: size.height)))
             } else {
                 panel.center()
@@ -121,9 +122,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let right = frame.midX > (panel.screen ?? NSScreen.main)?.visibleFrame.midX ?? frame.midX
         Self.positions[positionKey] = Position(corner: NSPoint(x: right ? frame.maxX : frame.minX, y: frame.maxY), right: right)
     }
-
-    /// How far inside the canvas's edge a panel first opens.
-    private static let inset: CGFloat = 16
 
     /// `frame`'s origin moved as little as needed for it to sit wholly on the screen it's mostly on.
     private static func onScreen(_ frame: NSRect) -> NSPoint {
