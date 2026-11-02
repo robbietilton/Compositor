@@ -108,6 +108,41 @@ struct FloatingPanelTests {
         controller.close()
     }
 
+    /// Panels sharing a position open where the last of them was left: Levels where Hue/Saturation was moved to. Left on
+    /// the right, a wider one keeps its right edge there, growing away from the screen's edge.
+    @Test func sharedPanelsOpenWhereTheLastWasLeft() throws {
+        let first = FloatingPanelController(name: "testSharedFirst", sharing: "testShared")
+        first.show(title: "Hue/Saturation", content: Text("Narrow").frame(width: 200, height: 100))
+        settle()
+        let firstPanel = try #require(NSApp.windows.first { $0.identifier == first.identifier })
+        let visible = try #require(firstPanel.screen?.visibleFrame)
+        firstPanel.setFrameTopLeftPoint(NSPoint(x: visible.maxX - 260, y: visible.maxY - 80))
+        let corner = NSPoint(x: firstPanel.frame.maxX, y: firstPanel.frame.maxY)
+        first.close()
+
+        let second = FloatingPanelController(name: "testSharedSecond", sharing: "testShared")
+        second.show(title: "Levels", content: Text("Wide").frame(width: 320, height: 160))
+        settle()
+        let secondPanel = try #require(NSApp.windows.first { $0.identifier == second.identifier })
+        #expect(abs(secondPanel.frame.maxX - corner.x) < 2 && abs(secondPanel.frame.maxY - corner.y) < 2,
+                "the same top-right corner: \(secondPanel.frame) vs \(corner)")
+        second.close()
+    }
+
+    /// A panel opens the first time inside the canvas's right edge, centered on it top to bottom, so the picture's
+    /// middle stays in view.
+    @Test func aPanelFirstOpensAtTheCanvasRightEdge() throws {
+        let window = try #require(NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible && !($0 is NSPanel) })
+        let canvas = try #require(FloatingPanelController.canvasRect(in: window))
+        let controller = FloatingPanelController(name: "testFirstPlacement-\(UUID().uuidString)")
+        controller.show(title: "Gaussian Blur", content: Text("Blur").frame(width: 200, height: 100))
+        settle()
+        let panel = try #require(NSApp.windows.first { $0.identifier == controller.identifier })
+        #expect(abs(panel.frame.maxX - (canvas.maxX - 16)) < 2, "inside the right edge: \(panel.frame) vs \(canvas)")
+        #expect(abs(panel.frame.midY - canvas.midY) < 2, "centered top to bottom: \(panel.frame) vs \(canvas)")
+        controller.close()
+    }
+
     /// The docked panel has to be wide enough for the widest thing it holds. Camera Raw's three
     /// grading wheels sit side by side and overflowed a 440pt panel, which showed as controls
     /// running past its edge — nothing warns about that, so the sizes are compared here instead.
