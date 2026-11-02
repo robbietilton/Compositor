@@ -44,6 +44,12 @@ The user's [Art with Flo reference, 10:48–11:49](https://www.youtube.com/watch
 
 Advanced stamps deliberately use the same CPU implementation for GPU-requested and fallback strokes. Their outputs agree in tests; this does not qualify a separate Metal effect implementation or force Core Image's blend operator to software. Existing Standard defaults retain their previous renderer.
 
+### Metal grain checkpoint — November 2, 2026
+
+The tile-local Metal stamp path now supports primary Moving/Texturized grain for otherwise Standard, single-tip stamps. It consumes the existing per-dab grain coordinates and deterministic jitter, scale/zoom/rotation, depth, brightness/contrast, Multiply/Screen/Overlay/Subtract, and Texturized coverage cap. Classic bilinear and Improved four-sample filtering compare against `brush_render_stamp`; end-to-end Moving and Texturized stroke pixels also compare within one byte. The CPU path remains the fallback for nearest (`None`) grain filtering: its discontinuous lookup showed a sparse CPU/Metal precision mismatch, so that mode is intentionally not declared equivalent yet.
+
+All non-Standard Rendering modes, pickup, wet/burnt edges, dual tips, stroke/edge blend operators, luminance, and alpha threshold remain on the existing CPU implementation. In particular, the 800 px Intense Blending + wet/burnt workload has not moved to Metal. No performance gain is claimed from this functional grain port. Release, visual comparison, and physical-device qualification remain outstanding.
+
 ## Performance
 
 Xcode Debug on this Mac mini, 4K canvas, 2400 px path, 12 updates, 25% spacing, wet/burnt edges 50%, Multiply. [Raw timing](evidence/rendering/rendering-4k-timing.txt).

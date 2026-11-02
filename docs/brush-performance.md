@@ -1,5 +1,41 @@
 # Brush rendering and 4K benchmark
 
+## Interactive Metal completion handoff (2026-11-01)
+
+Interactive continuous-brush updates now commit Metal work without waiting or reading buffers on the input path. Each stroke has at most one submitted command and one coalesced follow-up containing accumulated settled segments and the newest provisional tail. Once the latest command completes, its tiles are copied into the existing stroke-owned contexts and published on the main actor. A canceled stroke invalidates its completion epoch. Metal buffers are retained until command completion, and a GPU error cancels the active stroke before snapshot commit.
+
+Mouse-up remains the synchronous snapshot boundary: it queues the final accepted geometry behind any submitted work, waits once on the same command queue, reads the final tile contents, then uses the existing immutable snapshot and undo handoff. Save/export/undo therefore see committed pixels; mouse-up latency is still a synchronous cost. This implementation covers the existing continuous Metal path. Stamp-dynamic generated brushes such as Bristles still use the CPU renderer and are not improved by this change.
+
+Focused regression coverage drains pending Metal work only when a test needs to inspect a live preview. It checks cross-tile pixels, tail replacement, pressure/opacity coverage, a 10,000 × 10,000 sparse canvas, cancel-then-restart isolation, and cancellation after a reported GPU failure. Run:
+
+```sh
+xcodebuild -project Compositor.xcodeproj -scheme Compositor -destination 'platform=macOS' \
+  -parallel-testing-enabled NO \
+  -only-testing:CompositorTests/BrushTests \
+  -only-testing:CompositorTests/BrushIntersectionTests \
+  -only-testing:CompositorTests/BrushPerformanceTests \
+  -only-testing:CompositorTests/LargeCanvasBrushTests test
+```
+
+The Debug 4K benchmark run (`/tmp/compositor-async-brush-benchmark-debug.log`, isolated DerivedData `/tmp/CompositorBrushAsyncDebug`) reports these input-event intervals. Each frame interval includes `continueBrush`, `synchronizeDisplay`, and `displayIfNeeded`; async GPU completion and actual display presentation happen later and are not included.
+
+| Workload | Configuration | Update median | Update p95 | Update max | Mouse-up per stroke |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Continuous round, 40 px, blank | Debug | 0.038 ms | 0.236 ms | 0.419 ms | 20.7–24.6 ms |
+| Continuous round, 40 px, blank | Release | 0.011 ms | 0.202 ms | 0.307 ms | 19.1–22.3 ms |
+| Continuous round, 40 px, opaque | Debug | 0.038 ms | 0.564 ms | 1.824 ms | 16.6–18.0 ms |
+| Continuous round, 40 px, opaque | Release | 0.011 ms | 0.537 ms | 0.638 ms | 17.6–17.9 ms |
+| Continuous round, 800 px, blank | Debug | 0.055 ms | 0.615 ms | 0.977 ms | 77.2–82.2 ms |
+| Continuous round, 800 px, blank | Release | 0.015 ms | 0.509 ms | 0.892 ms | 74.1–78.5 ms |
+| Continuous round, 800 px, opaque | Debug | 0.058 ms | 1.696 ms | 2.013 ms | 71.2–72.3 ms |
+| Continuous round, 800 px, opaque | Release | 0.016 ms | 1.437 ms | 1.964 ms | 72.7–73.4 ms |
+| Stamp-dynamic Bristles, 120 px, zero spacing | Debug | 16.336 ms | 16.336 ms | 16.336 ms | 17.2 ms |
+| Stamp-dynamic Bristles, 120 px, zero spacing | Release | 14.617 ms | 14.617 ms | 14.617 ms | 15.0 ms |
+
+In the separate 12-update deterministic matrix, stamp-dynamic Bristles 800 px measured 712.6 ms median / 1,059.1 ms p95 in Debug and 658.4 ms / 1,010.9 ms in Release, with mouse-up at 342.9 ms and 333.2 ms. This confirms that the async continuous Metal change does not accelerate that brush path. The simple round results show that input-event work is now short because GPU completion and tile readback moved off the event path; they are not input-to-photon timings. Mouse-up remains synchronous. Debug and Release benchmark commands and logs: `/tmp/compositor-async-brush-benchmark-debug.log` and `/tmp/compositor-async-brush-benchmark-release.log`; their separate DerivedData folders are `/tmp/CompositorBrushAsyncDebug` and `/tmp/CompositorBrushAsyncRelease`. No after-change Allocations/peak-memory capture, actual display-presentation latency, native hands-on UI check, or physical tablet test was collected.
+
+Acceptance boundaries: **Code** keeps interactive continuous Metal appends asynchronous and mouse-up synchronous. **Automated tests** cover final pixel output and cancel/error behavior; the focused Debug run passed 31 tests in four suites, and the focused Release performance benchmark passed. **Native UI** was exercised through synthetic input in an NSWindow benchmark, without hands-on brush-panel review. **Source visual** was not regenerated because the change does not alter tip sampling or coverage; pixel-level brush previews were checked in the regression suite. **Physical device** testing was not performed; input remains deterministic synthetic mouse/pen data.
+
 The brush now sweeps a continuous round tip along the smoothed pointer path with a Metal compute kernel. Each changed 256 × 256 tile is processed once per update. Permanent coverage and the provisional tail have separate buffers, so replacing a tail cannot leave old pixels behind. Soft coverage accumulates by integrating paint deposition over distance travelled, equivalent to source-over tips at 2.5% diameter spacing. This blends self-crossings and corners smoothly and is independent of pointer-event count. The opacity setting caps the entire accumulated stroke. Hard tips retain their antialiased silhouette; the software fallback uses 2.5% soft / 1.5% hard tip spacing.
 
 Mouse-up installs an immutable `RasterSnapshot` and records the undo entry synchronously. Snapshots share unchanged tiles and flatten their replacement lists using a spatial index. Bounds are found in changed tiles with a small optimized C routine, instead of scanning every document pixel in unoptimized Swift. The canvas and subsequent strokes read the tiles directly. A contiguous CGImage is created lazily when export or an image-processing operation needs its bytes. Masks use the same snapshot handoff, including white coverage in newly expanded areas.
@@ -49,3 +85,174 @@ Crossing tests compare the joined stroke against source-over coverage, verify th
 With this correction, the 800 px / 4K Debug benchmark measured 3.08–3.12 ms median update and 6.3–9.7 ms mouse-up across blank and opaque layers. Log: `/tmp/compositor-intersection-bench.log`.
 
 The post-correction full Debug suite passed **175 tests in 26 suites** (`/tmp/compositor-intersection-full.log`).
+
+## Experimental baseline — November 1, 2026
+
+Branch `codex/experimental-brush-performance`, starting commit `450639a67a7dec518c56a113af64a80b4405bb59`; Apple M1 Mac mini, 16 GB; Debug, arm64, 4K canvas, 1000×1000-point window at backing scale 2, fit zoom. The reusable `BrushPerformanceTests` workload was run in isolated `/tmp/CompositorBrushBaseline` DerivedData with the cached Sparkle package graph. Raw test log: `/tmp/compositor-brush-bristles-zero.log`; result bundle: `/tmp/CompositorBrushBaseline/Logs/Test/Test-Compositor-2026.11.01_16-45-04-+0200.xcresult`.
+
+| Workload | Median update | p95 | Max | Mouse-up |
+| --- | ---: | ---: | ---: | ---: |
+| Legacy round, 40 px, blank | 0.61 ms | 1.10 ms | 1.39 ms | 5.7–6.5 ms |
+| Legacy round, 40 px, opaque | 0.59 ms | 1.36 ms | 2.70 ms | 1.8 ms |
+| Legacy round, 800 px, blank | 4.49 ms | 6.32 ms | 8.70 ms | 13.8–16.4 ms |
+| Legacy round, 800 px, opaque | 4.28 ms | 7.16 ms | 10.27 ms | 9.0–9.5 ms |
+| Generated Bristles, 120 px, zero spacing, None filtering, one 10 px move | 15.09 ms | 15.09 ms* | 15.09 ms* | 15.44 ms |
+
+`*` Single-sample probe, so p95/max are the same sample and are not stable estimates. A later 12-update matrix captured the 800 px zero-spacing case; its initial six-update attempt had exceeded the time bound.
+
+The current advanced path is shared C CPU stamping. `BrushStroke.append` routes stamp dynamics through `walk`/`place`, and `publish` converts dirty coverage to images for canvas display; `brush_render_stamp` in `Compositor/Rendering/BrushPixels.c` loops every pixel in each dab bound, samples the tip and grain, and performs filtering/effects inline. Zero spacing can make dabs overlap heavily, repeating this work over the same pixels. First optimization candidate is avoiding redundant per-pixel sampling/work without changing dab placement, filtering, or output; baseline instrumentation must separate placement, C raster, publication, and display before patching.
+
+The earlier 800 px advanced blend/grain probe (120 updates) measured 376.7 ms median / 396.1 ms p95 in one Debug run. It is historical and uses a different path from the bounded matrix below. The September legacy-round numbers also remain historical.
+
+Reproduce the current focused suite:
+
+```sh
+TEST_RUNNER_BRUSH_BENCHMARK=1 xcodebuild \
+  -project Compositor.xcodeproj -scheme Compositor -configuration Debug \
+  -derivedDataPath /tmp/CompositorBrushBaseline \
+  -clonedSourcePackagesDirPath /Users/sorin.jurcut/Library/Developer/Xcode/DerivedData/Compositor-clhoszwjpthxcobpsohkkcrysqkn/SourcePackages \
+  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO \
+  -parallel-testing-enabled NO -only-testing:CompositorTests/BrushPerformanceTests test
+```
+
+## Experimental profiling baseline — November 1, 2026
+
+The branch is `codex/experimental-brush-performance`, HEAD `450639a67a7dec518c56a113af64a80b4405bb59`. Hardware is an Apple M1 Mac mini with 16 GB RAM, running macOS 27.0.1 (26A434) and Xcode 27.2. The baseline build from that unchanged commit is preserved at `/tmp/CompositorBrushOriginalBaselineSource` and `/tmp/CompositorBrushOriginalBaselineDerivedData`; `/tmp/compositor-brush-original-baseline-build.log` reports `BUILD SUCCEEDED`. Experimental Debug and Release builds use separate `/tmp/CompositorBrushBaseline` and `/tmp/CompositorBrushBaselineRelease` DerivedData, both reusing the cached Sparkle package graph. Release tests set `ENABLE_TESTABILITY=YES` so the `@testable` test target can import the optimized app module.
+
+The deterministic matrix uses a 4000 × 4000 px document, one blank paint layer unless marked opaque, and an NSWindow/CanvasView 1000 × 1000 points at backing scale 2 and fit zoom. Opaque cases use one full-canvas imported gray image layer. Samples start at (800, 2000), then make 12 ten-pixel updates with a fixed seed (`0xB71571E5`), pressure ramp, tilt, rotation, device ID, and 16 ms timestamp increments. Generated Bristles uses zero spacing and None filtering. The asymmetric tip is a generated 64 × 64 L mask with Improved filtering. The transformed-mask case uses a 7° layer transform, selected 3000 × 3000 px selection, 40 px generated Bristles, and zero spacing. No local brush archive or Warptuner fixture is used.
+
+Each matrix row reports 12 update samples. With nearest-rank p95, p95 equals max for this sample count; treat these as a reproducible first baseline, not a stable cross-machine guarantee. Times are synchronous CPU wall times for `continueBrush`, canvas synchronization, and `displayIfNeeded`, except mouse-up, which is measured separately.
+
+| Workload | Touched tiles | Debug median / p95 / max | Release median / p95 / max |
+| --- | ---: | ---: | ---: |
+| Legacy round, 40 px, blank | 1 | 0.637 / 1.258 / 3.204 ms | 0.570 / 2.163 / 3.081 ms |
+| Legacy round, 40 px, opaque | 1 | 0.570 / 1.324 / 1.825 ms | 0.561 / 2.711 / 6.186 ms |
+| Legacy round, 800 px, blank | 16 | 4.376 / 6.875 / 10.766 ms | 4.429 / 6.715 / 7.738 ms |
+| Legacy round, 800 px, opaque | 16 | 4.541 / 7.387 / 9.527 ms | 4.281 / 7.089 / 9.190 ms |
+| Generated Bristles, zero spacing, 40 px | 1 | 4.061 / 4.628 / 4.628 ms | 3.450 / 4.039 / 4.039 ms |
+| Generated Bristles, zero spacing, 800 px | 36 | 682.021 / 1024.232 / 1024.232 ms | 675.375 / 1033.575 / 1033.575 ms |
+| Generated Speckle, 40 px | 1 | 1.594 / 1.818 / 1.818 ms | 1.394 / 1.621 / 1.621 ms |
+| Generated Speckle, 800 px | 36 | 25.612 / 34.119 / 34.119 ms | 25.119 / 27.412 / 27.412 ms |
+| Asymmetric image + Improved filter, 40 px | 1 | 2.518 / 2.940 / 2.940 ms | 2.282 / 2.613 / 2.613 ms |
+| Asymmetric image + Improved filter, 800 px | 36 | 51.211 / 70.178 / 70.178 ms | 51.026 / 71.352 / 71.352 ms |
+| High count (8), 40 px | 1 | 0.888 / 0.909 / 0.909 ms | 0.804 / 0.854 / 0.854 ms |
+| High count (8), 800 px | 16 | 4.786 / 5.012 / 5.012 ms | 4.709 / 5.357 / 5.357 ms |
+| Intense blend + wet/burnt edges, 40 px, opaque | 1 | 5.557 / 5.894 / 5.894 ms | 5.195 / 5.331 / 5.331 ms |
+| Intense blend + wet/burnt edges, 800 px, opaque | 20 | 97.528 / 101.446 / 101.446 ms | 94.977 / 97.819 / 97.819 ms |
+| Transformed, selected mask, 40 px Bristles zero spacing | 3 | 16.842 / 19.910 / 19.910 ms | 15.588 / 19.067 / 19.067 ms |
+
+The separate one-update 120 px Bristles probe measured 15.414 ms in Debug and 15.562 ms in Release; one sample is not a percentile estimate. In the matrix, 800 px zero-spacing Bristles has roughly 1.0 s p95 and 340 ms mouse-up in both builds. This is the clearest reproduced stall and the first optimization target.
+
+Debug and Release pixel hashes match for all 11 deterministic matrix outputs. Example visual outputs are `/tmp/compositor-brush-generated-bristles-800-zero-spacing.png`, `/tmp/compositor-brush-textured-blending-800-opaque.png`, and `/tmp/compositor-brush-benchmark.png`. Representative hashes: Bristles 800 `61e0e1359ce0790c…`, Speckle 800 `616832fd857d2790…`, asymmetric Improved 800 `c92cc6211070821f…`, textured blending 800 `4acf1d1417335d1f…`, transformed selected mask `44b7632dfd2a5227…`. Full hashes are in `/tmp/compositor-brush-debug-rss.log` and `/tmp/compositor-brush-release-matrix-clean.log`.
+
+## Profile phases and resource observations
+
+The live path is `EditorCanvas.mouseDown` / `mouseDragged` / `tabletPoint` → `EditorSession.beginBrush` / `continueBrush` → `BrushStroke.append` → curve and `walk`/`place` → `dab` → `brush_render_stamp` in `BrushPixels.c` → `publishTiles` → `EditorCanvas.synchronizeDisplay` / `draw`. The round continuous path uses `MetalBrushCoverage.render` and synchronously commits, waits, and reads back tiles. Signposts are opt-in via `BRUSH_PROFILE=1`; without it the closures call straight through and emit no signposts.
+
+Points of Interest traces are `/tmp/compositor-brush-profile.trace` (Debug) and `/tmp/compositor-brush-release-profile.trace` (Release). These are profiler runs; do not use their wall times as benchmark results. Paired signpost intervals show the same leading phases in both configurations:
+
+| Phase | Debug median / p95 / max | Release median / p95 / max |
+| --- | ---: | ---: |
+| Session input continue | 3.404 / 8.210 / 1041.831 ms | 3.267 / 15.240 / 1012.307 ms |
+| Dab placement (includes nested raster work) | 0.110 / 12.245 / 94.676 ms | 0.155 / 11.113 / 91.259 ms |
+| Individual C raster call | 0.194 / 0.700 / 5.912 ms | 0.183 / 0.672 / 6.899 ms |
+| Tile publication | 1.968 / 6.292 / 58.421 ms | 1.892 / 5.860 / 49.990 ms |
+| Canvas CPU draw callback | 50.838 / 112.915 / 112.915 ms | 31.528 / 97.549 / 97.549 ms |
+| Mouse-up commit and undo | 8.033 / 337.640 / 337.640 ms | 8.320 / 95.877 / 332.201 ms |
+| GPU completion wait | 0.927 / 1.397 / 2.565 ms | 1.045 / 1.549 / 3.414 ms |
+
+The separate Debug Metal System Trace is `/tmp/compositor-brush-debug-metal.trace`. For 976 Compositor compute intervals it reports 170 µs median, 384 µs p95, 2.77 ms max GPU execution, and at most two overlapping GPU intervals. This makes the CPU-side stamp path the leading bottleneck; GPU work is not close to the 1 s Bristles update. A Canvas draw callback is CPU wall time, not a display swap. No hardware tablet-to-photon latency was measured.
+
+App-process RSS was sampled every 100 ms during unprofiled matrix runs: Debug peak 827,248 KiB (about 808 MiB), Release peak 700,928 KiB (about 684 MiB). This is process RSS, including shared mappings.
+
+Allocations traces attached to the test host and covered the complete focused suite in both configurations: `/tmp/compositor-brush-debug-allocations.trace` and `/tmp/compositor-brush-release-allocations-full.trace`; exported aggregate tables are `/tmp/compositor-brush-debug-allocations-statistics.xml` and `/tmp/compositor-brush-release-allocations-full-statistics.xml`. The profiler-only build used an isolated ad-hoc signature with `get-task-allow` and no app sandbox so Instruments could attach and the benchmark could export PNGs under `/tmp`. It did not change the app's source or shipped entitlements. Allocations profiling adds substantial timing overhead, so these traces are memory evidence only.
+
+| Configuration | Cumulative heap allocations | Heap still live at trace end | Allocated then freed |
+| --- | ---: | ---: | ---: |
+| Debug | 1,810,707,640 bytes (1,726.8 MiB) | 135,406,504 bytes (129.1 MiB) | 1,675,301,136 bytes (1,597.7 MiB) |
+| Release | 1,166,028,552 bytes (1,112.0 MiB) | 135,512,104 bytes (129.2 MiB) | 1,030,516,448 bytes (982.8 MiB) |
+
+These are whole-suite totals over roughly 138 seconds, including app/test setup and every workload, not per-brush allocation rates or peak RSS. The Allocations template also reports cumulative `VM: CG Raster Data` backing of 3,440,345,088 bytes (Debug) and 1,249,476,608 bytes (Release); this is allocated raster backing, not a count of bytes copied. Exact `memcpy`/copy-on-write transfer volume and per-workload allocation attribution remain unmeasured. Touched-tile counts above are exact for the workload geometry; they do not substitute for copy-byte accounting.
+
+The signpost phase histograms above are synchronous main-actor wall intervals for input receipt at `EditorSession.beginBrush`/`continueBrush`, placement, raster, publication, canvas synchronization/draw, and commit/undo. They show how long the event path occupies the main thread, including synchronous waits, but do not decompose scheduler descheduling from running time. GPU queue overlap was at most two intervals in the Metal System Trace; CPU brush input is processed synchronously with no separate queued work list. Canvas draw is a CPU callback measurement, not a display swap. No input-to-photon or physical-tablet latency was measured; that remains outside these synthetic NSWindow runs.
+
+## Async renderer regression follow-up
+
+The focused Debug regression run passed 28 tests across `BrushTests` and `BrushIntersectionTests`. Added checks cover explicit CPU fallback, cancellation/session release with GPU work pending, and mouse-up flushing pending work before a project snapshot and undo. Per-stroke GPU submissions are serialized: the next render is submitted only from the previous command buffer's completion callback, so delayed completion cannot reorder stroke segments. The callback-injected GPU error path remains covered; a real Metal command-buffer/device failure is not reliably inducible in this test environment.
+
+Mouse-up remains the documented synchronous snapshot boundary. It waits once for outstanding GPU work, copies the final preview into the CPU-owned tile context, and only then publishes the immutable document/history state consumed by snapshot, save, and undo. Preview updates do not block on command completion.
+
+Existing after-change Instruments evidence above remains the basis for memory and GPU execution results: Debug/Release peak process RSS was 808/684 MiB; whole-suite Allocations totals and the Debug Metal System Trace are linked above. A new focused Allocations attach was attempted during this follow-up but did not produce a valid trace after the test host exited. The new `Brush GPU Completion` signpost now spans command submission through Metal's completed callback, and `Brush Display If Needed` marks the CPU display callback. The existing Metal System Trace reports GPU execution durations, but no actual screen presentation/vsync or input-to-photon latency was measured. A successful new trace correlating the completion signpost with presentation remains outstanding.
+
+## Acceptance targets for the optimization phase
+
+- Keep every 40 px workload's update p95 at or below 16.7 ms, including the transformed selected-mask case.
+- Keep simple 800 px round and high-count update p95 at or below 16.7 ms; bring generated/image/textured 800 px updates and zero-spacing Bristles to at or below 16.7 ms on this reference machine.
+- Keep mouse-up commit and undo p95 at or below 16.7 ms for all matrix workloads. Record measured lower-tier hardware separately rather than promise universal 60 Hz.
+- Bound queued GPU intervals to at most two and avoid unbounded pending input work.
+- Preserve deterministic sample ordering and all baseline pixel hashes. Do not meet timing targets by skipping dabs, raising spacing, or downgrading filtering.
+
+These are proposal thresholds for the follow-on optimization, not claims that the baseline already meets them. The 800 px Bristles p95 target requires about a 98% reduction from baseline and remains an aggressive acceptance gate.
+
+## Bristles GPU kernel prototype
+
+`MetalBristlesPrototype` is an isolated benchmark experiment, not wired into brush input or canvas publication. It batches 13 overlapping, axis-aligned 800 px Dry Bristles dabs at zero spacing into one Metal compute dispatch over an 832,000-pixel crop. It implements the current `.none` nearest-sample mask lookup and normal-flow optical-density accumulation. The test compares against `brush_render_stamp` and then compares final coverage bytes.
+
+On the reference M1 Mac, one Debug run measured 143.6 ms for the C reference and 2.8 ms for the GPU prototype wall time (1.9 ms from command submission through completion), with a maximum density difference of 0.0000191 and zero final-byte differences. This demonstrates that this restricted pixel kernel is GPU-suitable; it is not a live stroke latency result. In particular, the prototype does not yet handle rotated/tilted tips, grain, improved filtering, pressure opacity, tail rollback, tile publication, or display. It also allocates and reads back a compact crop per call. Those integration costs and full brush behavior need measurement before using this result to predict product performance.
+
+The grayscale visual comparison is [bristles-cpu-vs-gpu.png](bristles-cpu-vs-gpu.png): CPU reference on the left, GPU prototype on the right. The dense center is expected from 13 fully opaque, closely overlapping dabs; the Bristles texture is visible around the perimeter. The panels are pixel-identical after coverage conversion.
+
+### Tile-local affine stamp prototype follow-up
+
+This section records the initial isolated prototype before the production integration checkpoint below. The Metal primitive accepts the already-evaluated ordered dab transforms and dispatches a bounded 256×256 tile. It supports nearest (`.none`), bilinear (`.classic`) and four-sample (`.improved`) mask sampling and applies each dab's flow/strength before ordered optical-density accumulation. Its renderer reuses the compute pipeline and caches uploaded mask buffers by SHA-256 content hash for its lifetime.
+
+`generatedBristlesMetalPrototype` compares the real Metal output with the C CPU reference for 13 overlapping rotated dabs on the generated Bristles mask. Debug results on the reference M1: all three filters had maximum density error 0 and zero final-byte differences. CPU/GPU execution was 5.68/1.03 ms (`.none`), 6.05/0.37 ms (`.classic`) and 20.33/0.65 ms (`.improved`). This is a small tile-kernel prototype measurement, not a full stroke or mask/image production qualification. It establishes parity only for this generated mask, transform set, tile and flow/strength values.
+
+Run with `xcodebuild -project Compositor.xcodeproj -scheme Compositor -destination 'platform=macOS' -parallel-testing-enabled NO test -only-testing:CompositorTests/BrushPerformanceTests`. The `generatedBristlesMetalPrototype` pixel parity check runs as part of that focused suite.
+
+The following acceptance entry is historical for the profiling change: **production code** then included opt-in measurement wrappers and a read-only touched-tile diagnostic; no production brush algorithm or `.comp` contract changed. The Metal Bristles prototype was benchmark-only at that point. **Automated tests**: the focused performance suite passed in Debug and Release; the initial prototype parity check passed in Debug. BrushTests, BrushIntersectionTests, and LargeCanvasBrushTests passed; BrushDynamicsTests reproduced two failures in isolation (`presetsRoundTripAndRejectInvalidDynamicsAtomically`, required-value error; `transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen`, mask alpha expectation). **Native UI** was exercised through a native NSWindow in the benchmark, but no hands-on panel acceptance was performed. **Source visuals** are generated-tip outputs with matching Debug/Release hashes; they do not establish Procreate parity. **Physical device** testing was not performed; pressure/tilt/rotation came from deterministic synthetic input.
+
+Final focused logs: `/tmp/compositor-brush-debug-rss.log`, `/tmp/compositor-brush-release-matrix-clean.log`, `/tmp/compositor-brush-regressions.log`, and `/tmp/compositor-brush-dynamics-rerun.log`. Debug and Release benchmark result bundles are under `/tmp/CompositorBrushBaseline/Logs/Test` and `/tmp/CompositorBrushBaselineRelease/Logs/Test`.
+
+### Production stamp-rendering integration checkpoint
+
+`BrushStroke.dynamicDab` remains the sole placement/randomness evaluator. For eligible stamp strokes it queues its already-computed affine dab records by intersecting tile, runs the shared Metal mask kernel during tile publication, and feeds the existing coverage, color, snapshot, and undo paths. Uploaded masks are reused by content hash in a bounded 16-entry cache. The shader handles procedural radial tips and generated/custom/embedded image masks; `.classic` and `.improved` production routes are enabled. `.none` keeps the existing C renderer in production because the end-to-end embedded-mask parity case exceeded tolerance; the direct kernel matrix passes `.none`, but that production combination is not qualified. Unsupported rendering effects remain on the C path. GPU command creation/completion failures replay the queued dab records through the C renderer and emit one diagnostic per stroke.
+
+Provisional-tail rollback snapshots and restores pending Metal dab queues along with the existing stamped coverage. Without that queue rollback, provisional samples were deposited a second time after the shared coverage snapshot restored. CPU-versus-production-Metal comparisons cover procedural soft tips, generated Bristles with Improved filtering, custom images with Classic filtering, embedded images with CPU fallback for None, flips, rotation, roundness, count/scatter, jitter, path falloff, flow, multi-tile traversal, and color/opacity output. The accepted difference is at most one byte per output channel; qualified GPU cases pass in Debug. The prior embedded/None mismatch reached 21 output levels and is why that combination remains CPU-routed.
+
+The direct renderer matrix was rerun in Debug and Release after the kernel changes: generated Bristles, generated round and a custom mask across all three filters and both accumulation modes had zero density/cap error and zero converted-byte differences. Production-stroke comparisons passed in Debug and Release for qualified combinations, including variable pressure opacity, taper replay and two deterministic seeds. Release `BrushIntersectionTests` passed all 8 integration cases; the latest Debug run passed 9 tests, including a legacy-default assertion that default settings do not opt into Metal stamps. The suite includes sparse (two pointer events) and dense (approximately 95 events) Bristles input on a multi-tile stroke, each compared against forced CPU within one byte per output channel. A transformed, rotated/flipped layer-mask stroke clipped by an elliptical selection also matches CPU at the published tile-patch level within one byte; commit, exported image, undo, redo, save and reopen outputs were verified, with reopened and redone exports byte-identical to the committed export. Preview-bitmap comparison is intentionally omitted because it adds a second transform/resampling pass unrelated to the stored tile output.
+
+End-to-end benchmark: 40 pointer samples across a 1024×512 blank layer; 72 px generated Bristles, four stamps per placement, zero spacing, flow 0.65 and Improved filtering. Debug CPU was 5.82 s total / 148.6 ms median / 152.3 ms p95 / 197.7 ms max; Metal was 4.18 s / 94.1 ms / 185.7 ms / 192.9 ms. Release CPU was 5.59 s / 142.7 ms / 144.5 ms / 191.2 ms; Metal was 2.90 s / 67.0 ms / 129.4 ms / 135.4 ms. These are synchronous `append` wall times and include GPU wait, tile buffer setup/readback, and publication. They show lower total and median time, but Metal's Debug p95 is worse than CPU and both configurations remain far above 16.7 ms. Do not interpret these results as meeting the interactive latency target.
+
+Wide/high-count stress benchmark: 40 pointer samples across a 1536×1024 layer; 96 px generated Bristles, 12 stamps per placement, zero spacing, flow 0.65, scatter 0.3, and Improved filtering. Debug CPU was 42.56 s total / 1,070.3 ms median / 1,179.8 ms p95 / 1,271.0 ms max; Metal was 17.08 s / 391.6 ms / 690.8 ms / 716.6 ms. This is a 60% total-time reduction and 41% p95 reduction. Release CPU was 41.20 s / 1,032.2 ms median / 1,145.5 ms p95 / 1,250.0 ms max; Metal was 12.20 s / 272.9 ms / 501.1 ms / 531.8 ms, a 70% total-time reduction and 56% p95 reduction. Both Metal p95 results remain far above 16.7 ms (about 41× Debug and 30× Release); these are real relative gains, not an interactive-latency pass. Reproduce with `TEST_RUNNER_BRUSH_BENCHMARK=1 TEST_RUNNER_BRUSH_BENCHMARK_CASE=stamp-metal-stress xcodebuild -project Compositor.xcodeproj -scheme Compositor -destination 'platform=macOS' -parallel-testing-enabled NO test -only-testing:CompositorTests/BrushPerformanceTests` (add `-configuration Release CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES` for the optimized local test build). Logs: `/tmp/compositor-stamp-stress-debug.log` and `/tmp/compositor-stamp-stress-release.log`.
+
+The Metal route dispatches only the union of already-computed dirty pixel bounds inside touched tiles. Each tile's full density/cap arrays are still passed through shared Metal buffers and copied back after synchronous command completion. No peak-memory measurement or after-change Instruments Allocations/GPU trace has been captured for this route. Transformed-selection/undo/export/reopen parity is now covered above; real Metal command-buffer failure injection, unsupported-device diagnostic behavior, production-route memory attribution, and physical-device acceptance remain outstanding. Debug and Release focused logs: `/tmp/compositor-brush-stamp-debug-final.log`, `/tmp/compositor-brush-stamp-stroke-benchmark-debug.log`, `/tmp/compositor-brush-stamp-stroke-benchmark-release.log`.
+
+## Active continuous brush GPU presentation
+
+The active continuous-brush path now emits an immutable shared R8 coverage texture for each touched tile version alongside its mutable compute buffers. For supported simple paint and erase strokes, `BrushStroke.completeContinuousRender` retains those textures without reading coverage into CPU memory. The existing `GPUCanvasRenderer` samples them through Core Image, composes them over the original tile pixels, and writes into the stroke's persistent canvas texture. The shared canvas still applies layer order, layer transforms, viewport scaling, and layer masks. Mask painting, selection clipping, clone, healing, and active round-rendering effects continue through the established CPU publication fallback; direct mask presentation was excluded after the mask-alone parity regression exposed different behavior.
+
+`GPUCanvasTests.continuousBrushCoverageStaysGPUResidentForLiveCanvas` and `continuousBrushGPUCoverageMatchesOpaqueLayerErase` compare live GPU frames with Core Graphics output. The first asserts zero coverage readback bytes before a CPU consumer requests patches, then confirms no CPU patch staging upload was needed for GPU presentation. Its transformed 136×100 tile is 13,600 bytes: the former live path would read back 13,600 coverage bytes and upload a 54,400-byte RGBA staging image per published tile version. The direct route instead retains a 13,600-byte R8 snapshot and performs zero CPU coverage readback and zero CPU patch staging upload on that update. A later CPU consumer or mouse-up still materializes the snapshot. `continuousBrushGPUCoverageMatchesMaskPainting` verifies the fallback. `GPUCanvasTests` and `BrushTests` passed together: 51 tests total, including pending mouse-up/save/export, next-stroke cancellation, close while pending, and texture cache release. `BrushIntersectionTests` and `LargeCanvasBrushTests` then passed 11 additional tests. `BrushDynamicsTests` passed 36/38; its two failures are the preset required-value and selected-mask alpha expectation failures already present in prior benchmark notes. These are parity and transfer-path checks; no Instruments timing, peak-memory, or input-to-photon measurement has been captured for this change. The immutable coverage allocation is one byte per touched tile pixel for the latest tile versions; a fresh version is allocated on each completed render, while replaced versions become releasable after any queued canvas work finishes.
+
+### 4K interactive follow-up — November 2, 2026
+
+The existing `fourKInteractiveStroke` NSWindow harness was rerun after the GPU-resident change in isolated Debug and Release DerivedData. Each frame interval includes `continueBrush`, `synchronizeDisplay`, and `displayIfNeeded`; asynchronous command completion and actual screen presentation/vsync are outside that interval.
+
+| Brush/layer | Build | Frame median | Frame p95 | Frame max | Mouse-up, two passes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 40 px, blank | Debug | 0.035 ms | 0.126 ms | 0.220 ms | 18.4 / 17.9 ms |
+| 40 px, opaque | Debug | 0.036 ms | 0.445 ms | 0.716 ms | 16.1 / 17.5 ms |
+| 800 px, blank | Debug | 0.053 ms | 0.514 ms | 2.122 ms | 82.6 / 76.7 ms |
+| 800 px, opaque | Debug | 0.054 ms | 1.385 ms | 1.810 ms | 73.6 / 74.2 ms |
+| 40 px, blank | Release | 0.010 ms | 0.096 ms | 0.123 ms | 18.7 / 16.6 ms |
+| 40 px, opaque | Release | 0.011 ms | 0.433 ms | 0.705 ms | 15.7 / 15.0 ms |
+| 800 px, blank | Release | 0.014 ms | 0.339 ms | 0.437 ms | 71.1 / 71.0 ms |
+| 800 px, opaque | Release | 0.015 ms | 1.415 ms | 1.782 ms | 67.0 / 65.3 ms |
+
+Compared with the prior async-only results immediately above, frame p95 declined 16–47% in Debug and 1–52% in Release across these cases. This supports a reduction in synchronous input/display-call work; it does not measure input-to-photon latency. Mouse-up remains synchronous and reaches 65–83 ms for 800 px tips. This harness reports frame-call wall time rather than Instruments blocked intervals, and does not confirm the GPU command's screen presentation deadline. Logs and reproducible invocations: `/tmp/compositor-gpu-resident-interactive-debug.log` and `/tmp/compositor-gpu-resident-interactive-release.log`; `TEST_RUNNER_BRUSH_BENCHMARK=1 TEST_RUNNER_BRUSH_BENCHMARK_CASE=interactive xcodebuild -project Compositor.xcodeproj -scheme Compositor -configuration {Debug|Release} -derivedDataPath /tmp/CompositorGPUResident{Debug|Release} -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO -parallel-testing-enabled NO -only-testing:CompositorTests/BrushPerformanceTests test` (Release also used `ENABLE_TESTABILITY=YES`).
+
+### Metal grain checkpoint — November 2, 2026
+
+The production tile-local stamp renderer now handles primary grain for eligible Standard single-tip strokes with Classic bilinear and Improved four-sample grain filtering. Direct dab comparisons and Moving/Texturized stroke comparisons passed against the CPU renderer; Texturized caps are included. Nearest grain filtering remains explicitly CPU-only after its discontinuous texture lookup showed a sparse precision mismatch. Rendering modes and other advanced effects still use CPU rasterization.
+
+Added `textured-standard-800-opaque` to the existing 4K workload matrix so grain-only GPU cost can be compared separately from the unchanged `textured-blending-800-opaque` CPU workload. No timing or allocation result is recorded for this checkpoint: the local `xcodebuild test` invocation did not pass the benchmark environment into the XCTest host, and the existing test selector syntax first selected zero tests. The Debug/Release 800 px grain measurements and Instruments GPU/UI attribution remain open. The passing functional runs were the `BrushPerformanceTests` suite and `BrushDynamicsTests` suite; the latter retains the two previously documented baseline failures (`presetsRoundTripAndRejectInvalidDynamicsAtomically` and `transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen`).

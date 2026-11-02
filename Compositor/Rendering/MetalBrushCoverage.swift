@@ -44,8 +44,61 @@ final class MetalBrushCoverage {
         return Tile(permanent: permanent, preview: preview, cap: cap)
     }
     func render(_ tiles: [(Tile, CGRect, CGContext)], settled: [BrushSegment], tail: [BrushSegment],
-                mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize) throws {
-        guard !tiles.isEmpty else { return }
+                mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize,
+                completion: @escaping @MainActor (String?, [(CGRect, MTLTexture)]) -> Void) throws -> (MTLCommandBuffer, [(CGRect, MTLTexture)]) {
+        let snapshots = try snapshotTextures(for: tiles)
+        let command = try makeCommand(tiles, settled: settled, tail: tail, mapping: mapping, settings: settings,
+                                     canvas: canvas, snapshots: snapshots.map { $0.1 })
+        let retained = tiles.flatMap { tile, _, _ in [tile.permanent, tile.preview, tile.cap].compactMap { $0 } } + snapshots.map { $0.1 }
+        let completionSignpost = BrushPerformanceSignpost.begin("Brush GPU Completion")
+        command.addCompletedHandler { [retained, snapshots] command in
+            _ = retained
+            BrushPerformanceSignpost.end("Brush GPU Completion", identifier: completionSignpost)
+            let error = command.status == .completed ? nil : (command.error?.localizedDescription ?? "Metal brush rendering failed.")
+            Task { @MainActor in completion(error, snapshots) }
+        }
+        BrushPerformanceSignpost.measure("Brush GPU Submission") { command.commit() }
+        return (command, snapshots)
+    }
+
+    /// Mouse-up is the immutable snapshot boundary. Interactive appends use `render`; this
+    /// ordered flush waits once for all accepted segments and copies the final preview.
+    func renderAndWait(_ tiles: [(Tile, CGRect, CGContext)], settled: [BrushSegment], tail: [BrushSegment],
+                       mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize) throws -> [(CGRect, MTLTexture)] {
+        let snapshots = try snapshotTextures(for: tiles)
+        let command = try makeCommand(tiles, settled: settled, tail: tail, mapping: mapping, settings: settings,
+                                      canvas: canvas, snapshots: snapshots.map { $0.1 })
+        BrushPerformanceSignpost.measure("Brush GPU Flush Submission") { command.commit() }
+        BrushPerformanceSignpost.measure("Brush GPU Flush Wait") { command.waitUntilCompleted() }
+        guard command.status == .completed else { throw command.error ?? ExportError.render }
+        try readback(tiles)
+        return snapshots
+    }
+
+    private func snapshotTextures(for tiles: [(Tile, CGRect, CGContext)]) throws -> [(CGRect, MTLTexture)] {
+        try tiles.map { _, rect, _ in
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm,
+                width: Int(rect.width), height: Int(rect.height), mipmapped: false)
+            descriptor.storageMode = .shared
+            descriptor.usage = [.shaderWrite, .shaderRead]
+            guard let texture = device.makeTexture(descriptor: descriptor) else { throw ExportError.render }
+            return (rect, texture)
+        }
+    }
+
+    func readback(_ tiles: [(Tile, CGRect, CGContext)]) throws {
+        try BrushPerformanceSignpost.measure("Brush GPU Tile Readback") {
+            for (tile, rect, context) in tiles {
+                guard let destination = context.data else { throw ExportError.render }
+                memcpy(destination, tile.preview.contents(), Int(rect.width * rect.height))
+            }
+        }
+    }
+
+    private func makeCommand(_ tiles: [(Tile, CGRect, CGContext)], settled: [BrushSegment], tail: [BrushSegment],
+                             mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize,
+                             snapshots: [MTLTexture]) throws -> MTLCommandBuffer {
+        guard !tiles.isEmpty else { throw ExportError.render }
         // A dummy segment supplies a valid buffer for tail removal with no new geometry.
         let segments = settled + tail
         let storage = segments.isEmpty ? [BrushSegment(line: SIMD4(repeating: 0), dynamics: SIMD4(repeating: 0))] : segments
@@ -54,7 +107,7 @@ final class MetalBrushCoverage {
         }), let command = queue.makeCommandBuffer(), let encoder = command.makeComputeCommandEncoder() else { throw ExportError.render }
         encoder.setComputePipelineState(pipeline)
         encoder.setBuffer(buffer, offset: 0, index: 3)
-        for (tile, rect, _) in tiles {
+        for (index, (tile, rect, _)) in tiles.enumerated() {
             let origin = rect.origin.applying(mapping)
             var uniforms = Uniforms(
                 mapping: SIMD4(Float(mapping.a), Float(mapping.b), Float(mapping.c), Float(mapping.d)),
@@ -66,19 +119,13 @@ final class MetalBrushCoverage {
             // Without a cap the shader never reads it; any buffer fills the slot.
             encoder.setBuffer(tile.cap ?? tile.permanent, offset: 0, index: 4)
             encoder.setBuffer(tile.preview, offset: 0, index: 1)
+            encoder.setTexture(snapshots[index], index: 0)
             encoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 2)
             encoder.dispatchThreads(MTLSize(width: Int(rect.width), height: Int(rect.height), depth: 1),
                                     threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
         }
         encoder.endEncoding()
-        command.commit()
-        command.waitUntilCompleted()
-        guard command.status == .completed else { throw command.error ?? ExportError.render }
-        for (tile, rect, context) in tiles {
-            // CGContext owns its memory so makeImage's copy-on-write snapshots stay immutable.
-            guard let destination = context.data else { throw ExportError.render }
-            memcpy(destination, tile.preview.contents(), Int(rect.width * rect.height))
-        }
+        return command
     }
 
     // Compile once with the system Metal compiler; no optional Xcode Metal toolchain required.
@@ -182,12 +229,18 @@ kernel void continuousBrush(device float *permanent [[buffer(0)]],
                             constant BrushUniforms &u [[buffer(2)]],
                             device const BrushSegment *segments [[buffer(3)]],
                             device float *cap [[buffer(4)]],
+                            texture2d<float, access::write> snapshot [[texture(0)]],
                             uint2 pixel [[thread_position_in_grid]]) {
     if (pixel.x >= u.counts.x || pixel.y >= u.counts.y) return;
     uint index = pixel.y * u.counts.x + pixel.x;
     float2 local = float2(pixel) + 0.5f;
     float2 p = u.geometry.xy + local.x * u.mapping.xy + local.y * u.mapping.zw;
-    if (any(p < 0.0f) || any(p >= u.canvas.xy)) { preview[index] = 0; return; }
+    if (any(p < 0.0f) || any(p >= u.canvas.xy)) {
+        preview[index] = 0;
+        snapshot.write(float4(0.0f), pixel);
+        return;
+    }
+    uchar output;
     if (u.geometry.w >= 1.0f) {
         // Hard tips already have a solid interior. Preserve pixel-edge antialiasing. The strongest press to reach a
         // pixel sets it, so a stroke builds to its firmest press and never past it.
@@ -196,7 +249,7 @@ kernel void continuousBrush(device float *permanent [[buffer(0)]],
         for (uint i = u.counts.z; i < u.counts.w; ++i) tail = max(tail, hardCoverage(p, segments[i], u));
         float value = max(permanent[index], settled);
         permanent[index] = value;
-        preview[index] = uchar(round(255.0f * max(value, tail)));
+        output = uchar(round(255.0f * max(value, tail)));
     } else {
         // Soft paint builds up as it always has, then, with pressure for opacity, the firmest press to reach the pixel
         // caps it.
@@ -212,8 +265,10 @@ kernel void continuousBrush(device float *permanent [[buffer(0)]],
             cap[index] = settledCap;
             strength = max(settledCap, tailCap);
         }
-        preview[index] = uchar(round(255.0f * strength * (1.0f - exp(-min(value + tail, 20.0f)))));
+        output = uchar(round(255.0f * strength * (1.0f - exp(-min(value + tail, 20.0f)))));
     }
+    preview[index] = output;
+    snapshot.write(float4(float(output) / 255.0f), pixel);
 }
 """
 }

@@ -65,6 +65,12 @@ extension EditorSession {
     }
     /// `pressure` is a pen's, 0–1; nil for a mouse or trackpad, which presses fully.
     func beginBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil, seed: UInt64? = nil, deferTaperRendering: Bool = false) {
+        BrushPerformanceSignpost.measure("Brush Input Begin") {
+            beginBrushImpl(at: point, pressure: pressure, input: input, seed: seed, deferTaperRendering: deferTaperRendering)
+        }
+    }
+
+    private func beginBrushImpl(at point: CGPoint, pressure: CGFloat?, input: BrushInput?, seed: UInt64?, deferTaperRendering: Bool) {
         // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
         if tool == .blur, blurMode != .blur { beginWarp(at: point); return }
         guard tool == .brush || tool == .blur || (tool.isBrushTool && !isMaskSelected) else { return }
@@ -90,6 +96,18 @@ extension EditorSession {
             }
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush, seed: seed)
+            let strokeID = ObjectIdentifier(stroke)
+            stroke.onGPUPreview = { [weak self] in
+                guard let self, self.brushStroke.map(ObjectIdentifier.init) == strokeID else { return }
+                self.brushRevision += 1
+                self.refreshCanvasPreview?()
+            }
+            stroke.onGPUError = { [weak self] message in
+                guard let self, self.brushStroke.map(ObjectIdentifier.init) == strokeID else { return }
+                self.cancelBrush()
+                self.brushError = message
+                self.refreshCanvasPreview?()
+            }
             stroke.defersTaperRendering = deferTaperRendering
             if let offset = sourceOffset {
                 guard let sample = cloneSample(document, for: stroke, offset: offset) else { return }
@@ -117,6 +135,12 @@ extension EditorSession {
         } catch { cancelBrush(); brushError = error.localizedDescription }
     }
     func continueBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil) {
+        BrushPerformanceSignpost.measure("Brush Input Continue") {
+            continueBrushImpl(at: point, pressure: pressure, input: input)
+        }
+    }
+
+    private func continueBrushImpl(at point: CGPoint, pressure: CGFloat?, input: BrushInput?) {
         if let warpStroke { warpStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1; return }
         guard let brushStroke else { return }
         if let input, input.deviceID != brushInput.deviceID { return }
@@ -157,6 +181,7 @@ extension EditorSession {
     }
     func cancelBrush() {
         warpStroke = nil
+        brushStroke?.cancelPendingGPUWork()
         brushStroke = nil
         brushAnchor = nil
         brushPointer = nil
@@ -165,6 +190,12 @@ extension EditorSession {
     /// Called directly by mouse-up, before the next input event can be handled.
     @discardableResult
     func finishBrushImmediately() -> Bool {
+        BrushPerformanceSignpost.measure("Brush Mouse Up Commit and Undo") {
+            finishBrushImmediatelyImpl()
+        }
+    }
+
+    private func finishBrushImmediatelyImpl() -> Bool {
         if warpStroke != nil {
             guard !isProjectBusy else { return false }
             finishWarp()

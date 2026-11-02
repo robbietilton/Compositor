@@ -1,4 +1,31 @@
 import AppKit
+import Metal
+import os.log
+
+enum BrushPerformanceSignpost {
+    private static let log = OSLog(subsystem: "com.wonderassembly.compositor", category: .pointsOfInterest)
+    private static let enabled = ProcessInfo.processInfo.environment["BRUSH_PROFILE"] == "1"
+
+    static func measure<T>(_ name: StaticString, _ body: () throws -> T) rethrows -> T {
+        guard enabled else { return try body() }
+        let identifier = OSSignpostID(log: log)
+        os_signpost(.begin, log: log, name: name, signpostID: identifier)
+        defer { os_signpost(.end, log: log, name: name, signpostID: identifier) }
+        return try body()
+    }
+
+    static func begin(_ name: StaticString) -> OSSignpostID? {
+        guard enabled else { return nil }
+        let identifier = OSSignpostID(log: log)
+        os_signpost(.begin, log: log, name: name, signpostID: identifier)
+        return identifier
+    }
+
+    static func end(_ name: StaticString, identifier: OSSignpostID?) {
+        guard let identifier else { return }
+        os_signpost(.end, log: log, name: name, signpostID: identifier)
+    }
+}
 
 /// Optional tablet channels; absence is never a fabricated tilt or barrel angle. Rotation is in radians.
 nonisolated struct BrushInput: Equatable, Sendable {
@@ -274,6 +301,9 @@ final class BrushStroke {
 
     }
     private var stampedCoverage: [Int: StampedCoverage] = [:]
+    private var pendingMetalStampDabs: [Int: [MetalStampRenderer.Dab]] = [:]
+    private var metalStampTailBackup: [Int: [MetalStampRenderer.Dab]?] = [:]
+    private var reportedMetalStampFallback = false
     private var stampedTailBackup: [Int: StampedCoverage?] = [:]
     private var travelled: CGFloat = 0
     private(set) var dabIndex = 0
@@ -294,7 +324,11 @@ final class BrushStroke {
     private struct Tile { let rect: CGRect; let context: CGContext; var image: CGImage?; let base: CGImage?; var basePixels: Data? = nil }
     private var tiles: [Int: Tile] = [:]
     private let gpu: MetalBrushCoverage?
+    private let metalStampRenderer: MetalStampRenderer?
     private var gpuTiles: [Int: MetalBrushCoverage.Tile] = [:]
+    private(set) var gpuPresentationTiles: [(rect: CGRect, texture: MTLTexture)] = []
+    private(set) var gpuCoverageReadbackBytes = 0
+    var gpuPresentationBytes: Int { gpuPresentationTiles.reduce(0) { $0 + $1.texture.width * $1.texture.height } }
     private var gpuTailKeys = Set<Int>()
     /// Per-tile grayscale coverage. Soft tips accumulate paint within the stroke;
     /// hard tips keep their antialiased silhouette. Each tile is recomposed as original
@@ -305,7 +339,35 @@ final class BrushStroke {
     static let tileSize = 256
     /// The part of each tile the stroke touched since the last publish, in tile-local pixels.
     private var dirtyTiles: [Int: CGRect] = [:]
-    var patches: [BrushPatch] { tiles.values.compactMap { tile in tile.image.map { BrushPatch(rect: tile.rect, image: $0) } } }
+    var touchedTileCount: Int { tiles.count }
+    var patches: [BrushPatch] {
+        if !gpuPublicationKeys.isEmpty {
+            do { try waitForGPUPreview() } catch { onGPUError?(error.localizedDescription) }
+        }
+        return tiles.values.compactMap { tile in tile.image.map { BrushPatch(rect: tile.rect, image: $0) } }
+    }
+    private struct PendingContinuousRender {
+        var settled: [BrushSegment] = []
+        var tail: [BrushSegment] = []
+        var keys: Set<Int> = []
+    }
+    private var pendingContinuousRender: PendingContinuousRender?
+    private var gpuRenderInFlight = false
+    private var gpuCommand: MTLCommandBuffer?
+    private var gpuSubmittedTail: [BrushSegment] = []
+    private var gpuCommandEpoch: UInt64 = 0
+    private var gpuPublicationKeys: Set<Int> = []
+    var usesContinuousGPU: Bool { gpu != nil }
+    var hasUnmaterializedGPUPreview: Bool { !gpuPublicationKeys.isEmpty }
+    var canPresentGPUCoverage: Bool {
+        usesContinuousGPU && !isMask && selectionClip == nil && clone == nil && !settings.healing
+            && !settings.roundDynamics.renderingSettings.isActive
+    }
+    var gpuPresentationColor: CGColor { paintColor }
+    var usesMetalStampRenderer: Bool { metalStampRenderer != nil }
+    var hasPendingGPUWork: Bool { gpuRenderInFlight || pendingContinuousRender != nil }
+    var onGPUPreview: (@MainActor () -> Void)?
+    var onGPUError: (@MainActor (String) -> Void)?
 
     /// `growsMask`: a brush on a mask can paint anywhere on the canvas, as Photoshop's does, growing the mask past its
     /// layer. Other edits of a mask stay within it.
@@ -316,6 +378,15 @@ final class BrushStroke {
             settings.opacity = min(properties.maximumOpacity, max(properties.minimumOpacity, settings.opacity))
         }
         gpu = useGPU && !settings.usesStampDynamics ? MetalBrushCoverage.shared : nil
+        let rendering = settings.roundDynamics.renderingSettings
+        let stampShape = settings.roundDynamics.shapeSettings
+        let grainSupportedByMetal = settings.roundDynamics.grain.map { $0.filtering != .none } ?? true
+        let metalStampSupported = stampShape.filtering != .none
+            && grainSupportedByMetal && rendering.dualSource == nil
+            && rendering.mode == .standard && rendering.wetEdges == 0 && rendering.burntEdges == 0
+            && rendering.strokeBlend == .normal && !rendering.luminanceBlending && rendering.alphaThreshold == nil
+        let stampRenderer = metalStampSupported ? MetalStampRenderer.shared : nil
+        metalStampRenderer = useGPU && settings.usesStampDynamics && metalStampSupported ? stampRenderer : nil
         self.seed = seed
         let shape = settings.roundDynamics.shapeSettings
         let tip = shape.source == .custom ? shape.customTip : shape.source == .generated ? shape.generatedKind.make() : settings.shapeTip
@@ -323,7 +394,6 @@ final class BrushStroke {
             throw NSError(domain: "BrushShape", code: 1, userInfo: [NSLocalizedDescriptionKey: "Selected shape image is missing or invalid. Choose a source in Shape settings."])
         }
         let maskData = shape.source == .procedural ? nil : tip?.mask(shape.source == .generated ? .luminance : shape.mask)
-        let rendering = settings.roundDynamics.renderingSettings
         let secondary = rendering.dualSource == .generated ? rendering.secondary.make() : settings.secondaryShapeTip
         guard rendering.dualSource == nil || secondary?.isValid == true else {
             throw NSError(domain: "BrushRendering", code: 1, userInfo: [NSLocalizedDescriptionKey: "The selected secondary shape is missing or invalid."])
@@ -394,6 +464,10 @@ final class BrushStroke {
         let stampDiameter = settings.diameter / min(1, scaleX, scaleY)
         stamp = gpu == nil && !settings.usesStampDynamics && gridTip == nil && stampDiameter <= Self.stampLimit
             ? try Self.tip(diameter: stampDiameter, hardness: settings.hardness, falloff: falloff) : nil
+        if useGPU && settings.usesStampDynamics && metalStampSupported && stampRenderer == nil {
+            fputs("Metal stamp renderer unavailable; using the CPU fallback.\n", stderr)
+            reportedMetalStampFallback = true
+        }
     }
 
     /// The tip as grayscale coverage: white at full strength, fading to black at the rim.
@@ -497,12 +571,16 @@ final class BrushStroke {
 
     private func flushContinuous() throws {
         let n = samples.count
-        guard n >= 2 else { return }
-        let settled = continuousCurve(from: samples[n - 2], to: samples[n - 1],
-            before: samples[max(0, n - 3)], after: samples[n - 1], inputs: (inputSamples[n - 2], inputSamples[n - 1]))
-        try renderContinuous(settled: settled, tail: [])
-        samples = [samples[n - 1]]
-        inputSamples = [inputSamples[n - 1]]
+        if n >= 2 {
+            let settled = continuousCurve(from: samples[n - 2], to: samples[n - 1],
+                before: samples[max(0, n - 3)], after: samples[n - 1], inputs: (inputSamples[n - 2], inputSamples[n - 1]))
+            let changed = continuousKeys(settled).union(gpuTailKeys)
+            gpuTailKeys = []
+            if !changed.isEmpty { try enqueueContinuousRender(settled: settled, tail: [], keys: changed) }
+            samples = [samples[n - 1]]
+            inputSamples = [inputSamples[n - 1]]
+        }
+        try flushContinuousGPU()
     }
 
     private func segment(_ a: CGPoint, _ b: CGPoint, _ pressureA: CGFloat, _ pressureB: CGFloat) -> BrushSegment {
@@ -570,12 +648,19 @@ final class BrushStroke {
     }
 
     private func renderContinuous(settled: [BrushSegment], tail: [BrushSegment]) throws {
-        guard let gpu else { return }
+        guard gpu != nil else { return }
         let tailKeys = continuousKeys(tail)
         let changed = continuousKeys(settled).union(tailKeys).union(gpuTailKeys)
+        gpuTailKeys = tailKeys
+        guard !changed.isEmpty else { return }
+        try enqueueContinuousRender(settled: settled, tail: tail, keys: changed)
+        if !gpuRenderInFlight { try submitPendingContinuousRender() }
+    }
+
+    private func enqueueContinuousRender(settled: [BrushSegment], tail: [BrushSegment], keys: Set<Int>) throws {
+        guard let gpu else { throw ExportError.render }
         let columns = (width + Self.tileSize - 1) / Self.tileSize
-        var work: [(MetalBrushCoverage.Tile, CGRect, CGContext)] = []
-        for key in changed {
+        for key in keys {
             try allocateTile(key, x: key % columns, y: key / columns)
             guard let tile = tiles[key] else { continue }
             if coverage[key] == nil {
@@ -583,11 +668,161 @@ final class BrushStroke {
                 gpuTiles[key] = try gpu.tile(width: Int(tile.rect.width), height: Int(tile.rect.height),
                                              capped: settings.pressureOpacity && settings.hardness < 1)
             }
-            work.append((gpuTiles[key]!, tile.rect, coverage[key]!))
         }
-        try gpu.render(work, settled: settled, tail: tail, mapping: pixelToDocument, settings: settings, canvas: canvas.size)
-        gpuTailKeys = tailKeys
-        try publish(changed)
+        var pending = pendingContinuousRender ?? PendingContinuousRender()
+        pending.settled.append(contentsOf: settled)
+        pending.tail = tail
+        pending.keys.formUnion(keys)
+        guard pending.settled.count + pending.tail.count <= Self.maxDabs else { throw ProjectError.tooLarge }
+        pendingContinuousRender = pending
+        gpuPublicationKeys.formUnion(keys)
+    }
+
+    private func gpuWork(for keys: Set<Int>) throws -> [(MetalBrushCoverage.Tile, CGRect, CGContext)] {
+        try keys.compactMap { key in
+            guard let tile = tiles[key], let context = coverage[key], let gpuTile = gpuTiles[key] else {
+                throw ExportError.render
+            }
+            return (gpuTile, tile.rect, context)
+        }
+    }
+
+    private func submitPendingContinuousRender() throws {
+        guard let gpu, let pending = pendingContinuousRender else { return }
+        pendingContinuousRender = nil
+        let work = try gpuWork(for: pending.keys)
+        guard !work.isEmpty else { return }
+        gpuCommandEpoch &+= 1
+        let epoch = gpuCommandEpoch
+        let (command, _) = try gpu.render(work, settled: pending.settled, tail: pending.tail,
+            mapping: pixelToDocument, settings: settings, canvas: canvas.size) { [weak self] error, snapshots in
+                self?.completeContinuousRender(epoch: epoch, error: error, snapshots: snapshots)
+            }
+        gpuCommand = command
+        gpuSubmittedTail = pending.tail
+        gpuRenderInFlight = true
+    }
+
+    private func completeContinuousRender(epoch: UInt64, error: String?, snapshots: [(CGRect, MTLTexture)]) {
+        guard epoch == gpuCommandEpoch, gpuRenderInFlight else { return }
+        gpuRenderInFlight = false
+        gpuCommand = nil
+        gpuSubmittedTail = []
+        if let error {
+            pendingContinuousRender = nil
+            gpuPublicationKeys = []
+            gpuPresentationTiles = []
+            onGPUError?(error)
+            return
+        }
+        if canPresentGPUCoverage {
+            for snapshot in snapshots {
+                gpuPresentationTiles.removeAll { $0.rect == snapshot.0 }
+                gpuPresentationTiles.append((snapshot.0, snapshot.1))
+            }
+        } else {
+            gpuPresentationTiles = []
+        }
+        do {
+            if pendingContinuousRender != nil {
+                try submitPendingContinuousRender()
+                return
+            }
+            guard let gpu else { return }
+            let keys = gpuPublicationKeys
+            guard !keys.isEmpty else { return }
+            if canPresentGPUCoverage {
+                onGPUPreview?()
+                return
+            }
+            try readbackGPUWork(keys)
+            gpuPublicationKeys = []
+            try publish(keys)
+            onGPUPreview?()
+        } catch {
+            pendingContinuousRender = nil
+            gpuPublicationKeys = []
+            onGPUError?(error.localizedDescription)
+        }
+    }
+
+    /// Mouse-up drains any submitted command and the single coalesced follow-up, then reads
+    /// one immutable tile state for the existing commit/undo boundary.
+    private func flushContinuousGPU() throws {
+        guard let gpu else { return }
+        let priorCommand = gpuCommand
+        gpuCommandEpoch &+= 1 // Any queued completion callback is now stale.
+        gpuRenderInFlight = false
+        gpuCommand = nil
+        gpuSubmittedTail = []
+        let pending = pendingContinuousRender
+        pendingContinuousRender = nil
+        let keys = gpuPublicationKeys
+        guard !keys.isEmpty else { return }
+        let work = try gpuWork(for: keys)
+        gpuPresentationTiles = try gpu.renderAndWait(work, settled: pending?.settled ?? [], tail: pending?.tail ?? [],
+                              mapping: pixelToDocument, settings: settings, canvas: canvas.size)
+        gpuCoverageReadbackBytes += work.reduce(0) { $0 + Int($1.1.width * $1.1.height) }
+        if let priorCommand, priorCommand.status != .completed {
+            throw priorCommand.error ?? ExportError.render
+        }
+        try publish(keys)
+        gpuPublicationKeys = []
+        gpuTailKeys = []
+        onGPUPreview?()
+    }
+
+    /// Synchronous observation hook for pixel-level regression checks. Unlike mouse-up, it
+    /// preserves the current provisional tail instead of finalizing stroke geometry.
+    func waitForGPUPreview() throws {
+        guard let gpu else { return }
+        let priorCommand = gpuCommand
+        let pending = pendingContinuousRender
+        guard priorCommand != nil || pending != nil else {
+            let keys = gpuPublicationKeys
+            guard !keys.isEmpty else { return }
+            try readbackGPUWork(keys)
+            try publish(keys)
+            gpuPublicationKeys = []
+            onGPUPreview?()
+            return
+        }
+        gpuCommandEpoch &+= 1
+        gpuRenderInFlight = false
+        gpuCommand = nil
+        pendingContinuousRender = nil
+        let keys = gpuPublicationKeys
+        guard !keys.isEmpty else { return }
+        gpuPresentationTiles = try gpu.renderAndWait(try gpuWork(for: keys), settled: pending?.settled ?? [],
+            tail: pending?.tail ?? gpuSubmittedTail, mapping: pixelToDocument,
+            settings: settings, canvas: canvas.size)
+        gpuCoverageReadbackBytes += keys.reduce(0) { total, key in
+            total + (tiles[key].map { Int($0.rect.width * $0.rect.height) } ?? 0)
+        }
+        if let priorCommand, priorCommand.status != .completed { throw priorCommand.error ?? ExportError.render }
+        gpuSubmittedTail = []
+        try publish(keys)
+        gpuPublicationKeys = []
+        onGPUPreview?()
+    }
+
+    private func readbackGPUWork(_ keys: Set<Int>) throws {
+        guard let gpu else { return }
+        let work = try gpuWork(for: keys)
+        try gpu.readback(work)
+        gpuCoverageReadbackBytes += work.reduce(0) { $0 + Int($1.1.width * $1.1.height) }
+    }
+
+    func cancelPendingGPUWork() {
+        gpuCommandEpoch &+= 1
+        gpuRenderInFlight = false
+        gpuCommand = nil
+        gpuSubmittedTail = []
+        pendingContinuousRender = nil
+        gpuPublicationKeys = []
+        gpuTailKeys = []
+        gpuPresentationTiles = []
+        GPUCanvasRenderer.discardIfPresent(self)
     }
 
     /// Draws a straight tail to the cursor, first saving the coverage it can touch and the
@@ -608,6 +843,7 @@ final class BrushStroke {
                             // Direct pixel writes cannot use a shared CGContext image as an immutable backup.
                             tailBackup[key] = .some(nil)
                             stampedTailBackup[key] = .some(stampedCoverage[key])
+                            metalStampTailBackup[key] = .some(pendingMetalStampDabs[key])
                         } else { tailBackup[key] = .some(coverage[key]?.makeImage()) }
                     }
                 }
@@ -623,6 +859,7 @@ final class BrushStroke {
     private func removeTail() -> Set<Int> {
         var restored = Set<Int>()
         for (key, value) in stampedTailBackup { stampedCoverage[key] = value }
+        for (key, dabs) in metalStampTailBackup { pendingMetalStampDabs[key] = dabs }
         for (key, image) in tailBackup {
             guard let context = coverage[key], let tile = tiles[key] else { continue }
             let local = CGRect(origin: .zero, size: tile.rect.size)
@@ -633,6 +870,7 @@ final class BrushStroke {
         }
         tailBackup = [:]
         stampedTailBackup = [:]
+        metalStampTailBackup = [:]
         return restored
     }
 
@@ -690,7 +928,9 @@ final class BrushStroke {
                 * (2 * brushRandomUnit(seed: seed, index: dabIndex, channel: 102) - 1)
             let shifted = CGPoint(x: point.x + direction.x * linear - direction.y * lateral,
                                   y: point.y + direction.y * linear + direction.x * lateral)
-            try dab(shifted, input: input, direction: direction, distance: distance, changed: &changed)
+            try BrushPerformanceSignpost.measure("Brush Dab Placement") {
+                try dab(shifted, input: input, direction: direction, distance: distance, changed: &changed)
+            }
         }
         if let previous {
             let dx = point.x - previous.x, dy = point.y - previous.y
@@ -838,6 +1078,13 @@ final class BrushStroke {
     }
 
     private func publish(_ changed: Set<Int>) throws {
+        try BrushPerformanceSignpost.measure("Brush Tile Publication") {
+            try publishTiles(changed)
+        }
+    }
+
+    private func publishTiles(_ changed: Set<Int>) throws {
+        try flushMetalStampDabs()
         dirtyDocumentRect = nil
         for key in changed {
             if let tile = tiles[key], let coverage = coverage[key] {
@@ -898,6 +1145,62 @@ final class BrushStroke {
             if let rect = tiles[key]?.rect.applying(pixelToDocument).intersection(canvas) {
                 dirtyDocumentRect = dirtyDocumentRect.map { $0.union(rect) } ?? rect
             }
+        }
+    }
+
+    private func flushMetalStampDabs() throws {
+        guard !pendingMetalStampDabs.isEmpty else { return }
+        let pending = pendingMetalStampDabs
+        pendingMetalStampDabs.removeAll(keepingCapacity: true)
+        let shape = settings.roundDynamics.shapeSettings
+        let hardness = Float(settings.hardness), shapeSide = self.shapeSide
+        let filtering = shape.filtering == .none ? 0 : shape.filtering == .classic ? 1 : 2
+        for (key, dabs) in pending {
+            guard let renderer = metalStampRenderer, let tile = tiles[key], let current = stampedCoverage[key] else { throw ExportError.render }
+            var state = current
+            let capInput = state.cap.isEmpty ? [Float](repeating: 0, count: state.density.count) : state.cap
+            do {
+                let result = try renderer.render(tip: shapeMask, side: shapeSide,
+                    width: Int(tile.rect.width), height: Int(tile.rect.height),
+                    origin: SIMD2(Int32(tile.rect.minX), Int32(tile.rect.minY)), dabs: dabs,
+                    filtering: UInt32(filtering), initialDensity: state.density, initialCap: capInput,
+                    grain: grainMask, grainSide: grainSide,
+                    hardness: hardness, region: dirtyTiles[key])
+                state.density = result.density
+                if !state.cap.isEmpty { state.cap = result.cap }
+            } catch {
+                if !reportedMetalStampFallback {
+                    fputs("Metal brush stamp failed; replaying the tile on CPU: \(error.localizedDescription)\n", stderr)
+                    reportedMetalStampFallback = true
+                }
+                let replay: (UnsafePointer<UInt8>?, UnsafePointer<UInt8>?) -> Void = { tip, grain in
+                    state.density.withUnsafeMutableBufferPointer { density in
+                        state.cap.withUnsafeMutableBufferPointer { cap in
+                            for dab in dabs {
+                                dab.grainParameters.withUnsafeBufferPointer { parameters in
+                                    brush_render_stamp(density.baseAddress, cap.isEmpty ? nil : cap.baseAddress, nil, nil,
+                                        Int(tile.rect.width), 0, 0, Int(tile.rect.width), Int(tile.rect.height),
+                                        dab.u0, dab.v0, dab.ux, dab.uy, dab.vx, dab.vy,
+                                        hardness, dab.flow, dab.strength,
+                                        tip, shapeSide,
+                                        Int32(filtering),
+                                        0, 0, Float(self.settings.red), Float(self.settings.green), Float(self.settings.blue),
+                                        nil, 0, 1, 0, grain, self.grainSide,
+                                        grain == nil ? nil : parameters.baseAddress)
+                                }
+                            }
+                        }
+                    }
+                }
+                let replayTip: (UnsafePointer<UInt8>?) -> Void = { tip in
+                    if let mask = self.grainMask {
+                        mask.withUnsafeBytes { replay(tip, $0.bindMemory(to: UInt8.self).baseAddress) }
+                    } else { replay(tip, nil) }
+                }
+                if let mask = shapeMask { mask.withUnsafeBytes { replayTip($0.bindMemory(to: UInt8.self).baseAddress) } }
+                else { replayTip(nil) }
+            }
+            stampedCoverage[key] = state
         }
     }
 
@@ -1132,12 +1435,28 @@ final class BrushStroke {
                         Double(-gs*pixelToDocument.a+gc*pixelToDocument.b), Double(-gs*pixelToDocument.c+gc*pixelToDocument.d),
                         Double(depth), Double(grain.brightness), Double(grain.contrast), Double(BrushGrain.Blend.allCases.firstIndex(of: grain.blend)!),
                         grain.filtering == .none ? 0 : grain.filtering == .classic ? 1 : 2, grain.mode == .texturized ? 1 : 0]
+                    let metalStampEligible = metalStampRenderer != nil && rendering.mode.pickup == 0
+                        && clone == nil && !isBlur && !replacesWithClone && !settings.healing && !settings.erasing
+                    if metalStampEligible {
+                        state.density = densityValues
+                        state.cap = capValues
+                        state.pigment = pigmentValues
+                        state.edge = edgeValues
+                        stampedCoverage[key] = state
+                        pendingMetalStampDabs[key, default: []].append(MetalStampRenderer.Dab(
+                            u0: u0, v0: v0, ux: ux, uy: uy, vx: vx, vy: vy,
+                            flow: Float(options.flow), strength: Float(response.strength), grain: grainValues))
+                        dirtyTiles[key] = dirtyTiles[key].map { $0.union(touched) } ?? touched
+                        changed.insert(key)
+                        continue
+                    }
                     let render: (UnsafePointer<UInt8>?, UnsafePointer<UInt8>?, UnsafePointer<UInt8>?) -> Void = { tip, secondary, grain in
                         densityValues.withUnsafeMutableBufferPointer { density in
                             capValues.withUnsafeMutableBufferPointer { cap in
                                 pigmentValues.withUnsafeMutableBufferPointer { colors in
                                     edgeValues.withUnsafeMutableBufferPointer { edges in
                                         grainValues.withUnsafeBufferPointer { parameters in
+                                        BrushPerformanceSignpost.measure("Brush C Raster") {
                                         brush_render_stamp(density.baseAddress, cap.isEmpty ? nil : cap.baseAddress,
                                             colors.isEmpty ? nil : colors.baseAddress, edges.isEmpty ? nil : edges.baseAddress, Int(tile.rect.width),
                                             Int(touched.minX), Int(touched.minY), Int(touched.maxX), Int(touched.maxY),
@@ -1146,6 +1465,7 @@ final class BrushStroke {
                                             rendering.mode.index, Float(rendering.wetEdges), pigment[0], pigment[1], pigment[2], secondary,
                                             self.secondarySide, Float(rendering.secondaryScale), rendering.classicDualNormal ? 1 : 0,
                                             grain, self.grainSide, parameters.baseAddress)
+                                        }
                                         }
                                     }
                                 }
@@ -1180,6 +1500,8 @@ final class BrushStroke {
             changed.insert(key)
         }
         stampedCoverage = [:]
+        pendingMetalStampDabs.removeAll(keepingCapacity: true)
+        metalStampTailBackup = [:]
         carriedColor = nil
         for (index, dab) in taperDabs.enumerated() {
             let options = settings.roundDynamics

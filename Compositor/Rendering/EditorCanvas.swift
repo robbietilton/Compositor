@@ -570,6 +570,12 @@ final class CanvasView: NSView {
 
     @discardableResult
     func synchronizeDisplay() -> Bool {
+        BrushPerformanceSignpost.measure("Brush Canvas Synchronization") {
+            synchronizeDisplayImpl()
+        }
+    }
+
+    private func synchronizeDisplayImpl() -> Bool {
         // The stroke is over: what its surface holds stands in until the layer's own effects have been rebuilt from
         // the pixels it left, so nothing blinks at the end of a stroke.
         if session.brushStroke == nil, let surface = strokeSurface {
@@ -672,7 +678,7 @@ final class CanvasView: NSView {
         super.init(frame: .zero)
         session.refreshCanvasPreview = { [weak self] in
             self?.synchronizeDisplay()
-            self?.displayIfNeeded()
+            BrushPerformanceSignpost.measure("Brush Display If Needed") { self?.displayIfNeeded() }
         }
         addSubview(lines)
         addSubview(transformOverlay)
@@ -886,6 +892,12 @@ final class CanvasView: NSView {
     private var surround: CGFloat { session.canvasOnly ? 0 : 0.105 }
 
     override func draw(_ dirtyRect: NSRect) {
+        BrushPerformanceSignpost.measure("Brush Canvas Draw") {
+            drawCanvas(dirtyRect)
+        }
+    }
+
+    private func drawCanvas(_ dirtyRect: NSRect) {
         // The grid and a text frame being dragged follow the pixels under them.
         if lines.frame != bounds { lines.frame = bounds }
         lines.needsDisplay = true

@@ -769,6 +769,14 @@ struct BrushDynamicsTests {
             #expect(difference(image, try raster(dense)) <= 1)
             let transform = LayerTransform(origin: CGPoint(x: 0, y: row * 128), size: size)
             LayerRenderer.draw(try #require(image.makeImage()), transform: transform, center: transform.center, in: atlas)
+            for filtering in [ShapeBrushSettings.Filtering.classic, .improved] {
+                options.grain?.filtering = filtering
+                let cpu = try make(options, gpu: false), metal = try make(options)
+                #expect(metal.usesMetalStampRenderer)
+                try trace(cpu, steps: 32); try trace(metal, steps: 32)
+                #expect(difference(try raster(cpu), try raster(metal)) <= 1,
+                    "\(mode.rawValue) grain with \(filtering.rawValue) filtering must match CPU output")
+            }
         }
         #expect(difference(modes[0], modes[1]) > 1, "Moving grain must differ from canvas-anchored grain")
         for (index, blend) in BrushGrain.Blend.allCases.enumerated() {
