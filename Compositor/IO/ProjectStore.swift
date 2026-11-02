@@ -295,7 +295,12 @@ actor ProjectStore {
                 if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
                 if exr { return try DeepLayer.wideAsset(image, name: layer.name) }
                 if depth == 16 { return try DeepLayer.asset(image, name: layer.name) }
-                return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name)
+                if isMask { return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name) }
+                // A PNG decodes with straight alpha, or none; the brush and the canvas work in premultiplied pixels, and
+                // converting each tile a stroke touched made painting on an opened project's layers chug. Converted
+                // once here, into the layout an imported image or a new layer has.
+                guard let standard = try BrushRaster.copy(image).makeImage() else { throw ProjectError.missingImage }
+                return ImportedImage(image: standard, thumbnail: thumbnail, name: layer.name)
             }
             if layer.gif != nil, !isMask, asset.deep != nil { throw ProjectError.invalid }
             if isMask { masks[layer.id] = asset } else { images[layer.id] = asset }
@@ -536,7 +541,10 @@ actor ProjectStore {
                     kCGImageSourceShouldCacheImmediately: true
                   ] as CFDictionary) else { throw ProjectError.missingImage }
             if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
-            return ImportedImage(image: image, thumbnail: thumbnail, name: name)
+            if isMask { return ImportedImage(image: image, thumbnail: thumbnail, name: name) }
+            // Premultiplied, as a layer's image is (`load`).
+            guard let standard = try BrushRaster.copy(image).makeImage() else { throw ProjectError.missingImage }
+            return ImportedImage(image: standard, thumbnail: thumbnail, name: name)
         }
     }
 
