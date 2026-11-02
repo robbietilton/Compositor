@@ -10,14 +10,12 @@ import Vision
 /// files, checked against the fingerprints below), compiled and kept in Application Support. Until then, or without a
 /// connection, `depth` is nil and the fog falls back to its own guess.
 nonisolated enum DepthModel {
-    /// Where the files are published, and what each must be. A new model gets a new folder, so an old copy is never
-    /// mistaken for it.
-    static var source = URL(string: "https://github.com/robbietilton/Compositor/releases/download/depth-model-4/")!
-    static let version = "4"
+    /// Where the files are published, and what each must be. A new model gets a new release.
+    static var source = URL(string: "https://github.com/robbietilton/Compositor/releases/download/depth-model-1/")!
     private static let files: [(name: String, path: String, sha256: String)] = [
-        ("Manifest.json", "Manifest.json", "19446362b95858077b567712d4afdb11eaf62800cda930f8cded086a38539b18"),
-        ("model.mlmodel", "Data/com.apple.CoreML/model.mlmodel", "63b8e6372d888259aba8a4275513f27fc61efb24089c4f237dfe2984807fc0ea"),
-        ("weight.bin", "Data/com.apple.CoreML/weights/weight.bin", "3fb76b7db1c8c490f610bdfa7d6e749b7dd585ef6b50dfee6f2c2ff9690ef5c3"),
+        ("Manifest.json", "Manifest.json", "cfaa07eae081a343ff0e011c2875206d832335e55073252c29c79f73fd938929"),
+        ("model.mlmodel", "Data/com.apple.CoreML/model.mlmodel", "c9e2f4f1e44409a2b9f5fb0b072ba41fb42d03a555c333f635f5162676feb744"),
+        ("weight.bin", "Data/com.apple.CoreML/weights/weight.bin", "63d066f1aefc362f2cc0805a624e08df13b6cff3be45dc4307b20a531a2a9f86"),
     ]
     /// The sizes the model takes, width × height: square, 4:3 and 16:9 either way up.
     static let shapes = [(512, 512), (512, 384), (512, 288), (384, 512), (288, 512)]
@@ -28,11 +26,12 @@ nonisolated enum DepthModel {
         return shapes.min { abs(log(Double($0.0) / Double($0.1)) - aspect) < abs(log(Double($1.0) / Double($1.1)) - aspect) }!
     }
 
-    /// The compiled model, kept between launches.
+    /// The compiled model, kept between launches, in a folder named for its weights, so a copy of another model (one
+    /// kept while it was being made) is never mistaken for it.
     static var folder: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("Compositor/Depth Model \(version)", isDirectory: true)
+        return base.appendingPathComponent("Compositor/Depth Model \(files[2].sha256.prefix(12))", isDirectory: true)
     }
     private static var compiled: URL { folder.appendingPathComponent("DepthMini.mlmodelc", isDirectory: true) }
 
