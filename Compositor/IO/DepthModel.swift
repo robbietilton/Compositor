@@ -77,18 +77,24 @@ nonisolated enum DepthModel {
         }
     }
 
-    /// The three files into a package, each checked, then compiled into place.
+    /// The three files into a package, fetched together and each checked, then compiled into place.
     private static func download() async throws {
         let package = FileManager.default.temporaryDirectory.appendingPathComponent("DepthMini-\(UUID().uuidString).mlpackage")
         defer { try? FileManager.default.removeItem(at: package) }
-        for file in files {
-            let (data, response) = try await URLSession.shared.data(from: source.appendingPathComponent(file.name))
-            if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw URLError(.badServerResponse) }
-            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard digest == file.sha256 else { throw URLError(.cannotDecodeContentData) }
-            let destination = package.appendingPathComponent(file.path)
-            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: destination)
+        let source = source
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for file in files {
+                group.addTask {
+                    let (data, response) = try await URLSession.shared.data(from: source.appendingPathComponent(file.name))
+                    if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw URLError(.badServerResponse) }
+                    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                    guard digest == file.sha256 else { throw URLError(.cannotDecodeContentData) }
+                    let destination = package.appendingPathComponent(file.path)
+                    try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: destination)
+                }
+            }
+            try await group.waitForAll()
         }
         let built = try await MLModel.compileModel(at: package)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

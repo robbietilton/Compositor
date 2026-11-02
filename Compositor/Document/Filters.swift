@@ -615,6 +615,8 @@ final class FilterEdit {
     @ObservationIgnored var preparedSettings: FilterSettings?
     @ObservationIgnored var pending: FilterJob?
     @ObservationIgnored var previewTask: Task<Void, Never>?
+    /// Volumetric Light's first preview, held for the depth model (`beginFilter`).
+    @ObservationIgnored var waitsForDepth = false
     /// Previews render from a copy no larger than this on its longest side.
     static let previewLimit: CGFloat = 2048
 
@@ -839,14 +841,29 @@ extension EditorSession {
             edit.startedEmpty = startedEmpty
             edit.repeating = repeating
             filterEdit = edit
-            // Volumetric Light's depth model, downloaded the first time: the fog guesses until it's here, then redraws.
-            if kind == .volumetricLight, !DepthModel.isReady {
+            // Volumetric Light's depth model, downloaded the first time: the first preview waits for it, so the fog
+            // doesn't draw from its own guess and then jump to the depth. Fetching and compiling it takes about 3 seconds;
+            // a slow connection holds it only 5: then the fog guesses until the model is here, and redraws.
+            // Without a connection it fails at once, and the fog guesses straight away.
+            let waitsForDepth = kind == .volumetricLight && !repeating && !DepthModel.isReady
+            if waitsForDepth {
                 preparingDepth = true
-                Task { [weak self] in
+                edit.waitsForDepth = true
+                let guess = Task<Bool, Never> { [weak self, weak edit] in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled, let self, let edit, self.filterEdit === edit, !edit.committing else { return false }
+                    edit.waitsForDepth = false
+                    self.updateFilter(edit.settings, preview: edit.preview)
+                    return true
+                }
+                Task { [weak self, weak edit] in
                     let ready = await DepthModel.prepare()
+                    guess.cancel()
+                    let guessed = await guess.value
                     guard let self else { return }
                     self.preparingDepth = false
-                    if ready, let edit = self.filterEdit, edit.kind == .volumetricLight, !edit.committing {
+                    edit?.waitsForDepth = false
+                    if ready || !guessed, let edit, self.filterEdit === edit, !edit.committing {
                         self.updateFilter(edit.settings, preview: edit.preview)
                     }
                 }
@@ -855,7 +872,7 @@ extension EditorSession {
                 Task.detached(priority: .utility) { _ = MetalCameraRawLookup.shared }
             }
             // An automatic filter commits what its preview made, so it still needs one.
-            updateFilter(edit.settings, preview: !repeating || kind.isAutomatic)
+            if !waitsForDepth { updateFilter(edit.settings, preview: !repeating || kind.isAutomatic) }
         } catch { brushError = error.localizedDescription }
     }
 
@@ -901,6 +918,9 @@ extension EditorSession {
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
         guard let edit = filterEdit, !edit.committing else { return }
+        // The panel's sliders write their values back as it opens; while the first preview waits for the depth model,
+        // that isn't a change to draw (only one that changes something is).
+        if edit.waitsForDepth, settings.normalized == edit.settings, preview == edit.preview { return }
         edit.settings = settings.normalized
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
