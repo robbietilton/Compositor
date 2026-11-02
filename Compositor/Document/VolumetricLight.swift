@@ -338,6 +338,11 @@ nonisolated enum VolumetricLighting {
             } else {
                 composed = firmed(composed, side: side, extent: extent)
             }
+            // Hands and arms take Vision's mask worked out again on crops around them, which separates the fingers, and
+            // an arm from the body, where the whole photo's masks fill the gaps in (`limbGaps`).
+            if let gaps = limbGaps(image, outline: composed, extent: extent) {
+                composed = gaps.applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: composed])
+            }
             return try? PixelAdjust.render(composed.cropped(to: extent), width: image.width, height: image.height, isMask: true)
         }
     }
@@ -409,6 +414,76 @@ nonisolated enum VolumetricLighting {
         let soft = CIImage(cgImage: ovals, options: [.colorSpace: NSNull()]).clampedToExtent()
             .applyingGaussianBlur(sigma: max(width, height) * 0.02).cropped(to: extent)
         return try? PixelAdjust.render(soft, width: image.width, height: image.height, isMask: true)
+    }
+
+    /// What to take away from `outline`, white: the gaps between the people's fingers, and between their arms and
+    /// bodies, that Vision finds on a crop around each hand (from the wrist and elbow of their poses) and between each
+    /// elbow and hip, where they're many more of its pixels than in the whole photo. Each crop takes away only what's
+    /// narrow (on a crop Vision can drop a wide part of the body, a chest behind a fist, which stays), and only within
+    /// an oval inside it, soft-edged: its own edges cut through the body, and Vision is unsure there. Nil when no arm
+    /// is found.
+    private static func limbGaps(_ image: CGImage, outline: CIImage, extent: CGRect) -> CIImage? {
+        let request = VNDetectHumanBodyPoseRequest()
+        guard (try? VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])) != nil,
+              let people = request.results, !people.isEmpty else { return nil }
+        let height = extent.height
+        var gaps: CIImage?
+        func look(around center: CGPoint, half: CGFloat, narrow: CGFloat) {
+            let box = CGRect(x: center.x - half, y: center.y - half, width: half * 2, height: half * 2).integral.intersection(extent)
+            // CGImage crops count down from the top.
+            guard !box.isEmpty, let crop = image.cropping(to: CGRect(x: box.minX, y: height - box.maxY, width: box.width, height: box.height)),
+                  let found = foregroundMask(crop),
+                  let oval = CIFilter(name: "CIRadialGradient", parameters: [
+                      "inputCenter": CIVector(cgPoint: center), "inputRadius0": half * 0.6, "inputRadius1": half * 0.75,
+                      "inputColor0": CIColor.white, "inputColor1": CIColor.black])?.outputImage?.cropped(to: extent) else { return }
+            let seen = CIImage(cgImage: found, options: [.colorSpace: NSNull()])
+                .transformed(by: CGAffineTransform(translationX: box.minX, y: box.minY)).composited(over: CIImage(color: .white).cropped(to: extent))
+            let kept = narrowGaps(in: outline, seen: seen, narrow: narrow, extent: extent)
+                .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: oval])
+            gaps = gaps.map { kept.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: $0]) } ?? kept
+        }
+        for person in people {
+            // Vision's points are 0–1 with y up, as Core Image's are.
+            func point(_ name: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+                guard let joint = try? person.recognizedPoint(name), joint.confidence > 0.2 else { return nil }
+                return CGPoint(x: joint.location.x * extent.width, y: joint.location.y * height)
+            }
+            for (wristName, elbowName, hipName) in [(VNHumanBodyPoseObservation.JointName.leftWrist, VNHumanBodyPoseObservation.JointName.leftElbow,
+                                                     VNHumanBodyPoseObservation.JointName.leftHip), (.rightWrist, .rightElbow, .rightHip)] {
+                guard let w = point(wristName), let e = point(elbowName) else { continue }
+                let forearm = hypot(w.x - e.x, w.y - e.y)
+                guard forearm > 8 else { continue }
+                // The hand reaches on past the wrist, about half a forearm.
+                look(around: CGPoint(x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4), half: forearm * 0.8, narrow: forearm * 0.12)
+                // Between the elbow and the hip, where an arm hanging by the body leaves a gap.
+                if let h = point(hipName) {
+                    look(around: CGPoint(x: (e.x + h.x) / 2, y: (e.y + h.y) / 2), half: max(forearm * 0.8, hypot(e.x - h.x, e.y - h.y) * 0.8),
+                         narrow: forearm * 0.12)
+                }
+            }
+        }
+        return gaps
+    }
+
+    /// What `seen` leaves out of `outline`, white, but only what's narrow, no wider than about twice `narrow`: what's
+    /// wide survives shrinking then growing back, grown back further than it shrank so its rim, which the shrinking
+    /// rounds off, goes with it; the rest is narrow.
+    static func narrowGaps(in outline: CIImage, seen: CIImage, narrow: CGFloat, extent: CGRect) -> CIImage {
+        let cut = outline.applyingFilter("CIMinimumCompositing", parameters: [kCIInputBackgroundImageKey: seen])
+            .applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: outline])
+        let wide = cut.clampedToExtent().applyingFilter("CIMorphologyMinimum", parameters: ["inputRadius": narrow])
+            .applyingFilter("CIMorphologyMaximum", parameters: ["inputRadius": narrow * 1.6]).cropped(to: extent)
+        return wide.applyingFilter("CISubtractBlendMode", parameters: [kCIInputBackgroundImageKey: cut])
+    }
+
+    /// Vision's subject mask for `image`, white over the subject, at its size; nil when it finds none. Not Remove
+    /// Background's (`SubjectRemoval.subjectMask`), whose cache holds the whole photo's.
+    private static func foregroundMask(_ image: CGImage) -> CGImage? {
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        guard (try? handler.perform([request])) != nil, let result = request.results?.first, !result.allInstances.isEmpty,
+              let buffer = try? result.generateScaledMaskForImage(forInstances: result.allInstances, from: handler) else { return nil }
+        return try? PixelAdjust.render(CIImage(cvPixelBuffer: buffer), width: image.width, height: image.height, isMask: true)
     }
 
     /// The people in `image`, white, at its size; nil when there are none.

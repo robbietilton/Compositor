@@ -114,6 +114,31 @@ struct VolumetricLightTests {
         #expect(abs(own - 0.2) < 0.05, "at its own depth: \(own)")
     }
 
+    /// A crop's mask takes a narrow gap out of the outline, as between fingers, but not a wide part it left out, as a
+    /// chest behind a fist.
+    @Test func onlyNarrowGapsAreTakenOut() {
+        let extent = CGRect(x: 0, y: 0, width: 200, height: 200)
+        func box(_ rect: CGRect) -> CIImage {
+            CIImage(color: .white).cropped(to: rect).composited(over: CIImage.black.cropped(to: extent))
+        }
+        let outline = box(CGRect(x: 20, y: 20, width: 160, height: 160))
+        let left = [CGRect(x: 98, y: 40, width: 4, height: 120), CGRect(x: 130, y: 60, width: 40, height: 80)]
+        let seen = left.reduce(outline) { seen, rect in
+            CIImage.black.cropped(to: rect).composited(over: seen)
+        }
+        let gaps = VolumetricLighting.narrowGaps(in: outline, seen: seen, narrow: 6, extent: extent)
+        let context = CIContext()
+        func at(_ x: Int) -> Float {
+            var pixel = [Float](repeating: 0, count: 4)
+            context.render(gaps, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: x, y: 100, width: 1, height: 1), format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        let narrow = at(100), wide = at(150), edge = at(131), body = at(60)
+        #expect(narrow > 0.9, "the narrow gap is taken out: \(narrow)")
+        #expect(wide < 0.1 && edge < 0.1, "the wide part stays, to its edge: \(wide), \(edge)")
+        #expect(body < 0.1, "the rest stays: \(body)")
+    }
+
     /// Depth Contrast spreads bunched depths apart and keeps their order; 0 leaves them.
     @Test func depthContrastSpreadsBunchedDepths() {
         let bunched = DepthMap(values: [0, 0.01, 0.02, 0.03, 1], width: 5, height: 1)
