@@ -158,7 +158,7 @@ struct CheckerCircleIcon: View {
     }
 }
 
-/// Where a `FooterMenu`'s menu opens: just under its icon, as a pop-up button's does.
+/// Where a `FooterMenu`'s menu opens: just above its icon, which sits at the bottom of the window.
 @MainActor final class FooterMenuAnchor {
     weak var view: NSView?
 
@@ -166,7 +166,9 @@ struct CheckerCircleIcon: View {
         guard let view else { return }
         let menu = NSMenu()
         for item in items { menu.addItem(FooterMenuItem(title: item.title, action: item.action)) }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4), in: view)
+        // The menu's top-left corner goes at the point given, so its own height plus a gap above the icon's top.
+        let top = menu.size.height + 6
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? -top : view.bounds.maxY + top), in: view)
     }
 }
 
