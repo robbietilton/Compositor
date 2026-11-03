@@ -275,6 +275,8 @@ final class EditorSession {
     @ObservationIgnored var distortEffectsCache: [UUID: DistortEffectsCache] = [:]
     /// Document positions a move has just snapped to, drawn as guides while it lasts.
     @ObservationIgnored var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
+    /// Pixel gaps the Move tool shows while a layer is dragged, or with Command held over another layer.
+    @ObservationIgnored var distanceLines: [DistanceLine] = []
     /// Crop, resize and selection moves follow View › Snap (⇧⌘;) too: they had a Snap item of their own, which left
     /// the View menu with two called Snap.
     var snappingEnabled: Bool {
@@ -437,6 +439,13 @@ final class EditorSession {
             && selectionAmountOperation == nil
     }
     var showsRulers = ToolDefaults.bool("rulers", false) { didSet { ToolDefaults.set(showsRulers, "rulers") } }
+    /// View › Show › Distances: the Move tool's pixel gaps, while dragging and with Command held.
+    var showsDistances = ToolDefaults.bool("distances", false) {
+        didSet {
+            ToolDefaults.set(showsDistances, "distances")
+            if !showsDistances { distanceLines = [] }
+        }
+    }
     /// Master snap switch (View > Snap). On so today's layer/canvas snap keeps working.
     var snapEnabled = ToolDefaults.bool("snap", true) {
         didSet {

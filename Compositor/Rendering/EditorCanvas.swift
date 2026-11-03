@@ -793,6 +793,7 @@ final class CanvasView: NSView {
             if self.session.document != nil, self.session.tool == .move, let window = self.window {
                 let point = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
                 if self.visibleRect.contains(point) { self.updateTransformCursor(at: point, flags: event.modifierFlags) }
+                self.updateHoverDistances(at: point, flags: event.modifierFlags)
             }
             return event
         }
@@ -1632,6 +1633,7 @@ final class CanvasView: NSView {
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) {
         session.filterEdit?.cameraRawReadout = nil
+        if transformDrag == nil, !session.distanceLines.isEmpty { session.distanceLines = []; transformOverlay.needsDisplay = true }
         brushPointer = nil
         updateBrushCursor()
         // Tools set their cursor directly while over the canvas, so put the arrow back on the
@@ -1670,8 +1672,24 @@ final class CanvasView: NSView {
         if [Self.eyedropperCursor, Self.eyedropperAddCursor, Self.eyedropperRemoveCursor].contains(NSCursor.current) { restoreToolCursor() }
         brushPointer = convert(event.locationInWindow, from: nil)
         updateBrushCursor()
-        if session.tool == .move { updateTransformCursor(at: convert(event.locationInWindow, from: nil), flags: event.modifierFlags) }
+        if session.tool == .move {
+            updateTransformCursor(at: convert(event.locationInWindow, from: nil), flags: event.modifierFlags)
+            updateHoverDistances(at: convert(event.locationInWindow, from: nil), flags: event.modifierFlags)
+        }
         else { super.mouseMoved(with: event) }
+    }
+    /// The Move tool with Command held, between drags: the gaps from the selected layers to the layer under the pointer,
+    /// or to the canvas's edges.
+    private func updateHoverDistances(at point: CGPoint, flags: NSEvent.ModifierFlags) {
+        guard transformDrag == nil else { return }
+        var lines: [DistanceLine] = []
+        if session.showsDistances, session.tool == .move, flags.contains(.command), visibleRect.contains(point),
+           let document = session.document {
+            lines = session.hoverDistances(at: session.viewport.documentPoint(from: point, documentSize: document.size))
+        }
+        guard lines != session.distanceLines else { return }
+        session.distanceLines = lines
+        transformOverlay.needsDisplay = true
     }
     override func cursorUpdate(with event: NSEvent) {
         guard session.document != nil else { return }
@@ -2101,6 +2119,8 @@ final class CanvasView: NSView {
                 if case .move = drag.mode, !event.modifierFlags.contains(.control) {
                     draft = session.snappedMove(draft, moving: moving, tolerance: tolerance)
                 }
+                if case .move = drag.mode, session.showsDistances { session.distanceLines = session.movingDistances(draft, moving: moving) }
+                else { session.distanceLines = [] }
                 session.previewTransform(draft)
             }
             synchronizeDisplay()
@@ -2191,6 +2211,7 @@ final class CanvasView: NSView {
             return
         }
         session.snapGuides = ([], [])
+        session.distanceLines = []
         if guideDragging {
             session.finishGuideDrag(delete: isOverRuler(convert(event.locationInWindow, from: nil)))
             guideDragging = false

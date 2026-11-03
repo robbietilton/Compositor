@@ -183,6 +183,8 @@ struct CompositorApp: App {
                                     .configuredKeyboardShortcut("'").disabled(session.document == nil)
                                 Toggle("Guides", isOn: Binding(get: { session.showsGuides }, set: { session.showsGuides = $0 }))
                                     .configuredKeyboardShortcut(";").disabled(session.document == nil)
+                                Toggle("Distances", isOn: Binding(get: { session.showsDistances }, set: { session.showsDistances = $0 }))
+                                    .disabled(session.document == nil)
                             }
                             Button("Grid Settings…") { Task { await applicationDelegate.projects.gridSettings() } }
                                 .disabled(session.document == nil)
