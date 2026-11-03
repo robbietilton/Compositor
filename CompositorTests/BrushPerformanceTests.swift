@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import Darwin
 import Testing
 @testable import Compositor
 
@@ -9,6 +10,13 @@ struct BrushPerformanceTests {
         let environment = ProcessInfo.processInfo.environment
         guard environment["BRUSH_BENCHMARK"] == "1" || environment["TEST_RUNNER_BRUSH_BENCHMARK"] == "1" else { return false }
         return (environment["BRUSH_BENCHMARK_CASE"] ?? environment["TEST_RUNNER_BRUSH_BENCHMARK_CASE"]).map { $0 == name } ?? true
+    }
+
+    private func processCPUSeconds() -> Double {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
+        return Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1_000_000
+            + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1_000_000
     }
 
     /// Pixel-level CPU/GPU parity for ordered tile-local mask deposits and all shape filters.
@@ -117,6 +125,7 @@ struct BrushPerformanceTests {
         }
 
         for filtering in 1...2 {
+          for mode in 0...4 {
             let prepared = dabs.enumerated().map { index, pair -> (MetalStampRenderer.Dab, [Double]) in
                 var values = pair.1
                 values[10] = Double(filtering)
@@ -136,7 +145,7 @@ struct BrushPerformanceTests {
                                     brush_render_stamp(density.baseAddress, caps.baseAddress, nil, nil, 96,
                                         0, 0, 96, 96, dab.u0, dab.v0, dab.ux, dab.uy, dab.vx, dab.vy,
                                         1, dab.flow, dab.strength, tipBytes.bindMemory(to: UInt8.self).baseAddress,
-                                        side, 2, 0, 0, 0, 0, 0, nil, 0, 1, 0,
+                                        side, 2, Int32(mode), 0, 0, 0, 0, nil, 0, 1, 0,
                                         grainBytes.bindMemory(to: UInt8.self).baseAddress, grainSide, parameters.baseAddress)
                                 }
                             }
@@ -147,13 +156,15 @@ struct BrushPerformanceTests {
             let result = try renderer.render(tip: tip, side: side, width: 96, height: 96,
                 origin: SIMD2<Int32>(512, 256), dabs: prepared.map(\.0), filtering: 2,
                 initialDensity: [Float](repeating: 0, count: 96 * 96),
-                initialCap: [Float](repeating: 0, count: 96 * 96), grain: grain, grainSide: grainSide)
+                initialCap: [Float](repeating: 0, count: 96 * 96), grain: grain, grainSide: grainSide,
+                mode: Int32(mode))
             let densityIndex = zip(cpu, result.density).enumerated().max { abs($0.element.0 - $0.element.1) < abs($1.element.0 - $1.element.1) }?.offset ?? 0
             let capIndex = zip(cpuCaps, result.cap).enumerated().max { abs($0.element.0 - $0.element.1) < abs($1.element.0 - $1.element.1) }?.offset ?? 0
             #expect(abs(cpu[densityIndex] - result.density[densityIndex]) < 0.0001,
                 "filter=\(filtering) index=\(densityIndex) cpu=\(cpu[densityIndex]) gpu=\(result.density[densityIndex])")
             #expect(abs(cpuCaps[capIndex] - result.cap[capIndex]) < 0.0001,
                 "filter=\(filtering) index=\(capIndex) cpu=\(cpuCaps[capIndex]) gpu=\(result.cap[capIndex])")
+          }
         }
     }
 
@@ -172,6 +183,101 @@ struct BrushPerformanceTests {
         let bilinear = try BrushStroke(layer: layer, mask: false, settings: settings,
             canvas: CGSize(width: 128, height: 128), useGPU: true)
         #expect(bilinear.usesMetalStampRenderer)
+    }
+
+    @Test func metalWatercolorWetAndBurntEdgeAccumulationMatchesCPU() throws {
+        let tipShape = GeneratedBrushTip.bristles.make()
+        let tip = tipShape.mask(.luminance)
+        let side = tipShape.side
+        let grainSide = 32
+        let grain = Data((0..<grainSide * grainSide).map { UInt8(($0 * 47 + $0 / grainSide * 13) % 256) })
+        let renderer = try #require(MetalStampRenderer())
+        let dabs = (0..<5).map { index -> MetalStampRenderer.Dab in
+            let offset = Float(index) * 0.06
+            let parameters: [Double] = [0.12 + Double(offset), 0.31, 1.0 / 42, 0,
+                0, 1.0 / 39, 0.76, 0.04, 0.2, 2, 1, 0]
+            return MetalStampRenderer.Dab(u0: -0.48 + offset, v0: -0.42,
+                ux: 1.0 / 42, uy: 0, vx: 0, vy: 1.0 / 39,
+                flow: 0.68, strength: 0.81, grain: parameters)
+        }
+
+        for filtering in 1...2 {
+            for wet in [Float(0), 0.4, 1] {
+                for mode in 0...4 {
+                    var cpuDensity = [Float](repeating: 0, count: 96 * 96)
+                    var cpuCaps = [Float](repeating: 0, count: 96 * 96)
+                    var cpuEdges = [Float](repeating: 0, count: 96 * 96)
+                    tip.withUnsafeBytes { tipBytes in
+                        grain.withUnsafeBytes { grainBytes in
+                            for dab in dabs {
+                                dab.grainParameters.withUnsafeBufferPointer { parameters in
+                                    cpuDensity.withUnsafeMutableBufferPointer { density in
+                                        cpuCaps.withUnsafeMutableBufferPointer { caps in
+                                            cpuEdges.withUnsafeMutableBufferPointer { edges in
+                                                brush_render_stamp(density.baseAddress, caps.baseAddress, nil, edges.baseAddress,
+                                                    96, 0, 0, 96, 96, dab.u0, dab.v0, dab.ux, dab.uy, dab.vx, dab.vy,
+                                                    1, dab.flow, dab.strength, tipBytes.bindMemory(to: UInt8.self).baseAddress,
+                                                    side, Int32(filtering), Int32(mode), wet, 0.15, 0.42, 0.8,
+                                                    nil, 0, 1, 0, grainBytes.bindMemory(to: UInt8.self).baseAddress,
+                                                    grainSide, parameters.baseAddress)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let gpu = try renderer.render(tip: tip, side: side, width: 96, height: 96,
+                        origin: SIMD2<Int32>(256, 128), dabs: dabs, filtering: UInt32(filtering),
+                        initialDensity: [Float](repeating: 0, count: 96 * 96),
+                        initialCap: [Float](repeating: 0, count: 96 * 96),
+                        grain: grain, grainSide: grainSide,
+                        initialEdges: [Float](repeating: 0, count: 96 * 96),
+                        wetEdges: wet, accumulateEdges: true, mode: Int32(mode))
+                    let densityError = zip(cpuDensity, gpu.density).map { abs($0 - $1) }.max() ?? 0
+                    let capError = zip(cpuCaps, gpu.cap).map { abs($0 - $1) }.max() ?? 0
+                    let edgeDifference = zip(cpuEdges, gpu.edges).enumerated().max { abs($0.element.0 - $0.element.1) < abs($1.element.0 - $1.element.1) }
+                    let edgeError = edgeDifference.map { abs($0.element.0 - $0.element.1) } ?? 0
+                    #expect(densityError < 0.0001, "filter=\(filtering) wet=\(wet) mode=\(mode) density=\(densityError)")
+                    #expect(capError < 0.0001, "filter=\(filtering) wet=\(wet) mode=\(mode) cap=\(capError)")
+                    #expect(edgeError < 0.0001, "filter=\(filtering) wet=\(wet) mode=\(mode) index=\(edgeDifference?.offset ?? 0) cpu=\(edgeDifference?.element.0 ?? 0) gpu=\(edgeDifference?.element.1 ?? 0) edge=\(edgeError)")
+                }
+            }
+        }
+    }
+
+    @Test func metalStampRendererReusesBoundedScratchBuffers() throws {
+        let renderer = try #require(MetalStampRenderer())
+        let dab = MetalStampRenderer.Dab(u0: 0, v0: 0, ux: 1.0 / 16, uy: 0, vx: 0, vy: 1.0 / 16)
+        let first = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
+            origin: .zero, dabs: [dab])
+        #expect(renderer.scratchBufferAllocationCount == 3)
+        let second = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
+            origin: .zero, dabs: [dab], initialDensity: first.density, initialCap: first.cap)
+        #expect(renderer.scratchBufferAllocationCount == 3,
+            "Repeating a same-sized tile render should reuse density, cap, and dab buffers")
+        let edged = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
+            origin: .zero, dabs: [dab], initialDensity: second.density, initialCap: second.cap,
+            initialEdges: [Float](repeating: 0, count: 256), accumulateEdges: true)
+        #expect(renderer.scratchBufferAllocationCount == 4,
+            "An edge buffer is allocated once when edge accumulation is first requested")
+        _ = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
+            origin: .zero, dabs: [dab], initialDensity: edged.density, initialCap: edged.cap,
+            initialEdges: edged.edges, accumulateEdges: true)
+        #expect(renderer.scratchBufferAllocationCount == 4)
+        let fullTileCount = 256 * 256
+        let fullTile = try renderer.render(tip: nil, side: 0, width: 256, height: 256,
+            origin: .zero, dabs: [dab], initialDensity: [Float](repeating: 0, count: fullTileCount),
+            initialCap: [Float](repeating: 0, count: fullTileCount),
+            initialEdges: [Float](repeating: 0, count: fullTileCount), accumulateEdges: true)
+        #expect(renderer.cachedScratchBytes <= 2 << 20,
+            "One maximum tile plus pooled dab data stays below the retained scratch budget")
+        let retainedBytes = renderer.cachedScratchBytes
+        let oversized = [MetalStampRenderer.Dab](repeating: dab, count: (1 << 20) / (5 * MemoryLayout<SIMD4<Float>>.stride) + 1)
+        _ = try renderer.render(tip: nil, side: 0, width: 1, height: 1, origin: .zero,
+            dabs: oversized, initialDensity: [fullTile.density[0]], initialCap: [fullTile.cap[0]])
+        #expect(renderer.cachedScratchBytes == retainedBytes,
+            "Oversized dab uploads must use a one-shot buffer rather than expanding the retained pool")
     }
 
     /// Compare live append cost for the Bristles zero-spacing case; run separately by configuration.
@@ -201,6 +307,39 @@ struct BrushPerformanceTests {
             let sorted = samples.sorted()
             func percentile(_ fraction: Double) -> Double { sorted[min(sorted.count - 1, Int(ceil(fraction * Double(sorted.count))) - 1)] }
             print("STAMP STROKE useGPU=\(useGPU) median=\(percentile(0.5))ms p95=\(percentile(0.95))ms max=\(sorted.last ?? 0)ms total=\(samples.reduce(0,+))ms")
+        }
+    }
+
+    /// Pair interactive CPU work and mouse-up cost for the same zero-spacing Bristles stroke.
+    @Test func settledWatercolorEdgeCPUUsageBenchmark() throws {
+        guard shouldRunBenchmark("watercolor-edge") else { return }
+        for burntEdges: CGFloat in [0, 1] {
+            let session = EditorSession()
+            session.createDocument(width: 1024, height: 512)
+            session.addBlankLayer()
+            var settings = BrushSettings(diameter: 72, hardness: 1, red: 0.08, green: 0.32, blue: 0.62, opacity: 0.82)
+            settings.roundDynamics.spacing = 0
+            settings.roundDynamics.flow = 0.65
+            settings.roundDynamics.count = 4
+            settings.roundDynamics.scatter = 0.25
+            settings.roundDynamics.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+            settings.roundDynamics.rendering = BrushRenderingSettings(burntEdges: burntEdges)
+            let stroke = try BrushStroke(layer: #require(session.activeLayer), mask: false, settings: settings,
+                canvas: CGSize(width: 1024, height: 512), useGPU: true, seed: 0xA77E)
+            var appendCPU = 0.0
+            var appendWall: [Double] = []
+            for index in 0...39 {
+                let point = CGPoint(x: 192 + index * 16, y: 256)
+                let cpuStart = processCPUSeconds(), wallStart = CFAbsoluteTimeGetCurrent()
+                try stroke.append(point, input: BrushInput(pressure: 0.4 + CGFloat(index) / 65))
+                appendCPU += processCPUSeconds() - cpuStart
+                appendWall.append((CFAbsoluteTimeGetCurrent() - wallStart) * 1000)
+            }
+            let mouseUpCPUStart = processCPUSeconds(), mouseUpWallStart = CFAbsoluteTimeGetCurrent()
+            try stroke.flush()
+            let sorted = appendWall.sorted()
+            func percentile(_ fraction: Double) -> Double { sorted[min(sorted.count - 1, Int(ceil(fraction * Double(sorted.count))) - 1)] }
+            print("WATERCOLOR EDGE burnt=\(burntEdges) appendCPU=\(appendCPU * 1000)ms appendWallMedian=\(percentile(0.5))ms appendWallP95=\(percentile(0.95))ms appendWallMax=\(sorted.last ?? 0)ms mouseUpCPU=\((processCPUSeconds() - mouseUpCPUStart) * 1000)ms mouseUpWall=\((CFAbsoluteTimeGetCurrent() - mouseUpWallStart) * 1000)ms edgeDistanceCPU=\(stroke.edgePoolingMilliseconds)ms")
         }
     }
 
@@ -332,6 +471,10 @@ struct BrushPerformanceTests {
             let name: String
             let diameter: CGFloat
             let opaque: Bool
+            var useGPU = true
+            var sampleCount = 12
+            var samplesPerFrame = 1
+            var sampleRate = 60.0
             let settings: (inout BrushSettings) -> Void
         }
         let asymmetricMask = Data((0..<64 * 64).map { index -> UInt8 in
@@ -345,6 +488,16 @@ struct BrushPerformanceTests {
                 $0.roundDynamics.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .none)
             }),
             .init(name: "generated-bristles-800-zero-spacing", diameter: 800, opaque: false, settings: {
+                $0.roundDynamics.spacing = 0
+                $0.roundDynamics.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .none)
+            }),
+            .init(name: "frame-batch-bristles-800-240hz-single", diameter: 800, opaque: false,
+                  sampleCount: 48, sampleRate: 240, settings: {
+                $0.roundDynamics.spacing = 0
+                $0.roundDynamics.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .none)
+            }),
+            .init(name: "frame-batch-bristles-800-240hz-four", diameter: 800, opaque: false,
+                  sampleCount: 48, samplesPerFrame: 4, sampleRate: 240, settings: {
                 $0.roundDynamics.spacing = 0
                 $0.roundDynamics.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .none)
             }),
@@ -376,6 +529,9 @@ struct BrushPerformanceTests {
             }),
             .init(name: "textured-standard-800-opaque", diameter: 800, opaque: true, settings: {
                 $0.roundDynamics.grain = BrushGrain(scale: 64, depth: 1)
+            }),
+            .init(name: "textured-standard-800-opaque-cpu", diameter: 800, opaque: true, useGPU: false, settings: {
+                $0.roundDynamics.grain = BrushGrain(scale: 64, depth: 1)
             })
         ]
 
@@ -403,25 +559,41 @@ struct BrushPerformanceTests {
             session.viewport.fit(documentSize: session.document!.size)
             // Keep the host alive long enough for Instruments to attach before the measured workload starts.
             if ProcessInfo.processInfo.environment["BRUSH_PROFILE_ATTACH"] == "1" { Thread.sleep(forTimeInterval: 12) }
-            session.beginBrush(at: CGPoint(x: 800, y: 2000), input: BrushInput(pressure: 0.35, tilt: CGPoint(x: 0.3, y: 0.7), rotation: 0.2, timestamp: 1, deviceID: 42), seed: 0xB71571E5)
+            session.beginBrush(at: CGPoint(x: 800, y: 2000), input: BrushInput(pressure: 0.35, tilt: CGPoint(x: 0.3, y: 0.7), rotation: 0.2, timestamp: 1, deviceID: 42),
+                seed: 0xB71571E5, useGPU: workload.useGPU)
             var samples: [Double] = []
-            for index in 1...12 {
-                let start = CFAbsoluteTimeGetCurrent()
-                session.continueBrush(at: CGPoint(x: 800 + index * 10, y: 2000 + (index % 3) * 2),
-                    input: BrushInput(pressure: 0.35 + CGFloat(index) * 0.04,
-                        tilt: CGPoint(x: 0.3 + CGFloat(index) * 0.01, y: 0.7), rotation: 0.2 + CGFloat(index) * 0.02,
-                        timestamp: 1 + Double(index) * 0.016, deviceID: 42))
-                view.synchronizeDisplay(); view.displayIfNeeded()
-                samples.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            var frameStart = CFAbsoluteTimeGetCurrent()
+            for index in 1...workload.sampleCount {
+                if (index - 1) % workload.samplesPerFrame == 0 { frameStart = CFAbsoluteTimeGetCurrent() }
+                let input = BrushInput(pressure: 0.35 + CGFloat(index) * 0.008,
+                    tilt: CGPoint(x: 0.3 + CGFloat(index) * 0.002, y: 0.7), rotation: 0.2 + CGFloat(index) * 0.004,
+                    timestamp: 1 + Double(index) / workload.sampleRate, deviceID: 42)
+                let point = CGPoint(x: 800 + index * 10, y: 2000 + (index % 3) * 2)
+                if workload.samplesPerFrame == 1 {
+                    session.continueBrush(at: point, input: input)
+                } else {
+                    session.queueBrushInput(at: point, input: input)
+                }
+                let frameEnd = index % workload.samplesPerFrame == 0 || index == workload.sampleCount
+                if frameEnd {
+                    if workload.samplesPerFrame > 1 { try session.flushQueuedBrushInputSamples() }
+                    view.synchronizeDisplay(); view.displayIfNeeded()
+                    samples.append((CFAbsoluteTimeGetCurrent() - frameStart) * 1000)
+                }
             }
-            let touchedTiles = session.brushStroke?.touchedTileCount ?? 0
+            let completedStroke = session.brushStroke
+            let touchedTiles = completedStroke?.touchedTileCount ?? 0
             let mouseUp = CFAbsoluteTimeGetCurrent()
             await session.finishBrush()
             samples.sort()
             let image = try #require(session.activeLayer?.asset?.image)
             let pixels = try #require(image.dataProvider?.data) as Data
             let digest = SHA256.hash(data: pixels).map { String(format: "%02x", $0) }.joined()
-            print("BRUSH MATRIX \(workload.name) median=\(samples[samples.count/2]) p95=\(samples[Int(Double(samples.count)*0.95)]) max=\(samples.last!) mouseUp=\((CFAbsoluteTimeGetCurrent()-mouseUp)*1000)ms tiles=\(touchedTiles) pixels=\(digest)")
+            if workload.name == "textured-standard-800-opaque" || workload.name == "textured-standard-800-opaque-cpu" {
+                try pixels.write(to: URL(fileURLWithPath: "/tmp/compositor-\(workload.name).rgba"))
+            }
+            func percentile(_ fraction: Double) -> Double { samples[min(samples.count - 1, Int(ceil(fraction * Double(samples.count))) - 1)] }
+            print("BRUSH MATRIX \(workload.name) samples=\(workload.sampleCount) perFrame=\(workload.samplesPerFrame) medianFrame=\(percentile(0.5)) p95Frame=\(percentile(0.95)) maxFrame=\(samples.last!) mouseUp=\((CFAbsoluteTimeGetCurrent()-mouseUp)*1000)ms publications=\(completedStroke?.tilePublicationCount ?? 0) metalCompletion=\(completedStroke?.metalStampCompletionMilliseconds ?? 0)ms readback=\(completedStroke?.metalStampReadbackBytes ?? 0)B tiles=\(touchedTiles) pixels=\(digest)")
             #expect(session.brushError == nil)
             #expect(touchedTiles > 0)
             if workload.name == "generated-bristles-800-zero-spacing" || workload.name == "textured-blending-800-opaque" {
@@ -463,7 +635,8 @@ struct BrushPerformanceTests {
         let maskImage = try #require(transformed.activeLayer?.mask?.asset.image)
         let maskPixels = try #require(maskImage.dataProvider?.data) as Data
         let maskDigest = SHA256.hash(data: maskPixels).map { String(format: "%02x", $0) }.joined()
-        print("BRUSH MATRIX transformed-selected-mask-40-zero-spacing dabs=\(maskDabs) tiles=\(maskTiles) median=\(maskSamples[maskSamples.count/2]) p95=\(maskSamples[Int(Double(maskSamples.count)*0.95)]) max=\(maskSamples.last!) mouseUp=\((CFAbsoluteTimeGetCurrent()-maskUp)*1000)ms pixels=\(maskDigest)")
+        func maskPercentile(_ fraction: Double) -> Double { maskSamples[min(maskSamples.count - 1, Int(ceil(fraction * Double(maskSamples.count))) - 1)] }
+        print("BRUSH MATRIX transformed-selected-mask-40-zero-spacing dabs=\(maskDabs) tiles=\(maskTiles) median=\(maskPercentile(0.5)) p95=\(maskPercentile(0.95)) max=\(maskSamples.last!) mouseUp=\((CFAbsoluteTimeGetCurrent()-maskUp)*1000)ms pixels=\(maskDigest)")
         #expect(maskDabs > 0)
         #expect(transformed.brushError == nil)
         maskWindow.orderOut(nil)

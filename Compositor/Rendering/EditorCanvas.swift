@@ -68,6 +68,7 @@ final class CanvasView: NSView {
     private var spaceHeld = false
     private var panPhysicalKey: UInt16?
     private var brushPointer: CGPoint?
+    private var brushDisplayLink: CADisplayLink?
     /// The layer being drawn into a surface for SeparableBlend, which draws it plainly and blends it afterwards.
     private var normalBlendLayerID: UUID?
     private func blendMode(of layer: ImageLayer) -> LayerBlendMode {
@@ -547,7 +548,7 @@ final class CanvasView: NSView {
             /// Where the mask shows when placed apart from the layer.
             let maskPlacement: LayerTransform?
         }
-        let brushRevision: Int
+        var brushRevision: Int
         let pixelGrid: Bool
         let documentID: UUID?
         let size: CGSize?
@@ -573,6 +574,38 @@ final class CanvasView: NSView {
         BrushPerformanceSignpost.measure("Brush Canvas Synchronization") {
             synchronizeDisplayImpl()
         }
+    }
+
+    private func enqueueBrushInput(at point: CGPoint, input: BrushInput) {
+        session.queueBrushInput(at: point, input: input)
+        guard brushDisplayLink == nil else { return }
+        let link = displayLink(target: self, selector: #selector(flushBrushInputsOnDisplay(_:)))
+        link.add(to: .main, forMode: .common)
+        brushDisplayLink = link
+    }
+
+    @objc private func flushBrushInputsOnDisplay(_ link: CADisplayLink) {
+        guard !session.pendingBrushInputSamples.isEmpty else {
+            link.invalidate()
+            brushDisplayLink = nil
+            return
+        }
+        flushQueuedBrushInputs(synchronize: true, stopDisplayLink: false)
+    }
+
+    private func flushQueuedBrushInputs(synchronize: Bool, stopDisplayLink: Bool = true) {
+        if stopDisplayLink {
+            brushDisplayLink?.invalidate()
+            brushDisplayLink = nil
+        }
+        do { try session.flushQueuedBrushInputSamples() }
+        catch { session.brushError = error.localizedDescription }
+        if synchronize { synchronizeBrushFrame() }
+    }
+
+    private func discardQueuedBrushInputs() {
+        brushDisplayLink?.invalidate()
+        brushDisplayLink = nil
     }
 
     private func synchronizeDisplayImpl() -> Bool {
@@ -664,6 +697,35 @@ final class CanvasView: NSView {
         return changed
     }
 
+    /// Brush input changes only the stroke preview. Reuse the last layer hierarchy and invalidate its dirty bounds
+    /// instead of rebuilding the full display-state array for every display refresh.
+    private func synchronizeBrushFrame() {
+        guard var state = displayedState, let document = session.document, let stroke = session.brushStroke,
+              state.documentID == document.id, state.size == document.size,
+              state.viewport == session.viewport, state.renderBounds == renderBounds,
+              state.pixelGrid == session.showsPixelGrid,
+              state.textStyle == session.textDraft?.style,
+              state.textTransform == (session.textDraft == nil ? nil : inlineTextEditor?.shownTransform),
+              state.maskAlone == session.maskAloneLayer?.mask.map({ ObjectIdentifier($0.asset.image) }),
+              displayedTool == session.tool, displayedPicking == picking,
+              displayedTargeting == session.hueTargeting,
+              displayedCropRect == transformOverlay.cropViewRect,
+              displayedTransformGeometry == transformOverlay.geometry else {
+            synchronizeDisplay()
+            return
+        }
+        if let dirty = stroke.dirtyDocumentRect {
+            let origin = session.viewport.viewPoint(from: dirty.origin, documentSize: document.size)
+            let scale = session.viewport.pointsPerPixel
+            setNeedsDisplay(CGRect(origin: origin,
+                size: CGSize(width: dirty.width * scale, height: dirty.height * scale)).insetBy(dx: -2, dy: -2))
+        }
+        state.brushRevision = session.brushRevision
+        displayedState = state
+        updateBrushCursor()
+        transformOverlay.needsDisplay = true
+    }
+
     private func redrawRulers() {
         func find(_ view: NSView) {
             if view is CanvasRulerNSView { view.needsDisplay = true }
@@ -677,7 +739,7 @@ final class CanvasView: NSView {
         transformOverlay = TransformOverlay(session: session)
         super.init(frame: .zero)
         session.refreshCanvasPreview = { [weak self] in
-            self?.synchronizeDisplay()
+            self?.synchronizeBrushFrame()
             BrushPerformanceSignpost.measure("Brush Display If Needed") { self?.displayIfNeeded() }
         }
         addSubview(lines)
@@ -1637,6 +1699,11 @@ final class CanvasView: NSView {
         return image
     }
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { flushQueuedBrushInputs(synchronize: false) }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     override func mouseExited(with event: NSEvent) {
         session.filterEdit?.cameraRawReadout = nil
         brushPointer = nil
@@ -1934,8 +2001,7 @@ final class CanvasView: NSView {
         if event.window != nil, event.window === window { mouseDragged(with: event) }
         else if let point = session.brushPointer {
             // Native pressure-only events may have no window-relative cursor position.
-            session.continueBrush(at: point, input: PenInput.shared.sample(event))
-            synchronizeDisplay()
+            enqueueBrushInput(at: point, input: PenInput.shared.sample(event))
         }
     }
 
@@ -2065,8 +2131,7 @@ final class CanvasView: NSView {
                 brushAxisHorizontal = nil
             }
             brushLastPixel = pixel
-            session.continueBrush(at: pixel, input: PenInput.shared.sample(event))
-            synchronizeDisplay()
+            enqueueBrushInput(at: pixel, input: PenInput.shared.sample(event))
             return
         }
         if guideDragging, let drag = session.guideDrag, let document = session.document {
@@ -2214,8 +2279,10 @@ final class CanvasView: NSView {
             return
         }
         if session.brushStroke != nil || session.warpStroke != nil, !session.isProjectBusy {
+            flushQueuedBrushInputs(synchronize: false)
             if let document = session.document {
-                session.continueBrush(at: session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size))
+                session.continueBrush(at: session.viewport.documentPoint(from: convert(event.locationInWindow, from: nil), documentSize: document.size),
+                                      input: session.brushInput)
             }
             session.finishBrushImmediately()
             synchronizeDisplay()
@@ -2314,7 +2381,7 @@ final class CanvasView: NSView {
             if event.keyCode != 49 { super.keyDown(with: event); return }
         }
         if session.brushStroke != nil || session.warpStroke != nil {
-            if event.keyCode == 53 && !session.isProjectBusy { session.cancelBrush(); synchronizeDisplay() }
+            if event.keyCode == 53 && !session.isProjectBusy { discardQueuedBrushInputs(); session.cancelBrush(); synchronizeDisplay() }
             return
         }
         if session.lassoDraft != nil, [53, 36, 76, 51, 117].contains(event.keyCode) {
@@ -2429,7 +2496,7 @@ final class CanvasView: NSView {
         } else { super.keyUp(with: event) }
     }
     override func resignFirstResponder() -> Bool {
-        if !session.isProjectBusy { session.cancelBrush() }
+        if !session.isProjectBusy { discardQueuedBrushInputs(); session.cancelBrush() }
         brushPointer = nil
         updateBrushCursor()
         cropDrag = nil

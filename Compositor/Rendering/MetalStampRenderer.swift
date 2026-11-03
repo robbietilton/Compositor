@@ -56,8 +56,10 @@ final class MetalStampRenderer {
         let height: Int
         let density: [Float]
         let cap: [Float]
+        let edges: [Float]
         let wallMilliseconds: Double
         let executionMilliseconds: Double
+        let readbackBytes: Int
     }
 
     struct TileInput {
@@ -80,8 +82,17 @@ final class MetalStampRenderer {
     private let pipeline: MTLComputePipelineState
     private var uploadedMasks: [String: MTLBuffer] = [:]
     private var maskOrder: [String] = []
+    private let renderLock = NSLock()
+    private var densityScratch: MTLBuffer?
+    private var capScratch: MTLBuffer?
+    private var edgeScratch: MTLBuffer?
+    private var dabScratch: MTLBuffer?
+    private(set) var scratchBufferAllocationCount = 0
+    private var pooledScratchBytes = 0
     private static let maskCacheLimit = 16
+    private static let pooledDabBufferLimit = 1 << 20
     var cachedMaskCount: Int { uploadedMasks.count }
+    var cachedScratchBytes: Int { pooledScratchBytes }
     var deviceName: String { device.name }
 
     init?() {
@@ -95,19 +106,24 @@ final class MetalStampRenderer {
     }
 
     /// Accumulates ordered, tile-local mask dabs with the same shape and grain filters as BrushPixels.c.
-    /// Rendering modes, dual shapes and pigment pickup remain on the CPU path.
+    /// Wet-tip sampling, burnt-edge accumulation, and glaze modes share this ordered pass;
+    /// dual shapes and pigment pickup remain on the CPU path.
     func render(tip: Data?, side: Int, width: Int, height: Int, origin: SIMD2<Int32>, dabs: [Dab],
                 filtering: UInt32 = 0, initialDensity: [Float]? = nil, initialCap: [Float]? = nil,
                 grain: Data? = nil, grainSide: Int = 0,
-                maximumMode: Bool = false, hardness: Float = 1, region: CGRect? = nil) throws -> Result {
+                initialEdges: [Float]? = nil, wetEdges: Float = 0, accumulateEdges: Bool = false,
+                maximumMode: Bool = false, mode: Int32 = 0, hardness: Float = 1, region: CGRect? = nil) throws -> Result {
+        renderLock.lock()
+        defer { renderLock.unlock() }
         let wallStart = CFAbsoluteTimeGetCurrent()
         let tileBounds = CGRect(x: 0, y: 0, width: width, height: height)
         let region = region ?? tileBounds
         let dispatchRegion = region.integral.intersection(tileBounds)
         guard (tip == nil ? side == 0 : (1...256).contains(side) && tip?.count == side * side),
               (grain == nil ? grainSide == 0 : (1...256).contains(grainSide) && grain?.count == grainSide * grainSide), hardness.isFinite,
-              (0...1).contains(hardness), !dabs.isEmpty,
-              (1...256).contains(width), (1...256).contains(height), (0...2).contains(filtering),
+              (0...1).contains(hardness), wetEdges.isFinite, (0...1).contains(wetEdges), !dabs.isEmpty,
+              (1...256).contains(width), (1...256).contains(height), (0...2).contains(filtering), (0...4).contains(mode),
+              (1...250_000).contains(dabs.count),
               !region.isNull, !region.isEmpty, dispatchRegion == region,
               width.multipliedReportingOverflow(by: height).overflow == false,
               dabs.allSatisfy({ dab in
@@ -121,26 +137,47 @@ final class MetalStampRenderer {
         guard !overflow, pixelCount <= 65_536,
               initialDensity == nil || initialDensity?.count == pixelCount,
               initialCap == nil || initialCap?.count == pixelCount,
+              initialEdges == nil || (accumulateEdges && initialEdges?.count == pixelCount),
               pixelCount > 0 else { throw ExportError.render }
         let packedDabs = dabs.flatMap { [$0.encoded, $0.modifiers, $0.grainOrigin, $0.grainTransform, $0.grainEffects] }
+        let byteCount = pixelCount * MemoryLayout<Float>.stride
+        let densityBuffer = try scratchBuffer(&densityScratch, byteCount: byteCount)
+        if let initialDensity {
+            initialDensity.withUnsafeBytes { _ = memcpy(densityBuffer.contents(), $0.baseAddress!, byteCount) }
+        } else { memset(densityBuffer.contents(), 0, byteCount) }
+        let capBuffer = try scratchBuffer(&capScratch, byteCount: byteCount)
+        if let initialCap {
+            initialCap.withUnsafeBytes { _ = memcpy(capBuffer.contents(), $0.baseAddress!, byteCount) }
+        } else { memset(capBuffer.contents(), 0, byteCount) }
+        let edgeBuffer: MTLBuffer?
+        if accumulateEdges {
+            let buffer = try scratchBuffer(&edgeScratch, byteCount: byteCount)
+            if let initialEdges {
+                initialEdges.withUnsafeBytes { _ = memcpy(buffer.contents(), $0.baseAddress!, byteCount) }
+            } else { memset(buffer.contents(), 0, byteCount) }
+            edgeBuffer = buffer
+        } else { edgeBuffer = nil }
+        let dabBuffer: MTLBuffer?
+        let packedDabBytes = packedDabs.count * MemoryLayout<SIMD4<Float>>.stride
+        if packedDabBytes <= Self.pooledDabBufferLimit {
+            let buffer = try scratchBuffer(&dabScratch, byteCount: packedDabBytes)
+            packedDabs.withUnsafeBytes { _ = memcpy(buffer.contents(), $0.baseAddress!, $0.count) }
+            dabBuffer = buffer
+        } else {
+            dabBuffer = packedDabs.withUnsafeBytes { bytes in
+                bytes.baseAddress.flatMap { device.makeBuffer(bytes: $0, length: bytes.count, options: .storageModeShared) }
+            }
+            guard dabBuffer != nil else { throw ExportError.render }
+        }
         guard
-              let densityBuffer = initialDensity?.withUnsafeBytes({ bytes in
-                  bytes.baseAddress.flatMap { device.makeBuffer(bytes: $0, length: bytes.count, options: .storageModeShared) }
-              }) ?? device.makeBuffer(length: pixelCount * MemoryLayout<Float>.stride, options: .storageModeShared),
-              let capBuffer = initialCap?.withUnsafeBytes({ bytes in
-                  bytes.baseAddress.flatMap { device.makeBuffer(bytes: $0, length: bytes.count, options: .storageModeShared) }
-              }) ?? device.makeBuffer(length: pixelCount * MemoryLayout<Float>.stride, options: .storageModeShared),
               let tipBuffer = tip.map(maskBuffer) ?? device.makeBuffer(bytes: [UInt8](repeating: 0, count: 1), length: 1, options: .storageModeShared),
               let grainBuffer = grain.map(maskBuffer) ?? device.makeBuffer(bytes: [UInt8](repeating: 0, count: 1), length: 1, options: .storageModeShared),
-              let dabBuffer = packedDabs.withUnsafeBytes({ bytes in
-                  device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared)
-              }),
               let command = queue.makeCommandBuffer(), let encoder = command.makeComputeCommandEncoder() else {
             throw ExportError.render
         }
         var uniforms = Uniforms(dimensions: SIMD4(UInt32(width), UInt32(height), UInt32(side), filtering),
-                                originAndFlow: SIMD4(Float(origin.x), Float(origin.y), hardness, 0),
-                                counts: SIMD4(UInt32(dabs.count), maximumMode ? 1 : 0, 0, 0),
+                                originAndFlow: SIMD4(Float(origin.x), Float(origin.y), hardness, wetEdges),
+                                counts: SIMD4(UInt32(dabs.count), UInt32(maximumMode ? 1 : mode), UInt32(accumulateEdges ? 1 : 0), 0),
                                 dispatchRect: SIMD4(UInt32(dispatchRegion.minX), UInt32(dispatchRegion.minY),
                                     UInt32(dispatchRegion.width), UInt32(dispatchRegion.height)))
         encoder.setComputePipelineState(pipeline)
@@ -149,6 +186,7 @@ final class MetalStampRenderer {
         encoder.setBuffer(dabBuffer, offset: 0, index: 2)
         encoder.setBuffer(capBuffer, offset: 0, index: 5)
         encoder.setBuffer(grainBuffer, offset: 0, index: 6)
+        encoder.setBuffer(edgeBuffer, offset: 0, index: 8)
         var grainUniforms = SIMD4(UInt32(grainSide), 0, 0, 0)
         encoder.setBytes(&grainUniforms, length: MemoryLayout<SIMD4<UInt32>>.stride, index: 7)
         encoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 3)
@@ -164,8 +202,21 @@ final class MetalStampRenderer {
         return Result(origin: origin, width: width, height: height,
                       density: values,
                       cap: Array(UnsafeBufferPointer(start: capBuffer.contents().assumingMemoryBound(to: Float.self), count: pixelCount)),
+                      edges: edgeBuffer.map { Array(UnsafeBufferPointer(start: $0.contents().assumingMemoryBound(to: Float.self), count: pixelCount)) } ?? [],
                       wallMilliseconds: (CFAbsoluteTimeGetCurrent() - wallStart) * 1000,
-                      executionMilliseconds: executionMilliseconds)
+                      executionMilliseconds: executionMilliseconds,
+                      readbackBytes: pixelCount * MemoryLayout<Float>.stride * (2 + (accumulateEdges ? 1 : 0)))
+    }
+
+    /// The renderer waits for completion before returning, so this private scratch storage is never in flight.
+    private func scratchBuffer(_ slot: inout MTLBuffer?, byteCount: Int) throws -> MTLBuffer {
+        guard byteCount > 0 else { throw ExportError.render }
+        if let buffer = slot, buffer.length >= byteCount { return buffer }
+        guard let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else { throw ExportError.render }
+        pooledScratchBytes += buffer.length - (slot?.length ?? 0)
+        slot = buffer
+        scratchBufferAllocationCount += 1
+        return buffer
     }
 
     private func maskBuffer(_ mask: Data) -> MTLBuffer? {
@@ -217,6 +268,37 @@ final class MetalStampRenderer {
             + fy * ((1-fx)*grainPixel(grain,side,ix,iy+1)+fx*grainPixel(grain,side,ix+1,iy+1));
     }
 
+    static float tipSample(device const uchar *tip, uint side, float2 uv, uint filtering,
+                           float hardness, float4 dab, float4 modifier) {
+        if (side == 0) {
+            float radius = length(uv);
+            if (hardness < 1.0f) {
+                float t = max(0.0f, (radius - hardness) / (1.0f - hardness));
+                const float edge = exp(-2.5f);
+                return t < 1.0f ? max(0.0f, (exp(-2.5f * t * t) - edge) / (1.0f - edge)) : 0.0f;
+            }
+            if (filtering == 0) return radius <= 1.0f ? 1.0f : 0.0f;
+            float aa = max(0.000001f, (abs(uv.x * dab.z + uv.y * modifier.y)
+                + abs(uv.x * modifier.x + uv.y * dab.w)) / max(radius, 0.000001f));
+            return clamp((1.0f - radius) / aa + 0.5f, 0.0f, 1.0f);
+        }
+        if (any(abs(uv) > 1.0f + 2.0f / float(side))) return 0.0f;
+        float2 position = (uv + 1.0f) * (float(side) * 0.5f) - 0.5f;
+        if (filtering == 0) {
+            int2 p = int2(floor(position + 0.5f));
+            return all(p >= 0) && all(p < int2(side)) ? float(tip[uint(p.y) * side + uint(p.x)]) / 255.0f : 0.0f;
+        }
+        int2 p = int2(floor(position));
+        float2 f = position - float2(p);
+        float value = 0.0f;
+        for (int dy = 0; dy <= 1; ++dy) for (int dx = 0; dx <= 1; ++dx) {
+            int2 q = p + int2(dx, dy);
+            float texel = all(q >= 0) && all(q < int2(side)) ? float(tip[uint(q.y) * side + uint(q.x)]) / 255.0f : 0.0f;
+            value += (dx ? f.x : 1.0f - f.x) * (dy ? f.y : 1.0f - f.y) * texel;
+        }
+        return value;
+    }
+
     kernel void bristlesBatch(device float *density [[buffer(0)]],
                               device const uchar *tip [[buffer(1)]],
                               device const GrainDab *dabs [[buffer(2)]],
@@ -224,6 +306,7 @@ final class MetalStampRenderer {
                               device float *caps [[buffer(5)]],
                               device const uchar *grain [[buffer(6)]],
                               constant uint4 &grainUniforms [[buffer(7)]],
+                              device float *edges [[buffer(8)]],
                               uint2 dispatchPixel [[thread_position_in_grid]]) {
         if (dispatchPixel.x >= u.dispatchRect.z || dispatchPixel.y >= u.dispatchRect.w) return;
         const uint2 pixel = dispatchPixel + u.dispatchRect.xy;
@@ -247,38 +330,20 @@ final class MetalStampRenderer {
                     sampleUV += 0.25f * float2(sx * dab.z + sy * modifier.x,
                                                sx * modifier.y + sy * dab.w);
                 }
-                if (side == 0) {
-                    float radius = length(sampleUV);
-                    float sampleCoverage;
-                    if (u.originAndFlow.z < 1.0f) {
-                        float t = max(0.0f, (radius - u.originAndFlow.z) / (1.0f - u.originAndFlow.z));
-                        const float edge = exp(-2.5f);
-                        sampleCoverage = t < 1.0f ? max(0.0f, (exp(-2.5f * t * t) - edge) / (1.0f - edge)) : 0.0f;
-                    } else if (u.dimensions.w == 0) sampleCoverage = radius <= 1.0f ? 1.0f : 0.0f;
-                    else {
-                        float aa = max(0.000001f, (abs(sampleUV.x * dab.z + sampleUV.y * modifier.y)
-                            + abs(sampleUV.x * modifier.x + sampleUV.y * dab.w)) / max(radius, 0.000001f));
-                        sampleCoverage = clamp((1.0f - radius) / aa + 0.5f, 0.0f, 1.0f);
-                    }
-                    coverage += sampleCoverage / float(samples);
-                } else {
-                    if (any(abs(sampleUV) > 1.0f + 2.0f / float(side))) continue;
-                    float2 position = (sampleUV + 1.0f) * (float(side) * 0.5f) - 0.5f;
-                    if (u.dimensions.w == 0) {
-                        int2 p = int2(floor(position + 0.5f));
-                        if (all(p >= 0) && all(p < int2(side))) coverage += float(tip[uint(p.y) * side + uint(p.x)]) / 255.0f;
-                    } else {
-                    int2 p = int2(floor(position));
-                    float2 f = position - float2(p);
-                    for (int dy = 0; dy <= 1; ++dy) for (int dx = 0; dx <= 1; ++dx) {
-                        int2 q = p + int2(dx, dy);
-                        float value = all(q >= 0) && all(q < int2(side)) ? float(tip[uint(q.y) * side + uint(q.x)]) / 255.0f : 0;
-                        coverage += (dx ? f.x : 1.0f - f.x) * (dy ? f.y : 1.0f - f.y) * value / float(samples);
-                    }
-                    }
+                uint filter = u.dimensions.w == 0 ? 0 : 1;
+                float sampleCoverage = tipSample(tip, side, sampleUV, filter, u.originAndFlow.z, dab, modifier);
+                if (u.originAndFlow.w > 0.0f) {
+                    float spread = 0.36f * u.originAndFlow.w;
+                    // Match the CPU renderer's normalized five-tap watercolor filter.
+                    float blurred = sampleCoverage * 4.0f;
+                    blurred += tipSample(tip, side, sampleUV + float2(spread, 0), filter, u.originAndFlow.z, dab, modifier)
+                        + tipSample(tip, side, sampleUV - float2(spread, 0), filter, u.originAndFlow.z, dab, modifier)
+                        + tipSample(tip, side, sampleUV + float2(0, spread), filter, u.originAndFlow.z, dab, modifier)
+                        + tipSample(tip, side, sampleUV - float2(0, spread), filter, u.originAndFlow.z, dab, modifier);
+                    sampleCoverage = sampleCoverage * (1.0f - u.originAndFlow.w) + blurred * (u.originAndFlow.w / 8.0f);
                 }
+                coverage += sampleCoverage / float(samples);
             }
-            coverage *= modifier.z;
             if (coverage > 0) {
                 float capStrength = modifier.w;
                 if (grainUniforms.x > 0) {
@@ -303,9 +368,13 @@ final class MetalStampRenderer {
                     if (item.grainEffects.w == 1.0f) capStrength *= grainCoverage;
                 }
                 if (coverage <= 0) continue;
-                float ink = -log(1.0f - min(0.999999f, coverage));
+                float gain = u.counts.y == 1 ? 0.35f : u.counts.y == 2 ? 0.5f
+                    : u.counts.y == 3 ? 1.5f : u.counts.y == 4 ? 3.0f : 1.0f;
+                float inkCoverage = modifier.z * coverage;
+                float ink = -log(1.0f - min(0.999999f, inkCoverage)) * gain;
                 accumulated = u.counts.y == 1 ? max(accumulated, ink) : accumulated + ink;
                 cap = max(cap, capStrength);
+                if (u.counts.z != 0) edges[outputIndex] = min(32.0f, edges[outputIndex] + modifier.z * 7.0f * coverage * (1.0f - coverage));
             }
         }
         density[outputIndex] = min(32.0f, accumulated);

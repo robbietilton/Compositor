@@ -198,31 +198,75 @@ final class BrushLibrary {
     private(set) var selectedID: UUID?
     private(set) var error: String?
     private let url: URL?
+    private var bundledBrushes = [BrushPreset]()
+    private var userBrushes = [BrushPreset]()
+    private var hiddenBundledIDs = Set<UUID>()
 
     private struct Collection: Codable {
         var version = 1
         var brushes: [BrushPreset]
         var selectedID: UUID?
+        var hiddenBundledIDs: Set<UUID>?
+
+        private enum CodingKeys: String, CodingKey { case version, brushes, selectedID, hiddenBundledIDs }
+        init(brushes: [BrushPreset], selectedID: UUID?, hiddenBundledIDs: Set<UUID>) {
+            self.brushes = brushes
+            self.selectedID = selectedID
+            self.hiddenBundledIDs = hiddenBundledIDs
+        }
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            version = try values.decode(Int.self, forKey: .version)
+            brushes = try values.decode([BrushPreset].self, forKey: .brushes)
+            selectedID = try values.decodeIfPresent(UUID.self, forKey: .selectedID)
+            hiddenBundledIDs = try values.decodeIfPresent(Set<UUID>.self, forKey: .hiddenBundledIDs)
+        }
     }
     init(url: URL?) {
         self.url = url
-        // A saved collection owns its edits and deletions; bundled presets seed new collections only.
-        let saved = url.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
-        guard let collectionURL = saved ?? Bundle.main.url(forResource: "DefaultBrushes", withExtension: "json") else { return }
+        let legacyBundledIDs: Set<UUID> = [
+            UUID(uuidString: "686B9CF6-D0D3-4CBF-BECA-2737E8DD7D86")!,
+            UUID(uuidString: "33506A33-1B6A-47A2-A275-33CDE39C0E37")!,
+            UUID(uuidString: "4AB9F776-02D1-4188-BADB-6F8EA6A76C30")!
+        ]
         do {
-            guard try collectionURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 8 * 1024 * 1024 else {
-                throw CocoaError(.fileReadTooLarge)
+            if let resource = Bundle.main.url(forResource: "DefaultBrushes", withExtension: "json") {
+                let collection = try Self.readCollection(at: resource)
+                guard !collection.brushes.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+                bundledBrushes = collection.brushes
+                selectedID = collection.selectedID
             }
-            let data = try Data(contentsOf: collectionURL, options: .mappedIfSafe)
-            guard data.count <= 8 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
-            let collection = try JSONDecoder().decode(Collection.self, from: data)
-            guard collection.version == 1, !collection.brushes.isEmpty, collection.brushes.count <= 1000,
-                  collection.brushes.allSatisfy(\.isValid), Set(collection.brushes.map(\.id)).count == collection.brushes.count else {
-                throw CocoaError(.fileReadCorruptFile)
+            if let url, FileManager.default.fileExists(atPath: url.path) {
+                let collection = try Self.readCollection(at: url)
+                userBrushes = collection.brushes
+                hiddenBundledIDs = collection.hiddenBundledIDs
+                    ?? legacyBundledIDs.subtracting(Set(collection.brushes.map(\.id)))
+                selectedID = collection.selectedID ?? userBrushes.first?.id
             }
-            brushes = collection.brushes
-            selectedID = brushes.contains { $0.id == collection.selectedID } ? collection.selectedID : brushes.first?.id
+            rebuildBrushes()
         } catch { self.error = "Couldn’t read the brush collection. The saved file has been left unchanged. \(error.localizedDescription)" }
+    }
+    private static func readCollection(at url: URL) throws -> Collection {
+        guard try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 <= 8 * 1024 * 1024 else {
+            throw CocoaError(.fileReadTooLarge)
+        }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        guard data.count <= 8 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+        let collection = try JSONDecoder().decode(Collection.self, from: data)
+        guard collection.version == 1, collection.brushes.count <= 1000,
+              collection.brushes.allSatisfy(\.isValid),
+              Set(collection.brushes.map(\.id)).count == collection.brushes.count,
+              (collection.hiddenBundledIDs?.count ?? 0) <= 1000 else { throw CocoaError(.fileReadCorruptFile) }
+        return collection
+    }
+    private func rebuildBrushes() {
+        var merged = bundledBrushes.filter { !hiddenBundledIDs.contains($0.id) }
+        for user in userBrushes {
+            if let index = merged.firstIndex(where: { $0.id == user.id }) { merged[index] = user }
+            else { merged.append(user) }
+        }
+        brushes = merged
+        if !brushes.contains(where: { $0.id == selectedID }) { selectedID = userBrushes.first?.id ?? brushes.first?.id }
     }
     /// Called by the importer before publishing presets. The source file is immutable and shared by digest.
     func retainSource(_ data: Data) throws -> String {
@@ -265,25 +309,40 @@ final class BrushLibrary {
     func save(_ brush: BrushPreset, select: Bool = true) throws {
         guard error == nil else { throw CocoaError(.fileReadCorruptFile) }
         guard brush.isValid else { throw CocoaError(.validationMissingMandatoryProperty) }
-        var updated = brushes
-        if let index = updated.firstIndex(where: { $0.id == brush.id }) { updated[index] = brush }
-        else {
-            guard updated.count < 1000 else { throw CocoaError(.fileWriteOutOfSpace) }
+        var updated = userBrushes
+        if let bundled = bundledBrushes.first(where: { $0.id == brush.id }), bundled == brush {
+            updated.removeAll { $0.id == brush.id }
+        } else if let index = updated.firstIndex(where: { $0.id == brush.id }) {
+            updated[index] = brush
+        } else {
             updated.append(brush)
+        }
+        let visibleBundleIDs = bundledBrushes.filter { !hiddenBundledIDs.contains($0.id) }.map(\.id)
+        guard Set(updated.map(\.id)).union(visibleBundleIDs).count <= 1000 else {
+            throw CocoaError(.fileWriteOutOfSpace)
         }
         if let source = brush.source { _ = try sourceData(for: source) }
         if let digest = brush.roundDynamics.shapeSettings.customTip?.originalDigest { _ = try retainedData(digest) }
-        try persist(updated, selectedID: select ? brush.id : selectedID)
+        try persist(updated, selectedID: select ? brush.id : selectedID, hiddenBundledIDs: hiddenBundledIDs)
     }
 
     func delete(_ ids: Set<UUID>) throws {
         guard error == nil else { throw CocoaError(.fileReadCorruptFile) }
         guard brushes.contains(where: { ids.contains($0.id) }) else { return }
-        var updated = brushes.filter { !ids.contains($0.id) }
+        var updated = userBrushes.filter { !ids.contains($0.id) }
+        let hidden = hiddenBundledIDs.union(bundledBrushes.filter { ids.contains($0.id) }.map(\.id))
+        var remaining = bundledBrushes.filter { !hidden.contains($0.id) }
+        for user in updated {
+            if let index = remaining.firstIndex(where: { $0.id == user.id }) { remaining[index] = user }
+            else { remaining.append(user) }
+        }
         // Keep a usable brush even when the last native preset is deleted.
-        if !updated.contains(where: { $0.source == nil }) { updated.append(BrushPreset(name: "Hard Round")) }
-        let selection = updated.first { $0.id == selectedID && $0.source == nil } ?? updated.first { $0.source == nil }!
-        try persist(updated, selectedID: selection.id)
+        if !remaining.contains(where: { $0.source == nil }) { updated.append(BrushPreset(name: "Hard Round")) }
+        let selected = remaining.first { $0.id == selectedID && $0.source == nil }
+            ?? remaining.first { $0.source == nil }
+        if selected == nil, let fallback = updated.last { remaining.append(fallback) }
+        let selection = selected?.id ?? remaining.first?.id
+        try persist(updated, selectedID: selection, hiddenBundledIDs: hidden)
     }
 
     /// Publish an entire validated import once. Reimport never overwrites native edits or changes selection.
@@ -293,7 +352,7 @@ final class BrushLibrary {
         }
         let digest = SHA256.hash(data: original).map { String(format: "%02x", $0) }.joined()
         guard result.brushes.allSatisfy({ $0.source?.archiveDigest == digest }) else { throw CocoaError(.fileReadCorruptFile) }
-        var updated = brushes
+        var updated = userBrushes
         for brush in result.brushes {
             let existing = updated.contains {
                 $0.source?.archiveDigest == digest && $0.source?.memberPath == brush.source?.memberPath
@@ -301,23 +360,26 @@ final class BrushLibrary {
             }
             if !existing { updated.append(brush) }
         }
-        guard updated.count <= 1000, Set(updated.map(\.id)).count == updated.count else { throw CocoaError(.fileWriteOutOfSpace) }
-        let added = updated.count - brushes.count
+        let combinedIDs = Set(updated.map(\.id)).union(bundledBrushes.filter { !hiddenBundledIDs.contains($0.id) }.map(\.id))
+        guard combinedIDs.count <= 1000, Set(updated.map(\.id)).count == updated.count else { throw CocoaError(.fileWriteOutOfSpace) }
+        let added = updated.count - userBrushes.count
         if added > 0 {
             _ = try retainSource(original)
-            try persist(updated, selectedID: selectedID)
+            try persist(updated, selectedID: selectedID, hiddenBundledIDs: hiddenBundledIDs)
         }
         return added
     }
-    private func persist(_ updated: [BrushPreset], selectedID: UUID?) throws {
+    private func persist(_ updated: [BrushPreset], selectedID: UUID?, hiddenBundledIDs: Set<UUID>) throws {
         if let url {
-            let data = try JSONEncoder().encode(Collection(brushes: updated, selectedID: selectedID))
+            let data = try JSONEncoder().encode(Collection(brushes: updated, selectedID: selectedID, hiddenBundledIDs: hiddenBundledIDs))
             guard data.count <= 8 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
         }
-        brushes = updated
+        userBrushes = updated
+        self.hiddenBundledIDs = hiddenBundledIDs
         self.selectedID = selectedID
+        rebuildBrushes()
     }
 }
 

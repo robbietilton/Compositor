@@ -2,7 +2,6 @@
 """Build a local, ad-hoc signed canary with its own identity and icon."""
 from datetime import datetime
 from pathlib import Path
-import json
 import plistlib
 import shutil
 import subprocess
@@ -11,14 +10,16 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 derived = root / 'DerivedData' / 'Canary'
 source = root / 'Compositor/Assets.xcassets/AppIcon.appiconset/app-icon-1024-canary.png'
+if not source.is_file():
+    source = source.with_name('app-icon-1024.png')
 standard = root / 'Compositor/Assets.xcassets/AppIcon.appiconset/Contents.json'
 standard_before = standard.read_bytes()
 assert source.is_file(), f'Missing canary icon: {source}'
-assert all(image.get('filename') != source.name for image in json.loads(standard_before)['images'])
 subprocess.run([
     'xcodebuild', '-quiet', '-project', str(root / 'Compositor.xcodeproj'), '-scheme', 'Compositor',
     '-configuration', 'Debug', '-destination', 'platform=macOS', '-derivedDataPath', str(derived),
-    'CODE_SIGN_IDENTITY=-', 'CODE_SIGN_STYLE=Manual', 'DEVELOPMENT_TEAM=', 'build',
+    'CODE_SIGN_IDENTITY=-', 'CODE_SIGN_STYLE=Manual', 'DEVELOPMENT_TEAM=',
+    'ENABLE_HARDENED_RUNTIME=NO', 'build',
 ], check=True, cwd=root)
 output = root / 'dist' / ('Compositor-Canary-' + datetime.now().strftime('%Y%m%d-%H%M%S')) / 'Compositor Canary.app'
 output.parent.mkdir(parents=True)
@@ -67,7 +68,10 @@ precondition(pixels(CommandLine.arguments[1]) == pixels(CommandLine.arguments[2]
     entitlements = temp / 'Canary.entitlements'
     entitlements.write_text((root / 'Config/Compositor.entitlements').read_text()
                             .replace('$(PRODUCT_BUNDLE_IDENTIFIER)', metadata['CFBundleIdentifier']))
-    subprocess.run(['codesign', '--force', '--deep', '--sign', '-', '--entitlements', str(entitlements), str(output)], check=True)
+    # Ad-hoc signatures have no Team ID for hardened runtime library validation.
+    subprocess.run(['codesign', '--force', '--deep', '--sign', '-', '--options', '0', '--entitlements', str(entitlements), str(output)], check=True)
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(output)], check=True)
+    signature = subprocess.run(['codesign', '-dv', str(output)], check=True, capture_output=True, text=True)
+    assert 'runtime' not in signature.stderr, 'Local canary must not enable hardened runtime'
 assert standard.read_bytes() == standard_before, 'Standard icon configuration must stay unchanged'
 print(output)

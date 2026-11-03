@@ -287,6 +287,7 @@ final class EditorSession {
     @ObservationIgnored var brushAnchor: CGPoint?
     /// The pointer itself, so a smoothed stroke can catch up to it when the button is released.
     @ObservationIgnored var brushPointer: CGPoint?
+    @ObservationIgnored var pendingBrushInputSamples: [BrushStroke.InputSample] = []
     /// Latest normalized input; releases keep its pressure and orientation instead of fabricating a new sample.
     @ObservationIgnored var brushInput = BrushInput()
     @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?

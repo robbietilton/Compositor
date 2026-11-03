@@ -37,11 +37,12 @@ extension EditorSession {
         return nil
     }
     /// Tiled raster edit of the active layer's pixels or mask, within the shared pixel budgets.
-    func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false, seed: UInt64? = nil) throws -> BrushStroke {
+    func makeRasterEdit(for layer: ImageLayer, settings: BrushSettings = BrushSettings(), growsMask: Bool = false,
+                        seed: UInt64? = nil, useGPU: Bool = true) throws -> BrushStroke {
         guard let document else { throw ProjectError.tooLarge }
         pauseGIFForEditing(for: layer.id)
         let sourceLayer = pixelEditingLayer(for: layer)
-        let stroke = try BrushStroke(layer: sourceLayer, mask: isMaskSelected, settings: settings, canvas: document.size,
+        let stroke = try BrushStroke(layer: sourceLayer, mask: isMaskSelected, settings: settings, canvas: document.size, useGPU: useGPU,
                                      growsMask: growsMask, seed: seed ?? UInt64.random(in: .min ... .max))
         func maskPixels(_ candidate: ImageLayer) -> Int {
             candidate.mask.map { $0.asset.image.width * $0.asset.image.height } ?? 0
@@ -64,13 +65,16 @@ extension EditorSession {
         return stroke
     }
     /// `pressure` is a pen's, 0–1; nil for a mouse or trackpad, which presses fully.
-    func beginBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil, seed: UInt64? = nil, deferTaperRendering: Bool = false) {
+    func beginBrush(at point: CGPoint, pressure: CGFloat? = nil, input: BrushInput? = nil, seed: UInt64? = nil,
+                    deferTaperRendering: Bool = false, useGPU: Bool = true) {
         BrushPerformanceSignpost.measure("Brush Input Begin") {
-            beginBrushImpl(at: point, pressure: pressure, input: input, seed: seed, deferTaperRendering: deferTaperRendering)
+            beginBrushImpl(at: point, pressure: pressure, input: input, seed: seed,
+                deferTaperRendering: deferTaperRendering, useGPU: useGPU)
         }
     }
 
-    private func beginBrushImpl(at point: CGPoint, pressure: CGFloat?, input: BrushInput?, seed: UInt64?, deferTaperRendering: Bool) {
+    private func beginBrushImpl(at point: CGPoint, pressure: CGFloat?, input: BrushInput?, seed: UInt64?,
+                                deferTaperRendering: Bool, useGPU: Bool) {
         // Spot Healing and Clone Stamp rework image pixels; they have nothing to do on a mask.
         if tool == .blur, blurMode != .blur { beginWarp(at: point); return }
         guard tool == .brush || tool == .blur || (tool.isBrushTool && !isMaskSelected) else { return }
@@ -95,7 +99,8 @@ extension EditorSession {
                 settings.roundDynamics = RoundBrushDynamics(); settings.shapeTip = nil
             }
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
-            let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush, seed: seed)
+            let stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush,
+                seed: seed, useGPU: useGPU)
             let strokeID = ObjectIdentifier(stroke)
             stroke.onGPUPreview = { [weak self] in
                 guard let self, self.brushStroke.map(ObjectIdentifier.init) == strokeID else { return }
@@ -140,10 +145,71 @@ extension EditorSession {
         }
     }
 
+    func continueBrush(batch: [BrushStroke.InputSample]) {
+        guard !batch.isEmpty else { return }
+        BrushPerformanceSignpost.measure("Brush Input Batch") {
+            if let warpStroke {
+                for sample in batch { warpStroke.append(sample.point); lastBrushPoint?.point = sample.point }
+                brushRevision += batch.count
+                return
+            }
+            guard let brushStroke else { return }
+            if !pendingBrushInputSamples.isEmpty {
+                do { try flushQueuedBrushInputSamples() }
+                catch { cancelBrush(); brushError = error.localizedDescription; return }
+            }
+            var prepared: [BrushStroke.InputSample] = []
+            prepared.reserveCapacity(batch.count)
+            for sample in batch {
+                if let next = prepareBrushInput(at: sample.point, pressure: nil, input: sample.input) {
+                    prepared.append(next)
+                }
+            }
+            do {
+                try brushStroke.append(batch: prepared)
+                if let last = prepared.last { lastBrushPoint?.point = last.point }
+            }
+            catch { cancelBrush(); brushError = error.localizedDescription }
+        }
+    }
+
+    func queueBrushInput(at point: CGPoint, input: BrushInput) {
+        if let warpStroke { warpStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1; return }
+        if pendingBrushInputSamples.count == BrushStroke.maxInputSamplesPerBatch {
+            do { try flushQueuedBrushInputSamples() }
+            catch { cancelBrush(); brushError = error.localizedDescription; return }
+        }
+        guard let sample = prepareBrushInput(at: point, pressure: nil, input: input) else { return }
+        pendingBrushInputSamples.append(sample)
+    }
+
+    func flushQueuedBrushInputSamples() throws {
+        guard !pendingBrushInputSamples.isEmpty else { return }
+        let samples = pendingBrushInputSamples
+        pendingBrushInputSamples.removeAll(keepingCapacity: true)
+        guard let brushStroke else { return }
+        do {
+            try brushStroke.append(batch: samples)
+            if let last = samples.last { lastBrushPoint?.point = last.point }
+        }
+        catch { cancelBrush(); throw error }
+    }
+
     private func continueBrushImpl(at point: CGPoint, pressure: CGFloat?, input: BrushInput?) {
         if let warpStroke { warpStroke.append(point); lastBrushPoint?.point = point; brushRevision += 1; return }
         guard let brushStroke else { return }
-        if let input, input.deviceID != brushInput.deviceID { return }
+        if !pendingBrushInputSamples.isEmpty {
+            do { try flushQueuedBrushInputSamples() }
+            catch { cancelBrush(); brushError = error.localizedDescription; return }
+        }
+        guard let sample = prepareBrushInput(at: point, pressure: pressure, input: input) else { return }
+        do { try brushStroke.append(sample.point, input: sample.input); lastBrushPoint?.point = sample.point }
+        catch { cancelBrush(); brushError = error.localizedDescription }
+    }
+
+    private func prepareBrushInput(at point: CGPoint, pressure: CGFloat?, input: BrushInput?) -> BrushStroke.InputSample? {
+        guard let brushStroke else { return nil }
+        if let input, input.deviceID != brushInput.deviceID { return nil }
         let rawPrevious = brushPointer ?? point
         brushPointer = point
         let previousInput = brushInput
@@ -159,9 +225,10 @@ extension EditorSession {
         }
         let filtered = stabilization.point(point, previous: brushAnchor ?? point, rawPrevious: rawPrevious, zoom: viewport.zoom)
         // Smoothing filters position, never a stationary pressure/orientation change.
-        guard let painted = smoothed(filtered) ?? (brushInput != previousInput ? brushAnchor : nil) else { return }
-        do { try brushStroke.append(painted, input: brushInput); brushAnchor = painted; lastBrushPoint?.point = painted; brushRevision += 1 }
-        catch { cancelBrush(); brushError = error.localizedDescription }
+        guard let painted = smoothed(filtered) ?? (brushInput != previousInput ? brushAnchor : nil) else { return nil }
+        brushAnchor = painted
+        brushRevision += 1
+        return BrushStroke.InputSample(point: painted, input: brushInput)
     }
     /// Where the brush actually is, with Smoothing on: it trails the pointer on a string, and only
     /// moves once the pointer pulls that string taut — the model Photoshop uses. The string's length
@@ -180,6 +247,7 @@ extension EditorSession {
         return last.point
     }
     func cancelBrush() {
+        pendingBrushInputSamples.removeAll(keepingCapacity: true)
         warpStroke = nil
         brushStroke?.cancelPendingGPUWork()
         brushStroke = nil
@@ -205,6 +273,7 @@ extension EditorSession {
         guard !isProjectBusy else { return false }
         defer { cancelBrush() }
         do {
+            try flushQueuedBrushInputSamples()
             // Smoothing leaves the brush short of the pointer; the stroke ends where the hand did.
             if let pointer = brushPointer, let anchor = brushAnchor, pointer != anchor,
                tool == .brush, (stroke.settings.smoothing > 0 || stroke.settings.roundDynamics.stabilization?.isActive == true) {
