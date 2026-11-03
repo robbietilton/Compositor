@@ -14,7 +14,12 @@ PRODUCT_NAME = $(TARGET_NAME)
 // The fork's own identifier, under which the app ships. A build's number and signing team go in the local file included
 // at the end rather than here.
 PRODUCT_BUNDLE_IDENTIFIER = io.github.naco-siren.Compositor
-MARKETING_VERSION = 0.1
+// The iPad app's own version, not the Mac's: About says which Mac version it was merged from, and a release that only
+// fixes the iPad doesn't need a number of the Mac's. Pencil pressure makes it 2.0.
+MARKETING_VERSION = 1.0
+// The Mac version this branch is merged from (the Compositor target's MARKETING_VERSION in the project file), shown in
+// About after the iPad's own. Bump it with every merge of upstream main.
+COMPOSITOR_MAC_VERSION = 1.6.2
 CURRENT_PROJECT_VERSION = 1
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =

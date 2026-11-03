@@ -13,11 +13,11 @@ final class AboutController: UIViewController {
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Compositor"
     }
 
-    /// The version and, in parentheses, the build, as the Mac's About panel says them.
+    /// The iPad app's version, and the Mac version it was merged from, which says what its files and features match.
     static var version: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-        return "Version \(version) (\(build))"
+        let mac = Bundle.main.object(forInfoDictionaryKey: "CompositorMacVersion") as? String ?? ""
+        return "Version \(version) based on Mac \(mac)"
     }
 
     /// The license, from the copy of the repository's LICENSE the app carries.

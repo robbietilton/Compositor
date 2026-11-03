@@ -84,7 +84,8 @@ import UIKit
         let sheet = try await showAbout(in: controller)
         let texts = views(UILabel.self, in: sheet.view).compactMap(\.text)
         #expect(texts.contains(try info("CFBundleDisplayName")))
-        #expect(texts.contains("Version \(try info("CFBundleShortVersionString")) (\(try info("CFBundleVersion")))"))
+        #expect(texts.contains("Version \(try info("CFBundleShortVersionString")) based on Mac \(try info("CompositorMacVersion"))"))
+        #expect(try info("CompositorMacVersion").wholeMatch(of: /\d+\.\d+(\.\d+)?/) != nil)
         #expect(views(UIImageView.self, in: sheet.view).contains { $0.image != nil && $0.bounds.width >= 60 })
 
         let url = try #require(Bundle.main.url(forResource: "LICENSE", withExtension: nil))

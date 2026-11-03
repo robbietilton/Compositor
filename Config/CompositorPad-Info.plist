@@ -41,6 +41,8 @@
 			<true/>
 		</dict>
 	</array>
+	<key>CompositorMacVersion</key>
+	<string>$(COMPOSITOR_MAC_VERSION)</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSUserActivityTypes</key>
