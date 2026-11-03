@@ -238,7 +238,15 @@ extension EditorSession {
     func openVolumetricLightColorPicker() {
         guard canEditPalette, colorPicker == nil, let edit = filterEdit, edit.kind == .volumetricLight, !edit.committing else { return }
         let value = edit.settings.volumetric.color
+        edit.samplesVolumetricColor = false
         colorPicker = ColorPickerState(target: .volumetricLight, original: PaletteColor(red: value.red, green: value.green, blue: value.blue))
+    }
+    /// The eyedropper beside Volumetric Light's color well: the canvas color under a document point becomes the
+    /// light's, and the eyedropper puts itself away.
+    func sampleVolumetricLightColor(at point: CGPoint) {
+        guard let edit = filterEdit, edit.samplesVolumetricColor else { return }
+        edit.samplesVolumetricColor = false
+        if let color = sampleCompositeColor(at: point) { setVolumetricLightColor(color) }
     }
     func previewVolumetricLightColor() {
         guard let colorPicker, case .volumetricLight = colorPicker.target else { return }

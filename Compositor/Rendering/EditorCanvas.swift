@@ -113,7 +113,7 @@ final class CanvasView: NSView {
         palettePicking || (session.colorPicker != nil && !session.pickingForDialog) || session.hueSampleMode != nil || session.levels?.sampleMode != nil
             || session.colorRange != nil
             || session.filterEdit?.samplesWhiteBalance == true || session.filterEdit?.samplesPointColor == true
-            || session.filterEdit?.samplesDefringe == true
+            || session.filterEdit?.samplesDefringe == true || session.filterEdit?.samplesVolumetricColor == true
             || session.filterEdit?.drawingCameraRawGeometryGuide == true
     }
     /// View point where a targeted-adjustment drag began.
@@ -1839,7 +1839,14 @@ final class CanvasView: NSView {
             synchronizeDisplay()
             return
         }
-        if session.filterEdit?.kind == .volumetricLight, !spaceHeld, let document = session.document {
+        if session.filterEdit?.samplesVolumetricColor == true, !spaceHeld, let document = session.document {
+            session.sampleVolumetricLightColor(at: session.viewport.documentPoint(from: point, documentSize: document.size))
+            session.brushRevision += 1
+            FloatingPanelController.refocus(NSUserInterfaceItemIdentifier("filterPanel"))
+            return
+        }
+        // With the color picker open, a click samples the light's color (below) rather than moving the light.
+        if session.filterEdit?.kind == .volumetricLight, session.colorPicker == nil, !spaceHeld, let document = session.document {
             session.moveVolumetricLight(to: session.viewport.documentPoint(from: point, documentSize: document.size))
             volumetricDrag = true
             synchronizeDisplay()

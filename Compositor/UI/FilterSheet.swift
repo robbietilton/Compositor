@@ -406,7 +406,8 @@ struct FilterSheet: View {
     @ViewBuilder private var volumetricLightControls: some View {
         let color = settings.volumetric.color
         HStack(spacing: 8) {
-            Text("Click or drag on the canvas to move the light")
+            Text(edit?.samplesVolumetricColor == true ? "Click the canvas to take the light's color"
+                                                      : "Click or drag on the canvas to move the light")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button { session.openVolumetricLightColorPicker() } label: {
@@ -419,6 +420,14 @@ struct FilterSheet: View {
             }
             .buttonStyle(.plain)
             .help("Choose the light's color")
+            Button {
+                if case .volumetricLight = session.colorPicker?.target { session.closeColorPicker(commit: true) }
+                session.filterEdit?.samplesVolumetricColor.toggle()
+                session.brushRevision += 1
+            } label: { Image(systemName: "eyedropper") }
+            .buttonStyle(.borderless)
+            .tint(edit?.samplesVolumetricColor == true ? Color.accentColor : Color.secondary)
+            .help("Click the canvas to take the light's color from it")
         }
         control("Haze", \.volumetric.haze, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
             .help("How thick the air is: haze lit by the light, thinner in front of the subject")

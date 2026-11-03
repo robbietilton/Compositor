@@ -600,6 +600,8 @@ final class FilterEdit {
     var samplesWhiteBalance = false
     /// Defringe eyedropper, armed from Optics. Sets purple or green hue range from the clicked fringe.
     var samplesDefringe = false
+    /// Volumetric Light's eyedropper, armed beside its color well: the next click on the canvas takes the light's color.
+    var samplesVolumetricColor = false
     /// Guided Upright: drag lines on the preview.
     var drawingCameraRawGeometryGuide = false
     var cameraRawGuideDraft: (start: CGPoint, end: CGPoint)?

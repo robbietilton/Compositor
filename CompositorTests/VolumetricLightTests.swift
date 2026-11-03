@@ -57,6 +57,33 @@ struct VolumetricLightTests {
         session.cancelFilter()
     }
 
+    /// The eyedropper beside the color well takes the light's color from one click on the canvas, then puts itself away;
+    /// opening the color picker puts it away too.
+    @MainActor @Test func theEyedropperTakesTheLightsColorFromTheCanvas() throws {
+        let session = EditorSession()
+        session.createDocument(width: width, height: height, emptyLayer: true)
+        let image = try room()
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Room"))
+        session.beginFilter(.volumetricLight)
+        defer { session.cancelFilter() }
+        let edit = try #require(session.filterEdit)
+        let point = CGPoint(x: window.minX + 10, y: window.minY + 10)
+        let sampled = try #require(session.sampleCompositeColor(at: point))
+
+        session.sampleVolumetricLightColor(at: point)
+        #expect(edit.settings.volumetric.color != AdjustmentColor(sampled), "not armed: no change")
+
+        edit.samplesVolumetricColor = true
+        session.sampleVolumetricLightColor(at: point)
+        #expect(edit.settings.volumetric.color == AdjustmentColor(sampled))
+        #expect(!edit.samplesVolumetricColor, "one click, then it's put away")
+
+        edit.samplesVolumetricColor = true
+        session.openVolumetricLightColorPicker()
+        #expect(!edit.samplesVolumetricColor && session.colorPicker != nil)
+        session.closeColorPicker(commit: false)
+    }
+
     @Test func theLightStartsOnTheBrightestSpot() throws {
         let point = VolumetricLighting.brightestPoint(in: try room())
         #expect(window.insetBy(dx: -10, dy: -10).contains(point), "on the window: \(point)")
