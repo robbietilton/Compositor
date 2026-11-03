@@ -3,21 +3,18 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.2</title>
-      <pubDate>Tue, 03 Nov 2026 05:18:42 +0000</pubDate>
-      <sparkle:version>61</sparkle:version>
-      <sparkle:shortVersionString>1.6.2</sparkle:shortVersionString>
+      <title>Version 1.6.3</title>
+      <pubDate>Tue, 03 Nov 2026 21:30:23 +0000</pubDate>
+      <sparkle:version>62</sparkle:version>
+      <sparkle:shortVersionString>1.6.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.2</link>
-      <changes><![CDATA[New Reduce Noise filter and adjustment layer, which smooths grain while keeping edges and texture
-Camera Raw's Luminance noise reduction keeps much more detail
-Panning and zooming performance improved over Reduce Noise and Lens Effects layers
-The layers panel has separate buttons for non-destructive adjustment layers and filter layers
-The layers panel's buttons are easier to click, and their menus open above them
-Adjustment layer panels no longer have a Preview checkbox; use the layer's eye to compare
-Levels panel UI polish
-The app window opens full width and height after an update]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.2/Compositor.dmg" sparkle:edSignature="/UX1I0diFg6pTMVYdU8qAOk0RzjSXN4RN2p2bbH46dcWquWOmyrxJa0x8G6OGsVGap1ZGKE0aArngLloxPgQAQ==" length="8807836" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.3</link>
+      <changes><![CDATA[Shapes, lines, marquee selections and resized layers show their size beside the pointer as you drag
+New View › Show › Distances shows pixel gaps to the canvas edges and nearby layers while moving a layer, and to the layer under the pointer with ⌘ held
+Deselect (⌘D) works after clicking the same area twice with the Magic Wand
+Volumetric Light's color picker samples from the canvas instead of moving the light
+The "Automatically download and install updates" checkbox in the update alert can be checked again]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.3/Compositor.dmg" sparkle:edSignature="bvLTU0w/PWiIOX9//afs4tDNe8unRuom0NNPlGvZY6dtZRANYDqnWJU1G7/HaJq4ba682Sp1gNNIL4JIZmI2Bw==" length="8827062" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
