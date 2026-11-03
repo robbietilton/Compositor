@@ -1857,7 +1857,8 @@ final class CanvasView: NSView {
             synchronizeDisplay()
             return
         }
-        if session.filterEdit?.kind == .volumetricLight, !spaceHeld, let document = session.document {
+        // With the color picker open, a click samples the light's color (below) rather than moving the light.
+        if session.filterEdit?.kind == .volumetricLight, session.colorPicker == nil, !spaceHeld, let document = session.document {
             session.moveVolumetricLight(to: session.viewport.documentPoint(from: point, documentSize: document.size))
             volumetricDrag = true
             synchronizeDisplay()
