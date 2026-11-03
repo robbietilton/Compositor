@@ -54,7 +54,8 @@ struct HueSaturationSheet: View {
                     // Photoshop starts colorizing at hue 0, saturation 25.
                     settings.wrappedValue = colorize ? .colorizeStart : HueSaturationSettings()
                 }))
-                Toggle("Preview", isOn: preview)
+                // Not for an adjustment layer: its eye in the layers panel shows the picture without it.
+                if session.adjustmentOriginal == nil { Toggle("Preview", isOn: preview) }
                 Button("Reset") { settings.wrappedValue = current.colorize ? .colorizeStart : HueSaturationSettings() }
                 Spacer()
             }
