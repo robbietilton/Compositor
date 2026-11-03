@@ -422,6 +422,7 @@ nonisolated enum PixelFilter {
             image = try render(sharpened.cropped(to: extent), job: job)
         case .reduceNoise:
             // Camera Raw's noise reduction on its own, its contrast and color smoothness at their defaults.
+            _ = MetalNonlocalMeans.installed
             let context = try BrushRaster.context(width: width, height: height, mask: false)
             BrushRaster.draw(job.image, in: extent, mask: false, context: context)
             guard let data = context.data else { throw ExportError.render }

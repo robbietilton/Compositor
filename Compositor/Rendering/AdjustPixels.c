@@ -1299,13 +1299,17 @@ static double noise_sigma(const float *luma, const float *coverage, size_t width
     return count ? sqrt(M_PI / 2) * sum / (6.0 * count) : 0;
 }
 
+int (*adjust_nonlocal_means_gpu)(const float *, const float *, float *, size_t, size_t, int, int, double, double) = NULL;
+
 // Non-local means: each pixel averaged with the others within `search` pixels whose `patch`-wide surroundings look like
 // its own, so grain, random from patch to patch, averages away, while an edge or a texture, matched only by patches
 // along it, is kept. `h` is how alike (in brightness, 0–1) patches must be to count, and `sigma` the noise, whose share
 // of every distance is taken off first. Clear pixels lend nothing. Worked one band of rows at a time, an offset at a
-// time: each offset's squared differences summed over the patch with running sums.
+// time: each offset's squared differences summed over the patch with running sums. On the GPU when the app has set
+// `adjust_nonlocal_means_gpu`.
 static int nonlocal_means(const float *luma, const float *coverage, float *out, size_t width, size_t height,
                           int search, int patch, double h, double sigma) {
+    if (adjust_nonlocal_means_gpu && adjust_nonlocal_means_gpu(luma, coverage, out, width, height, search, patch, h, sigma)) return 1;
     // exp(-d) for d from 0 to 6 in 1024 steps; past 6 a match counts for nothing.
     enum { steps = 1024 };
     static float table[steps + 1];
