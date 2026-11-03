@@ -36,7 +36,7 @@ nonisolated enum AdjustmentKind: String, Codable, CaseIterable, Sendable {
         case .lensEffects: return "camera.aperture"
         case .tonalContrast: return "circle.lefthalf.striped.horizontal"
         case .sharpen: return "triangle.lefthalf.filled"
-        case .reduceNoise: return "sparkles"
+        case .reduceNoise: return "circle.dotted.and.circle"
         }
     }
     /// The filter panel that edits this kind; Levels and Hue/Saturation have panels of their own.

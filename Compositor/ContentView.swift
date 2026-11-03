@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     /// The Layers panel's width, remembered across launches.
-    @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
+    @AppStorage("layersPanelWidth") private var layersPanelWidth = 261.0
     @AppStorage("navigator.visible") private var showsNavigator = false
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
