@@ -202,8 +202,11 @@ struct FilterSheet: View {
                 Text("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion).")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true },
-                                            set: { session.updateFilter(settings, preview: $0) }))
+            // Not for an adjustment layer: its eye in the layers panel shows the picture without it.
+            if session.adjustmentOriginal == nil {
+                Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true },
+                                                set: { session.updateFilter(settings, preview: $0) }))
+            }
             if let error = edit?.previewError {
                 Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }

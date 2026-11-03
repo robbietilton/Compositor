@@ -38,7 +38,19 @@ final class ProjectWindowView: NSView {
                 self.proxy.previous = window.delegate
                 window.delegate = self.proxy
             }
+            Self.fillScreenOnceForThisBuild(window)
         }
+    }
+
+    /// The first launch of each build, a new download or an update, fills the screen (without going full screen), as
+    /// `defaultWindowPlacement` does only the very first time; after that macOS reopens the window at the size it was left.
+    private static func fillScreenOnceForThisBuild(_ window: NSWindow) {
+        let key = "windowFilledScreenForBuild"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        guard UserDefaults.standard.string(forKey: key) != build, !window.styleMask.contains(.fullScreen),
+              let screen = window.screen ?? NSScreen.main else { return }
+        UserDefaults.standard.set(build, forKey: key)
+        window.setFrame(screen.visibleFrame, display: true)
     }
 }
 
