@@ -2121,6 +2121,9 @@ final class CanvasView: NSView {
                 }
                 if case .move = drag.mode, session.showsDistances { session.distanceLines = session.movingDistances(draft, moving: moving) }
                 else { session.distanceLines = [] }
+                if case .resize = drag.mode {
+                    session.resizeSize = ("\(Int(abs(draft.size.width).rounded())) × \(Int(abs(draft.size.height).rounded())) px", pixel)
+                }
                 session.previewTransform(draft)
             }
             synchronizeDisplay()
@@ -2212,6 +2215,7 @@ final class CanvasView: NSView {
         }
         session.snapGuides = ([], [])
         session.distanceLines = []
+        session.resizeSize = nil
         if guideDragging {
             session.finishGuideDrag(delete: isOverRuler(convert(event.locationInWindow, from: nil)))
             guideDragging = false

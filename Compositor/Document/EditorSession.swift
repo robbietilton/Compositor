@@ -282,6 +282,8 @@ final class EditorSession {
     @ObservationIgnored var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
     /// Pixel gaps the Move tool shows while a layer is dragged, or with Command held over another layer.
     @ObservationIgnored var distanceLines: [DistanceLine] = []
+    /// A Move tool resize in progress: the layer's size, and where the pointer has the handle, in document pixels.
+    @ObservationIgnored var resizeSize: (text: String, corner: CGPoint)?
     /// Crop, resize and selection moves follow View › Snap (⇧⌘;) too: they had a Snap item of their own, which left
     /// the View menu with two called Snap.
     var snappingEnabled: Bool {
