@@ -33,6 +33,30 @@ struct VolumetricLightTests {
         return (Int(bytes[at]) + Int(bytes[at + 1]) + Int(bytes[at + 2])) / 3
     }
 
+    /// The first time, the first preview waits for the depth model rather than guessing and then jumping to the depth
+    /// a moment later, even as the panel opening sets its sliders; once the model is here (or can't be had: here, from
+    /// a folder without it), it draws.
+    @MainActor @Test func theFirstPreviewWaitsForTheDepthModel() async throws {
+        guard !DepthModel.isReady else { return }   // loaded already by another test: nothing to wait for
+        let source = DepthModel.source
+        defer { DepthModel.source = source }
+        DepthModel.source = FileManager.default.temporaryDirectory.appendingPathComponent("no-depth-model-\(UUID().uuidString)/")
+        let session = EditorSession()
+        session.createDocument(width: width, height: height, emptyLayer: true)
+        let image = try room()
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Room"))
+        session.beginFilter(.volumetricLight)
+        let edit = try #require(session.filterEdit)
+        #expect(session.preparingDepth && edit.previewTask == nil && edit.preparedPreview == nil, "no preview yet")
+        // The panel's sliders write their values back as it opens: no change, so still nothing drawn.
+        session.updateFilter(edit.settings, preview: edit.preview)
+        #expect(edit.previewTask == nil && edit.preparedPreview == nil, "still no preview")
+        while session.preparingDepth { try await Task.sleep(for: .milliseconds(20)) }
+        while edit.previewTask != nil || edit.preparedPreview == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(edit.preparedPreview != nil)
+        session.cancelFilter()
+    }
+
     @Test func theLightStartsOnTheBrightestSpot() throws {
         let point = VolumetricLighting.brightestPoint(in: try room())
         #expect(window.insetBy(dx: -10, dy: -10).contains(point), "on the window: \(point)")
@@ -93,6 +117,50 @@ struct VolumetricLightTests {
         }
         let guessed = try top(nil), near = try top(depthImage)
         #expect(abs(near - guessed) > 0.01, "near: \(near), guessed far: \(guessed)")
+    }
+
+    /// Keep Subject Clear holds the subject near whatever the model says; off, a subject the model puts far away keeps
+    /// that depth, and so its haze.
+    @Test func keepSubjectClearHoldsTheSubjectNear() {
+        let extent = CGRect(x: 0, y: 0, width: 64, height: 64)
+        let far = DepthMap(values: [Float](repeating: 0.2, count: 16 * 16), width: 16, height: 16)
+        let subject = CIImage(color: .white).cropped(to: CGRect(x: 16, y: 16, width: 32, height: 32))
+            .composited(over: CIImage.black.cropped(to: extent))
+        let context = CIContext()
+        func middle(_ clear: Bool) -> Float {
+            let depth = VolumetricLighting.composedDepth(far, subject: subject, extent: extent, keepsSubjectClear: clear)
+            var pixel = [Float](repeating: 0, count: 4)
+            context.render(depth, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: 32, y: 32, width: 1, height: 1), format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        let clear = middle(true), own = middle(false)
+        #expect(clear >= 0.89, "kept near: \(clear)")
+        #expect(abs(own - 0.2) < 0.05, "at its own depth: \(own)")
+    }
+
+    /// A crop's mask takes a narrow gap out of the outline, as between fingers, but not a wide part it left out, as a
+    /// chest behind a fist.
+    @Test func onlyNarrowGapsAreTakenOut() {
+        let extent = CGRect(x: 0, y: 0, width: 200, height: 200)
+        func box(_ rect: CGRect) -> CIImage {
+            CIImage(color: .white).cropped(to: rect).composited(over: CIImage.black.cropped(to: extent))
+        }
+        let outline = box(CGRect(x: 20, y: 20, width: 160, height: 160))
+        let left = [CGRect(x: 98, y: 40, width: 4, height: 120), CGRect(x: 130, y: 60, width: 40, height: 80)]
+        let seen = left.reduce(outline) { seen, rect in
+            CIImage.black.cropped(to: rect).composited(over: seen)
+        }
+        let gaps = VolumetricLighting.narrowGaps(in: outline, seen: seen, narrow: 6, extent: extent)
+        let context = CIContext()
+        func at(_ x: Int) -> Float {
+            var pixel = [Float](repeating: 0, count: 4)
+            context.render(gaps, toBitmap: &pixel, rowBytes: 16, bounds: CGRect(x: x, y: 100, width: 1, height: 1), format: .RGBAf, colorSpace: nil)
+            return pixel[0]
+        }
+        let narrow = at(100), wide = at(150), edge = at(131), body = at(60)
+        #expect(narrow > 0.9, "the narrow gap is taken out: \(narrow)")
+        #expect(wide < 0.1 && edge < 0.1, "the wide part stays, to its edge: \(wide), \(edge)")
+        #expect(body < 0.1, "the rest stays: \(body)")
     }
 
     /// Depth Contrast spreads bunched depths apart and keeps their order; 0 leaves them.

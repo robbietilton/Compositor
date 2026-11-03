@@ -65,7 +65,7 @@ struct FloatingPanelTests {
         case .levels: controller.show(title: "Levels", content: LevelsSheet(session: session))
         case .hsv: controller.show(title: "Hue/Saturation", content: HueSaturationSheet(session: session))
         case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
-             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
+             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen, .reduceNoise:
             controller.show(title: kind.rawValue, content: FilterSheet(session: session))
         case .invert: return   // filtered out above: no editor, so no panel to test
         }
@@ -105,6 +105,41 @@ struct FloatingPanelTests {
         let restored = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
         #expect(abs(restored.x - saved.x) < 2 && abs(restored.y - saved.y) < 2,
                 "the filter panel reopens where it was left, not on the right edge: \(restored)")
+        controller.close()
+    }
+
+    /// Panels sharing a position open where the last of them was left: Levels where Hue/Saturation was moved to. Left on
+    /// the right, a wider one keeps its right edge there, growing away from the screen's edge.
+    @Test func sharedPanelsOpenWhereTheLastWasLeft() throws {
+        let first = FloatingPanelController(name: "testSharedFirst", sharing: "testShared")
+        first.show(title: "Hue/Saturation", content: Text("Narrow").frame(width: 200, height: 100))
+        settle()
+        let firstPanel = try #require(NSApp.windows.first { $0.identifier == first.identifier })
+        let visible = try #require(firstPanel.screen?.visibleFrame)
+        firstPanel.setFrameTopLeftPoint(NSPoint(x: visible.maxX - 260, y: visible.maxY - 80))
+        let corner = NSPoint(x: firstPanel.frame.maxX, y: firstPanel.frame.maxY)
+        first.close()
+
+        let second = FloatingPanelController(name: "testSharedSecond", sharing: "testShared")
+        second.show(title: "Levels", content: Text("Wide").frame(width: 320, height: 160))
+        settle()
+        let secondPanel = try #require(NSApp.windows.first { $0.identifier == second.identifier })
+        #expect(abs(secondPanel.frame.maxX - corner.x) < 2 && abs(secondPanel.frame.maxY - corner.y) < 2,
+                "the same top-right corner: \(secondPanel.frame) vs \(corner)")
+        second.close()
+    }
+
+    /// A panel opens the first time centered on the canvas's right edge, where the layers panel begins, and on the
+    /// canvas top to bottom, so the picture's middle stays in view.
+    @Test func aPanelFirstOpensOnTheCanvasRightEdge() throws {
+        let window = try #require(NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible && !($0 is NSPanel) })
+        let canvas = try #require(FloatingPanelController.canvasRect(in: window))
+        let controller = FloatingPanelController(name: "testFirstPlacement-\(UUID().uuidString)")
+        controller.show(title: "Gaussian Blur", content: Text("Blur").frame(width: 200, height: 100))
+        settle()
+        let panel = try #require(NSApp.windows.first { $0.identifier == controller.identifier })
+        #expect(abs(panel.frame.midX - canvas.maxX) < 2, "centered on the right edge: \(panel.frame) vs \(canvas)")
+        #expect(abs(panel.frame.midY - canvas.midY) < 2, "centered top to bottom: \(panel.frame) vs \(canvas)")
         controller.close()
     }
 

@@ -82,6 +82,14 @@ final class DocumentHistory {
         pending = nil
         // Selecting, navigating, and no-op edits must preserve redo history.
         guard before.document != document else { return }
+        // What starts a document (an image opened onto the welcome screen, a new canvas) is where its history
+        // starts: undoing all the way back stops at it rather than closing it.
+        guard before.document != nil else {
+            revision = UUID()
+            past.removeAll()
+            future.removeAll()
+            return
+        }
         var start = (name: pendingName, before: before)
         if let group, let last = past.last, last.group === group, last.after.revision == before.revision {
             past.removeLast()

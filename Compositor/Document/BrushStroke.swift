@@ -154,7 +154,7 @@ final class BrushStroke {
     let pixelToDocument: CGAffineTransform
     let sourceRect: CGRect
     let paintTransform: LayerTransform
-    private let source: CGImage?
+    let source: CGImage?
     private let paintColor: CGColor
     private let falloff: CGGradient?
     /// The brush tip, rendered once and stamped for every dab. Only worth it up to
@@ -269,7 +269,15 @@ final class BrushStroke {
         let locations = (0...steps).map { CGFloat($0) / CGFloat(steps) }
         let levels: [CGFloat] = locations.flatMap { [BrushRaster.falloff($0), CGFloat(1)] }
         falloff = CGGradient(colorSpace: CGColorSpaceCreateDeviceGray(), colorComponents: levels, locations: locations, count: locations.count)
-        source = mask ? layer.mask?.asset.image : layer.asset?.image
+        // An opened layer's PNG has straight alpha, or none, and stays undecoded until it's drawn (`ProjectStore`), so the
+        // brush's premultiplied pixels are made once, here, rather than for each tile the stroke touches.
+        if mask {
+            source = layer.mask?.asset.image
+        } else if let image = layer.asset?.image, !BrushRaster.copiesStraight(image) {
+            source = try BrushRaster.copy(image).makeImage() ?? image
+        } else {
+            source = layer.asset?.image
+        }
         let scaleX = hypot(pixelToDocument.a, pixelToDocument.b)
         let scaleY = hypot(pixelToDocument.c, pixelToDocument.d)
         let square = abs(pixelToDocument.b) < 1e-9 && abs(pixelToDocument.c) < 1e-9

@@ -190,7 +190,7 @@ import Testing
             #expect(session.activeLayer?.adjustment?.curves == settings.curves)
             await session.commitFilter()
         case .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
-             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
+             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen, .reduceNoise:
             #expect(session.filterEdit?.kind == kind.filterKind)
             var settings = try #require(session.filterEdit).settings
             switch kind {
@@ -208,6 +208,7 @@ import Testing
             case .tonalContrast: settings.tonalAmount = 80; settings.tonalRadius = 30
             case .lensEffects: settings.lens.effect = .bokeh; settings.lens.bokehShape = .hexagon
             case .sharpen: settings.sharpenAmount = 150; settings.sharpenRadius = 2.5
+            case .reduceNoise: settings.reduceNoiseLuminance = 80; settings.reduceNoiseColor = 20
             default: settings.grain.amount = 70
             }
             session.updateFilter(settings, preview: true)
@@ -227,6 +228,7 @@ import Testing
             if kind == .tonalContrast { #expect(live.filterLayer.tonal?.amount == 80 && live.filterLayer.tonal?.radius == 30) }
             if kind == .lensEffects { #expect(live.filterLayer.lens?.effect == .bokeh && live.filterLayer.lens?.bokehShape == .hexagon) }
             if kind == .sharpen { #expect(live.filterLayer.sharpen?.amount == 150 && live.filterLayer.sharpen?.radius == 2.5) }
+            if kind == .reduceNoise { #expect(live.filterLayer.reduceNoise?.strength == 80 && live.filterLayer.reduceNoise?.color == 20) }
             await session.commitFilter()
         case .hsv:
             var settings = try #require(session.hueSaturation).settings
@@ -265,13 +267,14 @@ import Testing
                     && reopened.monochromatic == saved.resolvedNoiseMonochromatic)
             session.updateFilter(FilterSettings(), preview: true)
             session.cancelFilter()
-        case .vignette, .lensEffects, .tonalContrast, .sharpen:
+        case .vignette, .lensEffects, .tonalContrast, .sharpen, .reduceNoise:
             // Their settings reopen in the filter's panel as they were saved.
             let reopened = try #require(session.filterEdit).settings
             switch kind {
             case .vignette: #expect(VignetteLayerSettings(reopened) == saved.filterLayer.vignette)
             case .tonalContrast: #expect(TonalLayerSettings(reopened) == saved.filterLayer.tonal)
             case .sharpen: #expect(SharpenLayerSettings(reopened) == saved.filterLayer.sharpen)
+            case .reduceNoise: #expect(ReduceNoiseLayerSettings(reopened) == saved.filterLayer.reduceNoise)
             default: #expect(reopened.lens.normalized == saved.filterLayer.lens)
             }
             session.updateFilter(FilterSettings(), preview: true)

@@ -310,7 +310,7 @@ struct TransformOverlayGeometry: Equatable {
 
     /// Marching ants: a white line under an animated black dash.
     private func drawSelection(in context: CGContext, deviceScale: CGFloat) {
-        guard let selection = session.displayedSelection, !selection.isEmpty, var transform = documentToView,
+        guard session.showsSelectionEdges, let selection = session.displayedSelection, !selection.isEmpty, var transform = documentToView,
               let outline = antsOutline(for: selection.path, deviceScale: deviceScale),
               let path = outline.copy(using: &transform) else { return }
         context.saveGState()

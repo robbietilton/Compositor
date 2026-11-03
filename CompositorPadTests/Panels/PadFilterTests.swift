@@ -416,7 +416,7 @@ import UIKit
     @Test func everyAdjustmentKindIsOffered() async throws {
         let (window, controller, _) = try await shownWindow()
         defer { window.isHidden = true }
-        let withoutEditor: [AdjustmentKind] = [.progressiveBlur, .sharpen, .rgbSplit, .lensEffects]
+        let withoutEditor: [AdjustmentKind] = [.progressiveBlur, .sharpen, .reduceNoise, .rgbSplit, .lensEffects]
         for kind in AdjustmentKind.allCases {
             let new = UICommand(title: kind.rawValue, action: #selector(EditorWindowController.newAdjustmentLayer(_:)),
                                 propertyList: kind.rawValue)

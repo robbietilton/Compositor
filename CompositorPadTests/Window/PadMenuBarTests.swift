@@ -152,7 +152,7 @@ import UIKit
         #expect(elements(filter).first?.title == "Last Filter")
         // In the Mac's groups: those that can also be adjustment layers, in that menu's order, then the rest.
         #expect(filter.children.map { item in if case .menu(let group) = item { group.commands.map(\.title) } else { [] } }
-                == [[], ["Gaussian Blur…", "Motion Blur…", "Progressive Blur…", "Sharpen…", "Add Noise…", "Vignette…",
+                == [[], ["Gaussian Blur…", "Motion Blur…", "Progressive Blur…", "Sharpen…", "Reduce Noise…", "Add Noise…", "Vignette…",
                          "Bloom / Glow…", "RGB Split…", "Lens Effects…", "Tonal Contrast…"],
                     ["Dither…", "Scanlines…", "Volumetric Light…", "Rim Light…", "Lens Correction…", "Camera Raw Filter…",
                      "Remove Background…"]])

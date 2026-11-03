@@ -1,23 +1,36 @@
 import AppKit
 import SwiftUI
 
+private extension NSRect {
+    var area: CGFloat { isNull ? 0 : width * height }
+}
+
 /// Where a panel opens the first time (or each time, for docked styles).
 enum FloatingPanelPlacement: Sendable {
-    /// Centered on the canvas, or the last position the user left the panel.
+    /// Straddling the canvas's right edge, where the layers panel begins, centered on the canvas top to bottom, or the
+    /// last position the user left the panel.
     case automatic
     /// Full height of the main document window, flush against its right edge.
     case dockedToMainWindowRight
 }
 
-/// A movable, non-modal panel for tool dialogs: it never dims the editor, opens centered on
-/// the canvas the first time, and reopens wherever it was last left (for the app session).
+/// A movable, non-modal panel for tool dialogs: it never dims the editor, opens over the canvas's right edge the
+/// first time, so the picture's middle stays in view, and reopens wherever it was last left (for the app session).
 /// The close button reports through `onClose` so callers can treat it as Cancel.
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
-    /// Top-left corners (screen coordinates) per panel, so a panel reopens where it was left.
-    private static var positions: [String: NSPoint] = [:]
+    /// Where a panel was left, in screen coordinates: its top corner on the side it was moved toward, so a wider
+    /// panel opening there grows away from that side of the screen rather than off it.
+    private struct Position {
+        let corner: NSPoint
+        let right: Bool
+    }
+    /// Per panel, or per group of panels that share one (`sharing`), so a panel reopens where it was left.
+    private static var positions: [String: Position] = [:]
     let identifier: NSUserInterfaceItemIdentifier
     private let name: String
+    /// The key its position is remembered under: its own name, or a group's.
+    private let positionKey: String
     var onClose: (() -> Void)?
     private var panel: NSPanel?
     private var dismissing = false
@@ -27,8 +40,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// after the panel itself has become key.
     private weak var dockedWindow: NSWindow?
 
-    init(name: String) {
+    /// Panels given the same `sharing` open where any of them was last left: the edit dialogs, used one after another,
+    /// all go where the person moved the last one.
+    init(name: String, sharing: String? = nil) {
         self.name = name
+        positionKey = sharing ?? name
         identifier = NSUserInterfaceItemIdentifier(name)
     }
 
@@ -59,11 +75,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             if size.width > 0, size.height > 0 { panel.setContentSize(size) }
             if wasVisible {
                 panel.setFrameTopLeftPoint(topLeft) // Content changes must not shift the panel.
-            } else if let saved = Self.positions[name] {
-                panel.setFrameTopLeftPoint(saved)
-            } else if let center = (NSApp.mainWindow ?? NSApp.keyWindow).flatMap(Self.canvasCenter) {
+            } else if let saved = Self.positions[positionKey] {
                 let size = panel.frame.size
-                panel.setFrameOrigin(NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2))
+                panel.setFrameOrigin(Self.onScreen(NSRect(x: saved.right ? saved.corner.x - size.width : saved.corner.x,
+                                                          y: saved.corner.y - size.height, width: size.width, height: size.height)))
+            } else if let canvas = documentWindow().flatMap(Self.canvasRect) {
+                let size = panel.frame.size
+                panel.setFrameOrigin(Self.onScreen(NSRect(x: canvas.maxX - size.width / 2, y: canvas.midY - size.height / 2,
+                                                          width: size.width, height: size.height)))
             } else {
                 panel.center()
             }
@@ -99,20 +118,29 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// Gaussian Blur, and every other filter that shares this panel, on that right edge.
     private func remember(_ panel: NSWindow) {
         guard placement != .dockedToMainWindowRight else { return }
-        Self.positions[name] = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        let frame = panel.frame
+        let right = frame.midX > (panel.screen ?? NSScreen.main)?.visibleFrame.midX ?? frame.midX
+        Self.positions[positionKey] = Position(corner: NSPoint(x: right ? frame.maxX : frame.minX, y: frame.maxY), right: right)
     }
 
-    /// Screen-space center of the editor's canvas area, falling back to the window's.
-    static func canvasCenter(in window: NSWindow) -> NSPoint? {
+    /// `frame`'s origin moved as little as needed for it to sit wholly on the screen it's mostly on.
+    private static func onScreen(_ frame: NSRect) -> NSPoint {
+        let screen = NSScreen.screens.max { $0.visibleFrame.intersection(frame).area < $1.visibleFrame.intersection(frame).area }
+        guard let visible = screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return frame.origin }
+        return NSPoint(x: min(max(frame.minX, visible.minX), visible.maxX - frame.width),
+                       y: min(max(frame.minY, visible.minY), visible.maxY - frame.height))
+    }
+
+    /// Screen-space frame of the editor's canvas area, falling back to the window's.
+    static func canvasRect(in window: NSWindow) -> NSRect? {
         func find(_ view: NSView) -> CanvasView? {
             if let canvas = view as? CanvasView { return canvas }
             for child in view.subviews { if let canvas = find(child) { return canvas } }
             return nil
         }
         guard let content = window.contentView else { return nil }
-        guard let canvas = find(content) else { return NSPoint(x: window.frame.midX, y: window.frame.midY) }
-        let rect = window.convertToScreen(canvas.convert(canvas.bounds, to: nil))
-        return NSPoint(x: rect.midX, y: rect.midY)
+        guard let canvas = find(content) else { return window.frame }
+        return window.convertToScreen(canvas.convert(canvas.bounds, to: nil))
     }
 
     func windowDidMove(_ notification: Notification) {

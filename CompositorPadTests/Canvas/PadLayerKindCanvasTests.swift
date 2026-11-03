@@ -137,7 +137,7 @@ enum PadGIFFixture {
     /// the layers drawn. The ones worked out in floats on the GPU and in 8 bits for the export come within a few
     /// levels; Lens Effects, which the Mac shows exactly once the canvas settles, the iPad shows from its quick working,
     /// close to it.
-    @Test(arguments: [AdjustmentKind.vignette, .tonalContrast, .sharpen, .bloomGlow, .progressiveBlur, .rgbSplit, .lensEffects])
+    @Test(arguments: [AdjustmentKind.vignette, .tonalContrast, .sharpen, .reduceNoise, .bloomGlow, .progressiveBlur, .rgbSplit, .lensEffects])
     func aFilterLayerShowsAsItExports(kind: AdjustmentKind) throws {
         let session = session(width: 120, height: 80)
         // A picture on the left two thirds: a ramp, with a few bright spots for the lens to catch.
@@ -165,6 +165,10 @@ enum PadGIFFixture {
             adjustment.filterLayer.sharpen = SharpenLayerSettings()
             adjustment.filterLayer.sharpen?.amount = 200
             adjustment.filterLayer.sharpen?.radius = 2
+        case .reduceNoise:
+            adjustment.filterLayer.reduceNoise = ReduceNoiseLayerSettings()
+            adjustment.filterLayer.reduceNoise?.strength = 100
+            adjustment.filterLayer.reduceNoise?.color = 100
         case .lensEffects:
             adjustment.filterLayer.lens = LensEffectSettings()
             adjustment.filterLayer.lens?.effect = .prism
