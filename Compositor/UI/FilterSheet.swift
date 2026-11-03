@@ -181,6 +181,13 @@ struct FilterSheet: View {
                     .help("How strongly edges and fine detail are brought out")
                 control("Radius", \.sharpenRadius, range: 0.1...20, unit: "px", decimals: 1, logarithmic: true)
                     .help("How fine the detail it sharpens: small for crisp texture, larger for a punchier look")
+            case .reduceNoise:
+                control("Strength", \.reduceNoiseLuminance, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much grain is smoothed from the picture's brightness")
+                control("Preserve Details", \.reduceNoiseDetail, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much fine texture and edges are kept while the grain is smoothed")
+                control("Color Noise", \.reduceNoiseColor, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much colored speckle is smoothed into the colors around it")
             case .bloomGlow:
                 control("Amount", \.bloomAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Radius", \.bloomRadius, range: 1...150, unit: "px", decimals: 0, logarithmic: true)

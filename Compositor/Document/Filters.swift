@@ -9,6 +9,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case motionBlur = "Motion Blur"
     case progressiveBlur = "Progressive Blur"
     case sharpen = "Sharpen"
+    case reduceNoise = "Reduce Noise"
     case addNoise = "Add Noise"
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
@@ -40,7 +41,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     }
     /// Filters whose output channels each depend on all three input channels (Camera Raw's color, and the ones that work
     /// from brightness), which a 16-bit layer runs the slower, channel-by-channel way (`DeepLayer.run`).
-    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines }
+    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines || self == .reduceNoise }
     /// For the color adjustments whose channels mix, their color lookup, to apply to a 16-bit layer
     /// (`LayerAdjustment.sixteenBitLookup`); nil for the rest.
     func sixteenBitLookup(_ settings: FilterSettings) -> (cube: Data, dimension: Int)? {
@@ -109,6 +110,11 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     /// Sharpen: how much of the detail to add back, 0–300%, and how fine it is, 0.1–20 layer pixels.
     var sharpenAmount: Double = 100
     var sharpenRadius: Double = 1
+    /// Reduce Noise, as Camera Raw's noise reduction: how much grain is smoothed from the brightness, how much fine
+    /// texture is kept from it, and how much colored speckle is smoothed, each 0–100.
+    var reduceNoiseLuminance: Double = 50
+    var reduceNoiseDetail: Double = 50
+    var reduceNoiseColor: Double = 50
     /// Tonal Contrast: one local-detail radius and separate tonal strengths.
     var tonalAmount: Double = 50
     var tonalRadius: Double = 16
@@ -170,6 +176,9 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.bloomAmount = clamp(bloomAmount, 0...100, 40)
         result.sharpenAmount = clamp(sharpenAmount, 0...300, 100)
         result.sharpenRadius = clamp(sharpenRadius, 0.1...20, 1)
+        result.reduceNoiseLuminance = clamp(reduceNoiseLuminance, 0...100, 50)
+        result.reduceNoiseDetail = clamp(reduceNoiseDetail, 0...100, 50)
+        result.reduceNoiseColor = clamp(reduceNoiseColor, 0...100, 50)
         result.bloomRadius = clamp(bloomRadius, 1...150, 24)
         result.tonalAmount = clamp(tonalAmount, 0...100, 50)
         result.tonalRadius = clamp(tonalRadius, 1...100, 16)
@@ -411,6 +420,16 @@ nonisolated enum PixelFilter {
                 kCIInputIntensityKey: settings.sharpenAmount / 100,
             ])
             image = try render(sharpened.cropped(to: extent), job: job)
+        case .reduceNoise:
+            // Camera Raw's noise reduction on its own, its contrast and color smoothness at their defaults.
+            let context = try BrushRaster.context(width: width, height: height, mask: false)
+            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
+            guard let data = context.data else { throw ExportError.render }
+            adjust_camera_raw_detail(data.assumingMemoryBound(to: UInt8.self), width, height, context.bytesPerRow, 0, 0, 0, 0,
+                                     settings.reduceNoiseLuminance, settings.reduceNoiseDetail, 0, settings.reduceNoiseColor, 50, 50,
+                                     job.scale)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
         case .bloomGlow:
             let bloomed = edges.applyingFilter("CIBloom", parameters: [
                 kCIInputRadiusKey: settings.bloomRadius * job.scale,
@@ -1033,6 +1052,7 @@ extension EditorSession {
             || (edit.kind == .vignette && edit.settings.vignetteAmount == 0)
             || (edit.kind == .bloomGlow && edit.settings.bloomAmount == 0)
             || (edit.kind == .sharpen && edit.settings.sharpenAmount == 0)
+            || (edit.kind == .reduceNoise && edit.settings.reduceNoiseLuminance == 0 && edit.settings.reduceNoiseColor == 0)
             || (edit.kind == .lensEffects && edit.settings.lens.isIdentity)
             || (edit.kind == .rimLight && edit.settings.rimLight.isIdentity)
             || (edit.kind == .volumetricLight && edit.settings.volumetric.isIdentity)
