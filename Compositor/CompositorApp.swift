@@ -352,9 +352,8 @@ struct CompositorApp: App {
                         // ⌃⌘F, as in Photoshop; ⌘F is the command palette.
                         .configuredKeyboardShortcut("f", modifiers: [.command, .control]).disabled(!session.canRepeatLastFilter)
                     Divider()
-                    // Those that can also be adjustment layers, in that menu's order, then the rest. Reduce Noise sits with
-                    // them, beside Sharpen, its pair.
-                    let layered = AdjustmentKind.filters.compactMap(\.filterKind).flatMap { $0 == .sharpen ? [$0, .reduceNoise] : [$0] }
+                    // Those that can also be adjustment layers, in that menu's order, then the rest.
+                    let layered = AdjustmentKind.filters.compactMap(\.filterKind)
                     let others = FilterKind.allCases.filter { $0 != .contentAwareFill && !$0.isImageAdjustment && !layered.contains($0) }
                     ForEach(layered, id: \.self) { filterMenuItem($0) }
                     Divider()

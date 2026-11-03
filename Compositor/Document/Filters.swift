@@ -330,6 +330,15 @@ nonisolated enum PixelFilter {
         return image
     }
 
+    /// Reduce Noise on 8-bit premultiplied RGBA, in place: Camera Raw's noise reduction on its own, its contrast and color
+    /// smoothness at their defaults. The filter, and a Reduce Noise layer on the canvas (`GPUReduceNoise`).
+    static func reduceNoise(_ pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, bytesPerRow: Int, settings: FilterSettings,
+                            scale: CGFloat) {
+        _ = MetalNonlocalMeans.installed
+        adjust_camera_raw_detail(pixels, width, height, bytesPerRow, 0, 0, 0, 0, settings.reduceNoiseLuminance, settings.reduceNoiseDetail,
+                                 0, settings.reduceNoiseColor, 50, 50, scale)
+    }
+
     static func run(_ job: FilterJob) throws -> CGImage {
         let settings = job.settings.normalized
         let width = job.image.width, height = job.image.height
@@ -421,14 +430,11 @@ nonisolated enum PixelFilter {
             ])
             image = try render(sharpened.cropped(to: extent), job: job)
         case .reduceNoise:
-            // Camera Raw's noise reduction on its own, its contrast and color smoothness at their defaults.
-            _ = MetalNonlocalMeans.installed
             let context = try BrushRaster.context(width: width, height: height, mask: false)
             BrushRaster.draw(job.image, in: extent, mask: false, context: context)
             guard let data = context.data else { throw ExportError.render }
-            adjust_camera_raw_detail(data.assumingMemoryBound(to: UInt8.self), width, height, context.bytesPerRow, 0, 0, 0, 0,
-                                     settings.reduceNoiseLuminance, settings.reduceNoiseDetail, 0, settings.reduceNoiseColor, 50, 50,
-                                     job.scale)
+            reduceNoise(data.assumingMemoryBound(to: UInt8.self), width: width, height: height, bytesPerRow: context.bytesPerRow,
+                        settings: settings, scale: job.scale)
             guard let result = context.makeImage() else { throw ExportError.render }
             image = result
         case .bloomGlow:

@@ -633,6 +633,8 @@ nonisolated enum GPUAdjustment {
             return image.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [
                 kCIInputRadiusKey: sharpen.radius * scale, kCIInputIntensityKey: sharpen.amount / 100,
             ]).cropped(to: image.extent)
+        case .reduceNoise:
+            return GPUReduceNoise.apply(to: image, adjustment.filterLayer.resolvedReduceNoise, scale: scale)
         case .tonalContrast:
             let tonal = adjustment.filterLayer.resolvedTonal
             return MetalFinishing.tonalContrast(image, radius: tonal.radius * scale, tonal)

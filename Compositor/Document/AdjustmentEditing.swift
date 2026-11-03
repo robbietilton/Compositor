@@ -41,7 +41,7 @@ extension EditorSession {
                 edit.settings = original.resolvedHSV
                 hueSaturation = edit
             case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
-                 .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
+                 .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen, .reduceNoise:
                 var settings = original.filterLayer.applied(to: FilterSettings())
                 settings.curves = original.curves
                 settings.exposure = original.exposure
@@ -78,7 +78,7 @@ extension EditorSession {
             guard let hueSaturation else { return nil }
             value.hsvSettings = hueSaturation.settings
         case .curves, .exposure, .gradientMap, .grain, .blackWhite, .colorBalance, .gaussianBlur, .motionBlur, .addNoise,
-             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen:
+             .progressiveBlur, .bloomGlow, .rgbSplit, .vignette, .lensEffects, .tonalContrast, .sharpen, .reduceNoise:
             guard let filterEdit else { return nil }
             switch value.kind {
             case .exposure: value.exposure = filterEdit.settings.exposure
@@ -99,6 +99,7 @@ extension EditorSession {
             case .tonalContrast: value.filterLayer.tonal = TonalLayerSettings(filterEdit.settings)
             case .lensEffects: value.filterLayer.lens = filterEdit.settings.lens.normalized
             case .sharpen: value.filterLayer.sharpen = SharpenLayerSettings(filterEdit.settings)
+            case .reduceNoise: value.filterLayer.reduceNoise = ReduceNoiseLayerSettings(filterEdit.settings)
             default: value.curves = filterEdit.settings.curves
             }
         }

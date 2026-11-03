@@ -36,6 +36,12 @@ final class CanvasView: NSView {
     /// What each Lens Effects layer was made from on the last frame, and the one waiting to be made exactly.
     private var lensLatest: [UUID: [String]] = [:]
     private var lensWaiting: [UUID: [String]] = [:]
+    /// A Reduce Noise layer's picture: what's under it, smoothed at the document's own pixels, with what it was made from.
+    /// Placed each frame while that still matches, rather than smoothed again for every pan and zoom. Its key leaves out
+    /// the frame, which only places it.
+    private var noiseExact: [UUID: (key: [String], image: CGImage)] = [:]
+    private var noiseLatest: [UUID: [String]] = [:]
+    private var noiseWaiting: [UUID: [String]] = [:]
     /// The effects rendered for the text being edited, and what they were rendered from.
     private var draftEffects: (image: CGImage, effects: LayerEffects, transform: LayerTransform, rendered: CGImage, inset: CGFloat)?
     /// Which layer and text `draftEffects` were made for, so they can stand in once the edit is committed.
@@ -2836,6 +2842,37 @@ extension CanvasView {
         } }
     }
 
+    /// Makes `id`'s picture once the canvas has settled on `key`: what's under it composited as Copy Merged would, on
+    /// the main thread, then smoothed off it (the slow part), then a redraw to show it.
+    private func makeNoiseExact(_ id: UUID, key: [String], adjustment: LayerAdjustment) {
+        guard noiseWaiting[id] != key else { return }
+        noiseWaiting[id] = key
+        // On the run loop, so it waits while a drag or a slider keeps the canvas busy.
+        Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in MainActor.assumeIsolated {
+            guard let self, self.noiseWaiting[id] == key else { return }
+            self.noiseWaiting[id] = nil
+            guard self.noiseLatest[id] == key, var document = self.session.document,
+                  document.layers.contains(where: { $0.id == id }) else { return }
+            let underneath = Set(document.renderLayers.map(\.id).prefix { $0 != id })
+            for index in document.layers.indices where document.layers[index].isGroup != true && !underneath.contains(document.layers[index].id) {
+                document.layers[index].isVisible = false
+            }
+            let width = Int(document.size.width.rounded()), height = Int(document.size.height.rounded())
+            guard let context = try? BrushRaster.context(width: width, height: height, mask: false) else { return }
+            self.session.drawLiveComposite(document, in: context)
+            guard let below = context.makeImage() else { return }
+            Task.detached(priority: .userInitiated) {
+                guard let image = try? adjustment.apply(below) else { return }
+                await MainActor.run {
+                    guard self.noiseLatest[id] == key else { return }
+                    self.noiseExact = self.noiseExact.filter { self.noiseLatest[$0.key] != nil }
+                    self.noiseExact[id] = (key, image)
+                    self.needsDisplay = true
+                }
+            }
+        } }
+    }
+
     /// The frame the GPU would draw, `size` screen pixels across, for comparing with the Core Graphics canvas.
     func gpuFrame(size: CGSize) -> CIImage? {
         guard let renderer = GPUCanvasRenderer.shared, let document = session.document else { return nil }
@@ -3295,9 +3332,16 @@ extension CanvasView {
                 let page = CGRect(origin: .zero, size: document.size).applying(placement.mapping)
                 source = placement.renderer.keep(below.cropped(to: page)) ?? below
             }
-            guard var changed = GPUAdjustment.apply(adjustment, to: source, scale: placement.scale, mapping: placement.mapping,
-                                                    hdr: hasHDR, document: session.document?.size)
-            else { return nil }
+            var changed: CIImage
+            if folders, adjustment.kind == .reduceNoise, let exact = noiseExact[layer.id], exact.key == noiseLatest[layer.id],
+               let placed = placement.place(exact.image, transform: LayerTransform(origin: .zero, size: document.size)) {
+                changed = placed
+            } else {
+                guard let live = GPUAdjustment.apply(adjustment, to: source, scale: placement.scale, mapping: placement.mapping,
+                                                     hdr: hasHDR, document: session.document?.size)
+                else { return nil }
+                changed = live
+            }
             // In a blend mode, the adjusted colors blend with the ones under them at full coverage, and the original
             // coverage comes back after — as LiveMaskRenderer does, so soft edges aren't thickened.
             let mode = session.displayedBlendMode(for: layer)
@@ -3399,8 +3443,17 @@ extension CanvasView {
                     lensLatest[id] = key
                     if !key.contains(where: { $0.hasPrefix("transient") }), lensExact[id]?.key != key { makeLensExact(id, key: key) }
                 }
+                if adjustment.kind == .reduceNoise, !hasHDR {
+                    // What's under it and its settings, not the frame: panning and zooming keep the picture made.
+                    let key = prints.filter { !$0.hasPrefix("frame ") } + ["noise \(id) \(adjustment.filterLayer.resolvedReduceNoise) \(document.size)"]
+                    noiseLatest[id] = key
+                    if !key.contains(where: { $0.hasPrefix("transient") }), noiseExact[id]?.key != key {
+                        makeNoiseExact(id, key: key, adjustment: adjustment)
+                    }
+                }
                 prints.append(adjustmentPrint(layer, adjustment))
                 if adjustment.kind == .lensEffects { prints.append(lensExact[id]?.key == lensLatest[id] ? "exact" : "quick") }
+                if adjustment.kind == .reduceNoise { prints.append(noiseExact[id]?.key == noiseLatest[id] ? "exact" : "live") }
                 let steady = !prints.contains { $0.hasPrefix("transient") }
                 if cachesAdjustments, steady, let entry = adjustmentCache[id], entry.key == prints {
                     result = entry.image

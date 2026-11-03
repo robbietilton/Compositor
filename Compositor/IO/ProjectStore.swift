@@ -17,7 +17,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 20
+    static let current = 21
     /// Every version `load` accepts: each one a release has written (1 through `current`), and 27 from the
     /// GIF branch's own builds. Leaving out 15 and 16 once locked out projects saved by 1.5.4 and 1.5.5.
     /// The package-header and manifest checks both read this, so they can't drift apart when `current` is bumped.
@@ -409,6 +409,10 @@ actor ProjectStore {
                 // Sharpen layers arrived in version 19.
                 if adjustment.kind == .sharpen || filterLayer?.sharpen != nil {
                     guard manifest.version >= 19 else { throw ProjectError.invalid }
+                }
+                // Reduce Noise layers arrived in version 21.
+                if adjustment.kind == .reduceNoise || filterLayer?.reduceNoise != nil {
+                    guard manifest.version >= 21 else { throw ProjectError.invalid }
                 }
             }
             // Layer masks arrived in version 4, folder masks in version 6.
