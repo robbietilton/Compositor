@@ -1,3 +1,4 @@
+import Accelerate
 import CoreImage
 
 /// Reduce Noise layers on the GPU canvas: the filter's own work (`PixelFilter.reduceNoise`, its brightness smoothed on
@@ -14,13 +15,14 @@ nonisolated enum GPUReduceNoise {
     }
 }
 
-/// Works on the CPU's copy of its region, as the C code it runs needs.
+/// Works on the CPU's copy of its region, as the C code it runs needs. In BGRA: macOS 26 hands a kernel no other 8-bit
+/// layout (its RGBA one is refused), so red and blue are swapped to the C code's order and back.
 final class ReduceNoiseKernel: CIImageProcessorKernel {
     /// How far the search, its patches and the color smoothing reach, in the canvas's pixels.
     static let margin: CGFloat = 24
 
-    override class var outputFormat: CIFormat { .RGBA8 }
-    override class func formatForInput(at input: Int32) -> CIFormat { .RGBA8 }
+    override class var outputFormat: CIFormat { .BGRA8 }
+    override class func formatForInput(at input: Int32) -> CIFormat { .BGRA8 }
     override class func roi(forInput input: Int32, arguments: [String: Any]?, outputRect: CGRect) -> CGRect {
         outputRect.insetBy(dx: -margin, dy: -margin)
     }
@@ -35,14 +37,20 @@ final class ReduceNoiseKernel: CIImageProcessorKernel {
         settings.reduceNoiseDetail = arguments?["details"] as? Double ?? 50
         settings.reduceNoiseColor = arguments?["color"] as? Double ?? 50
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
-        let source = input.baseAddress.assumingMemoryBound(to: UInt8.self)
-        for row in 0..<height {
-            pixels.withUnsafeMutableBufferPointer {
-                ($0.baseAddress! + row * bytesPerRow).update(from: source + row * input.bytesPerRow, count: bytesPerRow)
+        // Blue, green, red, alpha to red, green, blue, alpha; the same map swaps them back.
+        let swap: [UInt8] = [2, 1, 0, 3]
+        try pixels.withUnsafeMutableBufferPointer { buffer in
+            var from = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: input.baseAddress), height: vImagePixelCount(height), width: vImagePixelCount(width),
+                                     rowBytes: input.bytesPerRow)
+            var into = vImage_Buffer(data: buffer.baseAddress!, height: vImagePixelCount(height), width: vImagePixelCount(width),
+                                     rowBytes: bytesPerRow)
+            guard vImagePermuteChannels_ARGB8888(&from, &into, swap, vImage_Flags(kvImageNoFlags)) == kvImageNoError else {
+                throw ExportError.render
             }
-        }
-        pixels.withUnsafeMutableBufferPointer {
-            PixelFilter.reduceNoise($0.baseAddress!, width: width, height: height, bytesPerRow: bytesPerRow, settings: settings, scale: scale)
+            PixelFilter.reduceNoise(buffer.baseAddress!, width: width, height: height, bytesPerRow: bytesPerRow, settings: settings, scale: scale)
+            guard vImagePermuteChannels_ARGB8888(&into, &into, swap, vImage_Flags(kvImageNoFlags)) == kvImageNoError else {
+                throw ExportError.render
+            }
         }
         // Both regions' rows run top-down: the output's first row is as far into the input as its top is below the input's.
         let rows = Int(output.region.height), columns = Int(output.region.width)
