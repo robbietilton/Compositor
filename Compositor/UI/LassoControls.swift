@@ -124,14 +124,16 @@ struct LassoControls: View {
     /// Expand, Contract and Feather, sharing one pixel amount (1–500, default 5); all disabled without a selection.
     private var modifyControls: some View {
         HStack(spacing: 5) {
-            ForEach(EditorSession.SelectionAmountOperation.allCases, id: \.self) { operation in
-                Button {
-                    session.modifySelection(operation, by: session.selectionModifyAmount)
-                } label: {
-                    SelectionModifyIcon(operation: operation).frame(width: 14, height: 14)
+            ToolHeaderPill {
+                ForEach(EditorSession.SelectionAmountOperation.allCases, id: \.self) { operation in
+                    Button {
+                        session.modifySelection(operation, by: session.selectionModifyAmount)
+                    } label: {
+                        SelectionModifyIcon(operation: operation).frame(width: 14, height: 14)
+                    }
+                    .accessibilityLabel(operation.rawValue)
+                    .help("\(operation.rawValue) the selection by this many pixels")
                 }
-                .accessibilityLabel(operation.rawValue)
-                .help("\(operation.rawValue) the selection by this many pixels")
             }
             TextField("Amount", value: Binding(get: { session.selectionModifyAmount },
                                                set: { session.selectionModifyAmount = min(500, max(1, $0)) }),
@@ -150,7 +152,6 @@ struct LassoControls: View {
 /// one with arrows pointing in, and Feather a solid square whose edge fades away.
 struct SelectionModifyIcon: View {
     let operation: EditorSession.SelectionAmountOperation
-    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Canvas { context, size in
@@ -195,8 +196,6 @@ struct SelectionModifyIcon: View {
                 outer.stroke(Path(roundedRect: square(1.4), cornerRadius: 3.4 * unit), with: .foreground, lineWidth: 1.2 * unit)
             }
         }
-        // A Canvas's foreground doesn't dim with its disabled button the way a label's text does.
-        .opacity(isEnabled ? 1 : 0.4)
         .accessibilityHidden(true)
     }
 }
@@ -254,7 +253,7 @@ struct SelectionAmountSheet: View {
                                 range: 1...maximum)
                 Slider(value: Binding(get: { Double(amount ?? 1) },
                                       set: { input = String(Int($0.rounded())) }),
-                       in: 1...Double(maximum), step: 1)
+                       in: 1...Double(maximum))
                 TextField("Amount", text: $input)
                     .frame(width: 56).textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing).focused($focused)
