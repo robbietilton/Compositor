@@ -466,7 +466,7 @@ extension EditorSession {
     /// Expand / Contract need a non-empty selection to work on.
     var canModifySelection: Bool { selection?.isEmpty == false && canEditSelection && lassoDraft == nil }
 
-    enum SelectionAmountOperation: String {
+    enum SelectionAmountOperation: String, CaseIterable {
         case expand = "Expand", contract = "Contract", feather = "Feather"
     }
 
@@ -480,14 +480,19 @@ extension EditorSession {
         guard let operation = selectionAmountOperation,
               (1...(operation == .feather ? 250 : 500)).contains(amount) else { return }
         selectionAmountOperation = nil
+        selectionModifyAmount = amount
+        modifySelection(operation, by: amount)
+    }
+
+    func modifySelection(_ operation: SelectionAmountOperation, by amount: Int) {
         switch operation {
-        case .expand: selectionExpandAmount = amount; expandSelection(by: amount)
-        case .contract: selectionContractAmount = amount; contractSelection(by: amount)
-        case .feather: selectionFeatherAmount = amount; featherSelection(by: amount)
+        case .expand: expandSelection(by: amount)
+        case .contract: contractSelection(by: amount)
+        case .feather: featherSelection(by: amount)
         }
     }
 
-    /// Grows the outline by `amount` pixels with rounded corners (Photoshop's Expand), clipped to the canvas.
+    /// Grows the outline by `amount` pixels, keeping its corners, clipped to the canvas.
     func expandSelection(by amount: Int) { resizeSelection(by: CGFloat(amount), name: "Expand Selection") }
 
     /// Shrinks the outline by `amount` pixels, including away from the canvas edges.
@@ -498,16 +503,16 @@ extension EditorSession {
     /// again softens further, the way Expand and Contract stack up.
     func featherSelection(by amount: Int) {
         guard canModifySelection, let current = selection, amount > 0 else { return }
-        // Two soft edges together spread a little less than their sum, as blurs do.
-        let softened = (current.feather * current.feather + CGFloat(amount) * CGFloat(amount)).squareRoot()
         setSelection(DocumentSelection(path: current.path, antialiased: current.antialiased,
-                                       feather: min(250, softened)), name: "Feather Selection")
+                                       feather: min(250, current.feather + CGFloat(amount))), name: "Feather Selection")
     }
 
     private func resizeSelection(by delta: CGFloat, name: String) {
         guard let document, let current = selection, canModifySelection, delta != 0, abs(delta) <= 500 else { return }
-        // A band `|delta|` wide on each side of the outline, added or removed.
-        let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        // A band `|delta|` wide on each side of the outline, added or removed. Its joins are mitered so corners stay
+        // sharp: a round one's curve shrinks to nothing when contracted by the same amount, and path subtraction then
+        // loses a corner of the outline. The limit bevels the spikes that very acute corners would grow.
+        let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .butt, lineJoin: .miter, miterLimit: 3)
         let result = delta > 0
             ? current.path.union(band, using: .winding)
                 .intersection(CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil), using: .winding)
