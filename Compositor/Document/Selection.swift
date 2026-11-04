@@ -270,6 +270,13 @@ extension EditorSession {
         return box.isEmpty ? nil : (Int(box.width), Int(box.height))
     }
 
+    /// The current selection's feather in whole pixels, for the status bar; nil when its edge is hard or a new outline is
+    /// being drawn. The ants look the same at any feather, so this is the one place it shows.
+    var selectionFeather: Int? {
+        guard lassoDraft == nil, let selection, !selection.isEmpty, selection.feather > 0 else { return nil }
+        return max(1, Int(selection.feather.rounded()))
+    }
+
     /// Off hides the marching ants of the current selection only.
     var showsSelectionEdges: Bool {
         get { selection == nil || hiddenSelectionEdges != selection }
