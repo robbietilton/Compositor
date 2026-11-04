@@ -385,7 +385,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // While an adjustment's editor is open the canvas only moves and zooms: the edit holds the layers, as on the Mac.
             return
         } else if PadCanvasInput.handles(tool) {
-            guard input.began(at: point, keys: keys, tapCount: touch.tapCount) else { return }
+            guard input.began(at: point, keys: keys, tapCount: touch.tapCount, pressure: Self.pressure(of: touch)) else { return }
             activeTouch = touch
             drag = .tool
             if input.isPainting { (touchPointer, touchKeys) = (point, keys) }
@@ -402,7 +402,9 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // Apple Pencil reports up to 240 points a second; the display shows every fourth. All of them go into a
             // stroke.
             let samples = input.isPainting ? event?.coalescedTouches(for: touch) ?? [touch] : [touch]
-            for sample in samples { input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? []) }
+            for sample in samples {
+                input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? [], pressure: Self.pressure(of: sample))
+            }
         case .pan(let last):
             let point = touch.location(in: self)
             session.viewport.translate(by: CGSize(width: point.x - last.x, height: point.y - last.y))
@@ -411,6 +413,12 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             hueTargetMoved(to: touch.location(in: self), keys: event?.modifierFlags ?? [])
         }
         setNeedsRender()
+    }
+
+    /// What `touch` presses with. Its force is the first estimate UIKit gives: the engine appends sample by sample, so a
+    /// refined force, a few samples later, would mean painting over what's already down.
+    private static func pressure(of touch: UITouch) -> CGFloat? {
+        PadCanvasInput.pressure(type: touch.type, force: touch.force, maximumPossibleForce: touch.maximumPossibleForce)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {

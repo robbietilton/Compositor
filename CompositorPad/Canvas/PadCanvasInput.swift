@@ -79,14 +79,30 @@ import UIKit
         return false
     }
 
+    /// The Brush's pressure, 0–1, for a touch of `type` pressing with `force`: nil for anything but Apple Pencil, or a
+    /// Pencil that reports no force, which press fully, as the Mac's mouse does. A firm but natural stroke reaches the
+    /// full Size and Opacity. On an iPad Air (3rd generation) with the first Apple Pencil, whose maximum is 4.167, such a
+    /// stroke presses 2.0–2.9, and only pressing unnaturally hard reaches the maximum, so the full pressure is at 0.6 of
+    /// it, about 2.5: a share of the maximum the Pencil reports rather than that 2.5, as another Pencil's may differ. The
+    /// square root of that share lifts the rest: everyday writing, about 0.35, comes to over a third, and a light touch,
+    /// about 0.086, to near a fifth, where their plain shares would be a seventh and a thirtieth. The Mac has no such
+    /// step, as a tablet's driver has already normalized its pressure.
+    static func pressure(type: UITouch.TouchType, force: CGFloat, maximumPossibleForce: CGFloat) -> CGFloat? {
+        guard type == .pencil, maximumPossibleForce > 0 else { return nil }
+        return min(1, (max(0, force) / (fullPressureShare * maximumPossibleForce)).squareRoot())
+    }
+
+    /// The share of Apple Pencil's maximum force at which it presses fully.
+    static let fullPressureShare: CGFloat = 0.6
+
     private func pixel(_ point: CGPoint) -> CGPoint? {
         session.document.map { session.viewport.documentPoint(from: point, documentSize: $0.size) }
     }
 
-    /// A touch coming down at `point`, the `tapCount`th in quick succession. False when it starts nothing to follow, as
-    /// a tap with the Magic Wand.
+    /// A touch coming down at `point`, the `tapCount`th in quick succession, pressing with `pressure` if it has one to
+    /// follow. False when it starts nothing to follow, as a tap with the Magic Wand.
     @discardableResult
-    func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) -> Bool {
+    func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1, pressure: CGFloat? = nil) -> Bool {
         guard let pixel = pixel(point) else { return false }
         // Option samples a color with the Brush, Spot Healing and the Gradient, as the Eyedropper does, as on the Mac.
         if session.tool == .eyedropper || (keys.contains(.alternate) && session.tool.samplesColorWithOption && session.brushStroke == nil) {
@@ -98,10 +114,10 @@ import UIKit
         if session.tool.isBrushTool {
             // Shift paints a straight line on from where the last stroke ended, as in Photoshop.
             if keys.contains(.shift), let from = session.shiftLineStart() {
-                session.beginBrush(at: from)
-                session.continueBrush(at: pixel)
+                session.beginBrush(at: from, pressure: pressure)
+                session.continueBrush(at: pixel, pressure: pressure)
             } else {
-                session.beginBrush(at: pixel)
+                session.beginBrush(at: pixel, pressure: pressure)
             }
             drag = .paint(BrushAxisLock(start: pixel, shift: keys.contains(.shift)), last: pixel)
             return true
@@ -179,7 +195,7 @@ import UIKit
         return true
     }
 
-    func moved(to point: CGPoint, keys: UIKeyModifierFlags = []) {
+    func moved(to point: CGPoint, keys: UIKeyModifierFlags = [], pressure: CGFloat? = nil) {
         guard let drag, let pixel = pixel(point) else { return }
         lastPoint = point
         switch drag {
@@ -187,7 +203,7 @@ import UIKit
             // Shift keeps the stroke straight, horizontal or vertical, from wherever it was pressed; letting go carries
             // on freehand.
             let pixel = axis.point(for: pixel, shift: keys.contains(.shift))
-            session.continueBrush(at: pixel)
+            session.continueBrush(at: pixel, pressure: pressure)
             self.drag = .paint(axis, last: pixel)
         case .sample(let original, let byOption):
             // Option let go, the rest of the touch does nothing, as on the Mac.
@@ -285,7 +301,8 @@ import UIKit
         guard let drag else { return }
         switch drag {
         case .paint(var axis, _):
-            // With Shift held the stroke ends on its line too, not where the touch lifted.
+            // With Shift held the stroke ends on its line too, not where the touch lifted. No pressure: Apple Pencil's
+            // falls away as it lifts, which would thin the stroke's end, so it keeps the last, as on the Mac.
             let pixel = pixel(point).map { axis.point(for: $0, shift: keys.contains(.shift)) }
             if let pixel { session.continueBrush(at: pixel) }
             session.finishBrushImmediately()
