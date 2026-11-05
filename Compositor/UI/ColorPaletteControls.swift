@@ -16,18 +16,17 @@ struct ColorSwatch: View {
     }
 }
 
-/// Half black, half white: the colors that Reset goes back to.
+/// A square split into black and white, the colors that Reset goes back to.
 private struct DefaultColorsIcon: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        HStack(spacing: 0) {
-            Color.black
-            Color.white
-        }
-        .clipShape(Circle())
-        .overlay { Circle().strokeBorder(.white.opacity(0.5), lineWidth: 0.75) }
-        .opacity(isEnabled ? 1 : 0.4)
+        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        LinearGradient(stops: [.init(color: .black, location: 0.5), .init(color: .white, location: 0.5)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(.white.opacity(0.5), lineWidth: 0.75) }
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
@@ -38,7 +37,8 @@ struct ColorPaletteControls: View {
     private let swatchSize = CGSize(width: 24, height: 24)
     private let swatchOffset = CGSize(width: 12, height: 12)
     var body: some View {
-        VStack(spacing: 7) {
+        // The buttons' click areas reach well past their small icons, so the gaps here are tight to make up for it.
+        VStack(spacing: 4) {
             ZStack(alignment: .topLeading) {
                 swatch(background: true).offset(swatchOffset)
                 swatch(background: false)
@@ -47,11 +47,11 @@ struct ColorPaletteControls: View {
             }
             .compositingGroup()
             .frame(width: swatchSize.width + swatchOffset.width, height: swatchSize.height + swatchOffset.height, alignment: .topLeading)
-            HStack(spacing: 8) {
+            HStack(spacing: 2) {
                 Button { session.resetPaletteColors() } label: {
                     DefaultColorsIcon()
-                        .frame(width: 9, height: 9)
-                        .frame(width: 16, height: 14)
+                        .frame(width: 8, height: 8)
+                        .frame(width: 22, height: 20)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -60,7 +60,7 @@ struct ColorPaletteControls: View {
                 Button { session.swapPaletteColors() } label: {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 10, weight: .regular))
-                        .frame(width: 16, height: 14)
+                        .frame(width: 22, height: 20)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
