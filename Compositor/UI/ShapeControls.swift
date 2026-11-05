@@ -14,15 +14,15 @@ struct ShapeControls: View {
             }
             .pickerStyle(.segmented).labelsHidden().fixedSize()
             .help("Shift-U (or Tab) steps through Rectangle, Ellipse and Line")
-            Button { session.openColorPicker(background: false) } label: {
-                let swatch = RoundedRectangle(cornerRadius: 3, style: .continuous)
-                swatch.fill(Color(nsColor: session.foregroundColor.nsColor))
-                    .overlay { swatch.strokeBorder(.black.opacity(0.5), lineWidth: 1) }
-                    .frame(width: 36, height: 18)
+            HStack(spacing: 6) {
+                Text("Color")
+                Button { session.openColorPicker(background: false) } label: {
+                    ColorSwatch(color: Color(nsColor: session.foregroundColor.nsColor))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Fill color")
+                .help("Shapes fill with the foreground color; click to change it")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Fill color")
-            .help("Shapes fill with the foreground color; click to change it")
             if session.shapeKind == .line {
                 HStack(spacing: 6) {
                     Text("Width").scrubbable(sensitivity: 1, value: $session.shapeLineWidth, range: 1...5000)
@@ -36,7 +36,6 @@ struct ShapeControls: View {
                         .frame(width: 48).textFieldStyle(.roundedBorder)
                         .arrowSteps(value: { session.shapeLineWidth },
                                     change: { session.shapeLineWidth = min(5000, max(1, $0)) })
-                        .unitSuffix("px")
                 }
                 HStack(spacing: 6) {
                     Text("Style")
@@ -71,7 +70,6 @@ struct ShapeControls: View {
                         .frame(width: 48).textFieldStyle(.roundedBorder)
                         .arrowSteps(value: { Double(session.shapeCornerRadius) },
                                     change: { session.shapeCornerRadius = min(5000, max(0, CGFloat($0))) })
-                        .unitSuffix("px")
                 }
                 .help("Round the rectangle's corners by this many pixels; 0 keeps them square")
                 Toggle("Smooth Corners", isOn: $session.shapeSmoothing)

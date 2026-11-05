@@ -197,7 +197,7 @@ final class ColorPickerPanelController: NSObject {
     static func refocus() { FloatingPanelController.refocus(identifier) }
 }
 
-/// A dialog's color swatch, drawn as the brush's: clicking it opens the app's picker on `color`, which follows the
+/// A dialog's color swatch: clicking it opens the app's picker on `color`, which follows the
 /// working color as it moves and keeps the one chosen. `closePicker()` puts the picker away with the dialog.
 struct DialogColorSwatch: View {
     let title: String
@@ -207,12 +207,7 @@ struct DialogColorSwatch: View {
         Button {
             session.openDialogColorPicker(title: title, color: color) { color = $0 }
         } label: {
-            let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            shape.fill(color.swiftUI)
-                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1) }
-                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                .frame(width: 34, height: 18)
-                .contentShape(shape)
+            ColorSwatch(color: color.swiftUI)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)

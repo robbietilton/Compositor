@@ -154,20 +154,15 @@ struct FilterSheet: View {
             case .scanlines:
                 scanlinesControls
             case .vignette:
-                HStack(spacing: 8) {
-                    Text("Color").frame(width: 95, alignment: .leading)
+                HStack(spacing: 10) {
+                    Text("Color").frame(width: labelWidth, alignment: .leading)
+                    Spacer()
                     Button { session.openVignetteColorPicker() } label: {
-                        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        shape.fill(Color(.sRGB, red: settings.vignetteColor.red,
-                                         green: settings.vignetteColor.green, blue: settings.vignetteColor.blue))
-                            .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                            .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                            .frame(width: 24, height: 24)
-                            .contentShape(shape)
+                        ColorSwatch(color: Color(.sRGB, red: settings.vignetteColor.red,
+                                                 green: settings.vignetteColor.green, blue: settings.vignetteColor.blue))
                     }
                     .buttonStyle(.plain)
                     .help("Choose the vignette color")
-                    Spacer()
                 }
                 control("Amount", \.vignetteAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                     .help("Blend the chosen color into the edges while keeping the center unchanged")
@@ -383,12 +378,7 @@ struct FilterSheet: View {
 
     private func swatch(_ color: AdjustmentColor, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-            shape.fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
-                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                .frame(width: 24, height: 24)
-                .contentShape(shape)
+            ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -410,12 +400,7 @@ struct FilterSheet: View {
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button { session.openVolumetricLightColorPicker() } label: {
-                let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                shape.fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
-                    .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                    .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                    .frame(width: 24, height: 24)
-                    .contentShape(shape)
+                ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
             }
             .buttonStyle(.plain)
             .help("Choose the light's color")
@@ -449,12 +434,7 @@ struct FilterSheet: View {
                 Spacer()
                 let color = light.color
                 Button { session.openRimLightColorPicker(index: index) } label: {
-                    let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    shape.fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
-                        .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                        .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                        .frame(width: 24, height: 24)
-                        .contentShape(shape)
+                    ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
                 }
                 .buttonStyle(.plain)
                 .help("Choose this light's color")
@@ -638,15 +618,9 @@ struct GradientMapControls: View {
     private func color(_ value: AdjustmentColor) -> Color { Color(.sRGB, red: value.red, green: value.green, blue: value.blue) }
 
     private func swatch(_ title: String, _ value: AdjustmentColor, action: @escaping () -> Void) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return HStack(spacing: 8) {
             Button(action: action) {
-                shape
-                    .fill(color(value))
-                    .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                    .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                    .frame(width: 24, height: 24)
-                    .contentShape(shape)
+                ColorSwatch(color: color(value))
             }
             .buttonStyle(.plain)
             .help("Choose the \(title.lowercased()) color")

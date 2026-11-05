@@ -64,14 +64,6 @@ extension View {
         }
     }
 
-    func unitSuffix(_ unit: String, scrubValue: Binding<Int>, sensitivity: Double,
-                    range: ClosedRange<Int>) -> some View {
-        HStack(spacing: 2) {
-            self
-            Text(unit).scrubbable(sensitivity: sensitivity, value: scrubValue, range: range)
-        }
-    }
-
     func toolHeaderBar() -> some View {
         font(ToolHeaderStyle.controlFont)
             .controlSize(.regular)

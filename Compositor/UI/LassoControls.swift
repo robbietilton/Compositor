@@ -112,9 +112,8 @@ struct LassoControls: View {
                     .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
                     .arrowSteps(value: { Double(session.objectSelectionSettings.edgeOffset) },
                                 change: { session.objectSelectionSettings.edgeOffset = Int(min(10, max(-10, $0.rounded()))) })
-                    .unitSuffix("px")
             }
-            // The bar squeezes text before controls, so without this the label and unit collapse to
+            // The bar squeezes text before controls, so without this the label collapses to
             // nothing the moment a selection adds its own buttons, leaving an unlabelled number box.
             .fixedSize()
             .help("Positive values tighten the detected mask inward; negative values expand it outward")
@@ -123,7 +122,14 @@ struct LassoControls: View {
 
     /// Expand, Contract and Feather, sharing one pixel amount (1–500, default 5); all disabled without a selection.
     private var modifyControls: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
+            Text("Size").scrubbable(sensitivity: 1, value: $session.selectionModifyAmount, range: 1...500)
+            TextField("Size", value: Binding(get: { session.selectionModifyAmount },
+                                             set: { session.selectionModifyAmount = min(500, max(1, $0)) }),
+                      format: .number)
+                .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
+                .arrowSteps(value: { Double(session.selectionModifyAmount) },
+                            change: { session.selectionModifyAmount = Int(min(500, max(1, $0.rounded()))) })
             ToolHeaderPill {
                 ForEach(EditorSession.SelectionAmountOperation.allCases, id: \.self) { operation in
                     Button {
@@ -135,15 +141,8 @@ struct LassoControls: View {
                     .help("\(operation.rawValue) the selection by this many pixels")
                 }
             }
-            TextField("Amount", value: Binding(get: { session.selectionModifyAmount },
-                                               set: { session.selectionModifyAmount = min(500, max(1, $0)) }),
-                      format: .number)
-                .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
-                .arrowSteps(value: { Double(session.selectionModifyAmount) },
-                            change: { session.selectionModifyAmount = Int(min(500, max(1, $0.rounded()))) })
-                .unitSuffix("px", scrubValue: $session.selectionModifyAmount, sensitivity: 1, range: 1...500)
-                .help("How many pixels to expand, contract or feather the selection by")
         }
+        .help("How many pixels to expand, contract or feather the selection by")
         .disabled(!session.canModifySelection)
     }
 }
