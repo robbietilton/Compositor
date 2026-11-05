@@ -16,6 +16,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     var pencilSeen: (Bool) -> Void = { _ in }
     /// The modifier keys a touch or the pointer came with, which the window holds.
     var keysSeen: (UIKeyModifierFlags) -> Void = { _ in }
+    /// The pressure under the stroke going on, handed on once a frame for the Brush bar to show.
+    let strokePressure = StrokePressure()
     private let surface = MetalCanvasView(frame: .zero)
     private(set) lazy var overlayView = PadOverlayView(session: session)
     /// What touches do with the tools, all but the Hand, and with Clone Stamp's source.
@@ -178,6 +180,8 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// Draws the frame, and asks for the next one when anything it read from the session changes. The display link
     /// calls it; tests call it to draw a frame without one.
     func render() {
+        // Once a frame, as the stroke is drawn: none while there's no stroke, and none again once it lifts.
+        strokePressure.value = session.brushStroke == nil ? nil : session.brushPressure
         guard let renderer = GPUCanvasRenderer.shared else { return }
         surface.fit(scale: session.viewport.backingScale)
         let size = surface.metalLayer.drawableSize

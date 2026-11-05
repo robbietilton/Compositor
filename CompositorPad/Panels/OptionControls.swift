@@ -5,6 +5,13 @@ import UIKit
 enum OptionControls {
     static let titleFont = UIFont.systemFont(ofSize: 15, weight: .semibold)
     static let controlFont = UIFont.systemFont(ofSize: 14)
+    /// What Apple Pencil's pressure sets, a value and a slider's track: purple, as the caption that says so is, but
+    /// muted, so a value that changes under every stroke doesn't catch the eye as much as the caption.
+    static let pressureValueColor = UIColor { traits in
+        var (hue, saturation, brightness, alpha): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        UIColor.systemPurple.resolvedColor(with: traits).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return UIColor(hue: hue, saturation: saturation * 0.45, brightness: brightness, alpha: alpha)
+    }
 
     static func title(_ text: String) -> UILabel {
         let label = UILabel()
@@ -264,7 +271,7 @@ final class NumberField: UIView, UITextFieldDelegate {
     var live = false
 
     let field = UITextField()
-    private let caption: UILabel?
+    let caption: FieldCaption?
     private var unitLabel: UILabel?
     private let row: UIStackView
     private var fieldWidth: NSLayoutConstraint!
@@ -278,10 +285,21 @@ final class NumberField: UIView, UITextFieldDelegate {
     /// goes in when the field is left.
     private var drafted = false
     private var scrubStart: Double?
+    /// Whether typing is locked, as while Apple Pencil's pressure sets the value: the value is purple, as its caption
+    /// is then, and a tap on it calls `onLockedTap` instead of bringing up the keyboard.
+    var isLocked = false {
+        didSet {
+            guard isLocked != oldValue else { return }
+            field.textColor = isLocked ? OptionControls.pressureValueColor : usualTextColor
+            if isLocked, field.isFirstResponder { field.resignFirstResponder() }
+        }
+    }
+    var onLockedTap: () -> Void = {}
+    private var usualTextColor: UIColor?
 
     init(caption: String?, unit: String? = nil, width: CGFloat, range: ClosedRange<Double>, sensitivity: Double = 1,
          format: @escaping (Double) -> String = NumberField.whole) {
-        self.caption = caption.map { OptionControls.caption($0, color: .secondaryLabel) }
+        self.caption = caption.map { FieldCaption($0) }
         self.range = range
         self.sensitivity = sensitivity
         self.format = format
@@ -303,6 +321,7 @@ final class NumberField: UIView, UITextFieldDelegate {
         field.keyboardType = .numbersAndPunctuation
         field.returnKeyType = .done
         field.delegate = self
+        usualTextColor = field.textColor
         field.accessibilityLabel = caption ?? unit
         field.addAction(UIAction { [weak self] _ in self?.typed() }, for: .editingChanged)
         fieldWidth = field.widthAnchor.constraint(equalToConstant: width)
@@ -337,13 +356,16 @@ final class NumberField: UIView, UITextFieldDelegate {
         return max(50, ceil((widest as NSString).size(withAttributes: [.font: font]).width) + 16 + 1)
     }
 
-    /// Shows `value`. While the field has the keyboard, a value from elsewhere, as the slider beside it or Undo, takes
-    /// the place of what's been typed, selected to be typed over, as when the field was tapped; the value that typing
-    /// itself applied leaves the typing as it is, as "1." on the way to 1.5.
-    func show(_ value: Double) {
+    /// Shows `value`, or `live` in its place, what the value comes to now under Apple Pencil's pressure: `value`
+    /// stays what scrubbing starts from. While the field has the keyboard, a value from elsewhere, as the slider beside
+    /// it or Undo, takes the place of what's been typed, selected to be typed over, as when the field was tapped; the
+    /// value that typing itself applied leaves the typing as it is, as "1." on the way to 1.5.
+    func show(_ value: Double, live: Double? = nil) {
         shown = value
         guard field.isEditing else {
-            field.text = format(value)
+            // Only when it changes, as a stroke's pressure updates it every frame.
+            let text = format(live ?? value)
+            if field.text != text { field.text = text }
             return
         }
         if drafted, let typed = parsed, abs(typed - value) <= 1e-9 * max(1, abs(value)) { return }
@@ -358,7 +380,7 @@ final class NumberField: UIView, UITextFieldDelegate {
         set {
             field.isEnabled = newValue
             caption?.isUserInteractionEnabled = newValue
-            caption?.textColor = newValue ? .secondaryLabel : .tertiaryLabel
+            caption?.isDimmed = !newValue
         }
     }
 
@@ -398,6 +420,13 @@ final class NumberField: UIView, UITextFieldDelegate {
         let text = (field.text ?? "").replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)
         guard let value = Double(text), value.isFinite else { return nil }
         return min(range.upperBound, max(range.lowerBound, value))
+    }
+
+    /// A locked field doesn't take the keyboard: the tap says why instead.
+    func textFieldShouldBeginEditing(_ textField: UITextField) -> Bool {
+        guard isLocked else { return true }
+        onLockedTap()
+        return false
     }
 
     /// A tap selects the whole value, so a new one is typed over it; not once the field is left, which selecting would
@@ -492,6 +521,70 @@ final class NumberField: UIView, UITextFieldDelegate {
     }
 }
 
+/// A field's caption, which scrubbing along changes the value, and which can also be a toggle, as the Brush's Size and
+/// Opacity are in Pressure Sensitivity: a tap sets the field to follow Apple Pencil's pressure or not, in place of
+/// Photoshop's buttons beside them. While it's a toggle, VoiceOver reads it as a button with its state, and it's purple
+/// while on; otherwise it's the plain label it was.
+final class FieldCaption: UILabel {
+    /// A tap, or VoiceOver's, while it's a toggle.
+    var onToggle: () -> Void = {}
+    /// Whether a tap toggles the setting.
+    var isToggle = false { didSet { if isToggle != oldValue { showToggle() } } }
+    /// Whether the setting is on, which shows while it's a toggle.
+    var isOn = false { didSet { if isOn != oldValue { showToggle() } } }
+    /// What the setting does, which VoiceOver says while it's a toggle, as tooltips don't show on iPad.
+    var toggleHint: String? { didSet { showToggle() } }
+    /// Dimmed with its field, which can't be changed then.
+    var isDimmed = false { didSet { if isDimmed != oldValue { showToggle() } } }
+    /// A tap, while it isn't a toggle but `isNote` says a tap says something, as a field that can't follow Apple
+    /// Pencil's pressure says so in Pressure Sensitivity.
+    var onNote: () -> Void = {}
+    /// Whether a tap calls `onNote`. VoiceOver reads it as the plain label still: it's a word on the side, not a control.
+    var isNote = false { didSet { if isNote != oldValue { showToggle() } } }
+    /// The tap, on its own: waiting for no double tap, it toggles at once.
+    private(set) lazy var tap: UITapGestureRecognizer = {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        tap.isEnabled = false
+        return tap
+    }()
+
+    init(_ text: String) {
+        super.init(frame: .zero)
+        self.text = text
+        // Said as it reads, whether or not the accessibility runtime has loaded yet to derive it.
+        accessibilityLabel = text
+        font = OptionControls.controlFont
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        isUserInteractionEnabled = true
+        addGestureRecognizer(tap)
+        showToggle()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Purple while on, the usual caption's gray otherwise; a button with its state to VoiceOver while a toggle.
+    private func showToggle() {
+        let on = isToggle && isOn
+        textColor = isDimmed ? .tertiaryLabel : on ? .systemPurple : .secondaryLabel
+        tap.isEnabled = (isToggle || isNote) && !isDimmed
+        accessibilityTraits = isToggle ? .button : .staticText
+        accessibilityValue = isToggle ? (isOn ? "Follows Apple Pencil’s pressure" : "Set by hand") : nil
+        accessibilityHint = isToggle ? toggleHint : nil
+    }
+
+    /// What a tap does, as its recognizer calls it: toggles, or says its word, or nothing.
+    @objc func tapped() {
+        guard !isDimmed else { return }
+        if isToggle { onToggle() } else if isNote { onNote() }
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard isToggle, !isDimmed else { return false }
+        onToggle()
+        return true
+    }
+}
+
 /// A caption to scrub, a slider and a field for the same value, as the Mac's brush settings have them.
 final class SliderField: UIView, UIGestureRecognizerDelegate {
     var onChange: (Double) -> Void = { _ in }
@@ -519,8 +612,25 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
     }
 
     private let slider = GradientSlider()
-    private let label: UILabel
+    private let label: FieldCaption
     private let number: NumberField
+    /// The caption, which scrubbing along changes the value, and which can be a toggle (`FieldCaption`).
+    var caption: FieldCaption { label }
+    /// Whether the field and the slider are locked, as while Apple Pencil's pressure sets the value: the field takes
+    /// no typing (`NumberField.isLocked`), and the slider, its track the field's muted purple and its thumb gray, no
+    /// drag; a tap on either calls `onLockedTap`. Scrubbing the caption still sets the value.
+    var isLocked: Bool {
+        get { number.isLocked }
+        set {
+            guard newValue != number.isLocked else { return }
+            number.isLocked = newValue
+            showLock()
+        }
+    }
+    var onLockedTap: () -> Void {
+        get { number.onLockedTap }
+        set { number.onLockedTap = newValue }
+    }
     /// The slider's range in the value's own units; the field and the caption may reach past it (see Radius).
     private let sliderRange: ClosedRange<Double>
     /// Whether the slider gives the small values most of its travel, as the Mac's logarithmic sliders do.
@@ -551,9 +661,8 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
         number = NumberField(caption: nil, unit: unit, width: fieldWidth,
                              range: fieldRange.lowerBound * fieldScale...fieldRange.upperBound * fieldScale,
                              format: decimals.map(NumberField.upTo) ?? format)
-        label = OptionControls.caption(caption, color: .secondaryLabel)
+        label = FieldCaption(caption)
         super.init(frame: .zero)
-        label.isUserInteractionEnabled = true
         label.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(scrubbed(_:))))
         for view in [label, slider] as [UIView] {
             let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
@@ -561,6 +670,7 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
             doubleTap.delegate = self
             view.addGestureRecognizer(doubleTap)
         }
+        slider.addGestureRecognizer(lockedTap)
         slider.minimumValue = Float(sliderPosition(sliderRange.lowerBound))
         slider.maximumValue = Float(sliderPosition(sliderRange.upperBound))
         slider.accessibilityLabel = caption
@@ -586,10 +696,12 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func show(_ value: Double) {
+    /// Shows `value`, the field and the slider's thumb `live` in its place, as `NumberField.show` does.
+    func show(_ value: Double, live: Double? = nil) {
         self.value = value
-        if !slider.isTracking { slider.value = Float(sliderPosition(min(sliderRange.upperBound, max(sliderRange.lowerBound, value)))) }
-        number.show(value * fieldScale)
+        let shown = live ?? value
+        if !slider.isTracking { slider.value = Float(sliderPosition(min(sliderRange.upperBound, max(sliderRange.lowerBound, shown)))) }
+        number.show(value * fieldScale, live: live.map { $0 * fieldScale })
     }
 
     /// Where the slider stands for `value`.
@@ -615,7 +727,7 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
     /// Gives every row's caption, and `labels` beside them, the widest one's width, so their sliders start and end in
     /// the same place, as the Mac's filter panel lines them up.
     static func alignCaptions(_ rows: [SliderField], with labels: [UILabel] = []) {
-        let all = rows.map(\.label) + labels
+        let all = rows.map { $0.label as UILabel } + labels
         let width = all.map { ceil($0.intrinsicContentSize.width) }.max() ?? 0
         for label in all {
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -624,9 +736,27 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
     }
 
     var isEnabled: Bool {
-        get { slider.isEnabled }
-        set { slider.isEnabled = newValue; number.isEnabled = newValue; offerReset() }
+        get { enabled }
+        set { enabled = newValue; number.isEnabled = newValue; showLock(); offerReset() }
     }
+    private var enabled = true
+    /// A tap on the slider while it's locked, which says why.
+    private lazy var lockedTap: UITapGestureRecognizer = {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(lockedTapped))
+        tap.isEnabled = false
+        return tap
+    }()
+
+    /// The slider as enabled and locked say.
+    private func showLock() {
+        let locked = number.isLocked
+        slider.isEnabled = enabled && !locked
+        slider.minimumTrackTintColor = locked ? OptionControls.pressureValueColor : nil
+        slider.thumbTintColor = locked ? .systemGray : nil
+        lockedTap.isEnabled = enabled && locked
+    }
+
+    @objc private func lockedTapped() { number.onLockedTap() }
 
     /// How far Up and Down step the field's value while it has the keyboard, as the Mac's effect fields step.
     var arrowStep: Double? {
@@ -638,12 +768,13 @@ final class SliderField: UIView, UIGestureRecognizerDelegate {
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 2 else { return super.gestureRecognizerShouldBegin(gesture) }
-        return onReset != nil && isEnabled && (gesture.view === label || onThumb(gesture.location(in: self)))
+        return onReset != nil && isEnabled && !isLocked && ((gesture.view === label && !label.isToggle) || onThumb(gesture.location(in: self)))
     }
 
-    /// Puts the value back, as a double tap at `point` on the caption or the thumb does; whether it did.
+    /// Puts the value back, as a double tap at `point` on the caption or the thumb does; whether it did. Not on a
+    /// caption that's a toggle, whose tap waits for no double tap; the thumb's still puts it back.
     @discardableResult func resets(at point: CGPoint) -> Bool {
-        guard label.convert(label.bounds, to: self).contains(point) || onThumb(point) else { return false }
+        guard !isLocked, (!label.isToggle && label.convert(label.bounds, to: self).contains(point)) || onThumb(point) else { return false }
         return resets()
     }
 

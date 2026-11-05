@@ -24,6 +24,14 @@ final class ToolOptionsBar: UIView {
     /// picker the bar or the rail opened, under which nothing in the bar can be reached, and whose color its swatches
     /// show as it's picked, until it begins to go.
     var dimsPickerControls = false { didSet { if dimsPickerControls != oldValue { setNeedsUpdateProperties() } } }
+    /// Who draws, for whether Apple Pencil's pressure reaches the Brush.
+    var input = DrawingInput.shared { didSet { setNeedsUpdateProperties() } }
+    /// The pressure under the stroke going on in the tab's canvas, for the Brush's Size and Opacity to show live.
+    var strokePressure: StrokePressure? { didSet { if strokePressure !== oldValue { setNeedsUpdateProperties() } } }
+    /// Says something in the status line, as a caption's tap sets its field to follow the pressure or not.
+    var onFlash: (String) -> Void = { _ in }
+    /// Warns in the status line, as a tap on a caption whose field can't follow the pressure says so.
+    var onWarn: (String) -> Void = { _ in }
 
     static let height: CGFloat = 50
 
@@ -310,18 +318,51 @@ final class ToolOptionsBar: UIView {
         let size = NumberField(caption: "Size", unit: "px", width: 56, range: 1...2000)
         size.onChange = { [weak self] in self?.session?.brushSettings.diameter = CGFloat($0) }
         add(size)
-        refreshers.append { size.show(Double($0.brushSettings.diameter)) }
+        if tool == .brush, let caption = size.caption {
+            followPressure(caption, setting: \.pressureSize, name: "size", field: "Size",
+                           on: "a light touch paints a thinner line", off: "every stroke paints the same width",
+                           hint: "Pen pressure sets the size: a light touch paints a thinner line")
+            size.onLockedTap = { [weak self] in self?.onFlash(Self.lockedMessage(name: "size", field: "Size")) }
+        } else {
+            noteNoPressure(size.caption, field: "Size", tool: name)
+        }
+        refreshers.append { [weak self] session in
+            let settings = session.brushSettings
+            // Under a stroke, what it paints at now; at rest, the setting, the most the pressure reaches.
+            let follows = self?.followsPressure(\.pressureSize, in: session) == true
+            let live = follows ? self?.strokePressure?.value : nil
+            size.isLocked = follows
+            size.show(Double(settings.diameter), live: live.map { Double(settings.diameter * settings.dynamics($0).scale) })
+        }
 
         let hardness = SliderField(caption: "Hardness", unit: "%", sliderRange: 0...1, fieldRange: 0...1, fieldScale: 100, sensitivity: 0.01)
         hardness.onChange = { [weak self] in self?.session?.brushSettings.hardness = CGFloat($0) }
         add(hardness)
         refreshers.append { hardness.show(Double($0.brushSettings.hardness)) }
+        noteNoPressure(hardness.caption, field: "Hardness", tool: tool == .brush ? nil : name)
 
         let opacity = SliderField(caption: tool == .blur ? "Strength" : "Opacity", unit: "%", sliderRange: 0.01...1,
                                   fieldRange: 0.01...1, fieldScale: 100, sensitivity: 0.01)
         opacity.onChange = { [weak self] in self?.session?.brushSettings.opacity = CGFloat($0) }
         add(opacity)
-        refreshers.append { opacity.show(Double($0.brushSettings.opacity)) }
+        if tool == .brush {
+            // Turned on, from 100%, so that the pressure reaches the whole range, whatever the field was set to.
+            followPressure(opacity.caption, setting: \.pressureOpacity, name: "opacity", field: "Opacity",
+                           on: "a light touch paints fainter, up to 100%", off: "every stroke paints the same",
+                           hint: "Pen pressure sets the opacity: a light touch paints fainter, up to the brush’s Opacity",
+                           turningOn: { $0.opacity = 1 })
+            opacity.onLockedTap = { [weak self] in self?.onFlash(Self.lockedMessage(name: "opacity", field: "Opacity")) }
+        } else {
+            noteNoPressure(opacity.caption, field: tool == .blur ? "Strength" : "Opacity", tool: name)
+        }
+        refreshers.append { [weak self] session in
+            let settings = session.brushSettings
+            // Under a stroke, what it paints at now; at rest, the setting, the most the pressure reaches.
+            let follows = self?.followsPressure(\.pressureOpacity, in: session) == true
+            let live = follows ? self?.strokePressure?.value : nil
+            opacity.isLocked = follows
+            opacity.show(Double(settings.opacity), live: live.map { Double(settings.opacity * settings.dynamics($0).strength) })
+        }
 
         // Blur softens by a radius of its own, apart from how strongly it lays the softening down. The slider covers
         // everyday radii; typing or scrubbing reaches up to 50.
@@ -331,6 +372,7 @@ final class ToolOptionsBar: UIView {
             radius.onChange = { [weak self] in self?.session?.brushSettings.blurRadius = CGFloat($0) }
             add(radius)
             refreshers.append { radius.show(Double($0.brushSettings.blurRadius)) }
+            noteNoPressure(radius.caption, field: "Radius", tool: name)
         }
         // Paint and Erase only: healing, cloning and smearing have their own feel.
         if tool == .brush {
@@ -338,6 +380,7 @@ final class ToolOptionsBar: UIView {
             smoothing.onChange = { [weak self] in self?.session?.brushSettings.smoothing = CGFloat($0) }
             add(smoothing)
             refreshers.append { smoothing.show(Double($0.brushSettings.smoothing)) }
+            noteNoPressure(smoothing.caption, field: "Smoothing", tool: nil)
         }
 
         if session.isMaskSelected {
@@ -370,6 +413,57 @@ final class ToolOptionsBar: UIView {
             self?.content.isUserInteractionEnabled = !session.showsBusy
             self?.content.alpha = session.showsBusy ? 0.5 : 1
         }
+    }
+
+    // MARK: Apple Pencil's pressure
+
+    /// Makes `caption` a toggle for `setting` while Apple Pencil's pressure reaches the Brush, as Photoshop's buttons
+    /// beside Size and Opacity are: purple while the pressure sets the field, and a tap says in the status line, whole,
+    /// what sets it now. Otherwise it's the caption it was. Built either way, so a mode switched doesn't build the bar
+    /// again, which would scroll it back. `turningOn` changes the settings as the tap turns the pressure on.
+    private func followPressure(_ caption: FieldCaption, setting: WritableKeyPath<BrushSettings, Bool>, name: String,
+                                field: String, on: String, off: String, hint: String,
+                                turningOn: ((inout BrushSettings) -> Void)? = nil) {
+        caption.toggleHint = hint
+        caption.onToggle = { [weak self] in
+            guard let self, let session else { return }
+            // A value being typed goes in first, so what the tap sets wins over it, rather than it going in as the lock
+            // takes the keyboard.
+            endEditing(true)
+            session.brushSettings[keyPath: setting].toggle()
+            if session.brushSettings[keyPath: setting] { turningOn?(&session.brushSettings) }
+            onFlash(session.brushSettings[keyPath: setting]
+                ? "Apple Pencil’s pressure sets the \(name): \(on)" : "The \(field) field sets the \(name): \(off)")
+        }
+        refreshers.append { [weak self] session in
+            caption.isToggle = self?.input.followsPressure == true
+            caption.isOn = session.brushSettings[keyPath: setting]
+        }
+    }
+
+    /// Makes a tap on `caption`, in Pressure Sensitivity, warn that its field doesn't follow Apple Pencil's pressure:
+    /// only the Brush's Size and Opacity do. `tool` is the bar's title, said for a tool other than the Brush.
+    private func noteNoPressure(_ caption: FieldCaption?, field: String, tool: String?) {
+        guard let caption else { return }
+        caption.onNote = { [weak self] in self?.onWarn(Self.noPressureMessage(field: field, tool: tool)) }
+        refreshers.append { [weak self] _ in caption.isNote = self?.input.followsPressure == true }
+    }
+
+    /// What a tap on a caption whose field doesn't follow the pressure says, whole: that it doesn't, and what does.
+    static func noPressureMessage(field: String, tool: String?) -> String {
+        if let tool { "\(tool)’s \(field) doesn’t follow Apple Pencil’s pressure · Only the Brush’s Size and Opacity do" }
+        else { "\(field) doesn’t follow Apple Pencil’s pressure · Only Size and Opacity do" }
+    }
+
+    /// Whether Apple Pencil's pressure sets `setting`'s field: in Pressure Sensitivity, with the Brush, whose fields
+    /// alone follow it, set to.
+    private func followsPressure(_ setting: KeyPath<BrushSettings, Bool>, in session: EditorSession) -> Bool {
+        session.tool == .brush && input.followsPressure && session.brushSettings[keyPath: setting]
+    }
+
+    /// What a tap on a field the pressure sets says: what sets it, and how to set it by hand.
+    static func lockedMessage(name: String, field: String) -> String {
+        "Apple Pencil’s pressure sets the \(name) · Tap the \(field) label to set it yourself"
     }
 
     // MARK: Selections

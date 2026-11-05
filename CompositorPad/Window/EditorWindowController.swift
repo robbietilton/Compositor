@@ -108,6 +108,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         rail.canPresent = { [weak self] in self?.isClear == true }
         optionsBar.canPresent = { [weak self] in self?.isClear == true }
         optionsBar.onChooseForeground = { [weak self] in self?.rail.chooseColor(background: false, from: $0) }
+        // Apple Pencil's pressure is purple in the bar, and so is what the status line says of it.
+        optionsBar.input = input
+        optionsBar.onFlash = { [weak self] in self?.statusBar.flash($0, color: .systemPurple) }
+        // What can't follow the pressure warns in orange.
+        optionsBar.onWarn = { [weak self] in self?.statusBar.flash($0, color: .systemOrange) }
         optionsBar.onChooseFont = { [weak self] source in
             guard let self else { return }
             self.typePickers.chooseFont(from: source, presenter: self)
@@ -223,6 +228,7 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         view.window?.windowScene?.title = tab.title
         rail.session = session
         optionsBar.session = session
+        optionsBar.strokePressure = tab.canvas.strokePressure
         layersPanel.session = session
         statusBar.session = session
         followClear()

@@ -8,8 +8,9 @@ final class StatusBarView: UIView {
     var fingerPaints = true { didSet { setNeedsUpdateProperties() } }
     /// A project is opening in the tab: it isn't waiting for a canvas.
     var isOpening = false { didSet { if isOpening != oldValue { setNeedsUpdateProperties() } } }
-    /// A word on what just changed, said in the hint's place for a moment.
+    /// A word on what just changed, said in the hint's place for a moment, and its color.
     private(set) var flashed: String?
+    private(set) var flashedColor: UIColor = .tintColor
     private var flashEnd: Task<Void, Never>?
 
     static let height: CGFloat = 30
@@ -68,17 +69,18 @@ final class StatusBarView: UIView {
             spinner.stopAnimating()
             hint.text = session.document == nil ? nil : flashed ?? Self.hint(for: session, fingerPaints: fingerPaints)
         }
-        hint.textColor = flashed == nil || session.showsBusy || session.isImporting ? .secondaryLabel : .tintColor
+        hint.textColor = flashed == nil || session.showsBusy || session.isImporting ? .secondaryLabel : flashedColor
     }
 
     /// How long a flash stays before the hint comes back.
     static let flashDuration: Duration = .seconds(3)
 
-    /// Says `message` in the hint's place, in the accent color, for `duration`, and to VoiceOver: a mode just switched,
-    /// say, and what it switched to.
-    func flash(_ message: String, for duration: Duration = flashDuration) {
+    /// Says `message` in the hint's place, in `color`, the accent color unless it's about something with a color of its
+    /// own, as Apple Pencil's pressure is purple, for `duration`, and to VoiceOver: a mode just switched, say, and what
+    /// it switched to.
+    func flash(_ message: String, color: UIColor = .tintColor, for duration: Duration = flashDuration) {
         flashEnd?.cancel()
-        crossfade { self.flashed = message }
+        crossfade { (self.flashed, self.flashedColor) = (message, color) }
         UIAccessibility.post(notification: .announcement, argument: message)
         flashEnd = Task { [weak self] in
             try? await Task.sleep(for: duration)

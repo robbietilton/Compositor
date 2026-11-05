@@ -21,6 +21,12 @@ import UIKit
     /// The open under way or last made, step by step, for the window's Loading card.
     private(set) var loading: LoadingProgress?
 
+    init() {
+        // Apple Pencil's pressure sets the Brush's size from the start, as most iPad painting apps have it, though not
+        // its opacity; each tab starts so, as nothing keeps it. The Mac's pen starts with neither, as Photoshop's.
+        session.brushSettings.pressureSize = true
+    }
+
     /// The file's name without its extension, or Untitled.
     var title: String { (session.projectURL ?? openingURL)?.deletingPathExtension().lastPathComponent ?? "Untitled" }
     /// Nothing in it yet and nothing on its way: the New Canvas form, which an opened project can take over.
