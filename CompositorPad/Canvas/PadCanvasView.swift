@@ -9,8 +9,11 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     let session: EditorSession
     /// Whether a finger paints, as `DrawingInput` says: once Apple Pencil turns up, fingers can move the canvas instead.
     var fingerPaints = true
-    /// Apple Pencil touched the canvas, hovered over it, or was tapped or squeezed.
-    var pencilSeen: () -> Void = {}
+    /// Whether Apple Pencil's pressure reaches the brush, as `DrawingInput` says: only in Pressure Sensitivity.
+    var followsPressure = false
+    /// Apple Pencil touched the canvas, hovered over it, or was tapped or squeezed; true when it touched reporting its
+    /// force.
+    var pencilSeen: (Bool) -> Void = { _ in }
     /// The modifier keys a touch or the pointer came with, which the window holds.
     var keysSeen: (UIKeyModifierFlags) -> Void = { _ in }
     private let surface = MetalCanvasView(frame: .zero)
@@ -308,7 +311,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     @objc private func hovered(_ gesture: UIHoverGestureRecognizer) {
         // Only Apple Pencil hovers above the screen; a pointer is on it.
-        if gesture.zOffset > 0 { pencilSeen() }
+        if gesture.zOffset > 0 { pencilSeen(false) }
         switch gesture.state {
         case .began, .changed: hover(at: gesture.location(in: self), keys: gesture.modifierFlags)
         default: hover(at: nil)
@@ -362,7 +365,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         if !isFirstResponder { becomeFirstResponder() }
         guard activeTouch == nil, let touch = touches.first, event?.allTouches?.count == 1,
               session.document != nil, !session.isProjectBusy, !session.isImporting else { return }
-        if touch.type == .pencil { pencilSeen() }
+        if touch.type == .pencil { pencilSeen(touch.maximumPossibleForce > 0) }
         let tool = session.tool
         let point = touch.location(in: self)
         let keys = event?.modifierFlags ?? []
@@ -385,7 +388,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // While an adjustment's editor is open the canvas only moves and zooms: the edit holds the layers, as on the Mac.
             return
         } else if PadCanvasInput.handles(tool) {
-            guard input.began(at: point, keys: keys, tapCount: touch.tapCount, pressure: Self.pressure(of: touch)) else { return }
+            guard input.began(at: point, keys: keys, tapCount: touch.tapCount, pressure: pressure(of: touch)) else { return }
             activeTouch = touch
             drag = .tool
             if input.isPainting { (touchPointer, touchKeys) = (point, keys) }
@@ -403,7 +406,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // stroke.
             let samples = input.isPainting ? event?.coalescedTouches(for: touch) ?? [touch] : [touch]
             for sample in samples {
-                input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? [], pressure: Self.pressure(of: sample))
+                input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? [], pressure: pressure(of: sample))
             }
         case .pan(let last):
             let point = touch.location(in: self)
@@ -417,8 +420,16 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     /// What `touch` presses with. Its force is the first estimate UIKit gives: the engine appends sample by sample, so a
     /// refined force, a few samples later, would mean painting over what's already down.
-    private static func pressure(of touch: UITouch) -> CGFloat? {
-        PadCanvasInput.pressure(type: touch.type, force: touch.force, maximumPossibleForce: touch.maximumPossibleForce)
+    private func pressure(of touch: UITouch) -> CGFloat? {
+        Self.pressure(type: touch.type, force: touch.force, maximumPossibleForce: touch.maximumPossibleForce,
+                      followsPressure: followsPressure)
+    }
+
+    /// What a touch of `type` pressing with `force` hands the brush: Apple Pencil's pressure only in Pressure
+    /// Sensitivity (`followsPressure`); in the other modes nothing, so it paints at full pressure, as a finger does.
+    static func pressure(type: UITouch.TouchType, force: CGFloat, maximumPossibleForce: CGFloat, followsPressure: Bool) -> CGFloat? {
+        guard followsPressure else { return nil }
+        return PadCanvasInput.pressure(type: type, force: force, maximumPossibleForce: maximumPossibleForce)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -524,7 +535,7 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
 
     /// A double tap (or squeeze) on Apple Pencil switches between painting and erasing, as the system setting suggests.
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
-        pencilSeen()
+        pencilSeen(false)
         guard UIPencilInteraction.preferredTapAction == .switchEraser || UIPencilInteraction.preferredTapAction == .switchPrevious
         else { return }
         if session.tool != .brush { session.selectTool(.brush) }
@@ -532,6 +543,6 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     }
 
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
-        pencilSeen()
+        pencilSeen(false)
     }
 }

@@ -33,17 +33,20 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
     private lazy var redoItem = barItem(symbol: "arrow.uturn.forward", label: "Redo") { [weak self] session in
         if let text = self?.textUndo { text.redo() } else { session.redo() }
     }
-    /// Who draws, Apple Pencil alone or fingers too: a switch for the whole app rather than a tool, so it sits by Undo
-    /// and Redo, not among the tools. It's there once Apple Pencil has turned up.
+    /// Who draws, and with what: for the whole app rather than a tool, so it sits by Undo and Redo, not among the
+    /// tools. It's there once Apple Pencil has turned up: a switch between Apple Pencil alone and fingers too, or, with
+    /// a Pencil that reports its force, a menu of those and Pressure Sensitivity.
     private lazy var inputItem: UIBarButtonItem = {
-        let item = UIBarButtonItem(title: nil, image: nil, primaryAction: UIAction { [weak self] _ in self?.switchInput() })
+        let item = UIBarButtonItem(title: nil, image: nil, primaryAction: switchAction)
         item.isHidden = true
         return item
     }()
-    /// Who draws, which the toolbar's switch shows and the canvas follows.
+    private lazy var switchAction = UIAction { [weak self] _ in self?.switchInput() }
+    /// Who draws, which the toolbar's item shows and the canvas follows.
     var input = DrawingInput.shared
-    /// Whether the switch last showed Apple Pencil alone, so a flip morphs one symbol into the other.
-    private var shownPencilOnly: Bool?
+    /// The mode the item last showed, and whether as a menu, so a change morphs one symbol into the other and the menu
+    /// is made again only then.
+    private var shownInput: (mode: DrawingInput.Mode, menu: Bool)?
     private lazy var typePickers: TypePickers = {
         let pickers = TypePickers()
         pickers.session = { [weak self] in self?.activeTab?.session }
@@ -228,9 +231,11 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         layersPanel.isOpening = opening
         statusBar.isOpening = opening
         tab.canvas.overlayView.isHidden = opening
-        // Who draws, which Apple Pencil turning up and the toolbar's switch change.
+        // Who draws, and whether with Apple Pencil's pressure, which Apple Pencil turning up and the toolbar's item
+        // change.
         statusBar.fingerPaints = input.fingerPaints
         tab.canvas.fingerPaints = input.fingerPaints
+        tab.canvas.followsPressure = input.followsPressure
         // What the editor asks of whoever shows it: a Photoshop file's conversion report, a RAW file's development,
         // and the errors it runs into. Shown once the update is over.
         if session.showsConversionSheet || session.showsRawDevelop || session.importError != nil || session.brushError != nil
@@ -568,7 +573,14 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         canvasHost.subviews.forEach { $0.removeFromSuperview() }
         let canvas = tab.canvas
         canvas.fingerPaints = input.fingerPaints
-        canvas.pencilSeen = { [weak self] in self?.pencilTurnedUp() }
+        canvas.followsPressure = input.followsPressure
+        canvas.pencilSeen = { [weak self, weak canvas] pressure in
+            guard let self else { return }
+            self.pencilTurnedUp(pressure: pressure)
+            // At once, not at the window's next update: the touch that brought the pressure paints with it.
+            canvas?.fingerPaints = self.input.fingerPaints
+            canvas?.followsPressure = self.input.followsPressure
+        }
         canvas.keysSeen = { [weak self] in self?.holdKeys($0) }
         // Space lends the Hand, which the rail shows in hand while it's held.
         canvas.spaceChanged = { [weak self] held in self?.rail.heldTool = held ? .hand : nil }
@@ -691,33 +703,56 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
         return UIMenu(children: [UIMenu(options: .displayInline, children: fileActions), close])
     }
 
-    /// Apple Pencil turned up on this window's canvas. The first time since launch it takes drawing from fingers, unless
-    /// the switch was left with fingers drawing too, and the status line says so.
-    private func pencilTurnedUp() {
-        if input.pencilTurnedUp() { inputSwitched(pencilOnly: true) }
+    /// Apple Pencil turned up on this window's canvas, reporting its force (`pressure`) when it touched. The first time
+    /// since launch it takes drawing from fingers, unless the switch was left with fingers drawing too, and its first
+    /// touch reporting its force brings Pressure Sensitivity; the status line says what changed.
+    private func pencilTurnedUp(pressure: Bool) {
+        if let mode = input.pencilTurnedUp(pressure: pressure) { inputSwitched(to: mode) }
     }
 
-    /// Flips who draws, from the toolbar's switch.
+    /// Flips who draws, from the toolbar's switch: Apple Pencil alone or fingers too.
     func switchInput() {
-        input.pencilOnly.toggle()
-        inputSwitched(pencilOnly: input.pencilOnly)
+        chooseInput(input.mode == .finger ? .pencil : .finger)
+    }
+
+    /// Who draws, from the toolbar's switch or its menu.
+    func chooseInput(_ mode: DrawingInput.Mode) {
+        guard mode != input.mode else { return }
+        input.mode = mode
+        inputSwitched(to: mode)
     }
 
     /// Says who draws now, as it just changed.
-    private func inputSwitched(pencilOnly: Bool) {
-        statusBar.flash(DrawingInput.description(pencilOnly: pencilOnly))
+    private func inputSwitched(to mode: DrawingInput.Mode) {
+        statusBar.flash(DrawingInput.description(of: mode, hasPressure: input.hasPressure))
     }
 
-    /// The switch for who draws: there once Apple Pencil has turned up, coming in as it does, and showing who draws
-    /// now, one symbol morphing into the other as it's flipped.
+    /// The menu of who draws, with a Pencil that reports its force: each mode with its symbol, the one in use checked.
+    private func inputMenu() -> UIMenu {
+        UIMenu(children: input.modes.map { mode in
+            UIAction(title: DrawingInput.title(of: mode), image: UIImage(systemName: DrawingInput.symbol(of: mode)),
+                     state: mode == input.mode ? .on : .off) { [weak self] _ in self?.chooseInput(mode) }
+        })
+    }
+
+    /// The item for who draws: there once Apple Pencil has turned up, coming in as it does, and showing who draws now
+    /// in its symbol and color, one symbol morphing into the other as it changes. A switch, or a menu once the Pencil
+    /// has reported its force.
     private func showInputSwitch() {
-        let pencilOnly = input.pencilOnly
-        inputItem.accessibilityLabel = DrawingInput.description(pencilOnly: pencilOnly)
-        if let image = UIImage(systemName: DrawingInput.symbol(pencilOnly: pencilOnly)) {
-            if shownPencilOnly == nil || inputItem.isHidden { inputItem.image = image }
-            else if shownPencilOnly != pencilOnly { inputItem.setSymbolImage(image, contentTransition: .replace) }
+        let mode = input.mode, menu = input.hasPressure
+        inputItem.accessibilityLabel = DrawingInput.title(of: mode)
+        inputItem.accessibilityValue = DrawingInput.description(of: mode, hasPressure: menu)
+        inputItem.tintColor = DrawingInput.tint(of: mode)
+        let switchedToMenu = shownInput?.menu != menu
+        // A menu shows on a tap of an item without an action. Before the symbol, as an action given to the item brings
+        // its own, which is none.
+        if switchedToMenu { inputItem.primaryAction = menu ? nil : switchAction }
+        if switchedToMenu || shownInput?.mode != mode { inputItem.menu = menu ? inputMenu() : nil }
+        if let image = UIImage(systemName: DrawingInput.symbol(of: mode)) {
+            if shownInput == nil || switchedToMenu || inputItem.isHidden { inputItem.image = image }
+            else if shownInput?.mode != mode { inputItem.setSymbolImage(image, contentTransition: .replace) }
         }
-        shownPencilOnly = pencilOnly
+        shownInput = (mode, menu)
         guard inputItem.isHidden == input.hasPencil else { return }
         if input.hasPencil, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
             UIView.animate(withDuration: 0.35) {
