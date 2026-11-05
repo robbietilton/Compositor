@@ -13,6 +13,7 @@ final class ProjectTab: Identifiable {
     init(name: String) {
         defaultName = name
         session = EditorSession()
+        session.apply(BrushDefaults.load())
         controller = ProjectController(session: session)
     }
 }
