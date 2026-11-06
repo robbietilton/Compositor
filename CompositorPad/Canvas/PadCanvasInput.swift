@@ -27,6 +27,10 @@ import UIKit
     private enum Drag {
         /// A brush stroke, kept straight while Shift is held, which last reached `last`, in document pixels.
         case paint(BrushAxisLock, last: CGPoint)
+        /// A brush stroke not begun yet, pressed at `pixel` with `keys`, as Apple Pencil's force there is still UIKit's
+        /// placeholder: it begins once the tip moves, at `pressure`, light, or once a real force comes with the tip
+        /// still, at that, so a tap stamps as hard as it pressed (`placeholderPressure`).
+        case paintHeld(pixel: CGPoint, keys: UIKeyModifierFlags, pressure: CGFloat)
         /// The Eyedropper taking colors, or a brush or the Gradient while Option is held, and the foreground color it
         /// replaced.
         case sample(original: PaletteColor, byOption: Bool)
@@ -75,7 +79,14 @@ import UIKit
     var isDragging: Bool { drag != nil }
     /// Whether a touch is drawing a brush stroke.
     var isPainting: Bool {
-        if case .paint = drag { return true }
+        switch drag {
+        case .paint, .paintHeld: true
+        default: false
+        }
+    }
+    /// Whether a brush stroke waits for Apple Pencil's first real force (`Drag.paintHeld`).
+    var isHoldingStroke: Bool {
+        if case .paintHeld = drag { return true }
         return false
     }
 
@@ -95,14 +106,29 @@ import UIKit
     /// The share of Apple Pencil's maximum force at which it presses fully.
     static let fullPressureShare: CGFloat = 0.6
 
+    /// The pressure a stroke's head paints at while Apple Pencil's force is still UIKit's placeholder, or settling down
+    /// from it, and no more. An iPad Pro (12.9-inch, 6th generation) with the second Apple Pencil reports 0.333 for every
+    /// stroke's first 12–21 ms, marked estimated, and only refines it 26–50 ms later, when the head is down: a light or
+    /// everyday start refines to 0.003–0.12, under the 0.365 the placeholder maps to, which stamped a blob at the head of
+    /// a light line. A light touch (about 0.086 on an iPad Air, 3rd generation) comes to about 0.19 on the curve, so the
+    /// head starts no heavier than one and grows into the line as the real force comes, as a real pen's does.
+    static let placeholderPressure: CGFloat = 0.2
+
+    /// How long a stroke still at its touch-down point waits for a real force before it begins at
+    /// `placeholderPressure`: longer than the placeholder lasts, short enough not to be felt as lag.
+    static let longestHold: TimeInterval = 0.033
+
     private func pixel(_ point: CGPoint) -> CGPoint? {
         session.document.map { session.viewport.documentPoint(from: point, documentSize: $0.size) }
     }
 
     /// A touch coming down at `point`, the `tapCount`th in quick succession, pressing with `pressure` if it has one to
     /// follow. False when it starts nothing to follow, as a tap with the Magic Wand.
+    /// `placeholder` says the pressure is from UIKit's placeholder force, not a real one: a brush stroke then waits to
+    /// begin (`Drag.paintHeld`).
     @discardableResult
-    func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1, pressure: CGFloat? = nil) -> Bool {
+    func began(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1, pressure: CGFloat? = nil,
+               placeholder: Bool = false) -> Bool {
         guard let pixel = pixel(point) else { return false }
         // Option samples a color with the Brush, Spot Healing and the Gradient, as the Eyedropper does, as on the Mac.
         if session.tool == .eyedropper || (keys.contains(.alternate) && session.tool.samplesColorWithOption && session.brushStroke == nil) {
@@ -112,14 +138,8 @@ import UIKit
             return true
         }
         if session.tool.isBrushTool {
-            // Shift paints a straight line on from where the last stroke ended, as in Photoshop.
-            if keys.contains(.shift), let from = session.shiftLineStart() {
-                session.beginBrush(at: from, pressure: pressure)
-                session.continueBrush(at: pixel, pressure: pressure)
-            } else {
-                session.beginBrush(at: pixel, pressure: pressure)
-            }
-            drag = .paint(BrushAxisLock(start: pixel, shift: keys.contains(.shift)), last: pixel)
+            if placeholder, let pressure { drag = .paintHeld(pixel: pixel, keys: keys, pressure: pressure) }
+            else { beginPaint(at: pixel, keys: keys, pressure: pressure) }
             return true
         }
         if session.tool == .zoom {
@@ -195,10 +215,40 @@ import UIKit
         return true
     }
 
-    func moved(to point: CGPoint, keys: UIKeyModifierFlags = [], pressure: CGFloat? = nil) {
+    /// Begins a brush stroke at `pixel`, as pressed with `keys`.
+    private func beginPaint(at pixel: CGPoint, keys: UIKeyModifierFlags, pressure: CGFloat?) {
+        // Shift paints a straight line on from where the last stroke ended, as in Photoshop.
+        if keys.contains(.shift), let from = session.shiftLineStart() {
+            session.beginBrush(at: from, pressure: pressure)
+            session.continueBrush(at: pixel, pressure: pressure)
+        } else {
+            session.beginBrush(at: pixel, pressure: pressure)
+        }
+        drag = .paint(BrushAxisLock(start: pixel, shift: keys.contains(.shift)), last: pixel)
+    }
+
+    /// Begins the stroke waiting for a real force (`Drag.paintHeld`) at the light pressure it was pressed with, as it
+    /// waited `longestHold`, or the touch lifted.
+    func beginHeldStroke() {
+        guard case .paintHeld(let pixel, let keys, let pressure) = drag else { return }
+        beginPaint(at: pixel, keys: keys, pressure: pressure)
+    }
+
+    /// The touch moving to `point`, or pressing differently where it is; `placeholder` as for `began`.
+    func moved(to point: CGPoint, keys: UIKeyModifierFlags = [], pressure: CGFloat? = nil, placeholder: Bool = false) {
         guard let drag, let pixel = pixel(point) else { return }
         lastPoint = point
         switch drag {
+        case .paintHeld(let start, let pressed, let light):
+            // Still where it came down, with nothing real to go by: it waits on, at the lightest it has come to.
+            let still = pixel == start
+            if still, placeholder {
+                if let pressure { self.drag = .paintHeld(pixel: start, keys: pressed, pressure: min(light, pressure)) }
+                return
+            }
+            // A tap's real force stamps as hard as it pressed; a stroke under way starts light and grows into its line.
+            beginPaint(at: start, keys: pressed, pressure: still ? pressure : light)
+            if !still { moved(to: point, keys: keys, pressure: pressure, placeholder: placeholder) }
         case .paint(var axis, _):
             // Shift keeps the stroke straight, horizontal or vertical, from wherever it was pressed; letting go carries
             // on freehand.
@@ -298,8 +348,12 @@ import UIKit
     /// The touch lifting at `point`, after `tapCount` taps in quick succession.
     func ended(at point: CGPoint, keys: UIKeyModifierFlags = [], tapCount: Int = 1) {
         defer { finish() }
+        // A tap lifted before a real force came: it stamps light.
+        beginHeldStroke()
         guard let drag else { return }
         switch drag {
+        case .paintHeld:
+            break
         case .paint(var axis, _):
             // With Shift held the stroke ends on its line too, not where the touch lifted. No pressure: Apple Pencil's
             // falls away as it lifts, which would thin the stroke's end, so it keeps the last, as on the Mac.
@@ -370,6 +424,9 @@ import UIKit
         defer { finish() }
         guard let drag else { return }
         switch drag {
+        case .paintHeld:
+            // Nothing painted yet, nothing to undo.
+            break
         case .paint(_, let last):
             session.cancelBrush()
             strokeEnded(at: last)

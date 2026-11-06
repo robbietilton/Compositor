@@ -359,6 +359,16 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         return resigned
     }
 
+    /// The force Apple Pencil came down with, and when: while a sample still reports it, estimated, it's UIKit's
+    /// placeholder, not a real force (`PadCanvasInput.placeholderPressure`).
+    private var touchDown: (force: CGFloat, time: TimeInterval)?
+    /// The stroke's estimates waiting for UIKit to refine them, until the first refinement comes (`refined`): before it,
+    /// an estimate under the placeholder is still settling down from it.
+    private var awaitingRefinement: Set<NSNumber> = []
+    private var refined = false
+    /// Begins a stroke held for a real force once it has waited `PadCanvasInput.longestHold` with the tip still.
+    private var holdEnd: Task<Void, Never>?
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Any touch lets go of a selected effect, as a click on the Mac's canvas does.
         session.effectSelection = nil
@@ -388,9 +398,21 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // While an adjustment's editor is open the canvas only moves and zooms: the edit holds the layers, as on the Mac.
             return
         } else if PadCanvasInput.handles(tool) {
-            guard input.began(at: point, keys: keys, tapCount: touch.tapCount, pressure: pressure(of: touch)) else { return }
+            touchDown = touch.type == .pencil ? (touch.force, touch.timestamp) : nil
+            (awaitingRefinement, refined) = ([], false)
+            noteEstimate(touch)
+            guard input.began(at: point, keys: keys, tapCount: touch.tapCount, pressure: pressure(of: touch),
+                              placeholder: followsPressure && isPlaceholder(touch)) else { return }
             activeTouch = touch
             drag = .tool
+            if input.isHoldingStroke {
+                holdEnd = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(PadCanvasInput.longestHold))
+                    guard !Task.isCancelled, let self else { return }
+                    input.beginHeldStroke()
+                    setNeedsRender()
+                }
+            }
             if input.isPainting { (touchPointer, touchKeys) = (point, keys) }
         }
         setNeedsRender()
@@ -406,7 +428,12 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
             // stroke.
             let samples = input.isPainting ? event?.coalescedTouches(for: touch) ?? [touch] : [touch]
             for sample in samples {
-                input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? [], pressure: pressure(of: sample))
+                noteEstimate(sample)
+                if input.isHoldingStroke, let touchDown, sample.timestamp - touchDown.time >= PadCanvasInput.longestHold {
+                    input.beginHeldStroke()
+                }
+                input.moved(to: sample.location(in: self), keys: event?.modifierFlags ?? [], pressure: pressure(of: sample),
+                            placeholder: followsPressure && isPlaceholder(sample))
             }
         case .pan(let last):
             let point = touch.location(in: self)
@@ -422,14 +449,46 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
     /// refined force, a few samples later, would mean painting over what's already down.
     private func pressure(of touch: UITouch) -> CGFloat? {
         Self.pressure(type: touch.type, force: touch.force, maximumPossibleForce: touch.maximumPossibleForce,
-                      followsPressure: followsPressure)
+                      followsPressure: followsPressure, placeholder: isPlaceholder(touch))
+    }
+
+    /// Whether `touch`'s force is UIKit's placeholder, or an estimate still settling down from it.
+    private func isPlaceholder(_ touch: UITouch) -> Bool {
+        guard touch.type == .pencil, let touchDown else { return false }
+        return Self.isPlaceholder(force: touch.force, estimated: touch.estimatedPropertiesExpectingUpdates.contains(.force),
+                                  touchDownForce: touchDown.force, refined: refined)
+    }
+
+    /// Keeps `touch`'s estimate, if UIKit will refine it, to know when the first refinement comes.
+    private func noteEstimate(_ touch: UITouch) {
+        guard touch.type == .pencil, !refined, touch.estimatedPropertiesExpectingUpdates.contains(.force),
+              let index = touch.estimationUpdateIndex else { return }
+        awaitingRefinement.insert(index)
+    }
+
+    /// Whether a force is UIKit's placeholder for a Pencil that came down with `touchDownForce`: still estimated, and
+    /// just that force; or, until UIKit's first refinement of the stroke (`refined`), an estimate under it. Those
+    /// settle down from the placeholder toward the real force over the next 50–80 ms, so a light stroke's first
+    /// estimates, 0.2–0.33 where it refines to 0.06–0.16, would still paint its head heavier than its line.
+    static func isPlaceholder(force: CGFloat, estimated: Bool, touchDownForce: CGFloat, refined: Bool = false) -> Bool {
+        estimated && (force == touchDownForce || (!refined && force < touchDownForce))
     }
 
     /// What a touch of `type` pressing with `force` hands the brush: Apple Pencil's pressure only in Pressure
-    /// Sensitivity (`followsPressure`); in the other modes nothing, so it paints at full pressure, as a finger does.
-    static func pressure(type: UITouch.TouchType, force: CGFloat, maximumPossibleForce: CGFloat, followsPressure: Bool) -> CGFloat? {
-        guard followsPressure else { return nil }
-        return PadCanvasInput.pressure(type: type, force: force, maximumPossibleForce: maximumPossibleForce)
+    /// Sensitivity (`followsPressure`), and no more than `PadCanvasInput.placeholderPressure` while the force is UIKit's
+    /// placeholder; in the other modes nothing, so it paints at full pressure, as a finger does.
+    static func pressure(type: UITouch.TouchType, force: CGFloat, maximumPossibleForce: CGFloat, followsPressure: Bool,
+                         placeholder: Bool = false) -> CGFloat? {
+        guard followsPressure,
+              let pressure = PadCanvasInput.pressure(type: type, force: force, maximumPossibleForce: maximumPossibleForce)
+        else { return nil }
+        return placeholder ? min(pressure, PadCanvasInput.placeholderPressure) : pressure
+    }
+
+    override func touchesEstimatedPropertiesUpdated(_ touches: Set<UITouch>) {
+        if !refined, touches.contains(where: { $0.estimationUpdateIndex.map(awaitingRefinement.contains) == true }) {
+            (awaitingRefinement, refined) = ([], true)
+        }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -447,6 +506,10 @@ final class PadCanvasView: UIView, UIGestureRecognizerDelegate, UIPencilInteract
         defer {
             activeTouch = nil
             drag = nil
+            holdEnd?.cancel()
+            holdEnd = nil
+            touchDown = nil
+            (awaitingRefinement, refined) = ([], false)
             (touchPointer, touchKeys) = (nil, [])
             setNeedsRender()
         }
