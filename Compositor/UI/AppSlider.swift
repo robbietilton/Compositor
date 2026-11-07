@@ -63,6 +63,19 @@ enum SliderGeometry {
         return Double(min(1, max(0, (x - knobSize.width / 2) / travel)))
     }
 
+    /// How far the fill reaches: to the knob's center, as macOS's own sliders do, except over the last few points at
+    /// each end, where it ramps quickly to empty and to full, so the glass knob shows none at the minimum and all at
+    /// the maximum.
+    static func fillWidth(fraction: Double, width: CGFloat) -> CGFloat {
+        let half = knobSize.width / 2, travel = max(0, width - knobSize.width)
+        let position = CGFloat(fraction) * travel, ramp = min(6, travel / 2)
+        guard ramp > 0 else { return CGFloat(fraction) * width }
+        if position < ramp { return position / ramp * (ramp + half) }
+        let remaining = travel - position
+        if remaining < ramp { return width - remaining / ramp * (ramp + half) }
+        return position + half
+    }
+
     static func knobCenter(fraction: Double, width: CGFloat) -> CGFloat {
         knobSize.width / 2 + CGFloat(fraction) * max(0, width - knobSize.width)
     }
@@ -110,7 +123,7 @@ struct SliderTrackView: View {
                         .frame(height: thickness)
                 } else {
                     Capsule().fill(Color.white.opacity(0.14)).frame(height: thickness)
-                    Capsule().fill(Color.accentColor).frame(width: max(thickness, center), height: thickness)
+                    Capsule().fill(Color.accentColor).frame(width: SliderGeometry.fillWidth(fraction: fraction, width: width), height: thickness)
                 }
                 knob
                     .offset(x: center - SliderGeometry.knobSize.width / 2)

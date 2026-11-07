@@ -44,4 +44,14 @@ struct CameraRawSliderTests {
         }
         #expect(SliderGeometry.fraction(of: 0, in: -100...100) == 0.5)
     }
+
+    /// The fill ends at the knob's center, but is empty at the minimum and full at the maximum.
+    @Test func theFillFollowsTheKnobAndReachesBothEnds() {
+        #expect(SliderGeometry.fillWidth(fraction: 0, width: 200) == 0)
+        #expect(SliderGeometry.fillWidth(fraction: 1, width: 200) == 200)
+        #expect(abs(SliderGeometry.fillWidth(fraction: 0.5, width: 200) - SliderGeometry.knobCenter(fraction: 0.5, width: 200)) < 0.001)
+        // Rising throughout, with no jump where the ramps meet the knob.
+        let widths = stride(from: 0.0, through: 1.0, by: 0.001).map { SliderGeometry.fillWidth(fraction: $0, width: 200) }
+        #expect(zip(widths, widths.dropFirst()).allSatisfy { $1 >= $0 && $1 - $0 < 1 })
+    }
 }
