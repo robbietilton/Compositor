@@ -68,6 +68,30 @@ import UIKit
         #expect(abs(gap(after: deselect, in: bar) - 18) < 1)
     }
 
+    /// Expand, Contract and Feather share one Size, 5 px to begin with, as the Mac's bar has since 1.6.4.
+    @Test func expandContractAndFeatherShareOneSize() throws {
+        let session = try session()
+        session.selectTool(.marquee)
+        session.setSelection(DocumentSelection(path: CGPath(rect: CGRect(x: 100, y: 100, width: 100, height: 50), transform: nil),
+                                               antialiased: false, feather: 0), name: "Select")
+        let bar = bar(for: session, width: 2400)
+        let sizes = views(NumberField.self, in: bar).filter { $0.caption?.text == "Size" }
+        #expect(sizes.count == 1)
+        let size = try #require(sizes.first)
+        #expect(size.field.text == "5")
+        size.onChange(12)
+        #expect(session.selectionModifyAmount == 12)
+        func tap(_ title: String) throws {
+            let button = try #require(views(UIButton.self, in: bar).first { $0.accessibilityLabel == title || $0.configuration?.title == title })
+            button.sendActions(for: .primaryActionTriggered)
+        }
+        try tap("Feather")
+        #expect(session.selection?.feather == 12)
+        try tap("Expand")
+        let box = try #require(session.selection?.path.boundingBoxOfPath)
+        #expect(abs(box.width - 124) < 1 && abs(box.height - 74) < 1)
+    }
+
     /// A gradient waiting for them has Cancel and Apply at the Gradient bar's end.
     @Test func applySitsAtTheGradientBarsEnd() throws {
         let session = try session()

@@ -519,11 +519,13 @@ final class EditorWindowController: UIViewController, UIDocumentPickerDelegate, 
 
     /// Expand, Contract or Feather from the Select menu asks by how many pixels, as the Mac's sheet does.
     private func askSelectionAmount(_ operation: EditorSession.SelectionAmountOperation, for session: EditorSession) {
-        let (title, amount, maximum) = switch operation {
-        case .expand: ("Expand Selection", session.selectionExpandAmount, 500)
-        case .contract: ("Contract Selection", session.selectionContractAmount, 500)
-        case .feather: ("Feather Selection", session.selectionFeatherAmount, 250)
+        let (title, maximum) = switch operation {
+        case .expand: ("Expand Selection", 500)
+        case .contract: ("Contract Selection", 500)
+        case .feather: ("Feather Selection", 250)
         }
+        // The amount the bar's buttons share, which can be more than Feather accepts.
+        let amount = min(session.selectionModifyAmount, maximum)
         let alert = UIAlertController(title: title, message: "A whole number from 1 to \(maximum) px.", preferredStyle: .alert)
         alert.addTextField { field in
             field.text = String(amount)

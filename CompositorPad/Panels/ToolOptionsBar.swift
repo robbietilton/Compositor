@@ -541,9 +541,7 @@ final class ToolOptionsBar: UIView {
             add(antialias)
             refreshers.append { antialias.isSelected = $0.selectionAntialiased }
         }
-        add(modifyControl("Expand", amount: \.selectionExpandAmount, range: 1...500) { $0.expandSelection(by: $1) })
-        add(modifyControl("Contract", amount: \.selectionContractAmount, range: 1...500) { $0.contractSelection(by: $1) })
-        add(modifyControl("Feather", amount: \.selectionFeatherAmount, range: 1...250, disablesAmount: false) { $0.featherSelection(by: $1) })
+        add(modifyControls())
         addSpace()
         let empty = OptionControls.caption("Empty selection", color: .secondaryLabel)
         let deselect = OptionControls.button("Deselect") { [weak self] in self?.session?.deselect() }
@@ -784,22 +782,25 @@ final class ToolOptionsBar: UIView {
         }
     }
 
-    /// A button and the pixels it works by, as the Mac's Expand, Contract and Feather, which keeps its amount open
+    /// Expand, Contract and Feather, sharing one pixel amount (1–500, 5 to begin with), as on the Mac; all disabled
     /// without a selection.
-    private func modifyControl(_ title: String, amount: ReferenceWritableKeyPath<EditorSession, Int>, range: ClosedRange<Double>,
-                               disablesAmount: Bool = true, action: @escaping (EditorSession, Int) -> Void) -> UIView {
-        let button = OptionControls.button(title) { [weak self] in
-            guard let session = self?.session else { return }
-            action(session, session[keyPath: amount])
+    private func modifyControls() -> UIView {
+        let size = NumberField(caption: "Size", unit: "px", width: 44, range: 1...500)
+        size.onChange = { [weak self] in self?.session?.selectionModifyAmount = Int($0.rounded()) }
+        let buttons = EditorSession.SelectionAmountOperation.allCases.map { operation in
+            let button = OptionControls.button(operation.rawValue) { [weak self] in
+                guard let session = self?.session else { return }
+                session.modifySelection(operation, by: session.selectionModifyAmount)
+            }
+            button.accessibilityHint = "\(operation.rawValue)s the selection by the Size's pixels."
+            return button
         }
-        let field = NumberField(caption: nil, unit: "px", width: 44, range: range)
-        field.onChange = { [weak self] in self?.session?[keyPath: amount] = Int($0.rounded()) }
         refreshers.append { session in
-            field.show(Double(session[keyPath: amount]))
-            button.isEnabled = session.canModifySelection
-            if disablesAmount { field.isEnabled = session.canModifySelection }
+            size.show(Double(session.selectionModifyAmount))
+            size.isEnabled = session.canModifySelection
+            for button in buttons { button.isEnabled = session.canModifySelection }
         }
-        return OptionControls.row([button, field], spacing: 5)
+        return OptionControls.row([size] + buttons, spacing: 5)
     }
 
     // MARK: Eyedropper

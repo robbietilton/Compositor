@@ -336,7 +336,7 @@ private let askedAtOnce = ["Image Size", "Canvas Size", "Rename", "Rename Layer"
             #expect(file.lastPathComponent == tab.title + ".jpg" && FileManager.default.fileExists(atPath: file.path(percentEncoded: false)),
                     sourceLocation: sourceLocation)
         case "Contract Selection":
-            #expect(session.selectionContractAmount == 7 && other.session.selectionContractAmount != 7, sourceLocation: sourceLocation)
+            #expect(session.selectionModifyAmount == 7 && other.session.selectionModifyAmount != 7, sourceLocation: sourceLocation)
         case "Photoshop file", "RAW file":
             #expect(await shown.answer?.value == true, sourceLocation: sourceLocation)
         case "Rename":
