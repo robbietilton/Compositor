@@ -14,6 +14,10 @@ final class MetalBrushCoverage {
         /// The firmest press that has reached each pixel, for a soft tip whose opacity follows a pen; nil otherwise.
         let cap: MTLBuffer?
     }
+    /// The GPU didn't finish the work: it was reset, or ran out of memory. The session paints the stroke again on the CPU.
+    struct Failed: Error {}
+    /// Renders left to fail on purpose, for tests of that recovery.
+    var failuresForTesting = 0
     private struct Uniforms {
         var mapping: SIMD4<Float>
         var geometry: SIMD4<Float>
@@ -46,6 +50,7 @@ final class MetalBrushCoverage {
     func render(_ tiles: [(Tile, CGRect, CGContext)], settled: [BrushSegment], tail: [BrushSegment],
                 mapping: CGAffineTransform, settings: BrushSettings, canvas: CGSize) throws {
         guard !tiles.isEmpty else { return }
+        if failuresForTesting > 0 { failuresForTesting -= 1; throw Failed() }
         // A dummy segment supplies a valid buffer for tail removal with no new geometry.
         let segments = settled + tail
         let storage = segments.isEmpty ? [BrushSegment(line: SIMD4(repeating: 0), dynamics: SIMD4(repeating: 0))] : segments
@@ -73,7 +78,7 @@ final class MetalBrushCoverage {
         encoder.endEncoding()
         command.commit()
         command.waitUntilCompleted()
-        guard command.status == .completed else { throw command.error ?? ExportError.render }
+        guard command.status == .completed else { throw Failed() }
         for (tile, rect, context) in tiles {
             // CGContext owns its memory so makeImage's copy-on-write snapshots stay immutable.
             guard let destination = context.data else { throw ExportError.render }

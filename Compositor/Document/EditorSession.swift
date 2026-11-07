@@ -298,6 +298,9 @@ final class EditorSession {
     @ObservationIgnored var brushPointer: CGPoint?
     /// The pen's latest pressure in this stroke; 1 for a mouse. Events that carry none (the release) keep it.
     @ObservationIgnored var brushPressure: CGFloat = 1
+    /// Every point the stroke in progress has been given, with its pressure, so it can be painted again from the start
+    /// (see `restartBrush`).
+    @ObservationIgnored var brushInput: [(point: CGPoint, pressure: CGFloat)] = []
     @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?
     /// The last rounded rectangle drawn for a transform in progress, by layer, with the size it was drawn at.
     @ObservationIgnored var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
