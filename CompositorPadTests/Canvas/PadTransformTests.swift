@@ -64,6 +64,47 @@ import UIKit
         #expect(session.document?.layers.first { $0.id == id }?.transform.origin == CGPoint(x: start.x + 30, y: start.y))
     }
 
+    /// A resize's size beside the pointer, and a move's distances, last only while the finger drags, as the Mac's end
+    /// with the mouse up: under Free Transform, which stays open after the drag, nothing still reports them, lifted or
+    /// cancelled.
+    @Test func aDragsSizeAndDistancesEndWithIt() throws {
+        let window = EditorWindowController()
+        window.loadViewIfNeeded()
+        let tab = try #require(window.activeTab)
+        let session = tab.session, input = tab.canvas.input
+        let canvas = CGSize(width: 400, height: 300)
+        session.viewport.resize(to: canvas, backingScale: 1, documentSize: nil)
+        session.createNewProject(width: 400, height: 300)
+        let context = try BrushRaster.context(width: 100, height: 80, mask: false)
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: 100, height: 80))
+        let image = try #require(context.makeImage())
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Red"))
+        session.selectTool(.move)
+        session.showsDistances = true
+        defer { session.showsDistances = false }
+        func point(_ pixel: CGPoint) -> CGPoint { session.viewport.viewPoint(from: pixel, documentSize: canvas) }
+
+        for cancels in [false, true] {
+            window.transformLayer(nil)
+            let box = try #require(session.transformEdit?.draft)
+            let corner = CGPoint(x: box.origin.x + box.size.width, y: box.origin.y + box.size.height)
+            input.began(at: point(corner))
+            input.moved(to: point(CGPoint(x: corner.x + 20, y: corner.y + 10)))
+            try #require(session.resizeSize != nil, "cancels: \(cancels)")
+            if cancels { input.cancelled() } else { input.ended(at: point(CGPoint(x: corner.x + 20, y: corner.y + 10))) }
+            #expect(session.transformEdit != nil && session.resizeSize == nil && session.dragOutSize == nil, "cancels: \(cancels)")
+
+            let center = CGPoint(x: box.origin.x + box.size.width / 2, y: box.origin.y + box.size.height / 2)
+            input.began(at: point(center))
+            input.moved(to: point(CGPoint(x: center.x + 15, y: center.y + 5)))
+            try #require(!session.distanceLines.isEmpty, "cancels: \(cancels)")
+            if cancels { input.cancelled() } else { input.ended(at: point(CGPoint(x: center.x + 15, y: center.y + 5))) }
+            #expect(session.distanceLines.isEmpty, "cancels: \(cancels)")
+            session.cancelTransform()
+        }
+    }
+
     /// Transforming a selection's pixels, from the window, keeps the layer's effects once it's applied, as on the Mac.
     @Test func transformingASelectionKeepsTheLayersEffects() async throws {
         let window = EditorWindowController()

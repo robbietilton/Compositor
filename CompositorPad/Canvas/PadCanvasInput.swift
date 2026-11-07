@@ -367,6 +367,8 @@ import UIKit
             // Option zooms out, as on the Mac.
             if !moved { session.zoom(to: session.viewport.zoom * (keys.contains(.alternate) ? 0.5 : 2), anchor: start) }
         case .transform:
+            // The size beside the pointer and the distances last only while dragging, as on the Mac.
+            (session.distanceLines, session.resizeSize) = ([], nil)
             // As the Mac's does: a drag applies itself when it's let go, unless it's part of an edit waiting for Apply.
             if session.transformEdit?.persistent == false { session.commitTransform() }
         case .outline:
@@ -435,6 +437,7 @@ import UIKit
         case .zoom:
             break
         case .transform(let transform, _):
+            (session.distanceLines, session.resizeSize) = ([], nil)
             session.previewTransform(transform.original)
             if let corners = transform.originalCorners { session.previewCorners(corners) }
             if session.transformEdit?.persistent == false { session.cancelTransform() }
