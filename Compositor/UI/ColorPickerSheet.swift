@@ -30,9 +30,15 @@ struct ColorPickerSheet: View {
                 .frame(width: 84, height: fieldSize, alignment: .topLeading)
             }
             Divider()
-            HStack {
+            // The hint fills the footer's left, so Cancel and OK sit together on the right rather than at opposite
+            // ends as in the other panels: spread out across an otherwise empty row, they left the picker looking unfinished.
+            HStack(spacing: 8) {
+                // A dialog covers the canvas, so there's nothing to sample.
+                if case .dialog = state.target {} else {
+                    Text("Click the canvas to sample").font(.caption).foregroundStyle(.secondary).fixedSize()
+                }
+                Spacer(minLength: 12)
                 Button("Cancel") { finish(false) }.configuredNativeShortcut(.escape)
-                Spacer()
                 Button("OK") { finish(true) }.configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
@@ -77,13 +83,15 @@ struct ColorPickerSheet: View {
     /// end is easy to hit.
     private var hueStrip: some View {
         let stripWidth: CGFloat = 14, arrow = CGSize(width: 9, height: 7), gap: CGFloat = 2, overhang: CGFloat = 6
-        let markerY = (1 - hsb.hue / 360) * fieldSize
+        // Kept a little in from the strip's very ends, so at red the arrows stay alongside the color rather than
+        // hanging past it.
+        let markerY = min(fieldSize - 1, max(1, (1 - hsb.hue / 360) * fieldSize))
         return ZStack(alignment: .topLeading) {
             LinearGradient(colors: stride(from: 360.0, through: 0, by: -60).map {
                 PickerHSB(hue: $0, saturation: 1, brightness: 1).rgb.swiftUI
             }, startPoint: .top, endPoint: .bottom)
                 .frame(width: stripWidth, height: fieldSize)
-                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .padding(.horizontal, arrow.width + gap)
                 .padding(.vertical, overhang)
             HStack(spacing: stripWidth + gap * 2) {
