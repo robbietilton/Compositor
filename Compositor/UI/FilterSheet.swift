@@ -579,7 +579,7 @@ struct FilterSheet: View {
                                 onChange: { value in update { $0[keyPath: key] = (value * step).rounded() / step } },
                                 onReset: reset)
             } else {
-                Slider(value: Binding(get: { logarithmic ? log(settings[keyPath: key]) : settings[keyPath: key] },
+                AppSlider(value: Binding(get: { logarithmic ? log(settings[keyPath: key]) : settings[keyPath: key] },
                                       set: { value in update { $0[keyPath: key] = ((logarithmic ? exp(value) : value) * step).rounded() / step } }),
                        in: logarithmic ? log(range.lowerBound)...log(range.upperBound) : range)
             }

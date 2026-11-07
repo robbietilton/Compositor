@@ -70,7 +70,7 @@ struct GridSettingsSheet: View {
             HStack {
                 Text("Opacity").frame(width: 110, alignment: .leading)
                     .scrubbable(sensitivity: 0.5, value: $appearance.opacity, range: GridAppearance.opacityRange)
-                Slider(value: Binding(get: { Double(appearance.opacity) }, set: { appearance.opacity = Int($0.rounded()) }),
+                AppSlider(value: Binding(get: { Double(appearance.opacity) }, set: { appearance.opacity = Int($0.rounded()) }),
                        in: Double(GridAppearance.opacityRange.lowerBound)...Double(GridAppearance.opacityRange.upperBound))
                 TextField("Opacity", value: Binding(get: { appearance.opacity }, set: setOpacity), format: .number)
                     .frame(width: 48).multilineTextAlignment(.trailing)

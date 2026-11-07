@@ -173,7 +173,7 @@ struct EffectsSheet: View {
                 .scrubbable(sensitivity: 1, value: value, range: limits)
             // A manually entered larger value stays intact; only the thumb is pinned
             // to the end of the slider until the user drags it again.
-            Slider(value: Binding(get: { min(range.upperBound, max(range.lowerBound, value.wrappedValue)) },
+            AppSlider(value: Binding(get: { min(range.upperBound, max(range.lowerBound, value.wrappedValue)) },
                                   set: { value.wrappedValue = $0 }), in: range)
             TextField(title, value: Binding(get: { Double(value.wrappedValue) },
                                             set: setAmount),

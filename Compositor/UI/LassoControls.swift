@@ -250,7 +250,7 @@ struct SelectionAmountSheet: View {
                     .scrubbable(sensitivity: 1,
                                 value: Binding<Int>(get: { amount ?? 1 }, set: { input = String($0) }),
                                 range: 1...maximum)
-                Slider(value: Binding(get: { Double(amount ?? 1) },
+                AppSlider(value: Binding(get: { Double(amount ?? 1) },
                                       set: { input = String(Int($0.rounded())) }),
                        in: 1...Double(maximum))
                 TextField("Amount", text: $input)
