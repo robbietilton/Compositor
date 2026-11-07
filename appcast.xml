@@ -3,17 +3,18 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.4</title>
-      <pubDate>Thu, 05 Nov 2026 01:16:20 +0000</pubDate>
-      <sparkle:version>63</sparkle:version>
-      <sparkle:shortVersionString>1.6.4</sparkle:shortVersionString>
+      <title>Version 1.6.5</title>
+      <pubDate>Sat, 07 Nov 2026 17:41:33 +0000</pubDate>
+      <sparkle:version>64</sparkle:version>
+      <sparkle:shortVersionString>1.6.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.4</link>
-      <changes><![CDATA[Cleaner, more modern color swatches throughout the app
-UI polish across tool bars, selection tools, layer effects and dialogs
-Feather now adds up each time you press it
-Fixed a selection expansion and contraction bug]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.4/Compositor.dmg" sparkle:edSignature="G6UcAvBBSI9gMp2l3dZ1w58acK+IZtY2tgUGfV56DWfxPR6R1plLfNVTvquDZcAxVMZ4i/+6OwNN8fU03XjFCg==" length="8830663" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.5</link>
+      <changes><![CDATA[Redesigned sliders throughout the app, with a slim track and a narrow knob that turns to glass while you drag
+A refreshed Color Picker that's more compact, with a new and current color comparison
+UI polish across panels and tool bars
+Fixed stroke layer effects being uneven or clipped on rounded shapes
+Fixed painting past the edges of a scaled-down layer, which could fail with a GPU error]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.5/Compositor.dmg" sparkle:edSignature="ObVLnm5VIXdjzBSBbimG13ENOKaNhPszHHDRZsdrAaVJAMX+ON/aTnBynNdfVCDW6W4+aJktvgigcQbWG8zOBQ==" length="8845829" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
