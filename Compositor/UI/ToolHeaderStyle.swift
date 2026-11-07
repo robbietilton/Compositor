@@ -15,18 +15,20 @@ enum ToolHeaderStyle {
 struct ToolHeaderPill<Content: View>: View {
     var segmentWidth: CGFloat = 28
     @ViewBuilder let content: Content
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         HStack(spacing: 0) {
             Group(subviews: content) { segments in
                 ForEach(segments.indices, id: \.self) { index in
-                    if index > 0 { Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 12) }
+                    if index > 0 { Rectangle().fill(.white.opacity(isEnabled ? 0.12 : 0.06)).frame(width: 1, height: 12) }
                     segments[index]
                 }
             }
         }
         .buttonStyle(ToolHeaderPillButtonStyle(width: segmentWidth))
-        .background(.white.opacity(0.09))
+        // Fainter while disabled, as the system's own buttons go, so a dimmed pill doesn't stand out from them.
+        .background(.white.opacity(isEnabled ? 0.09 : 0.045))
         .clipShape(Capsule())
     }
 }
