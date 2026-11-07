@@ -36,7 +36,7 @@ struct HueSaturationSheet: View {
                 Picker("Range", selection: settings.range) {
                     ForEach(ColorRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                .pickerStyle(.menu).frame(width: 160).labelsHidden().disabled(current.colorize)
+                .pickerStyle(.menu).labelsHidden().frame(width: 160, alignment: .leading).disabled(current.colorize)
                 Spacer()
                 samplingControls
             }
@@ -133,12 +133,13 @@ struct HueSaturationSheet: View {
                             onChange: { value.wrappedValue = $0.rounded() }, onReset: { value.wrappedValue = reset })
             TextField(title, value: value, format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
-                .unitSuffix(unit)
                 // A field's own submit swallows Return, so it confirms the window itself, as OK does.
                 .onSubmit {
                     value.wrappedValue = min(range.upperBound, max(range.lowerBound, value.wrappedValue))
                     Task { await session.commitHueSaturation() }
                 }
+            // A column the same width for every unit, so the fields line up whether or not a row has one.
+            Text(unit).frame(width: 16, alignment: .trailing).padding(.leading, -8)
         }
     }
 }

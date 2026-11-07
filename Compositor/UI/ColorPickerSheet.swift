@@ -18,7 +18,7 @@ struct ColorPickerSheet: View {
     private var color: PaletteColor { state.color }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 12) {
                 saturationBrightnessField
                 hueStrip
@@ -29,19 +29,14 @@ struct ColorPickerSheet: View {
                 }
                 .frame(width: 84, height: fieldSize, alignment: .topLeading)
             }
-            .padding(14)
             Divider()
-            HStack(spacing: 8) {
-                // A dialog covers the canvas, so there's nothing to sample.
-                if case .dialog = state.target {} else {
-                    Text("Click the canvas to sample").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 12)
+            HStack {
                 Button("Cancel") { finish(false) }.configuredNativeShortcut(.escape)
+                Spacer()
                 Button("OK") { finish(true) }.configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
         }
+        .padding(20)
         .fixedSize()
         .onAppear { hexDraft = color.hex }
         .onChange(of: color) { _, new in if !hexFocused { hexDraft = new.hex } }
