@@ -49,8 +49,6 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["NSDisabledDictationMenuItem": true, "NSDisabledCharacterPaletteMenuItem": true])
         // Always dark, alerts and open/save panels included, whatever the Mac is set to.
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        // Slider knobs snap to a click on the track instead of gliding there.
-        SliderSnap.install()
         // The Brush's pressure buttons wait for a tablet pen.
         PenInput.install()
     }

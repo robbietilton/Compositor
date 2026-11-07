@@ -42,14 +42,16 @@ struct TransformInspector: View {
                 })) {
                     ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }.frame(width: 170)
-                Button { change { $0.flipX.toggle() } } label: {
-                    Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                ToolHeaderPill(segmentWidth: 34) {
+                    Button { change { $0.flipX.toggle() } } label: {
+                        Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                    }
+                    .help("Flip Horizontal").accessibilityLabel("Flip Horizontal")
+                    Button { change { $0.flipY.toggle() } } label: {
+                        Image(systemName: "arrow.up.and.down.righttriangle.up.righttriangle.down")
+                    }
+                    .help("Flip Vertical").accessibilityLabel("Flip Vertical")
                 }
-                .help("Flip Horizontal").accessibilityLabel("Flip Horizontal")
-                Button { change { $0.flipY.toggle() } } label: {
-                    Image(systemName: "arrow.up.and.down.righttriangle.up.righttriangle.down")
-                }
-                .help("Flip Vertical").accessibilityLabel("Flip Vertical")
                 Divider().frame(height: 16)
 
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.

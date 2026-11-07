@@ -334,6 +334,56 @@ struct SelectionTests {
         #expect(abs(try #require(session.selection).path.boundingBoxOfPath.width - 30) < 0.01)
     }
 
+    /// A curved corner contracted by exactly its radius collapses to a point, and all four corners must survive that.
+    @Test func contractingARoundedRectangleByItsRadiusKeepsItsCorners() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080)
+        for radius in [5, 10, 20, 37] {
+            let start = CGRect(x: 200, y: 150, width: 700, height: 500)
+            session.setSelection(DocumentSelection(path: CGPath(roundedRect: start, cornerWidth: CGFloat(radius), cornerHeight: CGFloat(radius), transform: nil)), name: "Start")
+            session.contractSelection(by: radius)
+            let path = try #require(session.selection).path
+            let rect = start.insetBy(dx: CGFloat(radius), dy: CGFloat(radius))
+            for corner in [CGPoint(x: rect.minX + 1, y: rect.minY + 1), CGPoint(x: rect.maxX - 1, y: rect.minY + 1),
+                           CGPoint(x: rect.minX + 1, y: rect.maxY - 1), CGPoint(x: rect.maxX - 1, y: rect.maxY - 1)] {
+                #expect(path.contains(corner, using: .winding), "radius \(radius) lost \(corner): \(path)")
+            }
+        }
+    }
+
+    /// Repeating Contract or Expand keeps a rectangle a rectangle: all of it inset or grown, with square corners.
+    @Test func repeatedContractAndExpandKeepARectangleARectangle() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080)
+        for start in [CGRect(x: 300, y: 200, width: 900, height: 700), CGRect(x: 123, y: 87, width: 641, height: 513)] {
+            func expectRectangle(_ rect: CGRect, _ step: String) throws {
+                let selection = try #require(session.selection)
+                let box = selection.path.boundingBoxOfPath
+                #expect(abs(box.minX - rect.minX) < 0.01 && abs(box.minY - rect.minY) < 0.01
+                        && abs(box.width - rect.width) < 0.01 && abs(box.height - rect.height) < 0.01, "\(step): \(box), not \(rect)")
+                for corner in [CGPoint(x: rect.minX + 0.5, y: rect.minY + 0.5), CGPoint(x: rect.maxX - 0.5, y: rect.minY + 0.5),
+                               CGPoint(x: rect.minX + 0.5, y: rect.maxY - 0.5), CGPoint(x: rect.maxX - 0.5, y: rect.maxY - 0.5)] {
+                    #expect(selection.path.contains(corner, using: .winding), "\(step): the corner at \(corner) is missing from \(selection.path)")
+                }
+            }
+            session.setSelection(DocumentSelection(path: CGPath(rect: start, transform: nil)), name: "Start")
+            var rect = start
+            for step in 1...30 {
+                session.contractSelection(by: 5)
+                rect = rect.insetBy(dx: 5, dy: 5)
+                try expectRectangle(rect, "contract \(step)")
+            }
+            for step in 1...30 {
+                session.expandSelection(by: 5)
+                rect = rect.insetBy(dx: -5, dy: -5)
+                try expectRectangle(rect, "expand \(step)")
+            }
+            // Contracting straight after an Expand of the same amount is what used to lose a corner.
+            session.contractSelection(by: 5)
+            try expectRectangle(rect.insetBy(dx: 5, dy: 5), "contract after expand")
+        }
+    }
+
     @Test func expandStaysOnCanvasAndContractCanEmptyTheSelection() throws {
         let session = makeSession()
         session.selectAll()

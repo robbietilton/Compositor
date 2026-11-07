@@ -97,7 +97,7 @@ struct RawDevelopSheet: View {
                         unit: String, precision: Int) -> some View {
         HStack(spacing: 10) {
             Text(title).frame(width: 110, alignment: .leading)
-            Slider(value: value, in: range).frame(width: 300)
+            AppSlider(value: value, in: range).frame(width: 300)
             Text(String(format: "%.\(precision)f%@", value.wrappedValue, unit))
                 .monospacedDigit().foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .trailing)

@@ -169,7 +169,7 @@ struct ExportAsSheet: View {
                     GridRow {
                         Text("Quality")
                         HStack {
-                            Slider(value: $options.quality, in: 0...1, step: 0.01).frame(width: 300)
+                            AppSlider(value: $options.quality, in: 0...1, step: 0.01).frame(width: 300)
                             Text("\(Int((options.quality * 100).rounded()))%").monospacedDigit().frame(width: 45, alignment: .trailing)
                         }
                     }

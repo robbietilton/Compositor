@@ -19,7 +19,7 @@ struct LayerAppearanceControls: View {
                                 range: 0...100,
                                 onStart: { session.beginOpacityEdit() },
                                 onEnd: { session.finishOpacityEdit() })
-                Slider(value: Binding(get: { session.activeLayer?.opacity ?? 1 },
+                AppSlider(value: Binding(get: { session.activeLayer?.opacity ?? 1 },
                                       set: { session.setLayerOpacity($0) }), in: 0...1,
                        onEditingChanged: { if $0 { session.beginOpacityEdit() } else { session.finishOpacityEdit() } })
                 HStack(spacing: 2) {

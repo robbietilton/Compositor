@@ -4,12 +4,35 @@ import AppKit
 
 /// Feather softens the selection itself, so everything clipped by it fades at the edge.
 @MainActor struct SelectionFeatherTests {
+    @Test func featherAddsUpEachTimeItIsApplied() throws {
+        let session = EditorSession()
+        session.createDocument(width: 60, height: 20)
+        session.selectAll()
+        for _ in 0..<3 { session.modifySelection(.feather, by: 2) }
+        #expect(try #require(session.selection).feather == 6)
+        session.modifySelection(.feather, by: 500)
+        #expect(try #require(session.selection).feather == 250, "feather has a limit of 250 pixels")
+    }
+
+    @Test func theStatusBarsFeatherFollowsTheSelection() throws {
+        let session = EditorSession()
+        session.createDocument(width: 60, height: 20)
+        #expect(session.selectionFeather == nil)
+        session.selectAll()
+        #expect(session.selectionFeather == nil, "a hard edge has no feather to show")
+        for _ in 0..<2 { session.modifySelection(.feather, by: 3) }
+        #expect(session.selectionFeather == 6)
+        session.undo()
+        #expect(session.selectionFeather == 3)
+        session.deselect()
+        #expect(session.selectionFeather == nil)
+    }
+
     @Test func featherSoftensTheSelectionAndWhatItClips() async throws {
         let session = EditorSession()
         session.createDocument(width: 60, height: 20)
         session.addBlankLayer()
         session.selectAll()
-        session.selectionFeatherAmount = 6
         session.featherSelection(by: 6)
         let selection = try #require(session.selection)
         #expect(session.canModifySelection, "the selection cannot be modified")

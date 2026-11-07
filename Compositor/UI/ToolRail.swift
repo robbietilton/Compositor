@@ -54,7 +54,7 @@ struct ToolRailStack: View {
                 .frame(width: twoColumns ? ToolRailLayout.buttonSize * 2 + ToolRailLayout.columnSpacing : ToolRailLayout.buttonSize,
                        alignment: .leading)
             }
-            ColorPaletteControls(session: session).padding(.top, 8)
+            ColorPaletteControls(session: session)
         }
         .padding(.top, 16).padding(.bottom, 12)
         .frame(width: width)
