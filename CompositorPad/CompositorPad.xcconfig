@@ -19,7 +19,7 @@ PRODUCT_BUNDLE_IDENTIFIER = io.github.naco-siren.Compositor
 MARKETING_VERSION = 2.0
 // The Mac version this branch is merged from (the Compositor target's MARKETING_VERSION in the project file), shown in
 // About after the iPad's own. Bump it with every merge of upstream main.
-COMPOSITOR_MAC_VERSION = 1.6.2
+COMPOSITOR_MAC_VERSION = 1.6.3
 CURRENT_PROJECT_VERSION = 1
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =

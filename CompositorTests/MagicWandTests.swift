@@ -144,4 +144,25 @@ struct MagicWandTests {
         #expect(session.selection != nil)
         #expect(try pixels(session.selection?.path, width: 20, height: 10) == left)
     }
+
+    /// Edit › Deselect, read by the menu while a wand click is still working, is read again once it's done, even when
+    /// the click selected what was already selected and so changed nothing else the menu watches.
+    @Test func deselectComesBackAfterAWandClickThatChangesNothing() async throws {
+        let session = EditorSession()
+        session.createDocument(width: 20, height: 10)
+        let black = try image(width: 20, height: 10) { _, _ in [0, 0, 0, 255] }
+        session.insert(ImportedImage(image: black, thumbnail: black, name: "Black"))
+        session.selectTool(.wand)
+        await session.magicWand(at: CGPoint(x: 2, y: 2), mode: .replace)
+        let selection = session.selection
+        let again = Task { await session.magicWand(at: CGPoint(x: 2, y: 2), mode: .replace) }
+        while !session.isProjectBusy { await Task.yield() }
+        nonisolated(unsafe) var redrawn = false
+        withObservationTracking { _ = session.canEditSelection } onChange: { redrawn = true }
+        #expect(!session.canEditSelection)
+        await again.value
+        #expect(session.selection == selection)
+        #expect(session.canEditSelection)
+        #expect(redrawn)
+    }
 }

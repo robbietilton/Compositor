@@ -102,6 +102,9 @@ import Sparkle
         for (view, new) in zip(content.subviews, frames) { view.frame = new }
         for view in chain.dropLast() { view.frame.size.height -= trim }
         label.frame.origin.y = 0
+        // NSAlert also keeps an empty view the accessory's full height, which the trim leaves over the checkbox,
+        // taking its clicks. Hidden, clicks go through to what's under it.
+        for view in content.subviews where type(of: view) == NSView.self && view.subviews.isEmpty { view.isHidden = true }
     }
 
     /// The item's changes as a list: a line each, any leading bullet or dash taken off.
