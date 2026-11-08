@@ -90,16 +90,13 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("s", modifiers: [.command, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
-                    // Export As on JPEG.
-                    Button("Export JPEG…") { Task { await applicationDelegate.projects.exportAs(start: .jpeg) } }
-                        .configuredKeyboardShortcut("s", modifiers: [.command, .option, .shift])
-                        .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Button("Export PNG…") { Task { await applicationDelegate.projects.exportPNG() } }
                         .configuredKeyboardShortcut("e", modifiers: [.command, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
-                    // Still images or GIF timelines, sized and previewed; ⌥⇧⌘W, as Photoshop's Export As.
+                    // Still images or GIF timelines, sized and previewed; ⌥⇧⌘S, Photoshop's long-standing Save for Web, beside
+                    // Save and Save As. Its newer Export As key, ⌥⇧⌘W, works too (see the app delegate).
                     Button("Export As…") { Task { await applicationDelegate.projects.exportAs() } }
-                        .configuredKeyboardShortcut("w", modifiers: [.command, .option, .shift])
+                        .configuredKeyboardShortcut("s", modifiers: [.command, .option, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
                     Button("Close Project") {
