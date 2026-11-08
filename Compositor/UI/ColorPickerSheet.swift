@@ -2,14 +2,14 @@ import SwiftUI
 import AppKit
 
 /// Photoshop-style picker: saturation/brightness field, vertical hue strip,
-/// new/current preview, RGB and hex entry. Lives in a movable floating panel so
+/// new/current preview, RGB and hex entry, with Cancel and OK below as in the app's other panels. Lives in a movable floating panel so
 /// the canvas stays visible and can be clicked to sample a color.
 struct ColorPickerSheet: View {
     @Bindable var state: ColorPickerState
     let finish: (Bool) -> Void
     @State private var hexDraft = ""
     @FocusState private var hexFocused: Bool
-    private let fieldSize: CGFloat = 256
+    private let fieldSize: CGFloat = 245
 
     private var hsb: PickerHSB {
         get { state.hsb }
@@ -18,29 +18,29 @@ struct ColorPickerSheet: View {
     private var color: PaletteColor { state.color }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            saturationBrightnessField
-            hueStrip
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                saturationBrightnessField
+                hueStrip
+                VStack(alignment: .leading, spacing: 0) {
                     preview
-                    VStack(spacing: 8) {
-                        Button { finish(true) } label: { Text("OK").frame(maxWidth: .infinity) }
-                            .configuredNativeShortcut(.return)
-                        Button { finish(false) } label: { Text("Cancel").frame(maxWidth: .infinity) }
-                            .configuredNativeShortcut(.escape)
-                    }
-                    .controlSize(.large).frame(width: 90)
+                    Spacer(minLength: 12)
+                    fields
                 }
-                Spacer(minLength: 12)
-                fields
+                .frame(width: 84, height: fieldSize, alignment: .topLeading)
+            }
+            Divider()
+            // The hint fills the footer's left, so Cancel and OK sit together on the right rather than at opposite
+            // ends as in the other panels: spread out across an otherwise empty row, they left the picker looking unfinished.
+            HStack(spacing: 8) {
                 // A dialog covers the canvas, so there's nothing to sample.
                 if case .dialog = state.target {} else {
-                    Text("Click the canvas to sample")
-                        .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                    Text("Click the canvas to sample").font(.caption).foregroundStyle(.secondary).fixedSize()
                 }
+                Spacer(minLength: 12)
+                Button("Cancel") { finish(false) }.configuredNativeShortcut(.escape)
+                Button("OK") { finish(true) }.configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
-            .frame(width: 180, height: fieldSize, alignment: .topLeading)
         }
         .padding(20)
         .fixedSize()
@@ -50,20 +50,27 @@ struct ColorPickerSheet: View {
     }
 
     private var saturationBrightnessField: some View {
-        ZStack {
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        return ZStack {
             LinearGradient(colors: [.white, PickerHSB(hue: hsb.hue, saturation: 1, brightness: 1).rgb.swiftUI],
                            startPoint: .leading, endPoint: .trailing)
             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-            Circle()
-                .strokeBorder(.white, lineWidth: 1.5)
-                .background(Circle().strokeBorder(.black, lineWidth: 0.75).padding(-0.75))
-                .frame(width: 12, height: 12)
-                .position(x: hsb.saturation * fieldSize, y: (1 - hsb.brightness) * fieldSize)
         }
         .frame(width: fieldSize, height: fieldSize)
-        .clipShape(Rectangle())
-        .overlay { Rectangle().strokeBorder(.black.opacity(0.6), lineWidth: 1) }
-        .contentShape(Rectangle())
+        // Flattened before the corners are cut: clipped one by one, each gradient's own soft edge let the white and
+        // hue beneath show through the black at the bottom corners.
+        .compositingGroup()
+        .clipShape(shape)
+        // The pointer is filled with the color it picks, ringed in white so it shows on any of them.
+        .overlay(alignment: .topLeading) {
+            Circle()
+                .fill(color.swiftUI)
+                .overlay { Circle().strokeBorder(.white, lineWidth: 2) }
+                .shadow(color: .black.opacity(0.45), radius: 1)
+                .frame(width: 14, height: 14)
+                .position(x: hsb.saturation * fieldSize, y: (1 - hsb.brightness) * fieldSize)
+        }
+        .contentShape(shape)
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
             hsb.saturation = min(1, max(0, value.location.x / fieldSize))
             hsb.brightness = 1 - min(1, max(0, value.location.y / fieldSize))
@@ -71,37 +78,52 @@ struct ColorPickerSheet: View {
         .accessibilityLabel("Saturation and brightness")
     }
 
+    /// The hue strip, marked by an arrow on each side rather than a knob across it, so the hue being chosen stays
+    /// in view, as in Photoshop. It answers presses a little past its ends, where the arrows reach at red, so the very
+    /// end is easy to hit.
     private var hueStrip: some View {
-        let stripWidth: CGFloat = 20
-        let markerY = (1 - hsb.hue / 360) * fieldSize
+        let stripWidth: CGFloat = 14, arrow = CGSize(width: 9, height: 7), gap: CGFloat = 2, overhang: CGFloat = 6
+        // Kept a little in from the strip's very ends, so at red the arrows stay alongside the color rather than
+        // hanging past it.
+        let markerY = min(fieldSize - 1, max(1, (1 - hsb.hue / 360) * fieldSize))
         return ZStack(alignment: .topLeading) {
             LinearGradient(colors: stride(from: 360.0, through: 0, by: -60).map {
                 PickerHSB(hue: $0, saturation: 1, brightness: 1).rgb.swiftUI
             }, startPoint: .top, endPoint: .bottom)
                 .frame(width: stripWidth, height: fieldSize)
-                .overlay { Rectangle().strokeBorder(.black.opacity(0.6), lineWidth: 1) }
-                .padding(.horizontal, 7)
-            HStack(spacing: stripWidth) {
-                HueArrow().fill(.primary).frame(width: 7, height: 10)
-                HueArrow().fill(.primary).frame(width: 7, height: 10).scaleEffect(x: -1)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .padding(.horizontal, arrow.width + gap)
+                .padding(.vertical, overhang)
+            HStack(spacing: stripWidth + gap * 2) {
+                HueArrow().fill(Color(white: 0.92)).frame(width: arrow.width, height: arrow.height)
+                HueArrow().fill(Color(white: 0.92)).frame(width: arrow.width, height: arrow.height).scaleEffect(x: -1)
             }
-            .offset(y: markerY - 5)
+            .shadow(color: .black.opacity(0.5), radius: 0.75, y: 0.5)
+            .offset(y: overhang + markerY - arrow.height / 2)
         }
-        .frame(width: stripWidth + 14, height: fieldSize)
+        .frame(width: stripWidth + (arrow.width + gap) * 2, height: fieldSize + overhang * 2)
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-            hsb.hue = (1 - min(1, max(0, value.location.y / fieldSize))) * 360
+            hsb.hue = (1 - min(1, max(0, (value.location.y - overhang) / fieldSize))) * 360
         })
+        .padding(.vertical, -overhang)
         .accessibilityLabel("Hue")
         .accessibilityValue("\(Int(hsb.hue.rounded())) degrees")
     }
 
+    /// The new color over the one the picker opened with; clicking the old one goes back to it, as in Photoshop.
     private var preview: some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(color.swiftUI)
-            .overlay { RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(.black.opacity(0.6), lineWidth: 1) }
-            .frame(width: 64, height: 64)
-            .accessibilityLabel("New color")
+        VStack(spacing: 0) {
+            color.swiftUI.accessibilityLabel("New color")
+            state.original.swiftUI
+                .contentShape(Rectangle())
+                .onTapGesture { hsb.setRGB(state.original) }
+                .help("The color before: click to go back to it")
+                .accessibilityLabel("Current color")
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1) }
     }
 
     private var fields: some View {
@@ -110,10 +132,10 @@ struct ColorPickerSheet: View {
             channelRow("G", \.green)
             channelRow("B", \.blue)
             GridRow {
-                Text("#").frame(width: 14, alignment: .leading)
+                Text("#").frame(width: 12, alignment: .leading)
                 TextField("Hex", text: $hexDraft)
                     .font(.system(.body, design: .monospaced))
-                    .frame(width: 84)
+                    .frame(width: 62)
                     .focused($hexFocused)
                     .onSubmit(commitHex)
                     .accessibilityLabel("Hex color")
@@ -130,7 +152,7 @@ struct ColorPickerSheet: View {
                 hsb.setRGB(rgb)
             })
         return GridRow {
-            Text(label).frame(width: 14, alignment: .leading)
+            Text(label).frame(width: 12, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: channelValue, range: 0...255)
             TextField(label, value: channelValue, format: .number)
                 .frame(width: 52)
@@ -150,12 +172,20 @@ struct ColorPickerSheet: View {
     }
 }
 
+/// A small pointer aiming right: a round back tapering to a sharp tip, like a pin.
 private struct HueArrow: Shape {
     func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        let radius = rect.height / 2
+        let center = CGPoint(x: rect.minX + radius, y: rect.midY)
+        let tip = CGPoint(x: rect.maxX, y: rect.midY)
+        let reach = tip.x - center.x
+        guard reach > radius else { return Path(ellipseIn: rect) }
+        // Where the straight sides meet the round back: tangent to it from the tip.
+        let angle = acos(radius / reach)
+        return Path { path in
+            path.move(to: tip)
+            path.addArc(center: center, radius: radius, startAngle: .radians(Double(angle)),
+                        endAngle: .radians(-Double(angle)), clockwise: false)
             path.closeSubpath()
         }
     }
@@ -197,7 +227,7 @@ final class ColorPickerPanelController: NSObject {
     static func refocus() { FloatingPanelController.refocus(identifier) }
 }
 
-/// A dialog's color swatch, drawn as the brush's: clicking it opens the app's picker on `color`, which follows the
+/// A dialog's color swatch: clicking it opens the app's picker on `color`, which follows the
 /// working color as it moves and keeps the one chosen. `closePicker()` puts the picker away with the dialog.
 struct DialogColorSwatch: View {
     let title: String
@@ -207,12 +237,7 @@ struct DialogColorSwatch: View {
         Button {
             session.openDialogColorPicker(title: title, color: color) { color = $0 }
         } label: {
-            let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            shape.fill(color.swiftUI)
-                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1) }
-                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                .frame(width: 34, height: 18)
-                .contentShape(shape)
+            ColorSwatch(color: color.swiftUI)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)

@@ -206,6 +206,9 @@ final class EditorSession {
     var effectSelection: LayerEffectSelection?
     @ObservationIgnored var effectsPreviews = EffectsPreviewCache()
     var projectURL: URL?
+    /// The image file the document began as, opened or dropped into an empty window: until the document is saved as a
+    /// project, Export offers that file's name, folder and format, so editing a PNG and writing it back is quick.
+    @ObservationIgnored var sourceImageURL: URL?
     /// Blocks overlapping edits immediately. Not observed by the UI: controls only dim via
     /// `showsBusy`, after an operation has run long enough to be worth showing, so quick
     /// edits (invert, fills, stroke commits) never flash the interface.
@@ -220,23 +223,28 @@ final class EditorSession {
             updateBusyIndicator()
         }
     }
-    /// True once `isProjectBusy` has lasted longer than `busyIndicatorDelay`.
-    private(set) var showsBusy = false
+    /// True once `isProjectBusy` has lasted longer than `busyIndicatorDelay`. Reading it also watches for a quicker
+    /// operation ending, which `isProjectBusy`, not observed, can't tell the UI: a menu drawn during a Magic Wand click
+    /// that selected what was already selected kept Deselect dimmed, with nothing after it to redraw the menu.
+    var showsBusy: Bool { _ = quickOperationsEnded; return busyShowing }
+    private var busyShowing = false
+    private var quickOperationsEnded = 0
     static let busyIndicatorDelay: Duration = .milliseconds(250)
     @ObservationIgnored private var busyIndicatorTask: Task<Void, Never>?
     private func updateBusyIndicator() {
         if isProjectBusy {
-            guard busyIndicatorTask == nil, !showsBusy else { return }
+            guard busyIndicatorTask == nil, !busyShowing else { return }
             busyIndicatorTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: Self.busyIndicatorDelay)
                 guard let self, !Task.isCancelled, self.isProjectBusy else { return }
-                self.showsBusy = true
+                self.busyShowing = true
                 self.busyIndicatorTask = nil
             }
         } else {
+            if busyIndicatorTask != nil { quickOperationsEnded += 1 }
             busyIndicatorTask?.cancel()
             busyIndicatorTask = nil
-            if showsBusy { showsBusy = false }
+            if busyShowing { busyShowing = false }
         }
     }
     private var projectWaiters: [CheckedContinuation<Void, Never>] = []
@@ -275,6 +283,10 @@ final class EditorSession {
     @ObservationIgnored var distortEffectsCache: [UUID: DistortEffectsCache] = [:]
     /// Document positions a move has just snapped to, drawn as guides while it lasts.
     @ObservationIgnored var snapGuides: (xs: [CGFloat], ys: [CGFloat]) = ([], [])
+    /// Pixel gaps the Move tool shows while a layer is dragged, or with Command held over another layer.
+    @ObservationIgnored var distanceLines: [DistanceLine] = []
+    /// A Move tool resize in progress: the layer's size, and where the pointer has the handle, in document pixels.
+    @ObservationIgnored var resizeSize: (text: String, corner: CGPoint)?
     /// Crop, resize and selection moves follow View › Snap (⇧⌘;) too: they had a Snap item of their own, which left
     /// the View menu with two called Snap.
     var snappingEnabled: Bool {
@@ -289,6 +301,9 @@ final class EditorSession {
     @ObservationIgnored var brushPointer: CGPoint?
     /// The pen's latest pressure in this stroke; 1 for a mouse. Events that carry none (the release) keep it.
     @ObservationIgnored var brushPressure: CGFloat = 1
+    /// Every point the stroke in progress has been given, with its pressure, so it can be painted again from the start
+    /// (see `restartBrush`).
+    @ObservationIgnored var brushInput: [(point: CGPoint, pressure: CGFloat)] = []
     @ObservationIgnored var maskDistortPreviewCache: MaskDistortPreviewCache?
     /// The last rounded rectangle drawn for a transform in progress, by layer, with the size it was drawn at.
     @ObservationIgnored var shapeTransformPreviewCache: [UUID: (size: CGSize, image: CGImage)] = [:]
@@ -298,6 +313,9 @@ final class EditorSession {
     /// The Move tool's transform box and handles (⌘H). Hidden, a drag anywhere just moves the layer;
     /// a pending ⌘T transform still shows its box.
     var showsTransformControls = ToolDefaults.bool("transformControls", true) { didSet { ToolDefaults.set(showsTransformControls, "transformControls") } }
+    /// The selection whose outline ⌘H hid (outside the Move tool). It still limits painting and adjustments; any other
+    /// selection, or none, shows its outline again, so a new one is never invisible.
+    var hiddenSelectionEdges: DocumentSelection?
     /// The copies an Option-drag made, and what was selected before it, so Escape can take them away again.
     @ObservationIgnored var transformDuplicate: (copies: [UUID], source: Set<UUID>, primary: UUID?)?
     var brushSettings = BrushSettings() { didSet { refreshGradient() } }
@@ -375,7 +393,6 @@ final class EditorSession {
     @ObservationIgnored var previewZoom: ((PreviewZoomCommand) -> Void)?
     /// The text's style before the font menu started previewing faces on it (see `previewFont`).
     @ObservationIgnored var fontPreviewOriginal: LayerTextStyle?
-    var selectionFeatherAmount = 2
     var wandSettings = WandSettings()
     var objectSelectionSettings = ObjectSelectionSettings()
     var showsPixelGrid = ToolDefaults.bool("pixelGrid", true) { didSet { ToolDefaults.set(showsPixelGrid, "pixelGrid") } }
@@ -408,8 +425,15 @@ final class EditorSession {
             ToolDefaults.set(gridAppearance.opacity, "gridOpacity")
         }
     }
-    /// User guides. Hidden extras do not snap.
-    var showsGuides = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(showsGuides, "guides") } }
+    /// User guides, as View › Show › Guides (⌘;) and ⌘H leave them. Hidden guides do not snap. Turning them on, or making
+    /// a guide, also brings them back from ⌘H.
+    var showsGuides: Bool {
+        get { guidesOn && !extrasHideGuides }
+        set { guidesOn = newValue; extrasHideGuides = false }
+    }
+    private var guidesOn = ToolDefaults.bool("guides", true) { didSet { ToolDefaults.set(guidesOn, "guides") } }
+    /// ⌘H's hold on the guides, for the session only, so ⌘; keeps its own setting underneath.
+    var extrasHideGuides = false
     /// F: the canvas alone on black, filling the screen, with every panel and bar put away. F again brings them back.
     var canvasOnly = false
     /// Nothing in progress for Escape to cancel (a transform, crop, lasso, shape, gradient, stroke or text), so in
@@ -427,6 +451,13 @@ final class EditorSession {
             && selectionAmountOperation == nil
     }
     var showsRulers = ToolDefaults.bool("rulers", false) { didSet { ToolDefaults.set(showsRulers, "rulers") } }
+    /// View › Show › Distances: the Move tool's pixel gaps, while dragging and with Command held.
+    var showsDistances = ToolDefaults.bool("distances", false) {
+        didSet {
+            ToolDefaults.set(showsDistances, "distances")
+            if !showsDistances { distanceLines = [] }
+        }
+    }
     /// Master snap switch (View > Snap). On so today's layer/canvas snap keeps working.
     var snapEnabled = ToolDefaults.bool("snap", true) {
         didSet {
@@ -441,9 +472,8 @@ final class EditorSession {
     var snapToDocumentBounds = ToolDefaults.bool("snapBounds", true) { didSet { ToolDefaults.set(snapToDocumentBounds, "snapBounds") } }
     var locksGuides = ToolDefaults.bool("lockGuides", false) { didSet { ToolDefaults.set(locksGuides, "lockGuides") } }
     var guideDrag: GuideDrag?
-    /// Pixels the Expand / Contract buttons grow or shrink the selection by.
-    var selectionExpandAmount = 1
-    var selectionContractAmount = 1
+    /// Pixels the Expand, Contract and Feather buttons and commands change the selection by.
+    var selectionModifyAmount = 5
     @ObservationIgnored var pendingOpacityDigit: (digit: Int, time: TimeInterval)?
     var colorPicker: ColorPickerState?
     var brushError: String?
@@ -1002,8 +1032,9 @@ final class EditorSession {
             let startsDocument = document == nil
             var psdProfile: CMYKProfile?
             defer {
-                if startsDocument, document != nil, let profile = psdProfile ?? CMYK.profile(ofImageAt: url) {
-                    proofProfile = CMYK.adopt(profile)
+                if startsDocument, document != nil {
+                    if projectURL == nil { sourceImageURL = url }
+                    if let profile = psdProfile ?? CMYK.profile(ofImageAt: url) { proofProfile = CMYK.adopt(profile) }
                 }
             }
             do {
@@ -1234,6 +1265,8 @@ final class EditorSession {
     @ObservationIgnored var opensArtboard: ((PSDDocument, String) async -> Void)?
     /// The layer list's Export Layers as PNGs…; set by the project controller, which shows the panels.
     @ObservationIgnored var exportsLayers: (() async -> Void)?
+    /// While Volumetric Light's depth model is downloading or loading, the first time it's used (`DepthModel`).
+    var preparingDepth = false
     /// Set while Convert to 8-Bit ends its edit, so `keepLayerDepths` lets it make 16-bit layers 8-bit.
     @ObservationIgnored var convertsToEightBit = false
 

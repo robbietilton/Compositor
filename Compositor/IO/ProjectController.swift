@@ -52,8 +52,12 @@ final class ProjectController {
         guard let url = await savePanel(for: .png) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try await ImageExporter.shared.exportPNG(snapshot, to: url) }
-        catch { await showError("Couldn’t export PNG", error: error) }
+        do {
+            try await ImageExporter.shared.exportPNG(snapshot, to: url)
+            // Export As then starts on PNG too.
+            exportedFormat = .png
+            Self.lastExportFormat = .png
+        } catch { await showError("Couldn’t export PNG", error: error) }
     }
 
     /// The layer list's Export Layers as PNGs…: each selected layer on its own, trimmed to its pixels and named after it.
@@ -138,9 +142,8 @@ final class ProjectController {
         return await panel.begin() == .OK
     }
 
-    /// File › Export As…: still images or animation timelines, sized and previewed first. Export JPEG…
-    /// opens it on JPEG.
-    func exportAs(start: ExportFormat? = nil) async {
+    /// File › Export As…: still images or animation timelines, sized and previewed first, on the format last used.
+    func exportAs() async {
         guard let window, session.document != nil, begin() else { return }
         defer { session.isProjectBusy = false }
         guard let snapshot = session.projectSnapshot() else { return }
@@ -158,7 +161,7 @@ final class ProjectController {
                 sheet.title = "Export As"
                 sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
                     raster: raster, deepRaster: deepRaster, hdrRaster: hdrRaster, snapshot: snapshot, session: session,
-                    format: start ?? lastExportFormat) { chosen in
+                    format: exportedFormat ?? Self.startingFormat(source: session.sourceImageURL, projectURL: session.projectURL)) { chosen in
                     window.endSheet(sheet)
                     sheet.orderOut(nil)
                     // Release the hosted view and its closure after dismissal.
@@ -168,7 +171,8 @@ final class ProjectController {
                 window.beginSheet(sheet)
             }
             guard let chosen else { return }
-            lastExportFormat = chosen.format
+            exportedFormat = chosen.format
+            Self.lastExportFormat = chosen.format
             guard let url = await savePanel(for: chosen.format) else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -176,18 +180,38 @@ final class ProjectController {
         } catch { await showError("Couldn’t export", error: error) }
     }
 
-    /// The format Export As last used, offered first next time.
-    private var lastExportFormat = ExportFormat.png
+    /// The format this document was last exported in, offered first next time.
+    private var exportedFormat: ExportFormat?
+    /// The format Export As last used in any document, remembered between launches.
+    private static var lastExportFormat: ExportFormat {
+        get { UserDefaults.standard.string(forKey: "lastExportFormat").flatMap(ExportFormat.init(rawValue:)) ?? .png }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "lastExportFormat") }
+    }
 
-    /// Where an export goes: the project's name, with the format's extension.
+    /// What Export As starts on for a document not yet exported: the format of the image it began as, so a PNG goes
+    /// back out as a PNG, otherwise the format last used.
+    static func startingFormat(source: URL?, projectURL: URL?) -> ExportFormat {
+        guard projectURL == nil, let source, let type = UTType(filenameExtension: source.pathExtension) else { return lastExportFormat }
+        return [ExportFormat.png, .jpeg, .tiff, .gif, .exr].first { type.conforms(to: $0.type) } ?? lastExportFormat
+    }
+
+    /// The name an export starts with: the project's, or the image the document began as, or Untitled.
+    static func exportName(projectURL: URL?, source: URL?, format: ExportFormat) -> String {
+        ((projectURL ?? source)?.deletingPathExtension().lastPathComponent ?? "Untitled")
+            + "." + (format.type.preferredFilenameExtension ?? format.rawValue.lowercased())
+    }
+
+    /// Where an export goes: named after the project or the image it began as, and for an image, in its folder.
     private func savePanel(for format: ExportFormat) async -> URL? {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format.type]
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.title = "Export " + format.rawValue
-        panel.nameFieldStringValue = (session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
-            + "." + (format.type.preferredFilenameExtension ?? format.rawValue.lowercased())
+        panel.nameFieldStringValue = Self.exportName(projectURL: session.projectURL, source: session.sourceImageURL, format: format)
+        if session.projectURL == nil, let source = session.sourceImageURL {
+            panel.directoryURL = source.deletingLastPathComponent()
+        }
         let response: NSApplication.ModalResponse
         if let window { response = await panel.beginSheetModal(for: window) }
         else { response = await panel.begin() }
@@ -305,7 +329,11 @@ final class ProjectController {
             panel.allowedContentTypes = [.compositorProject]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.nameFieldStringValue = session.projectURL?.lastPathComponent ?? "Untitled.comp"
+            // A document that began as an image is saved, by default, beside it and under its name.
+            let source = session.projectURL == nil ? session.sourceImageURL : nil
+            panel.nameFieldStringValue = session.projectURL?.lastPathComponent
+                ?? source.map { $0.deletingPathExtension().lastPathComponent + ".comp" } ?? "Untitled.comp"
+            if let source { panel.directoryURL = source.deletingLastPathComponent() }
             panel.title = asNew ? "Save Project As" : "Save Project"
             let response: NSApplication.ModalResponse
             if let window { response = await panel.beginSheetModal(for: window) }

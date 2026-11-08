@@ -123,6 +123,122 @@ struct SelectionTests {
         #expect(session.lassoDraft == nil)
     }
 
+    /// ⌘H hides the outline but keeps the selection; a different selection, or none, shows outlines again.
+    /// The status bar's selection size: the Marquee as it's drawn, then the box around the selection, cut to the canvas.
+    @Test func selectionSizeFollowsTheMarqueeAndStaysOnTheCanvas() {
+        let session = makeSession()
+        #expect(session.selectionSize == nil)
+        session.selectTool(.marquee)
+        session.beginLasso(at: CGPoint(x: 10, y: 20), mode: .replace)
+        session.dragMarquee(to: CGPoint(x: 50, y: 35), square: false, fromCenter: false)
+        #expect(session.selectionSize?.width == 40 && session.selectionSize?.height == 15)
+        session.finishLasso()
+        #expect(session.selectionSize?.width == 40 && session.selectionSize?.height == 15)
+        lasso(session, square(70, -20, 60))
+        #expect(session.selectionSize?.width == 30 && session.selectionSize?.height == 40, "cut to the canvas")
+        session.deselect()
+        #expect(session.selectionSize == nil)
+    }
+
+    @Test func hiddenEdgesKeepTheSelectionAndAnyNewOneShows() throws {
+        let session = makeSession()
+        lasso(session, square(10, 10, 20))
+        session.showsSelectionEdges = false
+        #expect(!session.showsSelectionEdges && session.selection?.isEmpty == false)
+        lasso(session, square(40, 40, 20))
+        #expect(session.showsSelectionEdges, "a new selection shows its outline")
+        session.showsSelectionEdges = false
+        session.deselect()
+        session.selectAll()
+        #expect(session.showsSelectionEdges)
+    }
+
+    /// Taking away a box whose edge meets the selection's exactly, as a box dragged past the canvas edge does once clipped,
+    /// leaves no hairline for the ants to trace: neither a piece of its own nor a spur running out along the edge and
+    /// back. These pairs left one before.
+    @Test(arguments: [
+        (CGPoint(x: 49.78979217943021, y: 43.54330466303824), CGPoint(x: 34.92413828494898, y: -9.377977037384703),
+         CGPoint(x: 76.52049800780095, y: 39.0757224050528), CGPoint(x: 26.11377055953632, y: -31.636741687315578)),
+        (CGPoint(x: 95.91137388899875, y: 78.58053579093038), CGPoint(x: 42.06300352639197, y: 20.348643514322127),
+         CGPoint(x: 27.495646470147378, y: 55.396614491803234), CGPoint(x: 98.6680289963943, y: 80.45850546256963)),
+        (CGPoint(x: -25.102024008866458, y: -4.963973014248452), CGPoint(x: 131.49154436997242, y: 30.974038857803677),
+         CGPoint(x: -3.203595466171535, y: -14.504050372682055), CGPoint(x: 91.25120852295342, y: 36.95755647054405)),
+        (CGPoint(x: 60.31194159740437, y: 29.979655281967936), CGPoint(x: 36.49581073573158, y: 90.93939454902221),
+         CGPoint(x: 89.7907549216597, y: 30.0856538534466), CGPoint(x: -25.08151063399525, y: 66.62374348930767)),
+        (CGPoint(x: -17.29301365420453, y: 26.147567173397846), CGPoint(x: 43.70803815711665, y: -14.72283655670661),
+         CGPoint(x: 65.3070690463883, y: 1.3361279049343793), CGPoint(x: 9.755282700254142, y: -30.178942429392563)),
+        (CGPoint(x: -26.72778948280061, y: 4.297416056427288), CGPoint(x: 92.26766856046919, y: -37.746358726636),
+         CGPoint(x: 105.33729557383606, y: 48.25931253253097), CGPoint(x: 31.878872549870124, y: -37.17122527081534)),
+        // As the maintainer dragged it on a 1920 × 1080 canvas, where the spur ran 900 px along the top edge.
+        (CGPoint(x: -127, y: -106), CGPoint(x: 1138, y: 573), CGPoint(x: 237, y: 392), CGPoint(x: 1343, y: -415)),
+    ]) func subtractingAlongAnEdgeLeavesNoHairline(box: CGPoint, to: CGPoint, cut: CGPoint, cutTo: CGPoint) throws {
+        let session = EditorSession()
+        let large = max(box.x, to.x, cut.x, cutTo.x) > 200
+        session.createDocument(width: large ? 1920 : 100, height: large ? 1080 : 60, emptyLayer: true)
+        session.selectTool(.marquee)
+        marquee(session, from: box, to: to)
+        marquee(session, from: cut, to: cutTo, mode: .subtract)
+        #expect(try strayEdges(#require(session.selection).path).isEmpty)
+    }
+
+    /// Edges of `path` the ants would draw that don't divide selected from unselected: a quarter pixel either side of
+    /// the middle of each, both are in or both are out.
+    private func strayEdges(_ path: CGPath) -> [(CGPoint, CGPoint)] {
+        var edges: [(CGPoint, CGPoint)] = [], start = CGPoint.zero, last = CGPoint.zero
+        path.applyWithBlock { element in
+            let point = element.pointee.type == .closeSubpath ? start : element.pointee.points[0]
+            switch element.pointee.type {
+            case .moveToPoint: start = point
+            case .addLineToPoint, .closeSubpath: if point != last { edges.append((last, point)) }
+            default: break
+            }
+            last = point
+        }
+        return edges.filter { from, to in
+            let length = hypot(to.x - from.x, to.y - from.y)
+            guard length > 0 else { return true }
+            let middle = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+            let normal = CGPoint(x: -(to.y - from.y) / length * 0.25, y: (to.x - from.x) / length * 0.25)
+            return path.contains(CGPoint(x: middle.x + normal.x, y: middle.y + normal.y), using: .winding)
+                == path.contains(CGPoint(x: middle.x - normal.x, y: middle.y - normal.y), using: .winding)
+        }
+    }
+
+    /// Boxes cut one after another from a selection touching the canvas's top and left, as the maintainer drew them on
+    /// a 1920 × 1080 canvas: the last, over the corner, came back drawn as a second outline over the first, the cut-away
+    /// stretches of the canvas edge still marching.
+    @Test func cuttingAwayAtACornerLeavesNoOutlineOverTheCut() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080, emptyLayer: true)
+        func box(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> CGPath {
+            CGPath(rect: CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), transform: nil)
+        }
+        session.applySelection(box(-177, -86, 1092, 598), mode: .replace, name: "Rectangular Marquee")
+        session.applySelection(box(330, -90, 643, 350), mode: .subtract, name: "Rectangular Marquee")
+        session.applySelection(box(795, 0, 931, 295), mode: .subtract, name: "Rectangular Marquee")
+        session.applySelection(box(-46, -245, 214, 271), mode: .subtract, name: "Rectangular Marquee")
+        let path = try #require(session.selection).path
+        #expect(strayEdges(path).isEmpty, "\(strayEdges(path))")
+        #expect(try coverage(session, 100, 100) == 0 && coverage(session, 100, 300) == 255 && coverage(session, 250, 10) == 255)
+    }
+
+    /// ⌘H hides the outline and the guides together and brings both back; guides turned off with ⌘; stay off.
+    @Test func extrasHideTheOutlineAndGuidesTogether() throws {
+        let session = makeSession()
+        let guides = session.showsGuides
+        defer { session.showsGuides = guides }
+        session.showsGuides = true
+        lasso(session, square(10, 10, 20))
+        session.showsExtras = false
+        #expect(!session.showsSelectionEdges && !session.showsGuides && session.selection?.isEmpty == false)
+        session.showsExtras = true
+        #expect(session.showsSelectionEdges && session.showsGuides)
+        session.showsGuides = false
+        session.showsExtras = false
+        session.showsExtras = true
+        #expect(session.showsSelectionEdges && !session.showsGuides, "⌘H doesn't turn on guides ⌘; turned off")
+    }
+
     /// Select All then Inverse leaves nothing selected, as in Photoshop, so painting works everywhere again.
     @Test func inverseOfEverythingDeselects() throws {
         let session = makeSession()
@@ -216,6 +332,56 @@ struct SelectionTests {
         #expect(abs(shrunk.minX - 43) < 0.01 && abs(shrunk.width - 14) < 0.01)
         session.undo()
         #expect(abs(try #require(session.selection).path.boundingBoxOfPath.width - 30) < 0.01)
+    }
+
+    /// A curved corner contracted by exactly its radius collapses to a point, and all four corners must survive that.
+    @Test func contractingARoundedRectangleByItsRadiusKeepsItsCorners() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080)
+        for radius in [5, 10, 20, 37] {
+            let start = CGRect(x: 200, y: 150, width: 700, height: 500)
+            session.setSelection(DocumentSelection(path: CGPath(roundedRect: start, cornerWidth: CGFloat(radius), cornerHeight: CGFloat(radius), transform: nil)), name: "Start")
+            session.contractSelection(by: radius)
+            let path = try #require(session.selection).path
+            let rect = start.insetBy(dx: CGFloat(radius), dy: CGFloat(radius))
+            for corner in [CGPoint(x: rect.minX + 1, y: rect.minY + 1), CGPoint(x: rect.maxX - 1, y: rect.minY + 1),
+                           CGPoint(x: rect.minX + 1, y: rect.maxY - 1), CGPoint(x: rect.maxX - 1, y: rect.maxY - 1)] {
+                #expect(path.contains(corner, using: .winding), "radius \(radius) lost \(corner): \(path)")
+            }
+        }
+    }
+
+    /// Repeating Contract or Expand keeps a rectangle a rectangle: all of it inset or grown, with square corners.
+    @Test func repeatedContractAndExpandKeepARectangleARectangle() throws {
+        let session = EditorSession()
+        session.createDocument(width: 1920, height: 1080)
+        for start in [CGRect(x: 300, y: 200, width: 900, height: 700), CGRect(x: 123, y: 87, width: 641, height: 513)] {
+            func expectRectangle(_ rect: CGRect, _ step: String) throws {
+                let selection = try #require(session.selection)
+                let box = selection.path.boundingBoxOfPath
+                #expect(abs(box.minX - rect.minX) < 0.01 && abs(box.minY - rect.minY) < 0.01
+                        && abs(box.width - rect.width) < 0.01 && abs(box.height - rect.height) < 0.01, "\(step): \(box), not \(rect)")
+                for corner in [CGPoint(x: rect.minX + 0.5, y: rect.minY + 0.5), CGPoint(x: rect.maxX - 0.5, y: rect.minY + 0.5),
+                               CGPoint(x: rect.minX + 0.5, y: rect.maxY - 0.5), CGPoint(x: rect.maxX - 0.5, y: rect.maxY - 0.5)] {
+                    #expect(selection.path.contains(corner, using: .winding), "\(step): the corner at \(corner) is missing from \(selection.path)")
+                }
+            }
+            session.setSelection(DocumentSelection(path: CGPath(rect: start, transform: nil)), name: "Start")
+            var rect = start
+            for step in 1...30 {
+                session.contractSelection(by: 5)
+                rect = rect.insetBy(dx: 5, dy: 5)
+                try expectRectangle(rect, "contract \(step)")
+            }
+            for step in 1...30 {
+                session.expandSelection(by: 5)
+                rect = rect.insetBy(dx: -5, dy: -5)
+                try expectRectangle(rect, "expand \(step)")
+            }
+            // Contracting straight after an Expand of the same amount is what used to lose a corner.
+            session.contractSelection(by: 5)
+            try expectRectangle(rect.insetBy(dx: 5, dy: 5), "contract after expand")
+        }
     }
 
     @Test func expandStaysOnCanvasAndContractCanEmptyTheSelection() throws {

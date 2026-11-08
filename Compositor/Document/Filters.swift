@@ -9,6 +9,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case motionBlur = "Motion Blur"
     case progressiveBlur = "Progressive Blur"
     case sharpen = "Sharpen"
+    case reduceNoise = "Reduce Noise"
     case addNoise = "Add Noise"
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
@@ -17,6 +18,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case rgbSplit = "RGB Split"
     case lensEffects = "Lens Effects"
     case tonalContrast = "Tonal Contrast"
+    case volumetricLight = "Volumetric Light"
     case rimLight = "Rim Light"
     case lensCorrection = "Lens Correction"
     case cameraRaw = "Camera Raw Filter"
@@ -35,11 +37,11 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     /// 16-bit pixels, rather than three times through `DeepLayer.run`.
     var runsAtSixteenBits: Bool {
         self == .gaussianBlur || self == .motionBlur || self == .progressiveBlur || self == .bloomGlow || self == .lensEffects
-            || self == .sharpen || self == .rimLight
+            || self == .sharpen || self == .rimLight || self == .volumetricLight
     }
     /// Filters whose output channels each depend on all three input channels (Camera Raw's color, and the ones that work
     /// from brightness), which a 16-bit layer runs the slower, channel-by-channel way (`DeepLayer.run`).
-    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines }
+    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines || self == .reduceNoise }
     /// For the color adjustments whose channels mix, their color lookup, to apply to a 16-bit layer
     /// (`LayerAdjustment.sixteenBitLookup`); nil for the rest.
     func sixteenBitLookup(_ settings: FilterSettings) -> (cube: Data, dimension: Int)? {
@@ -108,6 +110,11 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     /// Sharpen: how much of the detail to add back, 0–300%, and how fine it is, 0.1–20 layer pixels.
     var sharpenAmount: Double = 100
     var sharpenRadius: Double = 1
+    /// Reduce Noise, as Camera Raw's noise reduction: how much grain is smoothed from the brightness, how much fine
+    /// texture is kept from it, and how much colored speckle is smoothed, each 0–100.
+    var reduceNoiseLuminance: Double = 50
+    var reduceNoiseDetail: Double = 50
+    var reduceNoiseColor: Double = 50
     /// Tonal Contrast: one local-detail radius and separate tonal strengths.
     var tonalAmount: Double = 50
     var tonalRadius: Double = 16
@@ -131,6 +138,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     var distortion: Double = 0
     var lens = LensEffectSettings()
     var rimLight = RimLightSettings()
+    var volumetric = VolumetricLightSettings()
     var curves = CurvesSettings()
     var exposure = ExposureSettings()
     var gradientMap = GradientMapSettings()
@@ -168,6 +176,9 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.bloomAmount = clamp(bloomAmount, 0...100, 40)
         result.sharpenAmount = clamp(sharpenAmount, 0...300, 100)
         result.sharpenRadius = clamp(sharpenRadius, 0.1...20, 1)
+        result.reduceNoiseLuminance = clamp(reduceNoiseLuminance, 0...100, 50)
+        result.reduceNoiseDetail = clamp(reduceNoiseDetail, 0...100, 50)
+        result.reduceNoiseColor = clamp(reduceNoiseColor, 0...100, 50)
         result.bloomRadius = clamp(bloomRadius, 1...150, 24)
         result.tonalAmount = clamp(tonalAmount, 0...100, 50)
         result.tonalRadius = clamp(tonalRadius, 1...100, 16)
@@ -189,6 +200,7 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.scanlines = scanlines.normalized
         result.lens = lens.normalized
         result.rimLight = rimLight.normalized
+        result.volumetric = volumetric.normalized
         result.cameraRaw = cameraRaw.normalized
         return result
     }
@@ -318,6 +330,15 @@ nonisolated enum PixelFilter {
         return image
     }
 
+    /// Reduce Noise on 8-bit premultiplied RGBA, in place: Camera Raw's noise reduction on its own, its contrast and color
+    /// smoothness at their defaults. The filter, and a Reduce Noise layer on the canvas (`GPUReduceNoise`).
+    static func reduceNoise(_ pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, bytesPerRow: Int, settings: FilterSettings,
+                            scale: CGFloat) {
+        _ = MetalNonlocalMeans.installed
+        adjust_camera_raw_detail(pixels, width, height, bytesPerRow, 0, 0, 0, 0, settings.reduceNoiseLuminance, settings.reduceNoiseDetail,
+                                 0, settings.reduceNoiseColor, 50, 50, scale)
+    }
+
     static func run(_ job: FilterJob) throws -> CGImage {
         let settings = job.settings.normalized
         let width = job.image.width, height = job.image.height
@@ -364,6 +385,12 @@ nonisolated enum PixelFilter {
             image = try render(settings.lens.apply(to: CIImage(cgImage: job.image), side: side), job: job)
         case .rimLight:
             image = try render(RimLighting.apply(to: CIImage(cgImage: job.image), source: job.image, settings: settings.rimLight), job: job)
+        case .volumetricLight:
+            // The light from the document into this image's pixels (rows top-down), then Core Image's (y up).
+            let pixel = settings.volumetric.center?.applying(job.mapping.inverted())
+                ?? VolumetricLighting.brightestPoint(in: job.image)
+            image = try render(VolumetricLighting.apply(to: CIImage(cgImage: job.image), source: job.image, settings: settings.volumetric,
+                                                        light: CGPoint(x: pixel.x, y: Double(height) - pixel.y)), job: job)
         case .motionBlur:
             // Core Image's y axis points up, so its counterclockwise angle matches Photoshop's.
             let streaked = extending(edges, past: job.canvasSides, of: extent).applyingFilter("CIMotionBlur", parameters: [
@@ -402,6 +429,14 @@ nonisolated enum PixelFilter {
                 kCIInputIntensityKey: settings.sharpenAmount / 100,
             ])
             image = try render(sharpened.cropped(to: extent), job: job)
+        case .reduceNoise:
+            let context = try BrushRaster.context(width: width, height: height, mask: false)
+            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
+            guard let data = context.data else { throw ExportError.render }
+            reduceNoise(data.assumingMemoryBound(to: UInt8.self), width: width, height: height, bytesPerRow: context.bytesPerRow,
+                        settings: settings, scale: job.scale)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
         case .bloomGlow:
             let bloomed = edges.applyingFilter("CIBloom", parameters: [
                 kCIInputRadiusKey: settings.bloomRadius * job.scale,
@@ -606,6 +641,8 @@ final class FilterEdit {
     @ObservationIgnored var preparedSettings: FilterSettings?
     @ObservationIgnored var pending: FilterJob?
     @ObservationIgnored var previewTask: Task<Void, Never>?
+    /// Volumetric Light's first preview, held for the depth model (`beginFilter`).
+    @ObservationIgnored var waitsForDepth = false
     /// Previews render from a copy no larger than this on its longest side.
     static let previewLimit: CGFloat = 2048
 
@@ -808,6 +845,11 @@ extension EditorSession {
                 settings.rgbSplitCenter = CGPoint(x: area.midX, y: area.midY)
                 settings.rgbSplitReach = max(1, hypot(area.width, area.height) / 2)
             }
+            // Volumetric Light starts on the layer's brightest spot: a window, the sky, a lamp.
+            if kind == .volumetricLight, !repeating, let image = layer.asset?.image {
+                settings.volumetric.center = VolumetricLighting.brightestPoint(in: image)
+                    .applying(BrushRaster.pixelToDocument(layer.transform, width: image.width, height: image.height))
+            }
             // Gradient Map starts from the foreground and background colors, as in Photoshop.
             if kind == .gradientMap {
                 settings.gradientMap = GradientMapSettings(shadows: AdjustmentColor(foregroundColor), highlights: AdjustmentColor(backgroundColor))
@@ -825,11 +867,38 @@ extension EditorSession {
             edit.startedEmpty = startedEmpty
             edit.repeating = repeating
             filterEdit = edit
+            // Volumetric Light's depth model, downloaded the first time: the first preview waits for it, so the fog
+            // doesn't draw from its own guess and then jump to the depth. Fetching and compiling it takes about 3 seconds;
+            // a slow connection holds it only 5: then the fog guesses until the model is here, and redraws.
+            // Without a connection it fails at once, and the fog guesses straight away.
+            let waitsForDepth = kind == .volumetricLight && !repeating && !DepthModel.isReady
+            if waitsForDepth {
+                preparingDepth = true
+                edit.waitsForDepth = true
+                let guess = Task<Bool, Never> { [weak self, weak edit] in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled, let self, let edit, self.filterEdit === edit, !edit.committing else { return false }
+                    edit.waitsForDepth = false
+                    self.updateFilter(edit.settings, preview: edit.preview)
+                    return true
+                }
+                Task { [weak self, weak edit] in
+                    let ready = await DepthModel.prepare()
+                    guess.cancel()
+                    let guessed = await guess.value
+                    guard let self else { return }
+                    self.preparingDepth = false
+                    edit?.waitsForDepth = false
+                    if ready || !guessed, let edit, self.filterEdit === edit, !edit.committing {
+                        self.updateFilter(edit.settings, preview: edit.preview)
+                    }
+                }
+            }
             if kind == .cameraRaw, edit.previewSource.width * edit.previewSource.height >= MetalCameraRawLookup.minimumPixels {
                 Task.detached(priority: .utility) { _ = MetalCameraRawLookup.shared }
             }
             // An automatic filter commits what its preview made, so it still needs one.
-            updateFilter(edit.settings, preview: !repeating || kind.isAutomatic)
+            if !waitsForDepth { updateFilter(edit.settings, preview: !repeating || kind.isAutomatic) }
         } catch { brushError = error.localizedDescription }
     }
 
@@ -856,6 +925,14 @@ extension EditorSession {
         updateFilter(settings, preview: edit.preview)
     }
 
+    /// Volumetric Light's light, clicked or dragged on the canvas (document coordinates).
+    func moveVolumetricLight(to point: CGPoint) {
+        guard let edit = filterEdit, edit.kind == .volumetricLight, !edit.committing else { return }
+        var settings = edit.settings
+        settings.volumetric.center = point
+        updateFilter(settings, preview: edit.preview)
+    }
+
     /// Progressive Blur's line, dragged on the canvas: either end moved (document coordinates).
     func moveProgressiveBlur(start: CGPoint? = nil, end: CGPoint? = nil) {
         guard let edit = filterEdit, edit.kind == .progressiveBlur, !edit.committing else { return }
@@ -867,6 +944,9 @@ extension EditorSession {
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
         guard let edit = filterEdit, !edit.committing else { return }
+        // The panel's sliders write their values back as it opens; while the first preview waits for the depth model,
+        // that isn't a change to draw (only one that changes something is).
+        if edit.waitsForDepth, settings.normalized == edit.settings, preview == edit.preview { return }
         edit.settings = settings.normalized
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
@@ -946,6 +1026,7 @@ extension EditorSession {
         if case .gradientMap = colorPicker?.target { closeColorPicker(commit: false) }
         if case .vignette = colorPicker?.target { closeColorPicker(commit: false) }
         if case .rimLight = colorPicker?.target { closeColorPicker(commit: false) }
+        if case .volumetricLight = colorPicker?.target { closeColorPicker(commit: false) }
         if case .dither = colorPicker?.target { closeColorPicker(commit: false) }
         if finishAdjustmentEditing(commit: false) { return }
         guard let edit = filterEdit, !edit.committing else { return }
@@ -978,8 +1059,10 @@ extension EditorSession {
             || (edit.kind == .vignette && edit.settings.vignetteAmount == 0)
             || (edit.kind == .bloomGlow && edit.settings.bloomAmount == 0)
             || (edit.kind == .sharpen && edit.settings.sharpenAmount == 0)
+            || (edit.kind == .reduceNoise && edit.settings.reduceNoiseLuminance == 0 && edit.settings.reduceNoiseColor == 0)
             || (edit.kind == .lensEffects && edit.settings.lens.isIdentity)
             || (edit.kind == .rimLight && edit.settings.rimLight.isIdentity)
+            || (edit.kind == .volumetricLight && edit.settings.volumetric.isIdentity)
             || (edit.kind == .tonalContrast && (edit.settings.tonalAmount == 0 ||
                 (edit.settings.tonalShadows == 0 && edit.settings.tonalMidtones == 0 && edit.settings.tonalHighlights == 0)))
             || (edit.kind == .exposure && edit.settings.exposure == ExposureSettings())

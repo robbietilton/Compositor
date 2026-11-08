@@ -36,6 +36,10 @@ struct AdjustmentPerformanceTests {
         case .rgbSplit: adjustment.filterLayer.rgbSplitDistance = 20; adjustment.filterLayer.rgbSplitBlur = 60
         case .vignette: adjustment.filterLayer.vignette = VignetteLayerSettings()
         case .tonalContrast: adjustment.filterLayer.tonal = TonalLayerSettings()
+        case .sharpen: adjustment.filterLayer.sharpen = SharpenLayerSettings()
+        case .reduceNoise: adjustment.filterLayer.reduceNoise = ReduceNoiseLayerSettings()
+        case .motionBlur: adjustment.resolvedMotionDistance = 100
+        case .progressiveBlur: adjustment.filterLayer.progressiveTo = 40
         case .lensEffects:
             var settings = LensEffectSettings()
             settings.effect = lens ?? .anamorphicFlare
@@ -86,6 +90,66 @@ struct AdjustmentPerformanceTests {
         return times.sorted()[times.count / 2]
     }
 
+    /// Milliseconds a frame takes while the canvas pans, at 100%, once it has settled: the view moved a little between
+    /// frames, so nothing kept for the last frame's placement still fits.
+    private func panTime(_ adjustments: [LayerAdjustment], frames: Int = 8) async throws -> Double {
+        let session = EditorSession()
+        session.createDocument(width: 4000, height: 2600)
+        let image = try picture()
+        session.insert(ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: "Picture"))
+        for adjustment in adjustments {
+            session.addAdjustment(adjustment.kind)
+            session.adjustmentEditingID = nil
+            if let id = session.activeLayerID { session.updateAdjustment(id, value: adjustment) }
+        }
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        defer { _ = window }
+        session.viewport.resize(to: canvas.bounds.size, backingScale: 2, documentSize: session.document?.size)
+        session.zoom(to: 1)
+        canvas.synchronizeDisplay()
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let size = CGSize(width: 3200, height: 2000)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 3200, height: 2000, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderWrite, .shaderRead]
+        let target = try #require(renderer.device.makeTexture(descriptor: descriptor))
+        func draw() throws {
+            let image = try #require(canvas.gpuFrame(size: size))
+            let command = try #require(renderer.queue.makeCommandBuffer())
+            renderer.context.render(image, to: target, commandBuffer: command, bounds: CGRect(origin: .zero, size: size), colorSpace: renderer.space)
+            command.commit()
+            command.waitUntilCompleted()
+        }
+        try draw()
+        for _ in 0..<150 where !canvas.adjustmentsSettled { try await Task.sleep(for: .milliseconds(100)) }
+        var times: [Double] = []
+        for _ in 0..<frames {
+            session.viewport.translate(by: CGSize(width: 7, height: 5))
+            canvas.synchronizeDisplay()
+            let start = CFAbsoluteTimeGetCurrent()
+            try draw()
+            times.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
+        }
+        return times.sorted()[times.count / 2]
+    }
+
+    @Test func adjustmentLayerPanTimes() async throws {
+        guard ProcessInfo.processInfo.environment["ADJUSTMENT_BENCHMARK"] == "1" else { return }
+        var lines = [String(format: "No adjustments: %.1f ms", try await panTime([]))]
+        let cases: [(String, [LayerAdjustment])] = [
+            ("Reduce Noise", [adjustment(.reduceNoise)]),
+            ("Lens: Starburst", [adjustment(.lensEffects, lens: .starburst)]),
+            ("Lens: Anamorphic Flare", [adjustment(.lensEffects, lens: .anamorphicFlare)]),
+            ("Lens: Bokeh", [adjustment(.lensEffects, lens: .bokeh)]),
+            ("Sharpen", [adjustment(.sharpen)]),
+            ("Tonal Contrast", [adjustment(.tonalContrast)]),
+        ]
+        for (name, adjustments) in cases { lines.append(String(format: "%@: %.1f ms panning", name, try await panTime(adjustments))) }
+        Attachment.record(lines.joined(separator: "\n"), named: "pan-times.txt")
+    }
+
     @Test func adjustmentLayerFrameTimes() throws {
         guard ProcessInfo.processInfo.environment["ADJUSTMENT_BENCHMARK"] == "1" else { return }
         var lines = [String(format: "No adjustments: %.1f ms", try frameTime([]))]
@@ -96,6 +160,10 @@ struct AdjustmentPerformanceTests {
             ("RGB Split", [adjustment(.rgbSplit)]),
             ("Vignette", [adjustment(.vignette)]),
             ("Tonal Contrast", [adjustment(.tonalContrast)]),
+            ("Sharpen", [adjustment(.sharpen)]),
+            ("Reduce Noise", [adjustment(.reduceNoise)]),
+            ("Motion Blur 100", [adjustment(.motionBlur)]),
+            ("Progressive Blur 40", [adjustment(.progressiveBlur)]),
             ("Lens: Anamorphic Flare", [adjustment(.lensEffects, lens: .anamorphicFlare)]),
             ("Lens: Starburst", [adjustment(.lensEffects, lens: .starburst)]),
             ("Lens: Mist", [adjustment(.lensEffects, lens: .mist)]),

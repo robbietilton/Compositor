@@ -260,6 +260,31 @@ extension EditorSession {
         shapeDraft = draft
     }
 
+    /// What's being dragged out, for the label beside the pointer: a Marquee's, a shape's or a resized layer's width and
+    /// height, or a line's length, with the point being dragged, in document pixels. Nil between drags.
+    var dragOutSize: (text: String, corner: CGPoint)? {
+        if let resizeSize, transformEdit != nil { return resizeSize }
+        func farthest(_ points: [CGPoint], from anchor: CGPoint) -> CGPoint? {
+            points.max { hypot($0.x - anchor.x, $0.y - anchor.y) < hypot($1.x - anchor.x, $1.y - anchor.y) }
+        }
+        if let draft = shapeDraft {
+            if draft.kind == .line {
+                guard let end = draft.end else { return nil }
+                return ("\(Int(hypot(end.x - draft.anchor.x, end.y - draft.anchor.y).rounded())) px", end)
+            }
+            let rect = draft.rect
+            let corners = [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                           CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY)]
+            guard let corner = farthest(corners, from: draft.anchor) else { return nil }
+            return ("\(Int(rect.width.rounded())) × \(Int(rect.height.rounded())) px", corner)
+        }
+        if let draft = lassoDraft, let anchor = draft.anchor, draft.points.count == 4, let size = selectionSize,
+           let corner = farthest(draft.points, from: anchor) {
+            return ("\(size.width) × \(size.height) px", corner)
+        }
+        return nil
+    }
+
     func cancelShape() {
         if shapeDraft != nil { shapeDraft = nil }
     }

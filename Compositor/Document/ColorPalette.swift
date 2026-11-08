@@ -128,6 +128,8 @@ extension EditorSession {
                 setVignetteColor(commit ? colorPicker.color : colorPicker.original)
             case .rimLight(let index):
                 setRimLightColor(commit ? colorPicker.color : colorPicker.original, index: index)
+            case .volumetricLight:
+                setVolumetricLightColor(commit ? colorPicker.color : colorPicker.original)
             case .dither(let light):
                 setDitherColor(commit ? colorPicker.color : colorPicker.original, light: light)
             case .dialog:
@@ -232,6 +234,23 @@ extension EditorSession {
         guard settings != edit.settings else { return }
         updateFilter(settings, preview: edit.preview)
     }
+    /// Opens the app's color picker on Volumetric Light's light.
+    func openVolumetricLightColorPicker() {
+        guard canEditPalette, colorPicker == nil, let edit = filterEdit, edit.kind == .volumetricLight, !edit.committing else { return }
+        let value = edit.settings.volumetric.color
+        colorPicker = ColorPickerState(target: .volumetricLight, original: PaletteColor(red: value.red, green: value.green, blue: value.blue))
+    }
+    func previewVolumetricLightColor() {
+        guard let colorPicker, case .volumetricLight = colorPicker.target else { return }
+        setVolumetricLightColor(colorPicker.color)
+    }
+    private func setVolumetricLightColor(_ color: PaletteColor) {
+        guard let edit = filterEdit, edit.kind == .volumetricLight, !edit.committing else { return }
+        var settings = edit.settings
+        settings.volumetric.color = AdjustmentColor(color)
+        guard settings != edit.settings else { return }
+        updateFilter(settings, preview: edit.preview)
+    }
     func previewVignetteColor() {
         guard let colorPicker, case .vignette = colorPicker.target else { return }
         setVignetteColor(colorPicker.color)
@@ -291,6 +310,8 @@ enum ColorPickerTarget: Equatable {
     case vignette
     /// One of Rim Light's lights.
     case rimLight(index: Int)
+    /// Volumetric Light's light.
+    case volumetricLight
     /// Dither's Two Colors: the dark one or the light one.
     case dither(light: Bool)
     case text(draftID: UUID?)
@@ -304,6 +325,7 @@ enum ColorPickerTarget: Equatable {
         case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
         case .vignette: return "Color Picker (Vignette Color)"
         case .rimLight(let index): return "Color Picker (Light \(index + 1))"
+        case .volumetricLight: return "Color Picker (Light Color)"
         case .dither(let light): return light ? "Color Picker (Light Color)" : "Color Picker (Dark Color)"
         case .dialog(let title): return "Color Picker (\(title))"
         }

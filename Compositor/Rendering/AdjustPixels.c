@@ -1280,6 +1280,110 @@ void adjust_camera_raw_sharpen_mask_overlay(uint8_t *rgba, size_t width, size_t 
     free(luma);
 }
 
+// How much noise `luma` carries, as its standard deviation (0–1): Immerkær's estimate, from how far each pixel strays
+// from what its eight neighbors predict, over the pixels that are there. Texture adds a little; flat grain is what counts.
+static double noise_sigma(const float *luma, const float *coverage, size_t width, size_t height) {
+    if (width < 3 || height < 3) return 0;
+    double sum = 0;
+    size_t count = 0;
+    for (size_t y = 1; y + 1 < height; ++y) {
+        const float *up = luma + (y - 1) * width, *row = luma + y * width, *down = luma + (y + 1) * width;
+        for (size_t x = 1; x + 1 < width; ++x) {
+            if (coverage[y * width + x] < 0.5f) continue;
+            double laplacian = up[x - 1] - 2 * up[x] + up[x + 1] - 2 * row[x - 1] + 4 * row[x] - 2 * row[x + 1]
+                + down[x - 1] - 2 * down[x] + down[x + 1];
+            sum += fabs(laplacian);
+            count++;
+        }
+    }
+    return count ? sqrt(M_PI / 2) * sum / (6.0 * count) : 0;
+}
+
+int (*adjust_nonlocal_means_gpu)(const float *, const float *, float *, size_t, size_t, int, int, double, double) = NULL;
+
+// Non-local means: each pixel averaged with the others within `search` pixels whose `patch`-wide surroundings look like
+// its own, so grain, random from patch to patch, averages away, while an edge or a texture, matched only by patches
+// along it, is kept. `h` is how alike (in brightness, 0–1) patches must be to count, and `sigma` the noise, whose share
+// of every distance is taken off first. Clear pixels lend nothing. Worked one band of rows at a time, an offset at a
+// time: each offset's squared differences summed over the patch with running sums. On the GPU when the app has set
+// `adjust_nonlocal_means_gpu`.
+static int nonlocal_means(const float *luma, const float *coverage, float *out, size_t width, size_t height,
+                          int search, int patch, double h, double sigma) {
+    if (adjust_nonlocal_means_gpu && adjust_nonlocal_means_gpu(luma, coverage, out, width, height, search, patch, h, sigma)) return 1;
+    // exp(-d) for d from 0 to 6 in 1024 steps; past 6 a match counts for nothing.
+    enum { steps = 1024 };
+    static float table[steps + 1];
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ for (int i = 0; i <= steps; ++i) table[i] = (float)exp(-6.0 * i / steps); });
+    float allowance = (float)(2 * sigma * sigma), toStep = (float)(steps / (6.0 * h * h));
+    float area = (float)((2 * patch + 1) * (2 * patch + 1));
+    __block int failed = 0;
+    in_bands(height, ^(size_t first, size_t last) {
+        size_t rows = last - first, span = rows + 2 * patch;
+        float *difference = malloc(span * width * sizeof(float));
+        float *column = malloc(width * sizeof(float));
+        float *total = calloc(rows * width, sizeof(float)), *weights = calloc(rows * width, sizeof(float));
+        float *strongest = calloc(rows * width, sizeof(float));
+        if (!difference || !column || !total || !weights || !strongest) {
+            failed = 1;
+            free(difference); free(column); free(total); free(weights); free(strongest);
+            return;
+        }
+        for (int dy = -search; dy <= search; ++dy) {
+            for (int dx = -search; dx <= search; ++dx) {
+                if (dx == 0 && dy == 0) continue;
+                // Squared differences from this offset, over the band and a patch's height either side.
+                for (size_t i = 0; i < span; ++i) {
+                    size_t y = clamped_index((int)(first + i) - patch, height), shifted = clamped_index((int)y + dy, height);
+                    const float *row = luma + y * width, *other = luma + shifted * width;
+                    float *into = difference + i * width;
+                    for (size_t x = 0; x < width; ++x) {
+                        float d = row[x] - other[clamped_index((int)x + dx, width)];
+                        into[x] = d * d;
+                    }
+                }
+                memset(column, 0, width * sizeof(float));
+                for (int i = 0; i < 2 * patch; ++i) {
+                    for (size_t x = 0; x < width; ++x) column[x] += difference[i * width + x];
+                }
+                for (size_t i = 0; i < rows; ++i) {
+                    // The column sums down the patch, then across it.
+                    const float *entering = difference + (i + 2 * patch) * width;
+                    for (size_t x = 0; x < width; ++x) column[x] += entering[x];
+                    size_t y = first + i, shifted = clamped_index((int)y + dy, height);
+                    float across = 0;
+                    for (int k = -patch; k < patch; ++k) across += column[clamped_index(k, width)];
+                    for (size_t x = 0; x < width; ++x) {
+                        across += column[clamped_index((int)x + patch, width)];
+                        float distance = across / area - allowance;
+                        across -= column[clamped_index((int)x - patch, width)];
+                        int step = distance <= 0 ? 0 : (int)(distance * toStep);
+                        if (step >= steps) continue;
+                        size_t neighbor = shifted * width + clamped_index((int)x + dx, width);
+                        float weight = table[step] * coverage[neighbor];
+                        size_t index = i * width + x;
+                        total[index] += weight * luma[neighbor];
+                        weights[index] += weight;
+                        if (weight > strongest[index]) strongest[index] = weight;
+                    }
+                    const float *leaving = difference + i * width;
+                    for (size_t x = 0; x < width; ++x) column[x] -= leaving[x];
+                }
+            }
+        }
+        // The pixel itself counts as much as its best match: as itself it would always count fully, and keep its grain.
+        for (size_t i = 0; i < rows; ++i) {
+            for (size_t x = 0; x < width; ++x) {
+                size_t index = i * width + x, pixel = (first + i) * width + x;
+                float own = strongest[index] > 0 ? strongest[index] : 1;
+                out[pixel] = (total[index] + own * luma[pixel]) / (weights[index] + own);
+            }
+        }
+        free(difference); free(column); free(total); free(weights); free(strongest);
+    });
+    return !failed;
+}
+
 void adjust_camera_raw_detail(uint8_t *rgba, size_t width, size_t height, size_t stride,
                               double sharpenAmount, double sharpenRadius, double sharpenDetail, double sharpenMasking,
                               double noiseLuminance, double noiseLuminanceDetail, double noiseLuminanceContrast,
@@ -1301,11 +1405,26 @@ void adjust_camera_raw_detail(uint8_t *rgba, size_t width, size_t height, size_t
         }
     } });
     if (noiseLuminance > 0) {
-        int radius = effects_radius(1.0 + noiseLuminance / 50.0, scale);
-        if (!box_blur_plane(luma, work, width, height, radius)) { free(luma); free(work); return; }
+        // Non-local means on the brightness (see `nonlocal_means`), as strong as the noise measured in it: a clean
+        // photo is left nearly alone. Detail asks patches to be more alike before they count, so less texture goes
+        // with the grain. Smaller previews look nearer and finer, the noise already thinned by their scaling.
         double strength = noiseLuminance / 100.0;
         double preserve = noiseLuminanceDetail / 100.0;
         double contrast = noiseLuminanceContrast / 100.0;
+        float *coverage = malloc(count * sizeof(float));
+        if (!coverage) { free(luma); free(work); return; }
+        for (size_t y = 0; y < height; ++y) {
+            for (size_t x = 0; x < width; ++x) coverage[y * width + x] = rgba[y * stride + x * 4 + 3] / 255.0f;
+        }
+        double sigma = fmax(0.5 / 255.0, noise_sigma(luma, coverage, width, height));
+        double h = sigma * (0.2 + 1.1 * strength) * (1.3 - 0.6 * preserve);
+        int search = (int)lround(fmin(7, fmax(3, 7 * (scale > 0 ? scale : 1)))), patch = scale < 0.5 ? 1 : 2;
+        int done = nonlocal_means(luma, coverage, work, width, height, search, patch, h, sigma * (0.4 + 0.6 * (1 - preserve)));
+        free(coverage);
+        if (!done) { free(luma); free(work); return; }
+        // Contrast puts back some of the local contrast smoothing took, measured on the smoothed brightness, not the grain.
+        float *local = contrast != 0 ? malloc(count * sizeof(float)) : NULL;
+        if (local && !box_blur_plane(work, local, width, height, effects_radius(2, scale))) { free(local); local = NULL; }
         for (size_t y = 0; y < height; ++y) {
             uint8_t *row = rgba + y * stride;
             for (size_t x = 0; x < width; ++x) {
@@ -1313,17 +1432,15 @@ void adjust_camera_raw_detail(uint8_t *rgba, size_t width, size_t height, size_t
                 double alpha = p[3];
                 if (!alpha) continue;
                 size_t index = y * width + x;
-                float edge = sharpen_edge_at(luma, width, height, x, y, 1);
-                double local = strength * (1.0 - preserve * fmin(1.0, edge * 6.0));
-                float blurred = work[index];
-                float target = (float)(luma[index] * (1.0 - local) + blurred * local);
-                if (contrast != 0) target = (float)(target + contrast * 0.25 * (luma[index] - blurred));
+                float target = work[index];
+                if (local) target = (float)(target + contrast * 0.5 * (work[index] - local[index]));
                 luma[index] = target;
                 double r = fmin(1.0, p[0] / alpha), g = fmin(1.0, p[1] / alpha), b = fmin(1.0, p[2] / alpha);
                 scale_luminance(&r, &g, &b, target);
                 write_premultiplied(p, r, g, b, alpha);
             }
         }
+        free(local);
     }
     if (noiseColor > 0) {
         // Color noise is speckle of random hue over the picture's own color, in blotches a few pixels wide. Each pixel

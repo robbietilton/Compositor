@@ -163,6 +163,16 @@ final class BrushStroke {
     /// size, run a little wider.
     static let maxDiameter: CGFloat = 2100
     var pixelLimit = DocumentLimits.documentPixelBudget
+    /// For a layer scaled down: how many pixels it may grow to, at its own resolution, as paint goes past its edges.
+    /// Past this the stroke throws `OutgrewItsResolution`, and the session paints it again on the layer at its displayed
+    /// size. Nil to grow freely.
+    var growthLimit: Int?
+    /// A scaled-down layer grown past `growthLimit`: at its own resolution it would take far more pixels than it shows.
+    struct OutgrewItsResolution: Error {}
+    /// The layer as it was in the document when the stroke began, which `layer` stands in for once the stroke has been
+    /// started again on it at its displayed size.
+    var originalLayer: ImageLayer
+    var usesGPU: Bool { gpu != nil }
     /// Limits every edit to the document selection; nil when nothing is selected.
     var selectionClip: SelectionClip?
     /// Clone Stamp, Blur, Smudge and Liquify: an image painted through the tip, and where it sits, already shifted
@@ -221,6 +231,7 @@ final class BrushStroke {
     init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false) throws {
         gpu = useGPU ? MetalBrushCoverage.shared : nil
         self.layer = layer
+        originalLayer = layer
         isMask = mask
         self.settings = settings
         self.canvas = CGRect(origin: .zero, size: canvas)
@@ -336,6 +347,12 @@ final class BrushStroke {
     }
 
     private func appendContinuous(_ point: CGPoint, pressure: CGFloat) throws {
+        let (settled, tail) = advanceContinuous(point, pressure: pressure)
+        try renderContinuous(settled: settled, tail: tail)
+    }
+
+    /// Takes in a sample: the curve pieces it settles, and the provisional straight tail to it.
+    private func advanceContinuous(_ point: CGPoint, pressure: CGFloat) -> (settled: [BrushSegment], tail: [BrushSegment]) {
         samples.append(point)
         pressures.append(pressure)
         if samples.count > 4 { samples.removeFirst(); pressures.removeFirst() }
@@ -347,7 +364,39 @@ final class BrushStroke {
                 before: samples[max(0, n - 4)], after: point, pressures: (pressures[n - 3], pressures[n - 2]))
         }
         let tail = n >= 2 ? [segment(samples[n - 2], point, pressures[n - 2], pressure)] : []
-        try renderContinuous(settled: settled, tail: tail)
+        return (settled, tail)
+    }
+
+    /// Paints `inputs` as `append` would one at a time, but on the GPU in a few batches rather than a render and a
+    /// publish for each point, so painting a stroke again from its start doesn't stall the one in progress. Batches
+    /// stay small enough that no single render keeps the GPU busy for long.
+    func replay(_ inputs: [(point: CGPoint, pressure: CGFloat)]) throws {
+        guard gpu != nil else {
+            for input in inputs { try append(input.point, pressure: input.pressure) }
+            return
+        }
+        var pending: [BrushSegment] = [], tail: [BrushSegment] = []
+        for input in inputs {
+            let point = input.point
+            guard point.x.isFinite, point.y.isFinite, abs(point.x) <= 10_000_000, abs(point.y) <= 10_000_000,
+                  samples.last != point else { continue }
+            let pressure = input.pressure.isFinite ? min(1, max(0, input.pressure)) : 1
+            let advanced = advanceContinuous(point, pressure: pressure)
+            pending += advanced.settled
+            tail = advanced.tail
+            if pending.count >= 32 {
+                try renderContinuous(settled: pending, tail: [])
+                pending = []
+            }
+        }
+        try renderContinuous(settled: pending, tail: tail)
+    }
+
+    /// Whether a dab at `point` (document pixels) reaches past the layer's own pixels.
+    func reachesPastSource(at point: CGPoint) -> Bool {
+        let scale = max(1e-9, min(hypot(pixelToDocument.a, pixelToDocument.b), hypot(pixelToDocument.c, pixelToDocument.d)))
+        let radius = settings.diameter / 2 / scale
+        return !sourceRect.insetBy(dx: radius, dy: radius).contains(point.applying(pixelToDocument.inverted()))
     }
 
     private func flushContinuous() throws {
@@ -713,6 +762,7 @@ final class BrushStroke {
         let size = Self.tileSize
         let rect = CGRect(x: x * size, y: y * size, width: min(size, width - x * size), height: min(size, height - y * size))
         let nextBounds = allocatedBounds.map { $0.union(rect) } ?? (source == nil ? rect : sourceRect.union(rect))
+        if let growthLimit, nextBounds.width * nextBounds.height > CGFloat(growthLimit) { throw OutgrewItsResolution() }
         guard nextBounds.width <= DocumentLimits.maxSideExtent, nextBounds.height <= DocumentLimits.maxSideExtent,
               nextBounds.width * nextBounds.height <= CGFloat(pixelLimit) else { throw ProjectError.tooLarge }
         allocatedBounds = nextBounds

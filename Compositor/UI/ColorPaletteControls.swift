@@ -1,41 +1,74 @@
 import SwiftUI
 import AppKit
 
+/// A color to click on, drawn the same everywhere. The thin outline keeps a color that matches what's behind it, such
+/// as black, visible.
+struct ColorSwatch: View {
+    let color: Color
+    var size: CGFloat = 22
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        shape.fill(color)
+            .overlay { shape.strokeBorder(.white.opacity(0.26), lineWidth: 1) }
+            .frame(width: size, height: size)
+            .contentShape(shape)
+    }
+}
+
+/// A square split into black and white, the colors that Reset goes back to.
+private struct DefaultColorsIcon: View {
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 3, style: .continuous)
+        LinearGradient(stops: [.init(color: .black, location: 0.5), .init(color: .white, location: 0.5)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(.white.opacity(0.5), lineWidth: 0.75) }
+            .opacity(isEnabled ? 1 : 0.4)
+    }
+}
+
 struct ColorPaletteControls: View {
     let session: EditorSession
     @State private var choosingMaskBackground: Bool?
     private var pickerPanel: ColorPickerPanelController { .shared }
-    private let swatchSize: CGFloat = 24
-    private let swatchOffset: CGFloat = 12
+    private let swatchSize = CGSize(width: 24, height: 24)
+    private let swatchOffset = CGSize(width: 12, height: 12)
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            swatch(background: true).offset(x: swatchOffset, y: swatchOffset)
-            swatch(background: false)
-            Button { session.swapPaletteColors() } label: {
-                Image(systemName: "arrow.left.and.right")
-                    .font(.system(size: 9, weight: .medium))
-                    .rotationEffect(.degrees(45))
-                    .frame(width: 12, height: 12)
-                    .contentShape(Rectangle())
+        // The buttons' click areas reach well past their small icons, so the gaps here are tight to make up for it.
+        VStack(spacing: 4) {
+            ZStack(alignment: .topLeading) {
+                swatch(background: true).offset(swatchOffset)
+                swatch(background: false)
+                    // A gap in the color behind, so the foreground reads as sitting on top of it.
+                    .background { RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.black).padding(-2).blendMode(.destinationOut) }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .offset(x: swatchSize + 3, y: -3)
-            .help("Swap foreground and background (X)")
-            .accessibilityLabel("Swap colors")
-            Button { session.resetPaletteColors() } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.system(size: 7.5, weight: .medium))
-                    .frame(width: 12, height: 12)
-                    .contentShape(Rectangle())
+            .compositingGroup()
+            .frame(width: swatchSize.width + swatchOffset.width, height: swatchSize.height + swatchOffset.height, alignment: .topLeading)
+            HStack(spacing: 2) {
+                Button { session.resetPaletteColors() } label: {
+                    DefaultColorsIcon()
+                        .frame(width: 8, height: 8)
+                        .frame(width: 22, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Reset colors to black and white (D)")
+                .accessibilityLabel("Reset colors")
+                Button { session.swapPaletteColors() } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 10, weight: .regular))
+                        .frame(width: 22, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Swap foreground and background (X)")
+                .accessibilityLabel("Swap colors")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .offset(x: -1, y: swatchSize + 3)
-            .help("Default colors (D)")
-            .accessibilityLabel("Default colors")
         }
-        .frame(width: swatchSize + swatchOffset, height: swatchSize + swatchOffset, alignment: .topLeading)
         .disabled(!session.canEditPalette)
         .popover(isPresented: Binding(get: { choosingMaskBackground != nil }, set: { if !$0 { choosingMaskBackground = nil } })) {
             VStack(alignment: .leading, spacing: 12) {
@@ -57,17 +90,11 @@ struct ColorPaletteControls: View {
     }
     private func swatch(background: Bool) -> some View {
         let label = background ? "Background color" : "Foreground color"
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return Button {
             if session.isMaskSelected { choosingMaskBackground = background }
             else { session.openColorPicker(background: background) }
         } label: {
-            shape
-                .fill(Color(nsColor: session.paletteColor(background: background).nsColor))
-                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                .frame(width: swatchSize, height: swatchSize)
-                .contentShape(shape)
+            ColorSwatch(color: Color(nsColor: session.paletteColor(background: background).nsColor), size: 24)
         }
         .buttonStyle(.plain).help(label).accessibilityLabel(label)
     }

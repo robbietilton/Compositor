@@ -133,6 +133,8 @@ struct FilterSheet: View {
                 lensEffectsControls
             case .rimLight:
                 rimLightControls
+            case .volumetricLight:
+                volumetricLightControls
             case .motionBlur:
                 control("Angle", \.angle, range: -90...90, unit: "°", decimals: 0, logarithmic: false)
                 control("Distance", \.distance, range: 1...2000, unit: "px", decimals: 0, logarithmic: true)
@@ -152,20 +154,15 @@ struct FilterSheet: View {
             case .scanlines:
                 scanlinesControls
             case .vignette:
-                HStack(spacing: 8) {
-                    Text("Color").frame(width: 95, alignment: .leading)
+                HStack(spacing: 10) {
+                    Text("Color").frame(width: labelWidth, alignment: .leading)
+                    Spacer()
                     Button { session.openVignetteColorPicker() } label: {
-                        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        shape.fill(Color(.sRGB, red: settings.vignetteColor.red,
-                                         green: settings.vignetteColor.green, blue: settings.vignetteColor.blue))
-                            .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                            .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                            .frame(width: 24, height: 24)
-                            .contentShape(shape)
+                        ColorSwatch(color: Color(.sRGB, red: settings.vignetteColor.red,
+                                                 green: settings.vignetteColor.green, blue: settings.vignetteColor.blue))
                     }
                     .buttonStyle(.plain)
                     .help("Choose the vignette color")
-                    Spacer()
                 }
                 control("Amount", \.vignetteAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                     .help("Blend the chosen color into the edges while keeping the center unchanged")
@@ -179,6 +176,13 @@ struct FilterSheet: View {
                     .help("How strongly edges and fine detail are brought out")
                 control("Radius", \.sharpenRadius, range: 0.1...20, unit: "px", decimals: 1, logarithmic: true)
                     .help("How fine the detail it sharpens: small for crisp texture, larger for a punchier look")
+            case .reduceNoise:
+                control("Strength", \.reduceNoiseLuminance, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much grain is smoothed from the picture's brightness")
+                control("Preserve Details", \.reduceNoiseDetail, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much fine texture and edges are kept while the grain is smoothed")
+                control("Color Noise", \.reduceNoiseColor, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+                    .help("How much colored speckle is smoothed into the colors around it")
             case .bloomGlow:
                 control("Amount", \.bloomAmount, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
                 control("Radius", \.bloomRadius, range: 1...150, unit: "px", decimals: 0, logarithmic: true)
@@ -193,8 +197,11 @@ struct FilterSheet: View {
                 Text("Positive straightens lines that bow outward (barrel); negative, lines that bow inward (pincushion).")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true },
-                                            set: { session.updateFilter(settings, preview: $0) }))
+            // Not for an adjustment layer: its eye in the layers panel shows the picture without it.
+            if session.adjustmentOriginal == nil {
+                Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true },
+                                                set: { session.updateFilter(settings, preview: $0) }))
+            }
             if let error = edit?.previewError {
                 Text(error).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
@@ -222,19 +229,30 @@ struct FilterSheet: View {
                     ProgressView().controlSize(.small)
                     Text(edit?.committing == true ? "Applying…" : "Working…")
                         .font(.callout).foregroundStyle(.secondary)
-                } else if let edit, edit.kind == .rimLight, edit.preparing, !RimLighting.hasSubject(for: edit.hdrPreviewSource ?? edit.previewSource) {
+                } else if edit?.kind == .volumetricLight, session.preparingDepth {
+                    // The first time only: the depth model is downloading (about 2.6 MB).
+                    ProgressView().controlSize(.small)
+                    Text("Getting depth…").font(.callout).foregroundStyle(.secondary)
+                } else if let edit, edit.preparing, edit.kind == .rimLight && !RimLighting.hasSubject(for: edit.hdrPreviewSource ?? edit.previewSource)
+                            || edit.kind == .volumetricLight && !VolumetricLighting.hasLooked(for: edit.hdrPreviewSource ?? edit.previewSource) {
                     // Only the first preview, which finds the subject: relighting it afterwards is quick.
                     ProgressView().controlSize(.small)
                     Text("Finding the subject…").font(.callout).foregroundStyle(.secondary)
                 }
+                if edit?.kind == .volumetricLight {
+                    Button("Extract Depth") { Task { await session.extractDepth() } }
+                        .help("Close the filter and add the depth the haze goes by as a new layer: white is near, black is far")
+                        .disabled(volumetricWaiting)
+                }
                 Button("OK") { Task { await session.commitFilter() } }
                     .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
-                    .disabled(edit?.kind.isAutomatic == true && (edit?.preparing == true || edit?.previewError != nil))
+                    .disabled(edit?.kind.isAutomatic == true && (edit?.preparing == true || edit?.previewError != nil) || volumetricWaiting)
             }
         }
         .onPreferenceChange(LabelWidthKey.self) { labelWidth = max(60, $0) }
         .padding(24)
-        .frame(width: isCameraRaw ? FloatingPanelController.dockedWidth : 380)
+        // Volumetric Light's a little wider: Extract Depth shares the row with Cancel and OK.
+        .frame(width: isCameraRaw ? FloatingPanelController.dockedWidth : edit?.kind == .volumetricLight ? 440 : 380)
         .frame(maxHeight: isCameraRaw ? .infinity : nil, alignment: .top)
         .fixedSize(horizontal: false, vertical: !isCameraRaw)
 
@@ -244,6 +262,7 @@ struct FilterSheet: View {
             session.previewGradientMapColor()
             session.previewVignetteColor()
             session.previewRimLightColor()
+            session.previewVolumetricLightColor()
             session.previewDitherColor()
         }
     }
@@ -359,12 +378,7 @@ struct FilterSheet: View {
 
     private func swatch(_ color: AdjustmentColor, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-            shape.fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
-                .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                .frame(width: 24, height: 24)
-                .contentShape(shape)
+            ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -372,6 +386,43 @@ struct FilterSheet: View {
 
     /// Lens Effects: which effect, then its own settings.
     /// Rim Light: Glow, then each light's color, angle, strength, width and choke, with room for up to three.
+    /// Volumetric Light's first preview, while it fetches the depth model or finds the subject: Extract Depth and OK
+    /// wait for it (the spinner says what for), and Cancel stays.
+    private var volumetricWaiting: Bool {
+        guard let edit, edit.kind == .volumetricLight else { return false }
+        return session.preparingDepth || edit.preparing && !VolumetricLighting.hasLooked(for: edit.hdrPreviewSource ?? edit.previewSource)
+    }
+
+    @ViewBuilder private var volumetricLightControls: some View {
+        let color = settings.volumetric.color
+        HStack(spacing: 8) {
+            Text("Click or drag on the canvas to move the light")
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { session.openVolumetricLightColorPicker() } label: {
+                ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
+            }
+            .buttonStyle(.plain)
+            .help("Choose the light's color")
+        }
+        control("Haze", \.volumetric.haze, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How thick the air is: haze lit by the light, thinner in front of the subject")
+        control("Distance", \.volumetric.distance, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How far into the scene the haze begins: low reaches up to the camera, high leaves all but the farthest parts clear")
+        control("Depth Contrast", \.volumetric.depthContrast, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("Spread out depths bunched together, such as a distant city, so the haze builds through them in steps; 0 keeps the depth as the model sees it")
+        control("Size", \.volumetric.size, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How big the light is")
+        control("Intensity", \.volumetric.intensity, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How bright the beams are")
+        control("Length", \.volumetric.length, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How far from the light the beams reach")
+        control("Shafts", \.volumetric.shafts, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
+            .help("How much the beams break up into separate shafts")
+        Toggle("Keep Subject Clear", isOn: flag(\.volumetric.keepsSubjectClear))
+            .help("Keep the subject clear of the haze; off, it's hazed by its own distance, so a figure far off is misted")
+    }
+
     @ViewBuilder private var rimLightControls: some View {
         let rim = settings.rimLight
         control("Glow", \.rimLight.glow, range: 0...100, unit: "%", decimals: 0, logarithmic: false)
@@ -383,12 +434,7 @@ struct FilterSheet: View {
                 Spacer()
                 let color = light.color
                 Button { session.openRimLightColorPicker(index: index) } label: {
-                    let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    shape.fill(Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
-                        .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                        .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                        .frame(width: 24, height: 24)
-                        .contentShape(shape)
+                    ColorSwatch(color: Color(.sRGB, red: color.red, green: color.green, blue: color.blue))
                 }
                 .buttonStyle(.plain)
                 .help("Choose this light's color")
@@ -533,7 +579,7 @@ struct FilterSheet: View {
                                 onChange: { value in update { $0[keyPath: key] = (value * step).rounded() / step } },
                                 onReset: reset)
             } else {
-                Slider(value: Binding(get: { logarithmic ? log(settings[keyPath: key]) : settings[keyPath: key] },
+                AppSlider(value: Binding(get: { logarithmic ? log(settings[keyPath: key]) : settings[keyPath: key] },
                                       set: { value in update { $0[keyPath: key] = ((logarithmic ? exp(value) : value) * step).rounded() / step } }),
                        in: logarithmic ? log(range.lowerBound)...log(range.upperBound) : range)
             }
@@ -572,15 +618,9 @@ struct GradientMapControls: View {
     private func color(_ value: AdjustmentColor) -> Color { Color(.sRGB, red: value.red, green: value.green, blue: value.blue) }
 
     private func swatch(_ title: String, _ value: AdjustmentColor, action: @escaping () -> Void) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return HStack(spacing: 8) {
             Button(action: action) {
-                shape
-                    .fill(color(value))
-                    .overlay { shape.inset(by: 1).strokeBorder(.white, lineWidth: 1.5) }
-                    .overlay { shape.strokeBorder(.black, lineWidth: 1) }
-                    .frame(width: 24, height: 24)
-                    .contentShape(shape)
+                ColorSwatch(color: color(value))
             }
             .buttonStyle(.plain)
             .help("Choose the \(title.lowercased()) color")

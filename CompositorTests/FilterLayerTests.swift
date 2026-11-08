@@ -227,13 +227,64 @@ struct FilterLayerTests {
         session.adjustmentEditingID = nil
         session.updateAdjustment(try #require(session.activeLayerID), value: adjustment)
         let snapshot = try #require(session.projectSnapshot())
-        #expect(snapshot.manifest.version == 20)
+        #expect(snapshot.manifest.version == ProjectManifest.current)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Sharpen-\(UUID()).comp")
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)
         #expect(try await ProjectStore.shared.load(from: url).manifest.layers.last?.adjustment == adjustment)
         var older = snapshot.manifest
         older.version = 18
+        await #expect(throws: (any Error).self) {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: url)
+        }
+    }
+
+    /// Reduce Noise smooths grain as a layer, the canvas's GPU drawing it as the export does, and a Reduce Noise layer
+    /// needs version 21.
+    @Test func reduceNoiseLayerSmoothsGrainAndSaves() async throws {
+        let size = 60
+        let context = try BrushRaster.context(width: size, height: size, mask: false)
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        var state: UInt32 = 7
+        for y in 0..<size {
+            for x in 0..<size {
+                state = state &* 1664525 &+ 1013904223
+                let value = UInt8(100 + Int(state >> 26))
+                for channel in 0..<3 { bytes[y * context.bytesPerRow + x * 4 + channel] = value }
+                bytes[y * context.bytesPerRow + x * 4 + 3] = 255
+            }
+        }
+        let grainy = try #require(context.makeImage())
+        var adjustment = LayerAdjustment(kind: .reduceNoise)
+        adjustment.filterLayer.reduceNoise = ReduceNoiseLayerSettings()
+        adjustment.filterLayer.reduceNoise?.strength = 100
+        let pixel = try reader(try adjustment.apply(grainy)), before = try reader(grainy)
+        func spread(_ read: (Int, Int) -> [Int]) -> Int {
+            let values = (20..<40).flatMap { x in (20..<40).map { y in read(x, y)[0] } }
+            return values.max()! - values.min()!
+        }
+        #expect(spread(pixel) < spread(before) / 2, "grain: \(spread(pixel)) after, \(spread(before)) before")
+        let gpu = try #require(GPUAdjustment.apply(adjustment, to: CIImage(cgImage: grainy), scale: 1, mapping: .identity))
+        let shown = try reader(try #require(PixelAdjust.ciContext.createCGImage(gpu, from: CGRect(x: 0, y: 0, width: size, height: size),
+                                                                                format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)))
+        for (x, y) in [(10, 10), (30, 30), (45, 20)] {
+            #expect(zip(shown(x, y), pixel(x, y)).allSatisfy { abs($0 - $1) <= 3 }, "canvas at \(x), \(y): \(shown(x, y)) against \(pixel(x, y))")
+        }
+
+        let session = EditorSession()
+        session.createDocument(width: size, height: size)
+        session.insert(ImportedImage(image: grainy, thumbnail: grainy, name: "Grain"))
+        session.addAdjustment(.reduceNoise)
+        session.adjustmentEditingID = nil
+        session.updateAdjustment(try #require(session.activeLayerID), value: adjustment)
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.version == 21)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ReduceNoise-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await ProjectStore.shared.save(snapshot, to: url)
+        #expect(try await ProjectStore.shared.load(from: url).manifest.layers.last?.adjustment == adjustment)
+        var older = snapshot.manifest
+        older.version = 20
         await #expect(throws: (any Error).self) {
             try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: url)
         }

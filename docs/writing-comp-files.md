@@ -129,7 +129,7 @@ An adjustment layer has an `adjustment` object and no `imageFile`, and it affect
 ```
 
 - `ranges` and `channels` run RGB, then red, green, blue. Curve points run from x 0 to x 255, in increasing x.
-- `kind` is one of `Hue/Saturation`, `Levels`, `Curves`, `Exposure`, `Gradient Map`, `Grain`, `Invert`, `Black & White`, `Color Balance`, `Gaussian Blur`, `Motion Blur`, `Add Noise`, from manifest `version` 16 `Progressive Blur`, `Bloom / Glow` and `RGB Split`, from 18 `Vignette`, `Lens Effects` and `Tonal Contrast`, and from 19 `Sharpen`, whose settings go in a `filterLayerSettings` object (fields and ranges in [project-format.md](project-format.md), versions 16, 18, 19 and 20).
+- `kind` is one of `Hue/Saturation`, `Levels`, `Curves`, `Exposure`, `Gradient Map`, `Grain`, `Invert`, `Black & White`, `Color Balance`, `Gaussian Blur`, `Motion Blur`, `Add Noise`, from manifest `version` 16 `Progressive Blur`, `Bloom / Glow` and `RGB Split`, from 18 `Vignette`, `Lens Effects` and `Tonal Contrast`, from 19 `Sharpen`, and from 21 `Reduce Noise`, whose settings go in a `filterLayerSettings` object (fields and ranges in [project-format.md](project-format.md), versions 16, 18, 19, 20 and 21).
 - For Hue/Saturation, set `hue`, `saturation` and `lightness` on the adjustment itself. Color Balance takes a `colorBalanceSettings` object (`shadowCyanRed`, `shadowMagentaGreen`, `shadowYellowBlue`, and the same for `mid` and `highlight`, each −100 to 100, plus `preserveLuminosity`).
 - For the other kinds, the easiest way to get the exact shape is to add one in Compositor, save, and copy it from that project's manifest.
 

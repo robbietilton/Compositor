@@ -19,7 +19,7 @@ nonisolated final class MetalLayerEffects: Sendable {
     private let inside: MTLComputePipelineState
     private let compose: MTLComputePipelineState
 
-    private struct Spread { var width: UInt32; var height: UInt32; var reach: UInt32; var smallest: UInt32 }
+    private struct Spread { var width: UInt32; var height: UInt32; var reach: UInt32; var smallest: UInt32; var size: Float = 0 }
     private struct Shift { var width: UInt32; var height: UInt32; var dx: Float; var dy: Float }
     private struct Blur { var width: UInt32; var height: UInt32; var sigma: Float; var radius: UInt32 }
     private struct Compose {
@@ -89,9 +89,11 @@ nonisolated final class MetalLayerEffects: Sendable {
 
         let stroke = effects.stroke.flatMap { $0.isEnabled && $0.size > 0 && $0.opacity > 0 ? $0 : nil }
         if let stroke {
-            // second: the shape reached out (or pulled in) by the stroke's size; third: the ring between them.
+            // third: each pixel's distance along its row to the other side of the shape's edge; second: the shape
+            // reached out (or pulled in) by the stroke's size, round; third again: the ring between them.
             var spread = Spread(width: UInt32(width), height: UInt32(height),
-                                reach: UInt32(max(1, Int(stroke.size.rounded()))), smallest: stroke.inside ? 1 : 0)
+                                reach: UInt32(Int(stroke.size.rounded(.up)) + 2), smallest: stroke.inside ? 1 : 0,
+                                size: Float(stroke.size))
             run(spreadRows, [(first, 0), (third, 1)], &spread, MemoryLayout<Spread>.stride)
             run(spreadColumns, [(third, 0), (second, 1)], &spread, MemoryLayout<Spread>.stride)
             run(ring, [(first, 0), (second, 1), (third, 2)], &spread, MemoryLayout<Spread>.stride)
@@ -211,7 +213,7 @@ nonisolated final class MetalLayerEffects: Sendable {
     #include <metal_stdlib>
     using namespace metal;
 
-    struct Spread { uint width; uint height; uint reach; uint smallest; };
+    struct Spread { uint width; uint height; uint reach; uint smallest; float size; };
     struct Shift { uint width; uint height; float dx; float dy; };
     struct Blur { uint width; uint height; float sigma; uint radius; };
     struct Compose { uint width; uint height; float4 strokeColor; float4 shadowColor; float4 overlayColor;
@@ -226,48 +228,66 @@ nonisolated final class MetalLayerEffects: Sendable {
         coverage[index] = float(pixels[index].w) / 255.0;
     }
 
-    // The largest (or smallest) value within reach along a row; past the edge there is nothing.
+    // Along a row, how far each pixel is from the nearest one on the other side of the shape's edge: the shape for an
+    // outside stroke, what's around it for an inside one (where past the edge also counts). Farther than reach comes
+    // back as reach + 1. The search stops at the first one found, so most pixels finish quickly.
     kernel void effects_spread_rows(device const float* source [[buffer(0)]],
                                     device float* result [[buffer(1)]],
                                     constant Spread& size [[buffer(9)]],
                                     uint2 gid [[thread_position_in_grid]]) {
         if (gid.x >= size.width || gid.y >= size.height) { return; }
+        bool inside = size.smallest == 1;
         int reach = int(size.reach);
-        int x = int(gid.x);
-        float best = size.smallest == 1 ? 1.0 : 0.0;
-        for (int offset = -reach; offset <= reach; ++offset) {
-            int sample = x + offset;
-            float value = (sample < 0 || sample >= int(size.width)) ? 0.0 : source[gid.y * size.width + uint(sample)];
-            best = size.smallest == 1 ? min(best, value) : max(best, value);
+        int x = int(gid.x), width = int(size.width);
+        uint base = gid.y * size.width;
+        float best = float(reach + 1);
+        if ((source[base + gid.x] >= 0.5) != inside) {
+            best = 0.0;
+        } else {
+            for (int offset = 1; offset <= reach; ++offset) {
+                int left = x - offset, right = x + offset;
+                bool found = (left < 0 ? inside : (source[base + uint(left)] >= 0.5) != inside)
+                          || (right >= width ? inside : (source[base + uint(right)] >= 0.5) != inside);
+                if (found) { best = float(offset); break; }
+            }
         }
-        result[gid.y * size.width + gid.x] = best;
+        result[base + gid.x] = best;
     }
 
+    // Down a column, the true distance from the row distances, turned into how much of the pixel the grown (or
+    // shrunk) shape covers. A pixel's center is half a pixel past the edge of the nearest one counted, so the edge is
+    // at distance - 0.5, and the reach blends across the pixel that straddles it. Rows further than the best found so
+    // far can't beat it, so the search stops there.
     kernel void effects_spread_columns(device const float* source [[buffer(0)]],
                                        device float* result [[buffer(1)]],
                                        constant Spread& size [[buffer(9)]],
                                        uint2 gid [[thread_position_in_grid]]) {
         if (gid.x >= size.width || gid.y >= size.height) { return; }
+        bool inside = size.smallest == 1;
         int reach = int(size.reach);
-        int y = int(gid.y);
-        float best = size.smallest == 1 ? 1.0 : 0.0;
-        for (int offset = -reach; offset <= reach; ++offset) {
-            int sample = y + offset;
-            float value = (sample < 0 || sample >= int(size.height)) ? 0.0 : source[uint(sample) * size.width + gid.x];
-            best = size.smallest == 1 ? min(best, value) : max(best, value);
+        int y = int(gid.y), height = int(size.height);
+        float own = source[gid.y * size.width + gid.x];
+        float best = own * own;
+        for (int offset = 1; offset <= reach; ++offset) {
+            float step = float(offset * offset);
+            if (step >= best) { break; }
+            int up = y - offset, down = y + offset;
+            float above = up < 0 ? (inside ? 0.0 : float(reach + 1)) : source[uint(up) * size.width + gid.x];
+            float below = down >= height ? (inside ? 0.0 : float(reach + 1)) : source[uint(down) * size.width + gid.x];
+            best = min(best, step + min(above * above, below * below));
         }
-        result[y * size.width + gid.x] = best;
+        result[gid.y * size.width + gid.x] = clamp(size.size + 1.0 - sqrt(best), 0.0, 1.0);
     }
 
     // What the stroke covers: the difference between the shape and the reached-out (or pulled-in) shape.
     kernel void effects_ring(device const float* shape [[buffer(0)]],
-                             device const float* moved [[buffer(1)]],
+                             device const float* reached [[buffer(1)]],
                              device float* result [[buffer(2)]],
                              constant Spread& size [[buffer(9)]],
                              uint2 gid [[thread_position_in_grid]]) {
         if (gid.x >= size.width || gid.y >= size.height) { return; }
         uint index = gid.y * size.width + gid.x;
-        result[index] = clamp(size.smallest == 1 ? shape[index] - moved[index] : moved[index] - shape[index], 0.0, 1.0);
+        result[index] = clamp(size.smallest == 1 ? shape[index] - (1.0 - reached[index]) : reached[index] - shape[index], 0.0, 1.0);
     }
 
     kernel void effects_shift(device const float* source [[buffer(0)]],

@@ -29,6 +29,145 @@ nonisolated struct DocumentSelection: Equatable, @unchecked Sendable {
     }
 }
 
+extension CGPath {
+    /// The outline without the hairlines Core Graphics leaves where edges should meet exactly but miss by a millionth of a
+    /// pixel, as a box's edge clipped to the canvas meeting the selection's own. They select nothing, but the marching ants
+    /// trace them: pieces a hair wide, spurs running out along an edge and straight back, and cut-outs drawn as a second
+    /// outline over the first rather than merged into it. Straight edges go onto a 1/4096 px grid, so those that should
+    /// meet do; split where another edge's corner lies on them; and every pair running between the same two points in
+    /// opposite directions goes. Such a pair adds nothing to what's selected, so the fill stays as it was. What's left is
+    /// linked back into outlines; curved pieces are kept as they are.
+    nonisolated var withoutSlivers: CGPath {
+        struct Point: Hashable, Comparable {
+            let x: Int64, y: Int64
+            static func < (a: Point, b: Point) -> Bool { a.x != b.x ? a.x < b.x : a.y < b.y }
+        }
+        struct Edge: Hashable { let from: Point, to: Point }
+        let grid: CGFloat = 4096
+        func onGrid(_ point: CGPoint) -> Point? {
+            let x = (point.x * grid).rounded(), y = (point.y * grid).rounded()
+            guard abs(x) < 1e15, abs(y) < 1e15 else { return nil }
+            return Point(x: Int64(x), y: Int64(y))
+        }
+
+        // Straight pieces become edges; anything with a curve is kept whole.
+        var edges: [Edge] = []
+        let curved = CGMutablePath()
+        var piece: [CGPathElement] = [], piecePoints: [CGPoint] = []
+        var straightCount = 0, unusable = false
+        func finishPiece() {
+            defer { piece = []; piecePoints = [] }
+            guard !piece.isEmpty else { return }
+            if piece.contains(where: { $0.type == .addQuadCurveToPoint || $0.type == .addCurveToPoint }) {
+                var at = 0
+                for element in piece {
+                    switch element.type {
+                    case .moveToPoint: curved.move(to: piecePoints[at]); at += 1
+                    case .addLineToPoint: curved.addLine(to: piecePoints[at]); at += 1
+                    case .addQuadCurveToPoint: curved.addQuadCurve(to: piecePoints[at + 1], control: piecePoints[at]); at += 2
+                    case .addCurveToPoint:
+                        curved.addCurve(to: piecePoints[at + 2], control1: piecePoints[at], control2: piecePoints[at + 1]); at += 3
+                    case .closeSubpath: curved.closeSubpath()
+                    @unknown default: break
+                    }
+                }
+                return
+            }
+            let corners = piecePoints.compactMap(onGrid)
+            guard corners.count == piecePoints.count else { unusable = true; return }
+            straightCount += corners.count
+            // Closed, as a fill treats every piece.
+            for (at, corner) in corners.enumerated() {
+                let next = corners[(at + 1) % corners.count]
+                if next != corner { edges.append(Edge(from: corner, to: next)) }
+            }
+        }
+        applyWithBlock { pointer in
+            let element = pointer.pointee
+            let count = switch element.type {
+            case .moveToPoint, .addLineToPoint: 1
+            case .addQuadCurveToPoint: 2
+            case .addCurveToPoint: 3
+            case .closeSubpath: 0
+            @unknown default: 0
+            }
+            if element.type == .moveToPoint { finishPiece() }
+            piece.append(element)
+            piecePoints += (0..<count).map { element.points[$0] }
+        }
+        finishPiece()
+        guard !unusable, straightCount > 0 else { return self }
+
+        // Split each edge where a corner of another lies on it. Corners sorted by x, so each edge checks only those
+        // within its own span.
+        let corners = Array(Set(edges.flatMap { [$0.from, $0.to] })).sorted()
+        var split: [Edge] = []
+        split.reserveCapacity(edges.count)
+        for edge in edges {
+            let low = min(edge.from.x, edge.to.x), high = max(edge.from.x, edge.to.x)
+            let dx = edge.to.x - edge.from.x, dy = edge.to.y - edge.from.y
+            let length = dx * dx + dy * dy
+            var start = 0, end = corners.count
+            while start < end {
+                let middle = (start + end) / 2
+                if corners[middle].x < low { start = middle + 1 } else { end = middle }
+            }
+            var inside: [(along: Int64, point: Point)] = []
+            while start < corners.count, corners[start].x <= high {
+                let corner = corners[start]
+                start += 1
+                guard corner != edge.from, corner != edge.to,
+                      corner.y >= min(edge.from.y, edge.to.y), corner.y <= max(edge.from.y, edge.to.y) else { continue }
+                let rx = corner.x - edge.from.x, ry = corner.y - edge.from.y
+                let along = rx * dx + ry * dy
+                if dx * ry - dy * rx == 0, along > 0, along < length { inside.append((along, corner)) }
+            }
+            guard !inside.isEmpty else { split.append(edge); continue }
+            var from = edge.from
+            for stop in inside.sorted(by: { $0.along < $1.along }) {
+                split.append(Edge(from: from, to: stop.point))
+                from = stop.point
+            }
+            split.append(Edge(from: from, to: edge.to))
+        }
+
+        // Opposite pairs cancel.
+        var remaining: [Edge: Int] = [:]
+        var cancelled = 0
+        for edge in split {
+            let back = Edge(from: edge.to, to: edge.from)
+            if let count = remaining[back], count > 0 {
+                remaining[back] = count - 1
+                cancelled += 1
+            } else {
+                remaining[edge, default: 0] += 1
+            }
+        }
+        guard cancelled > 0 else { return self }
+
+        // Every corner still has as many edges in as out, so following them always leads back to the start.
+        var leaving: [Point: [Point]] = [:]
+        for (edge, count) in remaining where count > 0 {
+            leaving[edge.from, default: []] += Array(repeating: edge.to, count: count)
+        }
+        let path = CGMutablePath()
+        path.addPath(curved)
+        for start in leaving.keys.sorted() {
+            while let first = leaving[start]?.popLast() {
+                var loop = [start], at = first
+                while at != start, let next = leaving[at]?.popLast() {
+                    loop.append(at)
+                    at = next
+                }
+                guard loop.count >= 3 else { continue }
+                path.addLines(between: loop.map { CGPoint(x: CGFloat($0.x) / grid, y: CGFloat($0.y) / grid) })
+                path.closeSubpath()
+            }
+        }
+        return path
+    }
+}
+
 extension DocumentSelection {
     /// Four Gaussian standard deviations retain the visible falloff outside the outline.
     var coverageBounds: CGRect {
@@ -118,6 +257,42 @@ struct LassoDraft {
 extension EditorSession {
     var selection: DocumentSelection? { document?.selection }
     var canEditSelection: Bool { canEditLayers }
+
+    /// The size the status bar shows, in whole pixels: the Marquee being drawn, else the box around the selection
+    /// within the canvas. Nil with neither.
+    var selectionSize: (width: Int, height: Int)? {
+        if let draft = lassoDraft, draft.anchor != nil, draft.points.count == 4 {
+            let xs = draft.points.map(\.x), ys = draft.points.map(\.y)
+            return (Int((xs.max()! - xs.min()!).rounded()), Int((ys.max()! - ys.min()!).rounded()))
+        }
+        guard let document, let selection, !selection.isEmpty else { return nil }
+        let box = selection.path.boundingBoxOfPath.intersection(CGRect(origin: .zero, size: document.size)).integral
+        return box.isEmpty ? nil : (Int(box.width), Int(box.height))
+    }
+
+    /// The current selection's feather in whole pixels, for the status bar; nil when its edge is hard or a new outline is
+    /// being drawn. The ants look the same at any feather, so this is the one place it shows.
+    var selectionFeather: Int? {
+        guard lassoDraft == nil, let selection, !selection.isEmpty, selection.feather > 0 else { return nil }
+        return max(1, Int(selection.feather.rounded()))
+    }
+
+    /// Off hides the marching ants of the current selection only.
+    var showsSelectionEdges: Bool {
+        get { selection == nil || hiddenSelectionEdges != selection }
+        set { hiddenSelectionEdges = newValue ? nil : selection }
+    }
+
+    /// View › Show Extras (⌘H, outside the Move tool): the selection's edges and the guides together, to see the
+    /// picture alone. On only while both are showing, so ⌘H hides whatever is showing and, pressed again, brings it
+    /// all back. Guides turned off with ⌘; stay off.
+    var showsExtras: Bool {
+        get { showsSelectionEdges && !extrasHideGuides }
+        set {
+            showsSelectionEdges = newValue
+            extrasHideGuides = !newValue
+        }
+    }
 
     /// Shift adds, Option (with or without Shift) subtracts; otherwise the options-bar mode.
     func selectionMode(shift: Bool, option: Bool) -> SelectionMode {
@@ -249,7 +424,7 @@ extension EditorSession {
             guard let current = selection else { return }
             result = current.path.subtracting(clipped, using: .winding)
         }
-        setSelection(DocumentSelection(path: result, antialiased: selectionAntialiased), name: name)
+        setSelection(DocumentSelection(path: result.withoutSlivers, antialiased: selectionAntialiased), name: name)
     }
 
     func setSelection(_ value: DocumentSelection?, name: String) {
@@ -298,7 +473,7 @@ extension EditorSession {
     /// Expand / Contract need a non-empty selection to work on.
     var canModifySelection: Bool { selection?.isEmpty == false && canEditSelection && lassoDraft == nil }
 
-    enum SelectionAmountOperation: String {
+    enum SelectionAmountOperation: String, CaseIterable {
         case expand = "Expand", contract = "Contract", feather = "Feather"
     }
 
@@ -312,14 +487,19 @@ extension EditorSession {
         guard let operation = selectionAmountOperation,
               (1...(operation == .feather ? 250 : 500)).contains(amount) else { return }
         selectionAmountOperation = nil
+        selectionModifyAmount = amount
+        modifySelection(operation, by: amount)
+    }
+
+    func modifySelection(_ operation: SelectionAmountOperation, by amount: Int) {
         switch operation {
-        case .expand: selectionExpandAmount = amount; expandSelection(by: amount)
-        case .contract: selectionContractAmount = amount; contractSelection(by: amount)
-        case .feather: selectionFeatherAmount = amount; featherSelection(by: amount)
+        case .expand: expandSelection(by: amount)
+        case .contract: contractSelection(by: amount)
+        case .feather: featherSelection(by: amount)
         }
     }
 
-    /// Grows the outline by `amount` pixels with rounded corners (Photoshop's Expand), clipped to the canvas.
+    /// Grows the outline by `amount` pixels, keeping its corners, clipped to the canvas.
     func expandSelection(by amount: Int) { resizeSelection(by: CGFloat(amount), name: "Expand Selection") }
 
     /// Shrinks the outline by `amount` pixels, including away from the canvas edges.
@@ -330,21 +510,21 @@ extension EditorSession {
     /// again softens further, the way Expand and Contract stack up.
     func featherSelection(by amount: Int) {
         guard canModifySelection, let current = selection, amount > 0 else { return }
-        // Two soft edges together spread a little less than their sum, as blurs do.
-        let softened = (current.feather * current.feather + CGFloat(amount) * CGFloat(amount)).squareRoot()
         setSelection(DocumentSelection(path: current.path, antialiased: current.antialiased,
-                                       feather: min(250, softened)), name: "Feather Selection")
+                                       feather: min(250, current.feather + CGFloat(amount))), name: "Feather Selection")
     }
 
     private func resizeSelection(by delta: CGFloat, name: String) {
         guard let document, let current = selection, canModifySelection, delta != 0, abs(delta) <= 500 else { return }
-        // A band `|delta|` wide on each side of the outline, added or removed.
-        let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        // A band `|delta|` wide on each side of the outline, added or removed. Its joins are mitered so corners stay
+        // sharp: a round one's curve shrinks to nothing when contracted by the same amount, and path subtraction then
+        // loses a corner of the outline. The limit bevels the spikes that very acute corners would grow.
+        let band = current.path.copy(strokingWithWidth: abs(delta) * 2, lineCap: .butt, lineJoin: .miter, miterLimit: 3)
         let result = delta > 0
             ? current.path.union(band, using: .winding)
                 .intersection(CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil), using: .winding)
             : current.path.subtracting(band, using: .winding)
-        setSelection(DocumentSelection(path: result, antialiased: current.antialiased, feather: current.feather), name: name)
+        setSelection(DocumentSelection(path: result.withoutSlivers, antialiased: current.antialiased, feather: current.feather), name: name)
     }
 
     func selectAll() {
@@ -360,7 +540,7 @@ extension EditorSession {
     func invertSelection() {
         guard let document, let current = selection else { return }
         let canvas = CGPath(rect: CGRect(origin: .zero, size: document.size), transform: nil)
-        let inverse = DocumentSelection(path: canvas.subtracting(current.path, using: .winding), antialiased: current.antialiased,
+        let inverse = DocumentSelection(path: canvas.subtracting(current.path, using: .winding).withoutSlivers, antialiased: current.antialiased,
                                         feather: current.feather)
         // The inverse of everything is no selection at all, as in Photoshop — not an invisible empty one that
         // quietly stops every brush.

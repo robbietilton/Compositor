@@ -70,6 +70,13 @@ final class DocumentHistory {
         // Selecting, navigating, and no-op edits must preserve redo history.
         guard before.document != document else { return }
         revision = UUID()
+        // What starts a document (an image opened onto the welcome screen, a new canvas) is where its history
+        // starts: undoing all the way back stops at it rather than closing it.
+        guard before.document != nil else {
+            past.removeAll()
+            future.removeAll()
+            return
+        }
         past.append(Entry(name: pendingName, before: before,
             after: Snapshot(document: document, activeLayerID: selection, revision: revision)))
         future.removeAll()

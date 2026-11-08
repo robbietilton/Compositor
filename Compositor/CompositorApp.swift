@@ -90,16 +90,13 @@ struct CompositorApp: App {
                         .configuredKeyboardShortcut("s", modifiers: [.command, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
-                    // Export As on JPEG.
-                    Button("Export JPEG…") { Task { await applicationDelegate.projects.exportAs(start: .jpeg) } }
-                        .configuredKeyboardShortcut("s", modifiers: [.command, .option, .shift])
-                        .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Button("Export PNG…") { Task { await applicationDelegate.projects.exportPNG() } }
                         .configuredKeyboardShortcut("e", modifiers: [.command, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
-                    // Still images or GIF timelines, sized and previewed; ⌥⇧⌘W, as Photoshop's Export As.
+                    // Still images or GIF timelines, sized and previewed; ⌥⇧⌘S, Photoshop's long-standing Save for Web, beside
+                    // Save and Save As. Its newer Export As key, ⌥⇧⌘W, works too (see the app delegate).
                     Button("Export As…") { Task { await applicationDelegate.projects.exportAs() } }
-                        .configuredKeyboardShortcut("w", modifiers: [.command, .option, .shift])
+                        .configuredKeyboardShortcut("s", modifiers: [.command, .option, .shift])
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
                     Button("Close Project") {
@@ -145,9 +142,15 @@ struct CompositorApp: App {
                         Toggle("Navigator (300% and above)", isOn: $showsNavigator)
                         Toggle("Pixel Grid (800% and above)", isOn: Binding(get: { session.showsPixelGrid },
                                                                               set: { session.showsPixelGrid = $0 }))
-                        Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },
-                                                                          set: { session.showsTransformControls = $0 }))
-                            .configuredKeyboardShortcut("h").disabled(session.tool != .move || session.document == nil)
+                        // ⌘H: the Move tool's transform box there; the selection's outline and the guides everywhere else.
+                        if session.tool == .move {
+                            Toggle("Show Transform Controls", isOn: Binding(get: { session.showsTransformControls },
+                                                                              set: { session.showsTransformControls = $0 }))
+                                .configuredKeyboardShortcut("h").disabled(session.document == nil)
+                        } else {
+                            Toggle("Show Extras", isOn: Binding(get: { session.showsExtras }, set: { session.showsExtras = $0 }))
+                                .configuredKeyboardShortcut("h").disabled(session.document == nil)
+                        }
                         Divider()
                         // Print: the canvas as the chosen CMYK profile will print it, tucked in a submenu as few need it. No
                         // shortcuts (Photoshop's ⌘Y sits by ⌘U and would be hit by mistake); Search Commands finds them.
@@ -177,6 +180,8 @@ struct CompositorApp: App {
                                     .configuredKeyboardShortcut("'").disabled(session.document == nil)
                                 Toggle("Guides", isOn: Binding(get: { session.showsGuides }, set: { session.showsGuides = $0 }))
                                     .configuredKeyboardShortcut(";").disabled(session.document == nil)
+                                Toggle("Distances", isOn: Binding(get: { session.showsDistances }, set: { session.showsDistances = $0 }))
+                                    .disabled(session.document == nil)
                             }
                             Button("Grid Settings…") { Task { await applicationDelegate.projects.gridSettings() } }
                                 .disabled(session.document == nil)
@@ -203,7 +208,7 @@ struct CompositorApp: App {
                                 .disabled(!session.canClearGuides)
                         }
                     }
-                    // ⌘H toggles the Move tool's transform controls instead of hiding the app, so Hide keeps its
+                    // ⌘H toggles the transform controls or extras instead of hiding the app, so Hide keeps its
                     // place in the app menu without the shortcut.
                     CommandGroup(replacing: .appVisibility) {
                         Button("Hide Compositor") { NSApp.hide(nil) }
@@ -211,6 +216,8 @@ struct CompositorApp: App {
                             .configuredKeyboardShortcut("h", modifiers: [.command, .option])
                         Button("Show All") { NSApp.unhideAllApplications(nil) }
                     }
+                    // No Services: it acts on selected text and files, which an image editor rarely has.
+                    CommandGroup(replacing: .systemServices) {}
                 }
                 CommandGroup(replacing: .pasteboard) {
                     // Canvas pixels when the canvas has focus; text fields keep their own editing.

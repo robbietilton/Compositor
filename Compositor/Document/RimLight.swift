@@ -67,19 +67,20 @@ nonisolated enum RimLighting {
     private static let cache = MaskCache()
     private final class MaskCache: @unchecked Sendable {
         private let lock = NSLock()
-        private var key: ObjectIdentifier?
+        /// The image the mask is for, held so another can't take its place in memory and be mistaken for it.
+        private var key: CGImage?
         private var value: CGImage?
         func contains(_ image: CGImage) -> Bool {
             lock.lock(); defer { lock.unlock() }
-            return key == ObjectIdentifier(image) && value != nil
+            return key === image && value != nil
         }
         func mask(for image: CGImage, make: () throws -> CGImage) throws -> CGImage {
             lock.lock()
-            let hit = key == ObjectIdentifier(image) ? value : nil
+            let hit = key === image ? value : nil
             lock.unlock()
             if let hit { return hit }
             let made = try make()
-            lock.lock(); key = ObjectIdentifier(image); value = made; lock.unlock()
+            lock.lock(); key = image; value = made; lock.unlock()
             return made
         }
     }

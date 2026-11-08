@@ -21,34 +21,6 @@ struct CameraRawSliderTests {
         #expect(CameraRawSliderTrack.plain.colors == nil)
     }
 
-    @Test func temperatureBarIsBlueOnTheLeftAndADoubleClickHitsOnlyTheKnob() throws {
-        let cell = GradientSliderCell()
-        cell.minValue = -100
-        cell.maxValue = 100
-        cell.doubleValue = 0
-        cell.gradientColors = CameraRawSliderTrack.temperature.colors
-        let width = 200
-        let height = 16
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
-        let bitmap = try #require(rep)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-        cell.drawBar(inside: NSRect(x: 0, y: 0, width: width, height: height), flipped: false)
-        NSGraphicsContext.restoreGraphicsState()
-        let left = try #require(bitmap.colorAt(x: 4, y: height / 2)?.usingColorSpace(.sRGB))
-        let right = try #require(bitmap.colorAt(x: width - 4, y: height / 2)?.usingColorSpace(.sRGB))
-        #expect(left.blueComponent > left.redComponent, "left is blue: \(left)")
-        #expect(right.redComponent + right.greenComponent > right.blueComponent + 0.4, "right is yellow: \(right)")
-
-        let slider = CameraRawSliderView(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        slider.minValue = -100
-        slider.maxValue = 100
-        slider.doubleValue = 40
-        let knob = (slider.cell as? NSSliderCell)?.knobRect(flipped: false) ?? .zero
-        #expect(slider.isOnKnob(NSPoint(x: knob.midX, y: knob.midY)))
-        #expect(!slider.isOnKnob(NSPoint(x: 2, y: knob.midY)))
-    }
-
     @Test func colorBalanceTracksRunFromEachColorToItsOpposite() throws {
         let cyanRed = try #require(FilterSheet.cyanRedTrack.colors)
         #expect(cyanRed[0].blueComponent > cyanRed[0].redComponent && cyanRed[1].redComponent > cyanRed[1].blueComponent)
@@ -60,15 +32,26 @@ struct CameraRawSliderTests {
         #expect(greens.greenComponent > greens.redComponent && greens.greenComponent > greens.blueComponent)
     }
 
-    @Test func trackClickValueMatchesTheClickedPosition() {
-        let slider = CameraRawSliderView(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        slider.minValue = -100
-        slider.maxValue = 100
-        let left = slider.value(at: NSPoint(x: 0, y: slider.bounds.midY))
-        let center = slider.value(at: NSPoint(x: slider.bounds.midX, y: slider.bounds.midY))
-        let right = slider.value(at: NSPoint(x: slider.bounds.maxX, y: slider.bounds.midY))
-        #expect(left == -100)
-        #expect(abs(center) < 1)
-        #expect(right == 100)
+    /// A press puts the knob's center under the pointer: the ends of the track are the ends of the range, and the
+    /// middle is the middle.
+    @Test func aPointOnTheTrackStandsForTheValueUnderIt() {
+        #expect(SliderGeometry.fraction(atX: 0, width: 200) == 0)
+        #expect(abs(SliderGeometry.fraction(atX: 100, width: 200) - 0.5) < 0.001)
+        #expect(SliderGeometry.fraction(atX: 200, width: 200) == 1)
+        for fraction in [0.0, 0.3, 1.0] {
+            let x = SliderGeometry.knobCenter(fraction: fraction, width: 200)
+            #expect(abs(SliderGeometry.fraction(atX: x, width: 200) - fraction) < 0.001)
+        }
+        #expect(SliderGeometry.fraction(of: 0, in: -100...100) == 0.5)
+    }
+
+    /// The fill ends at the knob's center, but is empty at the minimum and full at the maximum.
+    @Test func theFillFollowsTheKnobAndReachesBothEnds() {
+        #expect(SliderGeometry.fillWidth(fraction: 0, width: 200) == 0)
+        #expect(SliderGeometry.fillWidth(fraction: 1, width: 200) == 200)
+        #expect(abs(SliderGeometry.fillWidth(fraction: 0.5, width: 200) - SliderGeometry.knobCenter(fraction: 0.5, width: 200)) < 0.001)
+        // Rising throughout, with no jump where the ramps meet the knob.
+        let widths = stride(from: 0.0, through: 1.0, by: 0.001).map { SliderGeometry.fillWidth(fraction: $0, width: 200) }
+        #expect(zip(widths, widths.dropFirst()).allSatisfy { $1 >= $0 && $1 - $0 < 1 })
     }
 }
