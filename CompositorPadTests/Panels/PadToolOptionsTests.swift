@@ -92,6 +92,25 @@ import UIKit
         #expect(abs(box.width - 124) < 1 && abs(box.height - 74) < 1)
     }
 
+    /// Expand, Contract and Feather are the Mac's icons, side by side in one pill, each named for VoiceOver.
+    @Test func expandContractAndFeatherAreTheMacsIconsInOnePill() throws {
+        let session = try session()
+        session.selectTool(.marquee)
+        session.selectAll()
+        let bar = bar(for: session, width: 2400)
+        let buttons = try ["Expand", "Contract", "Feather"].map { name in
+            try #require(views(UIButton.self, in: bar).first { $0.accessibilityLabel == name })
+        }
+        for (button, name) in zip(buttons, ["expand", "contract", "feather"]) {
+            #expect(button.configuration?.title == nil)
+            #expect(button.configuration?.image == UIImage(named: "bar.selection.\(name)"))
+            #expect(button.configuration?.image != nil)
+        }
+        let pill = try #require(buttons[0].superview)
+        #expect(buttons.allSatisfy { $0.superview === pill })
+        #expect(pill.layer.cornerRadius == pill.bounds.height / 2)
+    }
+
     /// A gradient waiting for them has Cancel and Apply at the Gradient bar's end.
     @Test func applySitsAtTheGradientBarsEnd() throws {
         let session = try session()

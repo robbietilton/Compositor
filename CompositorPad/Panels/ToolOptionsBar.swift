@@ -787,20 +787,23 @@ final class ToolOptionsBar: UIView {
     private func modifyControls() -> UIView {
         let size = NumberField(caption: "Size", unit: "px", width: 44, range: 1...500)
         size.onChange = { [weak self] in self?.session?.selectionModifyAmount = Int($0.rounded()) }
-        let buttons = EditorSession.SelectionAmountOperation.allCases.map { operation in
-            let button = OptionControls.button(operation.rawValue) { [weak self] in
+        // The Mac's icons, drawn by scripts/rail-icons.swift.
+        let pill = ButtonPill(EditorSession.SelectionAmountOperation.allCases.map { operation in
+            let button = OptionControls.iconButton(UIImage(named: "bar.selection.\(operation.rawValue.lowercased())"),
+                                                   label: operation.rawValue) { [weak self] in
                 guard let session = self?.session else { return }
                 session.modifySelection(operation, by: session.selectionModifyAmount)
             }
-            button.accessibilityHint = "\(operation.rawValue)s the selection by the Size's pixels."
+            button.setHelp("\(operation.rawValue) the selection by this many pixels",
+                           hint: "\(operation.rawValue)s the selection by the Size's pixels.")
             return button
-        }
+        })
         refreshers.append { session in
             size.show(Double(session.selectionModifyAmount))
             size.isEnabled = session.canModifySelection
-            for button in buttons { button.isEnabled = session.canModifySelection }
+            pill.isEnabled = session.canModifySelection
         }
-        return OptionControls.row([size] + buttons, spacing: 5)
+        return OptionControls.row([size, pill], spacing: 8)
     }
 
     // MARK: Eyedropper

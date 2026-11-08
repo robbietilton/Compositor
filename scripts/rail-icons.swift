@@ -1,20 +1,24 @@
-// Draws the Mac rail's own icons, the ones SF Symbols has nothing to match, into the iPad rail's assets in
-// CompositorPad/RailIcons.xcassets: vector PDFs, each the size that looks as large as the symbols beside it, which the
-// rail shows as they are. Run it again when one of them changes:
+// Draws the Mac rail's own icons, the ones SF Symbols has nothing to match, and the selection tools' bar's, into the
+// iPad's assets in CompositorPad/RailIcons.xcassets: vector PDFs, each the size that looks as large as the symbols
+// beside it, which the rail and the bar show as they are. Run it again when one of them changes:
 //
 //     swiftc -parse-as-library -o /tmp/rail-icons scripts/rail-icons.swift Compositor/UI/ToolIcons.swift && /tmp/rail-icons
 import SwiftUI
 
 @main enum RailIcons {
-    enum Icon { case cloneStamp, gradient, polygonalLasso, objectSelection }
+    enum Icon { case cloneStamp, gradient, polygonalLasso, objectSelection, selectionModify(ToolIcons.SelectionModify) }
 
-    /// Each icon's name in the catalog, and its size in points: a little larger than the Mac's 18, as the rail's
-    /// symbols are, and more for the stamp and the gradient, which look small at that size beside them.
+    /// Each icon's name in the catalog, and its size in points: the rail's a little larger than the Mac's 18, as the
+    /// rail's symbols are, and more for the stamp and the gradient, which look small at that size beside them; the
+    /// bar's as much larger than the Mac's 14 as the iPad's bar is than the Mac's.
     static let icons: [(name: String, icon: Icon, side: CGFloat)] = [
-        ("cloneStamp", .cloneStamp, 25.2),
-        ("gradient", .gradient, 23.76),
-        ("lasso.polygonal", .polygonalLasso, 20),
-        ("wand.object", .objectSelection, 22),
+        ("rail.cloneStamp", .cloneStamp, 25.2),
+        ("rail.gradient", .gradient, 23.76),
+        ("rail.lasso.polygonal", .polygonalLasso, 20),
+        ("rail.wand.object", .objectSelection, 22),
+        ("bar.selection.expand", .selectionModify(.expand), 18),
+        ("bar.selection.contract", .selectionModify(.contract), 18),
+        ("bar.selection.feather", .selectionModify(.feather), 18),
     ]
 
     @MainActor static func main() throws {
@@ -23,13 +27,15 @@ import SwiftUI
         try FileManager.default.createDirectory(at: catalog, withIntermediateDirectories: true)
         try json(["info": ["author": "xcode", "version": 1]]).write(to: catalog.appending(path: "Contents.json"))
         for (name, icon, side) in icons {
-            let set = catalog.appending(path: "rail.\(name).imageset")
+            let set = catalog.appending(path: "\(name).imageset")
             try FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)
-            try pdf(view(icon), side: side).write(to: set.appending(path: "\(name).pdf"))
+            // The file is named without the set's "rail." or "bar.".
+            let file = "\(name.split(separator: ".", maxSplits: 1).last ?? Substring(name)).pdf"
+            try pdf(view(icon), side: side).write(to: set.appending(path: file))
             try json([
-                "images": [["filename": "\(name).pdf", "idiom": "universal"]],
+                "images": [["filename": file, "idiom": "universal"]],
                 "info": ["author": "xcode", "version": 1],
-                // Drawn from the vectors at any scale, and tinted as the rail's symbols are.
+                // Drawn from the vectors at any scale, and tinted as the symbols beside them are.
                 "properties": ["preserves-vector-representation": true, "template-rendering-intent": "template"],
             ]).write(to: set.appending(path: "Contents.json"))
         }
@@ -54,6 +60,8 @@ import SwiftUI
                 let style = ToolIcons.objectSelectionStyle(in: size)
                 for corner in ToolIcons.objectSelectionCorners(in: size) { context.stroke(corner, with: .foreground, style: style) }
                 context.fill(ToolIcons.objectSelectionPointer(in: size), with: .foreground)
+            case .selectionModify(let icon):
+                ToolIcons.draw(ToolIcons.selectionModify(icon, in: size), in: context)
             }
         }
     }

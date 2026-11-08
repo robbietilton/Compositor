@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The tool rail's own icons, for the tools and modes SF Symbols has nothing to match: their shapes in an icon's frame,
-/// each filled or stroked in the rail's color. scripts/rail-icons.swift draws them into the iPad rail's icons too.
+/// The tool rail's own icons, for the tools and modes SF Symbols has nothing to match, and the selection tools' bar's:
+/// their shapes in an icon's frame, each filled or stroked in the rail's or the bar's color. scripts/rail-icons.swift
+/// draws them into the iPad's icons too.
 enum ToolIcons {
     /// Clone Stamp: a rubber stamp's round handle, neck, body and pad, to fill. SF Symbols has none.
     static func cloneStamp(in size: CGSize) -> Path {
@@ -102,5 +103,60 @@ enum ToolIcons {
                          point(13.2, 14.4), point(11.5, 10.9), point(14.5, 10.9)])
         cursor.closeSubpath()
         return cursor
+    }
+
+    /// Expand, Contract and Feather, the selection tools' bar's buttons.
+    enum SelectionModify: CaseIterable { case expand, contract, feather }
+
+    /// A part of an icon: its shape, stroked with `stroke` or else filled, at `opacity`.
+    struct Part {
+        var path: Path
+        var stroke: StrokeStyle?
+        var opacity: Double = 1
+    }
+
+    /// Expand is a small outline with arrows pointing out, Contract a large one with arrows pointing in, and Feather a
+    /// solid square whose edge fades away.
+    static func selectionModify(_ icon: SelectionModify, in size: CGSize) -> [Part] {
+        let unit = size.width / 18
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * unit, y: y * unit) }
+        func square(_ inset: CGFloat) -> CGRect {
+            CGRect(x: inset * unit, y: inset * unit, width: (18 - inset * 2) * unit, height: (18 - inset * 2) * unit)
+        }
+        let arrow = StrokeStyle(lineWidth: 1.4 * unit, lineCap: .round, lineJoin: .round)
+        /// An arrow's lines at each of the four corners, from a top-left corner's points.
+        func corners(_ lines: [[(CGFloat, CGFloat)]]) -> [Part] {
+            [(false, false), (true, false), (false, true), (true, true)].flatMap { flipX, flipY in
+                lines.map { line in
+                    var path = Path()
+                    path.addLines(line.map { x, y in point(flipX ? 18 - x : x, flipY ? 18 - y : y) })
+                    return Part(path: path, stroke: arrow)
+                }
+            }
+        }
+        switch icon {
+        case .expand:
+            return [Part(path: Path(square(6.2)), stroke: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.6 * unit, 1.2 * unit]))]
+                + corners([[(4.3, 4.3), (1.6, 1.6)], [(1.6, 4.3), (1.6, 1.6), (4.3, 1.6)]])
+        case .contract:
+            return [Part(path: Path(square(1.4)), stroke: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.8 * unit, 1.4 * unit]))]
+                + corners([[(4.3, 4.3), (7.2, 7.2)], [(7.2, 4.8), (7.2, 7.2), (4.8, 7.2)]])
+        case .feather:
+            return [Part(path: Path(roundedRect: square(6), cornerRadius: 1 * unit)),
+                    Part(path: Path(roundedRect: square(3.8), cornerRadius: 2 * unit), stroke: StrokeStyle(lineWidth: 1.3 * unit),
+                         opacity: 0.6),
+                    Part(path: Path(roundedRect: square(1.4), cornerRadius: 3.4 * unit), stroke: StrokeStyle(lineWidth: 1.2 * unit),
+                         opacity: 0.28)]
+        }
+    }
+
+    /// Draws `parts` in the foreground style.
+    static func draw(_ parts: [Part], in context: GraphicsContext) {
+        for part in parts {
+            var context = context
+            context.opacity = part.opacity
+            if let stroke = part.stroke { context.stroke(part.path, with: .foreground, style: stroke) }
+            else { context.fill(part.path, with: .foreground) }
+        }
     }
 }

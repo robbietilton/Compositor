@@ -162,6 +162,23 @@ enum OptionControls {
         return button
     }
 
+    /// A button that shows only `image`, for a `ButtonPill`, named `label` for VoiceOver.
+    static func iconButton(_ image: UIImage?, label: String, action: @escaping () -> Void) -> UIButton {
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = image
+        configuration.contentInsets = .zero
+        let button = UIButton(configuration: configuration)
+        // As the Mac's pill buttons: lighter while held, and faint while they can't be used.
+        button.configurationUpdateHandler = { button in
+            button.configuration?.baseForegroundColor = .label.withAlphaComponent(button.isEnabled ? 1 : 0.4)
+            button.configuration?.background.backgroundColor = UIColor(white: 1, alpha: button.isHighlighted ? 0.14 : 0)
+            button.configuration?.background.cornerRadius = 0
+        }
+        button.accessibilityLabel = label
+        button.addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
+        return button
+    }
+
     /// Segments for a setting with a few named values, as the Mac's segmented pickers.
     static func segments(_ titles: [String], action: @escaping (Int) -> Void) -> UISegmentedControl {
         let control = UISegmentedControl(items: titles)
@@ -919,5 +936,54 @@ final class SwatchButton: UIControl {
         guard let sRGB = color.cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
               let c = sRGB.components, c.count >= 3 else { return nil }
         return PaletteColor(red: min(1, max(0, c[0])), green: min(1, max(0, c[1])), blue: min(1, max(0, c[2])))
+    }
+}
+
+/// Buttons side by side in one capsule, split by hairlines, as the Mac's tool bars group them since 1.6.4.
+final class ButtonPill: UIStackView {
+    static let segmentSize = CGSize(width: 40, height: 30)
+    private var dividers: [UIView] = []
+
+    init(_ buttons: [UIButton]) {
+        super.init(frame: .zero)
+        alignment = .center
+        clipsToBounds = true
+        for (index, button) in buttons.enumerated() {
+            if index > 0 {
+                let divider = UIView()
+                divider.translatesAutoresizingMaskIntoConstraints = false
+                divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
+                divider.heightAnchor.constraint(equalToConstant: 15).isActive = true
+                dividers.append(divider)
+                addArrangedSubview(divider)
+            }
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.widthAnchor.constraint(equalToConstant: Self.segmentSize.width).isActive = true
+            button.heightAnchor.constraint(equalToConstant: Self.segmentSize.height).isActive = true
+            addArrangedSubview(button)
+        }
+        setContentHuggingPriority(.required, for: .horizontal)
+        showEnabled()
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Whether its buttons can be used; the pill fades with them while they can't, as the Mac's does.
+    var isEnabled = true {
+        didSet {
+            guard isEnabled != oldValue else { return }
+            for case let button as UIButton in arrangedSubviews { button.isEnabled = isEnabled }
+            showEnabled()
+        }
+    }
+
+    private func showEnabled() {
+        backgroundColor = UIColor(white: 1, alpha: isEnabled ? 0.09 : 0.045)
+        for divider in dividers { divider.backgroundColor = UIColor(white: 1, alpha: isEnabled ? 0.12 : 0.06) }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layer.cornerRadius = bounds.height / 2
     }
 }

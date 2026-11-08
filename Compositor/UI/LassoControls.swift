@@ -154,46 +154,12 @@ struct SelectionModifyIcon: View {
 
     var body: some View {
         Canvas { context, size in
-            let unit = size.width / 18
-            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * unit, y: y * unit) }
-            func square(_ inset: CGFloat) -> CGRect {
-                CGRect(x: inset * unit, y: inset * unit, width: (18 - inset * 2) * unit, height: (18 - inset * 2) * unit)
+            let icon: ToolIcons.SelectionModify = switch operation {
+            case .expand: .expand
+            case .contract: .contract
+            case .feather: .feather
             }
-            func stroke(_ points: [CGPoint]) {
-                var path = Path()
-                path.addLines(points)
-                context.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: 1.4 * unit, lineCap: .round, lineJoin: .round))
-            }
-            /// Mirrors a top-left corner's points to all four corners.
-            func corners(_ draw: ((CGFloat, CGFloat) -> CGPoint) -> Void) {
-                for (flipX, flipY) in [(false, false), (true, false), (false, true), (true, true)] {
-                    draw { x, y in point(flipX ? 18 - x : x, flipY ? 18 - y : y) }
-                }
-            }
-            switch operation {
-            case .expand:
-                context.stroke(Path(square(6.2)), with: .foreground,
-                               style: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.6 * unit, 1.2 * unit]))
-                corners { at in
-                    stroke([at(4.3, 4.3), at(1.6, 1.6)])
-                    stroke([at(1.6, 4.3), at(1.6, 1.6), at(4.3, 1.6)])
-                }
-            case .contract:
-                context.stroke(Path(square(1.4)), with: .foreground,
-                               style: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.8 * unit, 1.4 * unit]))
-                corners { at in
-                    stroke([at(4.3, 4.3), at(7.2, 7.2)])
-                    stroke([at(7.2, 4.8), at(7.2, 7.2), at(4.8, 7.2)])
-                }
-            case .feather:
-                context.fill(Path(roundedRect: square(6), cornerRadius: 1 * unit), with: .foreground)
-                var middle = context
-                middle.opacity = 0.6
-                middle.stroke(Path(roundedRect: square(3.8), cornerRadius: 2 * unit), with: .foreground, lineWidth: 1.3 * unit)
-                var outer = context
-                outer.opacity = 0.28
-                outer.stroke(Path(roundedRect: square(1.4), cornerRadius: 3.4 * unit), with: .foreground, lineWidth: 1.2 * unit)
-            }
+            ToolIcons.draw(ToolIcons.selectionModify(icon, in: size), in: context)
         }
         .accessibilityHidden(true)
     }
