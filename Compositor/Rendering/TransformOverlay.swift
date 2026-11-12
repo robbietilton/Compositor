@@ -226,6 +226,62 @@ final class TransformOverlay: NSView {
         drawSelection()
         drawLassoDraft()
         drawSnapGuides()
+        drawDistances()
+        drawDragOutSize()
+    }
+
+    /// A Marquee's or shape's size, a line's length, or a resized layer's size, as it's dragged: in a dark label just
+    /// above and right of the point being dragged, the other side of it near the view's edge.
+    private func drawDragOutSize() {
+        guard let size = session.dragOutSize, let transform = documentToView else { return }
+        let corner = size.corner.applying(transform)
+        let text = NSAttributedString(string: size.text, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white,
+        ])
+        let textSize = text.size()
+        var label = CGRect(x: corner.x + 14, y: corner.y - 14 - (textSize.height + 6), width: textSize.width + 12, height: textSize.height + 6)
+        if label.maxX > bounds.maxX - 4 { label.origin.x = corner.x - 14 - label.width }
+        if label.minY < bounds.minY + 4 { label.origin.y = corner.y + 14 }
+        NSColor(white: 0.12, alpha: 0.9).setFill()
+        NSBezierPath(roundedRect: label, xRadius: 4, yRadius: 4).fill()
+        text.draw(at: CGPoint(x: label.minX + 6, y: label.minY + 3))
+    }
+
+    /// The Move tool's pixel gaps: a line with an end bar at each side, and its length in a label on it, the same
+    /// size at any zoom.
+    private func drawDistances() {
+        let lines = session.distanceLines
+        guard !lines.isEmpty, let transform = documentToView, let context = NSGraphicsContext.current?.cgContext else { return }
+        let color = NSColor.systemPink
+        context.saveGState()
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(1)
+        for line in lines {
+            let start = (line.horizontal ? CGPoint(x: line.from, y: line.across) : CGPoint(x: line.across, y: line.from)).applying(transform)
+            let end = (line.horizontal ? CGPoint(x: line.to, y: line.across) : CGPoint(x: line.across, y: line.to)).applying(transform)
+            context.move(to: start)
+            context.addLine(to: end)
+            for point in [start, end] {
+                context.move(to: line.horizontal ? CGPoint(x: point.x, y: point.y - 4) : CGPoint(x: point.x - 4, y: point.y))
+                context.addLine(to: line.horizontal ? CGPoint(x: point.x, y: point.y + 4) : CGPoint(x: point.x + 4, y: point.y))
+            }
+        }
+        context.strokePath()
+        context.restoreGState()
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white,
+        ]
+        for line in lines {
+            let start = (line.horizontal ? CGPoint(x: line.from, y: line.across) : CGPoint(x: line.across, y: line.from)).applying(transform)
+            let end = (line.horizontal ? CGPoint(x: line.to, y: line.across) : CGPoint(x: line.across, y: line.to)).applying(transform)
+            let text = NSAttributedString(string: "\(Int(line.length.rounded())) px", attributes: attributes)
+            let size = text.size()
+            let label = CGRect(x: (start.x + end.x) / 2 - size.width / 2 - 5, y: (start.y + end.y) / 2 - size.height / 2 - 2,
+                               width: size.width + 10, height: size.height + 4)
+            color.setFill()
+            NSBezierPath(roundedRect: label, xRadius: 4, yRadius: 4).fill()
+            text.draw(at: CGPoint(x: label.minX + 5, y: label.minY + 2))
+        }
     }
 
     /// Non-printing layout grid over the document: majors in the chosen style, dotted subdivisions, both in the

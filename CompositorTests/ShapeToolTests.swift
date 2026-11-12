@@ -285,4 +285,29 @@ struct ShapeToolTests {
         let column = (0..<80).filter { pixel(50, $0).alpha > 127 }
         #expect(column.count >= 10, "about three times the 4-pixel width")
     }
+
+    /// The size shown beside the pointer and in the status bar while dragging: a shape's width and height at the corner
+    /// being dragged, even from the center; a line's length at its end; a Marquee's width and height.
+    @Test func whatsBeingDraggedOutShowsItsSize() {
+        let session = makeSession()
+        session.beginShape(at: CGPoint(x: 10, y: 10))
+        session.dragShape(to: CGPoint(x: 40, y: 30), square: false, fromCenter: false)
+        #expect(session.dragOutSize?.text == "30 × 20 px")
+        #expect(session.dragOutSize?.corner == CGPoint(x: 40, y: 30))
+        session.dragShape(to: CGPoint(x: 0, y: 0), square: false, fromCenter: true)
+        #expect(session.dragOutSize?.text == "20 × 20 px")
+        #expect(session.dragOutSize?.corner == CGPoint(x: 0, y: 0))
+        session.cancelShape()
+        session.shapeKind = .line
+        session.beginShape(at: CGPoint(x: 10, y: 10))
+        session.dragShape(to: CGPoint(x: 40, y: 50), square: false, fromCenter: false)
+        #expect(session.dragOutSize?.text == "50 px")
+        session.cancelShape()
+        #expect(session.dragOutSize == nil)
+        session.selectTool(.marquee)
+        session.beginLasso(at: CGPoint(x: 60, y: 50), mode: .replace)
+        session.dragMarquee(to: CGPoint(x: 20, y: 10), square: false, fromCenter: false)
+        #expect(session.dragOutSize?.text == "40 × 40 px")
+        #expect(session.dragOutSize?.corner == CGPoint(x: 20, y: 10))
+    }
 }

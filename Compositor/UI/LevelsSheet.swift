@@ -16,9 +16,14 @@ struct LevelsSheet: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Channel", selection: Binding(get: { settings.channel }, set: { channel in update { $0.channel = channel } })) {
-                ForEach(LevelsChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }.frame(width: 180)
+            // The channel at the histogram's left edge, Reset across from it.
+            HStack {
+                Picker("Channel", selection: Binding(get: { settings.channel }, set: { channel in update { $0.channel = channel } })) {
+                    ForEach(LevelsChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }.fixedSize()
+                Spacer()
+                Button("Reset") { edit?.sampleMode = nil; update { $0 = LevelsSettings() } }
+            }
             VStack(spacing: 0) {
                 histogram.frame(height: 150).background(.black.opacity(0.25))
                     .overlay(alignment: .topLeading) {
@@ -65,12 +70,11 @@ struct LevelsSheet: View {
                     }
                 }.disabled(edit?.histogramReady != true)
             }
-            HStack {
+            // Not for an adjustment layer: its eye in the layers panel shows the picture without it.
+            if session.adjustmentOriginal == nil {
                 Toggle("Preview", isOn: Binding(get: { edit?.preview ?? true }, set: {
                     session.updateLevels(settings, preview: $0)
                 })).configuredNativeShortcut("p", modifiers: .option)
-                Spacer()
-                Button("Reset") { edit?.sampleMode = nil; update { $0 = LevelsSettings() } }
             }
             Text(session.adjustmentOriginal != nil ? "Underlying pixels · alpha-weighted histogram" : session.selection == nil ? "Original pixels · alpha-weighted histogram" : "Original pixels · selection and alpha-weighted histogram")
                 .font(.caption).foregroundStyle(.secondary)

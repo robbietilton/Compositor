@@ -49,8 +49,6 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["NSDisabledDictationMenuItem": true, "NSDisabledCharacterPaletteMenuItem": true])
         // Always dark, alerts and open/save panels included, whatever the Mac is set to.
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        // Slider knobs snap to a click on the track instead of gliding there.
-        SliderSnap.install()
         // The Brush's pressure buttons wait for a tablet pen.
         PenInput.install()
     }
@@ -70,6 +68,16 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
                   self.session.canvasOnly, self.session.escapeHasNothingToCancel, NSApp.keyWindow === self.projects.window,
                   !(NSApp.keyWindow?.firstResponder is NSText) else { return event }
             self.toggleCanvasOnly()
+            return nil
+        }
+        // ⌥⇧⌘W, Photoshop's newer Export As key, opens Export As too, as its menu's ⌥⇧⌘S does, unless the person has
+        // given the combination to another command.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.charactersIgnoringModifiers?.lowercased() == "w",
+                  event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.command, .option, .shift],
+                  NSApp.keyWindow === self.projects.window, self.session.document != nil, self.projects.canStart,
+                  !ShortcutSettings.shared.overrides.values.contains(ShortcutChord("w", 11)) else { return event }
+            Task { await self.projects.exportAs() }
             return nil
         }
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in

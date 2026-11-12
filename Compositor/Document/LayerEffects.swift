@@ -595,62 +595,91 @@ nonisolated enum LayerEffectsRenderer {
         return try PixelAdjust.render(soft, width: Int(size.width), height: Int(size.height), isMask: true)
     }
 
-    /// Where a stroke lands: the shape grown (or shrunk) by its size, less the shape itself. A square reach, not a
-    /// round one — a round one eats into the corners of a rectangle, which reads as a wobbly edge.
+    /// Where a stroke lands: the shape grown (or shrunk) by its size, less the shape itself. The reach is round, measured
+    /// as the true distance from the shape's edge, so a circle's stroke is as thick on the diagonals as at the sides and
+    /// an outside stroke rounds a rectangle's corners, as Photoshop's does.
     static func strokeCoverage(_ image: CGImage, placed: CGRect, size: CGSize, stroke: StrokeEffect) throws -> CGImage {
         let width = Int(size.width), height = Int(size.height)
         let shape = try coverage(image, in: placed, size: size, blur: 0)
         var levels = try GuidedMatte.levels(of: shape, width: width, height: height)
-        let reach = max(1, Int(stroke.size.rounded()))
-        let moved = extreme(levels, width: width, height: height, reach: reach, smallest: stroke.inside)
-        // The ring between the two shapes.
+        let reach = Float(stroke.size)
+        let distances = edgeDistances(levels, width: width, height: height, inside: stroke.inside,
+                                      limit: Int(reach.rounded(.up)) + 2)
         for i in levels.indices {
-            levels[i] = stroke.inside ? max(0, levels[i] - moved[i]) : max(0, moved[i] - levels[i])
+            // How much of this pixel the grown (or shrunk) shape covers. A pixel's center sits half a pixel past the
+            // edge of the nearest one counted as the shape, so the edge is at `distance - 0.5` and the reach blends
+            // across the pixel that straddles it.
+            let reached = min(1, max(0, reach + 1 - distances[i]))
+            levels[i] = stroke.inside ? max(0, levels[i] - (1 - reached)) : max(0, reached - levels[i])
         }
         return try GuidedMatte.image(levels, width: width, height: height)
     }
 
-    /// The largest (or smallest) value within `reach` on each side: two sliding-window passes, so the cost doesn't
-    /// grow with the reach. Core Image's own morphology filters stall on a wide stroke.
-    static func extreme(_ source: [Float], width: Int, height: Int, reach: Int, smallest: Bool) -> [Float] {
-        guard width > 0, height > 0, source.count == width * height else { return [] }
-        let radius = max(0, reach)
-        var pass = [Float](repeating: 0, count: source.count)
-        var result = [Float](repeating: 0, count: source.count)
-        // Each index enters and leaves the deque at most once. A head index avoids Array.removeFirst's
-        // shifting cost; one reusable buffer avoids allocating a queue and values array for every line.
-        var queue = [Int](repeating: 0, count: max(width, height))
-        func sweep(_ input: UnsafeBufferPointer<Float>, _ output: UnsafeMutableBufferPointer<Float>,
-                   lines: Int, count: Int, lineStep: Int, elementStep: Int) {
-            for line in 0..<lines {
-                let base = line * lineStep
-                var head = 0, tail = 0, next = 0
-                for center in 0..<count {
-                    while next <= min(count - 1, center + radius) {
-                        let value = input[base + next * elementStep]
-                        while tail > head {
-                            let previous = input[base + queue[tail - 1] * elementStep]
-                            if smallest ? previous < value : previous > value { break }
-                            tail -= 1
-                        }
-                        queue[tail] = next
-                        tail += 1
-                        next += 1
+    /// For each pixel, how far it is from the nearest pixel on the other side of the shape's edge: from the shape for
+    /// an outside stroke, from what's around it for an inside one, where past the image's edge also counts as around
+    /// it. Pixels at least half covered are the shape. Distances beyond `limit` come back as `limit + 1` or more.
+    /// A row pass then a column pass (Felzenszwalb and Huttenlocher's), so the cost doesn't grow with the reach.
+    static func edgeDistances(_ levels: [Float], width: Int, height: Int, inside: Bool, limit: Int) -> [Float] {
+        guard width > 0, height > 0, levels.count == width * height else { return [] }
+        let cap = limit + 1
+        let far = Float(cap * cap)
+        var squared = [Float](repeating: far, count: levels.count)
+        // Along each row: the distance to the nearest pixel on the other side, kept squared for the column pass.
+        levels.withUnsafeBufferPointer { levels in
+            squared.withUnsafeMutableBufferPointer { squared in
+                for row in 0..<height {
+                    let base = row * width
+                    func isTarget(_ x: Int) -> Bool { (levels[base + x] >= 0.5) != inside }
+                    var last = inside ? -1 : Int.min / 2
+                    for x in 0..<width {
+                        if isTarget(x) { last = x }
+                        let gap = min(cap, x - last)
+                        squared[base + x] = Float(gap * gap)
                     }
-                    while head < tail, queue[head] < center - radius { head += 1 }
-                    let outside = center < radius || center + radius >= count
-                    output[base + center * elementStep] = smallest && outside ? 0 : input[base + queue[head] * elementStep]
+                    last = inside ? width : Int.max / 2
+                    for x in stride(from: width - 1, through: 0, by: -1) {
+                        if isTarget(x) { last = x }
+                        let gap = min(cap, last - x)
+                        squared[base + x] = min(squared[base + x], Float(gap * gap))
+                    }
                 }
             }
         }
-        source.withUnsafeBufferPointer { input in
-            pass.withUnsafeMutableBufferPointer { output in
-                sweep(input, output, lines: height, count: width, lineStep: width, elementStep: 1)
+        // Down each column: the lowest of the parabolas the row distances make, which is the distance in two dimensions.
+        var column = [Float](repeating: 0, count: height)
+        var lowest = [Int](repeating: 0, count: height)
+        var bounds = [Float](repeating: 0, count: height + 1)
+        var result = [Float](repeating: 0, count: levels.count)
+        for x in 0..<width {
+            for y in 0..<height { column[y] = squared[y * width + x] }
+            var count = 0
+            lowest[0] = 0
+            bounds[0] = -.infinity
+            bounds[1] = .infinity
+            // Where the parabolas from rows q and p cross, written without squaring the row numbers, which would
+            // lose precision in Float on a tall image.
+            func crossing(_ q: Int, _ p: Int) -> Float {
+                ((column[q] - column[p]) / Float(q - p) + Float(q + p)) / 2
             }
-        }
-        pass.withUnsafeBufferPointer { input in
-            result.withUnsafeMutableBufferPointer { output in
-                sweep(input, output, lines: width, count: height, lineStep: 1, elementStep: width)
+            for q in 1..<max(1, height) {
+                var crossesAt = crossing(q, lowest[count])
+                while crossesAt <= bounds[count] {
+                    count -= 1
+                    crossesAt = crossing(q, lowest[count])
+                }
+                count += 1
+                lowest[count] = q
+                bounds[count] = crossesAt
+                bounds[count + 1] = .infinity
+            }
+            count = 0
+            for y in 0..<height {
+                while bounds[count + 1] < Float(y) { count += 1 }
+                let p = lowest[count]
+                var distance = Float((y - p) * (y - p)) + column[p]
+                // Past the top and bottom edges counts as around the shape.
+                if inside { distance = min(distance, Float((y + 1) * (y + 1)), Float((height - y) * (height - y))) }
+                result[y * width + x] = distance.squareRoot()
             }
         }
         return result

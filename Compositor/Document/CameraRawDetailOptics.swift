@@ -117,6 +117,7 @@ nonisolated extension CameraRawSettings {
                                      CameraRawTables.exposureTables, Int32(CameraRawTables.size))
         }
         if detail.adjusts {
+            _ = MetalNonlocalMeans.installed
             adjust_camera_raw_detail(pixels, width, height, stride,
                                      detail.sharpenAmount, detail.sharpenRadius, detail.sharpenDetail, detail.sharpenMasking,
                                      detail.noiseLuminance, detail.noiseLuminanceDetail, detail.noiseLuminanceContrast,

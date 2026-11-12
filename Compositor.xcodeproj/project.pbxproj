@@ -413,7 +413,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 65;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -430,7 +430,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.12;
+				MARKETING_VERSION = 1.6.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -452,7 +452,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/Compositor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 58;
+				CURRENT_PROJECT_VERSION = 65;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
 				ENABLE_APP_SANDBOX = YES;
@@ -469,7 +469,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.12;
+				MARKETING_VERSION = 1.6.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -487,146 +487,3 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 58;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.5.12;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Compositor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Compositor";
-			};
-			name = Debug;
-		};
-		8F311FBF304F03BC0017D14F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.5.12;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Compositor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Compositor";
-			};
-			name = Release;
-		};
-		8F311FC1304F03BC0017D14F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.5.12;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Compositor;
-			};
-			name = Debug;
-		};
-		8F311FC2304F03BC0017D14F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 58;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.5.12;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wonderassembly.compositor.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Compositor;
-			};
-			name = Release;
-		};
-/* End XCBuildConfiguration section */
-
-/* Begin XCConfigurationList section */
-		8F311F94304F03BB0017D14F /* Build configuration list for PBXProject "Compositor" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8F311FB8304F03BC0017D14F /* Debug */,
-				8F311FB9304F03BC0017D14F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8F311FBA304F03BC0017D14F /* Build configuration list for PBXNativeTarget "Compositor" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8F311FBB304F03BC0017D14F /* Debug */,
-				8F311FBC304F03BC0017D14F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8F311FBD304F03BC0017D14F /* Build configuration list for PBXNativeTarget "CompositorTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8F311FBE304F03BC0017D14F /* Debug */,
-				8F311FBF304F03BC0017D14F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8F311FC0304F03BC0017D14F /* Build configuration list for PBXNativeTarget "CompositorUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8F311FC1304F03BC0017D14F /* Debug */,
-				8F311FC2304F03BC0017D14F /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-/* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		5A9C0D1E2F3A4B5C6D7E8F02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.10.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		5A9C0D1E2F3A4B5C6D7E8F03 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 5A9C0D1E2F3A4B5C6D7E8F02 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
-	};
-	rootObject = 8F311F91304F03BB0017D14F /* Project object */;
-}

@@ -53,26 +53,7 @@ struct LassoControls: View {
                             .help(session.tool == .wand && session.wandMode == .object ? "Smooth the detected object outline; turn off for the raw pixel mask" : "Smooth selection edges; turn off for hard pixel edges")
                     }
                     Divider().frame(height: 18)
-                    modifyControl("Expand", amount: $session.selectionExpandAmount) {
-                        session.expandSelection(by: session.selectionExpandAmount)
-                    }
-                    modifyControl("Contract", amount: $session.selectionContractAmount) {
-                        session.contractSelection(by: session.selectionContractAmount)
-                    }
-                    // Softens the selection's edge, as Select → Feather does.
-                    HStack(spacing: 5) {
-                        Button("Feather") { session.featherSelection(by: session.selectionFeatherAmount) }
-                            .disabled(!session.canModifySelection)
-                            .help("Fade the edge of the selection by this many pixels")
-                        TextField("Feather", value: Binding(get: { Double(session.selectionFeatherAmount) },
-                                                            set: { session.selectionFeatherAmount = $0.isFinite ? Int(min(250, max(1, $0))) : 2 }),
-                                  format: .number.precision(.fractionLength(0)))
-                        .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
-                        .arrowSteps(value: { Double(session.selectionFeatherAmount) },
-                                    change: { session.selectionFeatherAmount = Int(min(250, max(1, $0))) })
-                        .unitSuffix("px", scrubValue: $session.selectionFeatherAmount,
-                                    sensitivity: 1, range: 1...250)
-                    }
+                    modifyControls
                 }
             }
             .scrollIndicators(.never)
@@ -131,29 +112,90 @@ struct LassoControls: View {
                     .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
                     .arrowSteps(value: { Double(session.objectSelectionSettings.edgeOffset) },
                                 change: { session.objectSelectionSettings.edgeOffset = Int(min(10, max(-10, $0.rounded()))) })
-                    .unitSuffix("px")
             }
-            // The bar squeezes text before controls, so without this the label and unit collapse to
+            // The bar squeezes text before controls, so without this the label collapses to
             // nothing the moment a selection adds its own buttons, leaving an unlabelled number box.
             .fixedSize()
             .help("Positive values tighten the detected mask inward; negative values expand it outward")
         }
     }
 
-    /// A button plus its pixel amount (1–500, default 1); both disabled without a selection.
-    private func modifyControl(_ title: String, amount: Binding<Int>, action: @escaping () -> Void) -> some View {
-        HStack(spacing: 5) {
-            Button(title, action: action)
-            TextField(title, value: Binding(get: { amount.wrappedValue },
-                                            set: { amount.wrappedValue = min(500, max(1, $0)) }),
+    /// Expand, Contract and Feather, sharing one pixel amount (1–500, default 5); all disabled without a selection.
+    private var modifyControls: some View {
+        HStack(spacing: 6) {
+            Text("Size").scrubbable(sensitivity: 1, value: $session.selectionModifyAmount, range: 1...500)
+            TextField("Size", value: Binding(get: { session.selectionModifyAmount },
+                                             set: { session.selectionModifyAmount = min(500, max(1, $0)) }),
                       format: .number)
                 .frame(width: ToolHeaderStyle.threeDigits).textFieldStyle(.roundedBorder)
-                .arrowSteps(value: { Double(amount.wrappedValue) },
-                            change: { amount.wrappedValue = Int(min(500, max(1, $0.rounded()))) })
-                .unitSuffix("px", scrubValue: amount, sensitivity: 1, range: 1...500)
+                .arrowSteps(value: { Double(session.selectionModifyAmount) },
+                            change: { session.selectionModifyAmount = Int(min(500, max(1, $0.rounded()))) })
+            ToolHeaderPill {
+                ForEach(EditorSession.SelectionAmountOperation.allCases, id: \.self) { operation in
+                    Button {
+                        session.modifySelection(operation, by: session.selectionModifyAmount)
+                    } label: {
+                        SelectionModifyIcon(operation: operation).frame(width: 14, height: 14)
+                    }
+                    .accessibilityLabel(operation.rawValue)
+                    .help("\(operation.rawValue) the selection by this many pixels")
+                }
+            }
         }
+        .help("How many pixels to expand, contract or feather the selection by")
         .disabled(!session.canModifySelection)
-        .help("\(title) the selection by this many pixels")
+    }
+}
+
+/// Header icons for changing a selection. Expand is a small outline with arrows pointing out, Contract a large
+/// one with arrows pointing in, and Feather a solid square whose edge fades away.
+struct SelectionModifyIcon: View {
+    let operation: EditorSession.SelectionAmountOperation
+
+    var body: some View {
+        Canvas { context, size in
+            let unit = size.width / 18
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * unit, y: y * unit) }
+            func square(_ inset: CGFloat) -> CGRect {
+                CGRect(x: inset * unit, y: inset * unit, width: (18 - inset * 2) * unit, height: (18 - inset * 2) * unit)
+            }
+            func stroke(_ points: [CGPoint]) {
+                var path = Path()
+                path.addLines(points)
+                context.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: 1.4 * unit, lineCap: .round, lineJoin: .round))
+            }
+            /// Mirrors a top-left corner's points to all four corners.
+            func corners(_ draw: ((CGFloat, CGFloat) -> CGPoint) -> Void) {
+                for (flipX, flipY) in [(false, false), (true, false), (false, true), (true, true)] {
+                    draw { x, y in point(flipX ? 18 - x : x, flipY ? 18 - y : y) }
+                }
+            }
+            switch operation {
+            case .expand:
+                context.stroke(Path(square(6.2)), with: .foreground,
+                               style: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.6 * unit, 1.2 * unit]))
+                corners { at in
+                    stroke([at(4.3, 4.3), at(1.6, 1.6)])
+                    stroke([at(1.6, 4.3), at(1.6, 1.6), at(4.3, 1.6)])
+                }
+            case .contract:
+                context.stroke(Path(square(1.4)), with: .foreground,
+                               style: StrokeStyle(lineWidth: 1.3 * unit, dash: [1.8 * unit, 1.4 * unit]))
+                corners { at in
+                    stroke([at(4.3, 4.3), at(7.2, 7.2)])
+                    stroke([at(7.2, 4.8), at(7.2, 7.2), at(4.8, 7.2)])
+                }
+            case .feather:
+                context.fill(Path(roundedRect: square(6), cornerRadius: 1 * unit), with: .foreground)
+                var middle = context
+                middle.opacity = 0.6
+                middle.stroke(Path(roundedRect: square(3.8), cornerRadius: 2 * unit), with: .foreground, lineWidth: 1.3 * unit)
+                var outer = context
+                outer.opacity = 0.28
+                outer.stroke(Path(roundedRect: square(1.4), cornerRadius: 3.4 * unit), with: .foreground, lineWidth: 1.2 * unit)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -190,13 +232,8 @@ struct SelectionAmountSheet: View {
     init(session: EditorSession, operation: EditorSession.SelectionAmountOperation) {
         self.session = session
         self.operation = operation
-        let amount: Int
-        switch operation {
-        case .expand: amount = session.selectionExpandAmount
-        case .contract: amount = session.selectionContractAmount
-        case .feather: amount = session.selectionFeatherAmount
-        }
-        _input = State(initialValue: String(amount))
+        // The shared amount can be more than Feather accepts.
+        _input = State(initialValue: String(min(session.selectionModifyAmount, operation == .feather ? 250 : 500)))
     }
 
     private var maximum: Int { operation == .feather ? 250 : 500 }
@@ -213,9 +250,9 @@ struct SelectionAmountSheet: View {
                     .scrubbable(sensitivity: 1,
                                 value: Binding<Int>(get: { amount ?? 1 }, set: { input = String($0) }),
                                 range: 1...maximum)
-                Slider(value: Binding(get: { Double(amount ?? 1) },
+                AppSlider(value: Binding(get: { Double(amount ?? 1) },
                                       set: { input = String(Int($0.rounded())) }),
-                       in: 1...Double(maximum), step: 1)
+                       in: 1...Double(maximum))
                 TextField("Amount", text: $input)
                     .frame(width: 56).textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing).focused($focused)

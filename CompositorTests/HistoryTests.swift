@@ -7,7 +7,7 @@ import Testing
 struct HistoryTests {
     @Test func everyLayerEditRoundTripsWithSelection() throws {
         let session = EditorSession()
-        var states: [(CanvasDocument?, UUID?)] = [(nil, nil)]
+        var states: [(CanvasDocument?, UUID?)] = []
         func capture() { states.append((session.document, session.activeLayerID)) }
         session.createDocument(width: 800, height: 600); capture()
         session.addBlankLayer(); capture()
@@ -83,21 +83,40 @@ struct HistoryTests {
     @Test func historyBlockedDuringImportsAndDialogs() {
         let session = EditorSession()
         session.createDocument(width: 40, height: 40)
+        session.addBlankLayer()
         session.isImporting = true
         session.undo()
-        #expect(session.document != nil)
+        #expect(session.document?.layers.count == 1)
         session.isImporting = false
         session.showsNewDocument = true
         session.undo()
-        #expect(session.document != nil)
+        #expect(session.document?.layers.count == 1)
         session.showsNewDocument = false
         session.undo()
         session.showsImporter = true
         session.redo()
-        #expect(session.document == nil)
+        #expect(session.document?.layers.isEmpty == true)
         session.showsImporter = false
         session.redo()
-        #expect(session.document != nil)
+        #expect(session.document?.layers.count == 1)
+    }
+
+    /// Undoing all the way back stops at the image a document was opened from, or the new canvas, rather than closing
+    /// it and going back to the welcome screen.
+    @Test func undoStopsAtWhatStartedTheDocument() async throws {
+        let url = try ImageImportTests().fixture(.png)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let session = EditorSession()
+        await session.importImages([url])
+        let opened = try #require(session.document)
+        #expect(!session.canUndo)
+        session.addBlankLayer()
+        session.undo()
+        session.undo()
+        #expect(session.document == opened)
+        session.clearProject()
+        session.createDocument(width: 40, height: 40)
+        #expect(!session.canUndo && session.document != nil)
     }
 
     @Test func batchImportIsOneEntryAndFailuresDoNotAddHistory() async throws {
@@ -105,6 +124,7 @@ struct HistoryTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let missing = url.appendingPathExtension("missing")
         let session = EditorSession()
+        session.createDocument(width: 40, height: 40)
         await session.importImages([url, missing, url])
         #expect(session.history.undoCount == 1)
         let imported = session.document
@@ -112,7 +132,7 @@ struct HistoryTests {
         #expect(imported?.layers.count == 2)
         session.importError = nil
         session.undo()
-        #expect(session.document == nil)
+        #expect(session.document?.layers.isEmpty == true)
         session.redo()
         #expect(session.document == imported)
         #expect(session.activeLayerID == selection)
@@ -126,6 +146,7 @@ struct HistoryTests {
         let url = try ImageImportTests().fixture(.png)
         defer { try? FileManager.default.removeItem(at: url) }
         let session = EditorSession()
+        session.createDocument(width: 40, height: 40)
         async let first: Void = session.importImages([url])
         async let second: Void = session.importImages([url])
         _ = await (first, second)
@@ -133,7 +154,7 @@ struct HistoryTests {
         session.undo()
         #expect(session.document?.layers.count == 1)
         session.undo()
-        #expect(session.document == nil)
+        #expect(session.document?.layers.isEmpty == true)
     }
 
     @Test func historyBoundsEntriesAndUniqueRetainedPixels() async throws {

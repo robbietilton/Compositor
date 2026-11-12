@@ -33,6 +33,30 @@ struct VolumetricLightTests {
         return (Int(bytes[at]) + Int(bytes[at + 1]) + Int(bytes[at + 2])) / 3
     }
 
+    /// The first time, the first preview waits for the depth model rather than guessing and then jumping to the depth
+    /// a moment later, even as the panel opening sets its sliders; once the model is here (or can't be had: here, from
+    /// a folder without it), it draws.
+    @MainActor @Test func theFirstPreviewWaitsForTheDepthModel() async throws {
+        guard !DepthModel.isReady else { return }   // loaded already by another test: nothing to wait for
+        let source = DepthModel.source
+        defer { DepthModel.source = source }
+        DepthModel.source = FileManager.default.temporaryDirectory.appendingPathComponent("no-depth-model-\(UUID().uuidString)/")
+        let session = EditorSession()
+        session.createDocument(width: width, height: height, emptyLayer: true)
+        let image = try room()
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Room"))
+        session.beginFilter(.volumetricLight)
+        let edit = try #require(session.filterEdit)
+        #expect(session.preparingDepth && edit.previewTask == nil && edit.preparedPreview == nil, "no preview yet")
+        // The panel's sliders write their values back as it opens: no change, so still nothing drawn.
+        session.updateFilter(edit.settings, preview: edit.preview)
+        #expect(edit.previewTask == nil && edit.preparedPreview == nil, "still no preview")
+        while session.preparingDepth { try await Task.sleep(for: .milliseconds(20)) }
+        while edit.previewTask != nil || edit.preparedPreview == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(edit.preparedPreview != nil)
+        session.cancelFilter()
+    }
+
     @Test func theLightStartsOnTheBrightestSpot() throws {
         let point = VolumetricLighting.brightestPoint(in: try room())
         #expect(window.insetBy(dx: -10, dy: -10).contains(point), "on the window: \(point)")

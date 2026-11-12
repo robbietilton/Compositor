@@ -17,7 +17,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 20
+    static let current = 21
     /// Every version `load` accepts: each one a release has written (1 through `current`), and 27 from the
     /// GIF branch's own builds. Leaving out 15 and 16 once locked out projects saved by 1.5.4 and 1.5.5.
     /// The package-header and manifest checks both read this, so they can't drift apart when `current` is bumped.
@@ -295,7 +295,12 @@ actor ProjectStore {
                 if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
                 if exr { return try DeepLayer.wideAsset(image, name: layer.name) }
                 if depth == 16 { return try DeepLayer.asset(image, name: layer.name) }
-                return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name)
+                if isMask { return ImportedImage(image: image, thumbnail: thumbnail, name: layer.name) }
+                // A PNG decodes with straight alpha, or none; the brush and the canvas work in premultiplied pixels, and
+                // converting each tile a stroke touched made painting on an opened project's layers chug. Converted
+                // once here, into the layout an imported image or a new layer has.
+                guard let standard = try BrushRaster.copy(image).makeImage() else { throw ProjectError.missingImage }
+                return ImportedImage(image: standard, thumbnail: thumbnail, name: layer.name)
             }
             if layer.gif != nil, !isMask, asset.deep != nil { throw ProjectError.invalid }
             if isMask { masks[layer.id] = asset } else { images[layer.id] = asset }
@@ -404,6 +409,10 @@ actor ProjectStore {
                 // Sharpen layers arrived in version 19.
                 if adjustment.kind == .sharpen || filterLayer?.sharpen != nil {
                     guard manifest.version >= 19 else { throw ProjectError.invalid }
+                }
+                // Reduce Noise layers arrived in version 21.
+                if adjustment.kind == .reduceNoise || filterLayer?.reduceNoise != nil {
+                    guard manifest.version >= 21 else { throw ProjectError.invalid }
                 }
             }
             // Layer masks arrived in version 4, folder masks in version 6.
@@ -536,7 +545,10 @@ actor ProjectStore {
                     kCGImageSourceShouldCacheImmediately: true
                   ] as CFDictionary) else { throw ProjectError.missingImage }
             if isMask, !LayerMask.isValid(image) { throw ProjectError.invalid }
-            return ImportedImage(image: image, thumbnail: thumbnail, name: name)
+            if isMask { return ImportedImage(image: image, thumbnail: thumbnail, name: name) }
+            // Premultiplied, as a layer's image is (`load`).
+            guard let standard = try BrushRaster.copy(image).makeImage() else { throw ProjectError.missingImage }
+            return ImportedImage(image: standard, thumbnail: thumbnail, name: name)
         }
     }
 

@@ -3,18 +3,18 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     /// The Layers panel's width, remembered across launches.
-    @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
+    @AppStorage("layersPanelWidth") private var layersPanelWidth = 261.0
     @AppStorage("navigator.visible") private var showsNavigator = false
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
     @State private var canvasFrame: CGRect = .zero
-    @State private var levelsPanel = FloatingPanelController(name: "levelsPanel")
-    @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel")
-    @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel")
-    @State private var colorRangePanel = FloatingPanelController(name: "colorRangePanel")
-    @State private var filterPanel = FloatingPanelController(name: "filterPanel")
-    @State private var effectsPanel = FloatingPanelController(name: "effectsPanel")
+    @State private var levelsPanel = FloatingPanelController(name: "levelsPanel", sharing: "editPanel")
+    @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel", sharing: "editPanel")
+    @State private var selectionAmountPanel = FloatingPanelController(name: "selectionAmountPanel", sharing: "editPanel")
+    @State private var colorRangePanel = FloatingPanelController(name: "colorRangePanel", sharing: "editPanel")
+    @State private var filterPanel = FloatingPanelController(name: "filterPanel", sharing: "editPanel")
+    @State private var effectsPanel = FloatingPanelController(name: "effectsPanel", sharing: "editPanel")
     @State private var isDropTargeted = false
     /// The window's width, so the tab strip can use the toolbar's free space.
     @State private var windowWidth: CGFloat = 1180
@@ -345,8 +345,11 @@ struct ContentView: View {
                 Text(session.viewport.zoom, format: .percent.precision(.fractionLength(0...1)))
                     .frame(width: 62, alignment: .leading).accessibilityIdentifier("zoomStatus")
                 Text("\(document.width) × \(document.height) px").accessibilityIdentifier("canvasDimensions")
-                if let size = session.selectionSize {
-                    Text("Selection \(size.width) × \(size.height) px").accessibilityIdentifier("selectionDimensions")
+                if let draft = session.shapeDraft, let size = session.dragOutSize {
+                    Text("\(draft.kind == .line ? "Line" : "Shape") \(size.text)").accessibilityIdentifier("shapeDimensions")
+                } else if let size = session.selectionSize {
+                    Text("Selection \(size.width) × \(size.height) px" + (session.selectionFeather.map { " · Feather \($0) px" } ?? ""))
+                        .accessibilityIdentifier("selectionDimensions")
                 }
                 Text("sRGB · Transparent")
             } else { Text("Ready when you are") }

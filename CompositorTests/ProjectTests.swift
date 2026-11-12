@@ -35,6 +35,27 @@ struct ProjectTests {
         }
     }
 
+    /// A layer's PNG decodes with straight alpha, or none; it opens premultiplied, as an imported image is, so painting on
+    /// it doesn't convert each tile the brush touches. Its pixels are unchanged.
+    @Test func openedLayersAreInThePaintingLayout() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = EditorSession()
+        session.createDocument(width: 4, height: 2)
+        let context = try BrushRaster.context(width: 4, height: 2, mask: false)
+        context.setFillColor(CGColor(srgbRed: 1, green: 0.5, blue: 0, alpha: 0.5))
+        context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        let painted = try #require(context.makeImage())
+        session.insert(ImportedImage(image: painted, thumbnail: painted, name: "Half"))
+        let url = root.appendingPathComponent("Layout.comp")
+        try await ProjectStore.shared.save(try #require(session.projectSnapshot()), to: url)
+        let image = try #require(try await ProjectStore.shared.load(from: url).documentLayers.first?.asset?.image)
+        #expect(image.alphaInfo == .premultipliedLast && image.bitsPerPixel == 32)
+        func bytes(_ image: CGImage) -> [UInt8] { Array(try! BrushRaster.copy(image).makeImage()!.dataProvider!.data! as Data) }
+        let before = bytes(painted), after = bytes(image)
+        #expect(zip(before, after).allSatisfy { abs(Int($0) - Int($1)) <= 1 }, "\(before.prefix(8)) vs \(after.prefix(8))")
+    }
+
     @Test func projectRoundTripSurvivesSourceRemovalAndPackageMove() async throws {
         let root = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: root) }

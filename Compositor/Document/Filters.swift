@@ -9,6 +9,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     case motionBlur = "Motion Blur"
     case progressiveBlur = "Progressive Blur"
     case sharpen = "Sharpen"
+    case reduceNoise = "Reduce Noise"
     case addNoise = "Add Noise"
     case vignette = "Vignette"
     case bloomGlow = "Bloom / Glow"
@@ -40,7 +41,7 @@ nonisolated enum FilterKind: String, CaseIterable, Sendable {
     }
     /// Filters whose output channels each depend on all three input channels (Camera Raw's color, and the ones that work
     /// from brightness), which a 16-bit layer runs the slower, channel-by-channel way (`DeepLayer.run`).
-    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines }
+    var mixesChannels: Bool { self == .cameraRaw || self == .tonalContrast || self == .scanlines || self == .reduceNoise }
     /// For the color adjustments whose channels mix, their color lookup, to apply to a 16-bit layer
     /// (`LayerAdjustment.sixteenBitLookup`); nil for the rest.
     func sixteenBitLookup(_ settings: FilterSettings) -> (cube: Data, dimension: Int)? {
@@ -109,6 +110,11 @@ nonisolated struct FilterSettings: Equatable, Sendable {
     /// Sharpen: how much of the detail to add back, 0–300%, and how fine it is, 0.1–20 layer pixels.
     var sharpenAmount: Double = 100
     var sharpenRadius: Double = 1
+    /// Reduce Noise, as Camera Raw's noise reduction: how much grain is smoothed from the brightness, how much fine
+    /// texture is kept from it, and how much colored speckle is smoothed, each 0–100.
+    var reduceNoiseLuminance: Double = 50
+    var reduceNoiseDetail: Double = 50
+    var reduceNoiseColor: Double = 50
     /// Tonal Contrast: one local-detail radius and separate tonal strengths.
     var tonalAmount: Double = 50
     var tonalRadius: Double = 16
@@ -170,6 +176,9 @@ nonisolated struct FilterSettings: Equatable, Sendable {
         result.bloomAmount = clamp(bloomAmount, 0...100, 40)
         result.sharpenAmount = clamp(sharpenAmount, 0...300, 100)
         result.sharpenRadius = clamp(sharpenRadius, 0.1...20, 1)
+        result.reduceNoiseLuminance = clamp(reduceNoiseLuminance, 0...100, 50)
+        result.reduceNoiseDetail = clamp(reduceNoiseDetail, 0...100, 50)
+        result.reduceNoiseColor = clamp(reduceNoiseColor, 0...100, 50)
         result.bloomRadius = clamp(bloomRadius, 1...150, 24)
         result.tonalAmount = clamp(tonalAmount, 0...100, 50)
         result.tonalRadius = clamp(tonalRadius, 1...100, 16)
@@ -321,6 +330,15 @@ nonisolated enum PixelFilter {
         return image
     }
 
+    /// Reduce Noise on 8-bit premultiplied RGBA, in place: Camera Raw's noise reduction on its own, its contrast and color
+    /// smoothness at their defaults. The filter, and a Reduce Noise layer on the canvas (`GPUReduceNoise`).
+    static func reduceNoise(_ pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, bytesPerRow: Int, settings: FilterSettings,
+                            scale: CGFloat) {
+        _ = MetalNonlocalMeans.installed
+        adjust_camera_raw_detail(pixels, width, height, bytesPerRow, 0, 0, 0, 0, settings.reduceNoiseLuminance, settings.reduceNoiseDetail,
+                                 0, settings.reduceNoiseColor, 50, 50, scale)
+    }
+
     static func run(_ job: FilterJob) throws -> CGImage {
         let settings = job.settings.normalized
         let width = job.image.width, height = job.image.height
@@ -411,6 +429,14 @@ nonisolated enum PixelFilter {
                 kCIInputIntensityKey: settings.sharpenAmount / 100,
             ])
             image = try render(sharpened.cropped(to: extent), job: job)
+        case .reduceNoise:
+            let context = try BrushRaster.context(width: width, height: height, mask: false)
+            BrushRaster.draw(job.image, in: extent, mask: false, context: context)
+            guard let data = context.data else { throw ExportError.render }
+            reduceNoise(data.assumingMemoryBound(to: UInt8.self), width: width, height: height, bytesPerRow: context.bytesPerRow,
+                        settings: settings, scale: job.scale)
+            guard let result = context.makeImage() else { throw ExportError.render }
+            image = result
         case .bloomGlow:
             let bloomed = edges.applyingFilter("CIBloom", parameters: [
                 kCIInputRadiusKey: settings.bloomRadius * job.scale,
@@ -615,6 +641,8 @@ final class FilterEdit {
     @ObservationIgnored var preparedSettings: FilterSettings?
     @ObservationIgnored var pending: FilterJob?
     @ObservationIgnored var previewTask: Task<Void, Never>?
+    /// Volumetric Light's first preview, held for the depth model (`beginFilter`).
+    @ObservationIgnored var waitsForDepth = false
     /// Previews render from a copy no larger than this on its longest side.
     static let previewLimit: CGFloat = 2048
 
@@ -839,14 +867,29 @@ extension EditorSession {
             edit.startedEmpty = startedEmpty
             edit.repeating = repeating
             filterEdit = edit
-            // Volumetric Light's depth model, downloaded the first time: the fog guesses until it's here, then redraws.
-            if kind == .volumetricLight, !DepthModel.isReady {
+            // Volumetric Light's depth model, downloaded the first time: the first preview waits for it, so the fog
+            // doesn't draw from its own guess and then jump to the depth. Fetching and compiling it takes about 3 seconds;
+            // a slow connection holds it only 5: then the fog guesses until the model is here, and redraws.
+            // Without a connection it fails at once, and the fog guesses straight away.
+            let waitsForDepth = kind == .volumetricLight && !repeating && !DepthModel.isReady
+            if waitsForDepth {
                 preparingDepth = true
-                Task { [weak self] in
+                edit.waitsForDepth = true
+                let guess = Task<Bool, Never> { [weak self, weak edit] in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled, let self, let edit, self.filterEdit === edit, !edit.committing else { return false }
+                    edit.waitsForDepth = false
+                    self.updateFilter(edit.settings, preview: edit.preview)
+                    return true
+                }
+                Task { [weak self, weak edit] in
                     let ready = await DepthModel.prepare()
+                    guess.cancel()
+                    let guessed = await guess.value
                     guard let self else { return }
                     self.preparingDepth = false
-                    if ready, let edit = self.filterEdit, edit.kind == .volumetricLight, !edit.committing {
+                    edit?.waitsForDepth = false
+                    if ready || !guessed, let edit, self.filterEdit === edit, !edit.committing {
                         self.updateFilter(edit.settings, preview: edit.preview)
                     }
                 }
@@ -855,7 +898,7 @@ extension EditorSession {
                 Task.detached(priority: .utility) { _ = MetalCameraRawLookup.shared }
             }
             // An automatic filter commits what its preview made, so it still needs one.
-            updateFilter(edit.settings, preview: !repeating || kind.isAutomatic)
+            if !waitsForDepth { updateFilter(edit.settings, preview: !repeating || kind.isAutomatic) }
         } catch { brushError = error.localizedDescription }
     }
 
@@ -901,6 +944,9 @@ extension EditorSession {
 
     func updateFilter(_ settings: FilterSettings, preview: Bool) {
         guard let edit = filterEdit, !edit.committing else { return }
+        // The panel's sliders write their values back as it opens; while the first preview waits for the depth model,
+        // that isn't a change to draw (only one that changes something is).
+        if edit.waitsForDepth, settings.normalized == edit.settings, preview == edit.preview { return }
         edit.settings = settings.normalized
         edit.preview = preview
         // A bigger blur needs more room around the layer than it was given.
@@ -1013,6 +1059,7 @@ extension EditorSession {
             || (edit.kind == .vignette && edit.settings.vignetteAmount == 0)
             || (edit.kind == .bloomGlow && edit.settings.bloomAmount == 0)
             || (edit.kind == .sharpen && edit.settings.sharpenAmount == 0)
+            || (edit.kind == .reduceNoise && edit.settings.reduceNoiseLuminance == 0 && edit.settings.reduceNoiseColor == 0)
             || (edit.kind == .lensEffects && edit.settings.lens.isIdentity)
             || (edit.kind == .rimLight && edit.settings.rimLight.isIdentity)
             || (edit.kind == .volumetricLight && edit.settings.volumetric.isIdentity)
