@@ -254,6 +254,7 @@ struct BrushPerformanceTests {
         #expect(renderer.scratchBufferAllocationCount == 3)
         let second = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
             origin: .zero, dabs: [dab], initialDensity: first.density, initialCap: first.cap)
+        #expect(first.edges.isEmpty && second.edges.isEmpty)
         #expect(renderer.scratchBufferAllocationCount == 3,
             "Repeating a same-sized tile render should reuse density, cap, and dab buffers")
         let edged = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
@@ -265,6 +266,10 @@ struct BrushPerformanceTests {
             origin: .zero, dabs: [dab], initialDensity: edged.density, initialCap: edged.cap,
             initialEdges: edged.edges, accumulateEdges: true)
         #expect(renderer.scratchBufferAllocationCount == 4)
+        let disabledEdges = try renderer.render(tip: nil, side: 0, width: 16, height: 16,
+            origin: .zero, dabs: [dab], initialDensity: edged.density, initialCap: edged.cap)
+        #expect(disabledEdges.edges.isEmpty && renderer.scratchBufferAllocationCount == 4,
+            "Disabled edges still need a valid Metal binding, without allocating another buffer")
         let fullTileCount = 256 * 256
         let fullTile = try renderer.render(tip: nil, side: 0, width: 256, height: 256,
             origin: .zero, dabs: [dab], initialDensity: [Float](repeating: 0, count: fullTileCount),

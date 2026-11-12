@@ -186,7 +186,8 @@ final class MetalStampRenderer {
         encoder.setBuffer(dabBuffer, offset: 0, index: 2)
         encoder.setBuffer(capBuffer, offset: 0, index: 5)
         encoder.setBuffer(grainBuffer, offset: 0, index: 6)
-        encoder.setBuffer(edgeBuffer, offset: 0, index: 8)
+        // The shader still requires a binding when counts.z disables edge access.
+        encoder.setBuffer(edgeBuffer ?? densityBuffer, offset: 0, index: 8)
         var grainUniforms = SIMD4(UInt32(grainSide), 0, 0, 0)
         encoder.setBytes(&grainUniforms, length: MemoryLayout<SIMD4<UInt32>>.stride, index: 7)
         encoder.setBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 3)
