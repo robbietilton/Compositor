@@ -79,6 +79,87 @@ import Testing
 
     private struct Difference { let mean: Double; let over: Double }
 
+    @Test func continuousBrushCoverageStaysGPUResidentForLiveCanvas() async throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 128, height: 96), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 128, height: 96)
+        session.addBlankLayer()
+        session.selectTool(.brush)
+        session.document?.layers[0].transform.origin = CGPoint(x: 8, y: 4)
+        session.brushSettings = BrushSettings(diameter: 28, hardness: 0.65, red: 0.9, green: 0.2, blue: 0.1)
+        session.brushSettings.opacity = 0.55
+        session.beginBrush(at: CGPoint(x: 16, y: 48))
+        session.continueBrush(at: CGPoint(x: 112, y: 48))
+        let stroke = try #require(session.brushStroke)
+        for _ in 0..<100 where stroke.hasPendingGPUWork { try await Task.sleep(for: .milliseconds(1)) }
+        #expect(!stroke.hasPendingGPUWork)
+        #expect(!stroke.gpuPresentationTiles.isEmpty)
+        let coverageBytes = stroke.gpuPresentationBytes
+        #expect(coverageBytes > 0)
+        #expect(stroke.hasUnmaterializedGPUPreview)
+        #expect(stroke.gpuCoverageReadbackBytes == 0)
+        session.zoom(to: 1.25)
+        let difference = try compare(session, name: "continuous GPU brush preview", width: 128, height: 96, backingScale: 1)
+        #expect(difference.mean < 2)
+        #expect(difference.over == 0)
+        #expect(!stroke.hasUnmaterializedGPUPreview)
+        #expect(stroke.gpuCoverageReadbackBytes == coverageBytes)
+        #expect(GPUCanvasRenderer.shared?.cpuPatchUploadBytes(for: stroke) == 0)
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        #expect(renderer.hasCachedStroke(stroke))
+        session.cancelBrush()
+        #expect(stroke.gpuPresentationBytes == 0)
+        #expect(!renderer.hasCachedStroke(stroke))
+    }
+
+    @Test func continuousBrushGPUCoverageMatchesOpaqueLayerErase() async throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 128, height: 96), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 128, height: 96)
+        let image = try pattern(128, 96, seed: 3)
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Base"))
+        session.selectTool(.brush)
+        session.brushMode = .erase
+        session.brushSettings = BrushSettings(diameter: 28, hardness: 1, red: 1, green: 0, blue: 0)
+        session.brushSettings.opacity = 0.45
+        session.beginBrush(at: CGPoint(x: 16, y: 48))
+        session.continueBrush(at: CGPoint(x: 112, y: 48))
+        let stroke = try #require(session.brushStroke)
+        for _ in 0..<100 where stroke.hasPendingGPUWork { try await Task.sleep(for: .milliseconds(1)) }
+        #expect(!stroke.hasPendingGPUWork && stroke.hasUnmaterializedGPUPreview)
+        session.zoom(to: 1)
+        let difference = try compare(session, name: "continuous GPU erase", width: 128, height: 96, backingScale: 1)
+        #expect(difference.mean < 2)
+        #expect(difference.over == 0)
+    }
+
+    @Test func continuousBrushGPUCoverageMatchesMaskPainting() async throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = EditorSession()
+        session.viewport.resize(to: CGSize(width: 128, height: 96), backingScale: 1, documentSize: nil)
+        session.createDocument(width: 128, height: 96)
+        let image = try pattern(128, 96, seed: 5)
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Masked"))
+        session.addLayerMask()
+        session.selectTool(.brush)
+        session.isMaskSelected = true
+        session.maskPaintWhite = false
+        session.brushSettings = BrushSettings(diameter: 28, hardness: 0.8, red: 0, green: 0, blue: 0)
+        session.beginBrush(at: CGPoint(x: 16, y: 48))
+        session.continueBrush(at: CGPoint(x: 112, y: 48))
+        let stroke = try #require(session.brushStroke)
+        for _ in 0..<100 where stroke.hasPendingGPUWork { try await Task.sleep(for: .milliseconds(1)) }
+        #expect(!stroke.hasPendingGPUWork && !stroke.hasUnmaterializedGPUPreview)
+        #expect(stroke.gpuPresentationTiles.isEmpty)
+        #expect(stroke.gpuCoverageReadbackBytes > 0)
+        session.zoom(to: 1)
+        let difference = try compare(session, name: "continuous GPU mask paint", width: 128, height: 96, backingScale: 1)
+        #expect(difference.mean < 2)
+        #expect(difference.over == 0)
+    }
+
     /// Both canvases drawn for `session`; the share of pixels more than 12 levels apart, and the mean difference.
     private func compare(_ session: EditorSession, name: String, width points: Int = 500, height pointsHigh: Int = 400,
                          backingScale: Int = 2, inWindow: Bool = false) throws -> Difference {

@@ -1,10 +1,11 @@
 import AppKit
 import Observation
 
-nonisolated struct PaletteColor: Equatable, Sendable {
+nonisolated struct PaletteColor: Codable, Hashable, Sendable {
     var red: CGFloat
     var green: CGFloat
     var blue: CGFloat
+    var isValid: Bool { [red, green, blue].allSatisfy { $0.isFinite && (0...1).contains($0) } }
     static let black = PaletteColor(red: 0, green: 0, blue: 0)
     static let white = PaletteColor(red: 1, green: 1, blue: 1)
     var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }

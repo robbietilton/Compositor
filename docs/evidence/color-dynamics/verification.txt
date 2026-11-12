@@ -1,0 +1,21 @@
+Focused model/persistence/HSL/input/recovery/native UI
+/tmp/compositor-color-qualified.xcresult
+54 passed, 0 failed, 54 distinct tests
+
+Broader brush/import/pigment/sibling regression
+/tmp/compositor-color-regressions.xcresult
+163 passed, 3 failed, 166 distinct tests
+CloneStampTests/cloneStampKeepsItsOwnSoftBrushTip()
+Expectation failed: session.brushSettings.hardness == 1
+session.brushSettings.hardness → 0.0
+1 → 1.0
+BrushDynamicsTests/presetsRoundTripAndRejectInvalidDynamicsAtomically()
+Caught error: Error Domain=NSCocoaErrorDomain Code=1570 "%{PROPERTY}@ is a required value."
+BrushDynamicsTests/transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen()
+Expectation failed: alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 && abs(alpha(pixels, 250, 64) - 20) <= 2
+alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 → true
+abs(alpha(pixels, 250, 64) - 20) <= 2 → false
+
+Final native UI after compact labels and qualified accessibility names
+/tmp/compositor-color-ui-final.xcresult
+9 passed, 0 failed, 9 distinct tests

@@ -1,0 +1,9 @@
+# Settled watercolor prototype
+
+Run `python3 prototypes/watercolor/watercolor_settled.py` from the repository root. It writes `settled_stroke_exercises.png` beside the script. The prototype needs Pillow and NumPy.
+
+This is an offline visual prototype, not wired into the Compositor canvas. Each mark is settled in one deterministic pass: a pressure-shaped base silhouette is deformed at several spatial scales, low-opacity variants build its pigment body, paper texture modulates deposition, and a post-stroke edge pass pools dark pigment at the contour. The edge keeps a continuous baseline, with seeded inward spikes fading smoothly before the center. The existing soft wash remains outside the contour. Center opacity and Wet Mix behavior are intentionally unchanged for this prototype. A clear-water mark reactivates, dilutes and shifts pigment already on the sheet.
+
+The four panels follow Susan Chiang's straight-line, thin-thick-thin and dab-turn-pull exercises, with a fourth clear-water rewet example. They are a repeatable visual review sheet, not a fluid solver or a performance benchmark. The wash reactivation is a simple blur/transport approximation; GPU implementation, Compositor undo integration and visual tuning remain future work.
+
+`python3 prototypes/watercolor/watercolor_flow_shape.py` runs a separate generated-silhouette experiment using `references/generated_base_shape.png`. It keeps the computer-generated mask fixed, creates a paper-sensitive vector field, transports suspended pigment for a few offscreen settling steps, fixes some pigment into the paper, and pools a continuous rim with irregular inward branches. The pale water field can carry beyond the mask. The script writes `settled_flow_shape.png` and checks deterministic replay. This is a focused flow/pigment prototype, not production brush behavior; velocity, diffusion, fixation and edge pooling are stylized parameters awaiting visual tuning.
