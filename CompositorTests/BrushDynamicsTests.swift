@@ -502,6 +502,123 @@ struct BrushDynamicsTests {
         return try #require(context.makeImage())
     }
 
+    @Test func colorDynamicsValidationIdentityAndColorMath() throws {
+        var options = RoundBrushDynamics(); options.colorDynamics = BrushColorDynamics()
+        #expect(options.isValid && !options.usesStamps)
+        let legacy = try make(RoundBrushDynamics()), identity = try make(options)
+        try trace(legacy, steps: 8); try trace(identity, steps: 8)
+        #expect(difference(try raster(legacy), try raster(identity)) == 0)
+        let red = PaletteColor(red: 1, green: 0, blue: 0)
+        let negative = BrushColorResponse(hue: -0.1).applying(to: red, secondaryColor: .white)
+        #expect(negative.red == 1 && negative.blue > 0 && negative.green == 0)
+        let gray = PaletteColor(red: 0.5, green: 0.5, blue: 0.5)
+        #expect(BrushColorResponse(hue: 1).applying(to: gray, secondaryColor: .white) == gray)
+        #expect(BrushColorResponse(lightness: 1).applying(to: red, secondaryColor: .black) == .white)
+        #expect(BrushColorResponse(darkness: 1).applying(to: red, secondaryColor: .white) == .black)
+        #expect(BrushColorResponse(secondary: 1).applying(to: red, secondaryColor: .black) == .black)
+        let fields: [WritableKeyPath<BrushColorResponse, CGFloat>] = [\.hue, \.saturation, \.lightness, \.darkness, \.secondary]
+        for field in fields {
+            for invalid: CGFloat in [.nan, .infinity, 1.01] {
+                var response = BrushColorResponse(); response[keyPath: field] = invalid
+                options.colorDynamics?.pressure = response
+                #expect(!options.isValid)
+                #expect(throws: (any Error).self) { _ = try make(options) }
+            }
+        }
+        options.colorDynamics = BrushColorDynamics(stamp: BrushColorResponse(hue: -0.1))
+        #expect(!options.isValid)
+        options.colorDynamics?.stamp.hue = 0.6
+        options.colorDynamics?.secondaryColor.red = .nan
+        #expect(!options.isValid)
+    }
+
+    @Test func colorDynamicsSensorsAndRandomScopesAreExplicit() throws {
+        let base = SIMD3<Float>(0.8, 0.3, 0.15)
+        var settings = BrushColorDynamics(secondaryColor: .black,
+            pressure: BrushColorResponse(secondary: 1), tilt: BrushColorResponse(secondary: 1), rotation: BrushColorResponse(secondary: 1))
+        func color(_ input: BrushInput, curve: PressureCurve = PressureCurve(), index: Int = 0, copy: Int = 0) -> SIMD3<Float> {
+            settings.color(base, stroke: settings.stroke.randomized(seed: 42, index: 0, channel: 1300), input: input,
+                curve: curve, seed: 42, index: index, copy: copy)
+        }
+        #expect(color(BrushInput()) == base)
+        #expect(color(BrushInput(pressure: 0)) == base)
+        #expect(color(BrushInput(pressure: 1)) == .zero)
+        #expect(color(BrushInput(tilt: CGPoint(x: 1, y: 0))) == .zero)
+        #expect(color(BrushInput(rotation: .pi / 2)) == .zero)
+        let curve = PressureCurve(points: [.init(x: 0, y: 0), .init(x: 0.5, y: 0), .init(x: 1, y: 1)])
+        #expect(color(BrushInput(pressure: 0.5), curve: curve) == base)
+        settings = BrushColorDynamics(stroke: BrushColorResponse(hue: 1, secondary: 0.5))
+        #expect(color(BrushInput(), index: 0, copy: 0) == color(BrushInput(), index: 100, copy: 15))
+        settings = BrushColorDynamics(stamp: BrushColorResponse(hue: 1, secondary: 0.5))
+        #expect(color(BrushInput(), copy: 0) != color(BrushInput(), copy: 1))
+        #expect(color(BrushInput(), index: 0) != color(BrushInput(), index: 1))
+        for group: WritableKeyPath<BrushColorDynamics, BrushColorResponse> in [\.tilt, \.rotation, \.pressure] {
+            var options = RoundBrushDynamics(); options.spacing = 0.3
+            var dynamics = BrushColorDynamics(); dynamics[keyPath: group].secondary = 1
+            options.colorDynamics = dynamics
+            let stroke = try make(options)
+            try stroke.append(CGPoint(x: 256, y: 64), input: BrushInput())
+            let input = group == \.pressure ? BrushInput(pressure: 1) : group == \.tilt ? BrushInput(tilt: CGPoint(x: 1, y: 0)) : BrushInput(rotation: .pi / 2)
+            try stroke.append(CGPoint(x: 256, y: 64), input: input)
+            try stroke.flush()
+            #expect(stroke.dabIndex == 2, "Stationary color sensor changes must create a new dab")
+        }
+    }
+
+    @Test func colorDynamicsEveryControlChangesNativePixels() throws {
+        var options = RoundBrushDynamics(); options.flow = 0.5; options.spacing = 0.2
+        let baseline = try renderingStroke(BrushRenderingSettings(), options: options, gpu: false)
+        try baseline.append(CGPoint(x: 256, y: 64), input: BrushInput(pressure: 1, tilt: CGPoint(x: 1, y: 0), rotation: .pi / 2))
+        try baseline.flush(); let original = try raster(baseline)
+        let groups: [WritableKeyPath<BrushColorDynamics, BrushColorResponse>] = [\.stroke, \.stamp, \.pressure, \.tilt, \.rotation]
+        let fields: [WritableKeyPath<BrushColorResponse, CGFloat>] = [\.hue, \.saturation, \.lightness, \.darkness, \.secondary]
+        let atlas = try BrushRaster.context(width: 512, height: 128 * groups.count, mask: false)
+        for (row, group) in groups.enumerated() {
+            for field in fields {
+                var dynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.1, green: 0.2, blue: 0.9))
+                dynamics[keyPath: group][keyPath: field] = 0.8
+                options.colorDynamics = dynamics
+                let changed = try renderingStroke(BrushRenderingSettings(), options: options)
+                #expect(!changed.usesMetalStampRenderer)
+                try changed.append(CGPoint(x: 256, y: 64), input: BrushInput(pressure: 1, tilt: CGPoint(x: 1, y: 0), rotation: .pi / 2))
+                try changed.flush()
+                #expect(difference(original, try raster(changed)) > 0, "Color response had no output: \(group), \(field)")
+            }
+            var dynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.1, green: 0.2, blue: 0.9))
+            dynamics[keyPath: group] = BrushColorResponse(hue: 0.6, saturation: 0.2, secondary: 0.5)
+            options.colorDynamics = dynamics
+            let stroke = try renderingStroke(BrushRenderingSettings(), options: options)
+            for step in 0...32 {
+                let t = CGFloat(step) / 32
+                try stroke.append(CGPoint(x: 32 + 448 * t, y: 64), input: BrushInput(pressure: t, tilt: CGPoint(x: t, y: 0), rotation: -.pi / 2 + .pi * t))
+            }
+            try stroke.flush()
+            BrushRaster.draw(try #require(try raster(stroke).makeImage()), in: CGRect(x: 0, y: row * 128, width: 512, height: 128), mask: false, context: atlas)
+        }
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: atlas.makeImage()!).representation(using: .png, properties: [:])), named: "native-color-dynamics-groups.png")
+    }
+
+    @Test func colorDynamicsPreservesAlphaAndSeededTailReplay() throws {
+        var options = RoundBrushDynamics(); options.flow = 0.2; options.spacing = 0.2; options.count = 3
+        options.taperStart = 0.1; options.taperEnd = 0.2
+        options.colorDynamics = BrushColorDynamics(stroke: BrushColorResponse(hue: 0.3), stamp: BrushColorResponse(hue: 0.7, secondary: 0.4), pressure: BrushColorResponse(darkness: 0.2))
+        let sparse = try make(options), dense = try make(options, gpu: false), deferred = try make(options)
+        deferred.defersTaperRendering = true
+        try trace(sparse, steps: 1, ramp: true); try trace(dense, steps: 64, ramp: true); try trace(deferred, steps: 1, ramp: true)
+        let result = try raster(sparse)
+        #expect(difference(result, try raster(dense)) <= 1)
+        #expect(difference(result, try raster(deferred)) <= 1)
+        try sparse.flush(); #expect(difference(result, try raster(sparse)) == 0)
+        let otherSeed = try make(options, seed: 99); try trace(otherSeed, steps: 1, ramp: true)
+        #expect(difference(result, try raster(otherSeed)) > 0)
+        options.colorDynamics = nil
+        let plain = try make(options, gpu: false); try trace(plain, steps: 1, ramp: true)
+        let plainPixels = try raster(plain)
+        var alphaDifference = 0
+        for y in 0..<128 { for x in 0..<512 { alphaDifference = max(alphaDifference, abs(alpha(result, x, y) - alpha(plainPixels, x, y))) } }
+        #expect(alphaDifference <= 1, "Color variation must preserve coverage within byte quantization")
+    }
+
     @Test func wetMixDefaultsPersistenceAndInvalidSettings() throws {
         let defaults = BrushWetMix()
         #expect(defaults.isValid && !defaults.isActive)
@@ -574,8 +691,9 @@ struct BrushDynamicsTests {
             let layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: image, name: "Backdrop"), origin: .zero)
             let legacy = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, seed: 42)
             settings.roundDynamics.wetMix = BrushWetMix(dilution: 1, charge: 0, pull: 1, grade: 1)
+            settings.roundDynamics.colorDynamics = BrushColorDynamics(stamp: BrushColorResponse(hue: 1, secondary: 1))
             let wet = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, seed: 42)
-            #expect(wet.settings.roundDynamics.wetMix == nil)
+            #expect(wet.settings.roundDynamics.wetMix == nil && wet.settings.roundDynamics.colorDynamics == nil)
             try trace(legacy, steps: 8); try trace(wet, steps: 8)
             #expect(difference(try raster(legacy), try raster(wet)) == 0)
         }
@@ -801,6 +919,7 @@ struct BrushDynamicsTests {
         session.brushSettings.roundDynamics.flow = 0.3; session.brushSettings.roundDynamics.spacing = 0.2
         session.brushSettings.roundDynamics.taperEnd = 0.1
         session.brushSettings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6)
+        session.brushSettings.roundDynamics.colorDynamics = BrushColorDynamics(stamp: BrushColorResponse(hue: 0.3))
         session.brushSettings.roundDynamics.rendering = BrushRenderingSettings(mode: .intenseGlaze, wetEdges: 1, burntEdges: 0.7,
             strokeBlend: .screen, luminanceBlending: true, alphaThreshold: 0.1, dualSource: .generated, secondary: .bristles, classicDualNormal: true)
         session.beginBrush(at: CGPoint(x: 32, y: 64), seed: 42); session.continueBrush(at: CGPoint(x: 480, y: 64))
@@ -836,6 +955,7 @@ struct BrushDynamicsTests {
         settings.roundDynamics.spacing = 0.25; settings.roundDynamics.flow = 0.25
         settings.roundDynamics.shape = ShapeBrushSettings(source: .custom, customTip: asymmetricBrushShapeTip())
         settings.roundDynamics.grain = BrushGrain(scale: 23, depth: 0.7)
+        settings.roundDynamics.colorDynamics = BrushColorDynamics(stamp: BrushColorResponse(hue: 0.5, secondary: 0.3))
         settings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6)
         settings.roundDynamics.rendering = BrushRenderingSettings(mode: .intenseBlending, wetEdges: 0.8, burntEdges: 0.7,
             edgeBlend: .colorBurn, strokeBlend: .multiply, luminanceBlending: true, alphaThreshold: 0.05,
@@ -862,11 +982,12 @@ struct BrushDynamicsTests {
 
     @Test func renderingFourKTimingAndTileBudget() throws {
         var report = "4K Debug Rendering: 2400 px path, 12 updates, 25% spacing. Native CPU advanced path.\n"
-        for diameter: CGFloat in [40, 800] { for configuration in 0..<4 {
+        for diameter: CGFloat in [40, 800] { for configuration in 0..<5 {
             let mode: BrushRenderingSettings.Mode = configuration == 0 ? .uniformGlaze : .intenseBlending
             var settings = BrushSettings(diameter: diameter, hardness: 0.4, red: 0.7, green: 0.3, blue: 0.1)
             settings.roundDynamics.spacing = 0.25; settings.roundDynamics.flow = 0.3
             settings.roundDynamics.rendering = BrushRenderingSettings(mode: mode, wetEdges: 0.5, burntEdges: 0.5, strokeBlend: .multiply)
+            if configuration == 4 { settings.roundDynamics.colorDynamics = BrushColorDynamics(stroke: BrushColorResponse(hue: 0.5), stamp: BrushColorResponse(hue: 0.6, saturation: 0.3, secondary: 0.4)) }
             if configuration == 3 { settings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6, blurJitter: 0.4, wetnessJitter: 0.3) }
             if configuration == 2 { settings.roundDynamics.grain = BrushGrain(scale: 23, depth: 0.8, filtering: .improved) }
             let stroke = try BrushStroke(layer: ImageLayer(name: "4K", blankSize: CGSize(width: 4000, height: 4000)), mask: false,
@@ -879,7 +1000,7 @@ struct BrushDynamicsTests {
             }
             let start = CFAbsoluteTimeGetCurrent(); try stroke.flush(); let flush = (CFAbsoluteTimeGetCurrent() - start) * 1000
             times.sort(); #expect(!stroke.patches.isEmpty && stroke.patches.count < 120)
-            report += "diameter=\(diameter) mode=\(mode.rawValue) grain=\(configuration == 2) wetMix=\(configuration == 3) median=\(times[times.count / 2])ms max=\(times.last!)ms flush=\(flush)ms tiles=\(stroke.patches.count)\n"
+            report += "diameter=\(diameter) mode=\(mode.rawValue) grain=\(configuration == 2) wetMix=\(configuration == 3) colorDynamics=\(configuration == 4) median=\(times[times.count / 2])ms max=\(times.last!)ms flush=\(flush)ms tiles=\(stroke.patches.count)\n"
         } }
         Attachment.record(Data(report.utf8), named: "rendering-4k-timing.txt")
     }

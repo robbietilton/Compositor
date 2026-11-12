@@ -178,6 +178,8 @@ struct PenPressureTests {
     @Test func interpolationAndCalibrationPreserveMissingChannelsAndUprightTilt() throws {
         let start = BrushInput(pressure: 0.2, tilt: CGPoint(x: -0.5, y: 0.5), rotation: 179 * .pi / 180, timestamp: 10, deviceID: 1)
         let end = BrushInput(pressure: 0.8, tilt: CGPoint(x: 0.5, y: -0.5), rotation: -179 * .pi / 180, timestamp: 12, deviceID: 1)
+        #expect(start.interpolated(to: end, fraction: 0) == start)
+        #expect(BrushInput(timestamp: 10, deviceID: 1).interpolated(to: end, fraction: 1) == end)
         let middle = start.interpolated(to: end, fraction: 0.5)
         #expect(abs(middle.effectivePressure - 0.5) < 0.001 && middle.tilt == .zero)
         #expect(abs(abs(try #require(middle.rotation)) - .pi) < 0.001 && middle.timestamp == 11)

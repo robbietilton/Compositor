@@ -61,6 +61,8 @@ nonisolated struct BrushInput: Equatable, Sendable {
         if let timestamp, let end = other.timestamp { time = timestamp + (max(timestamp, end) - timestamp) * Double(t) }
         else { time = nil }
         guard deviceID == other.deviceID else { return BrushInput(timestamp: time) }
+        if t == 0 { return self }
+        if t == 1 { return other.monotonic(after: timestamp) }
         let angle: CGFloat?
         if let rotation, let end = other.rotation { angle = rotation + Self.wrappedAngle(end - rotation) * t }
         else { angle = nil }
@@ -230,13 +232,19 @@ final class BrushStroke {
     private let shapeHasInk: Bool
     private let secondaryMask: Data?
     private let secondarySide: Int
+    private let strokeColorResponse: BrushColorResponse
+    private var colorDynamics: BrushColorDynamics? {
+        guard !isMask, !settings.erasing, !settings.healing, clone == nil,
+              let color = settings.roundDynamics.colorDynamics, color.isActive else { return nil }
+        return color
+    }
     private var wetReservoir: CGFloat? = nil
     private var wetMix: BrushWetMix? {
         guard !isMask, !settings.erasing, !settings.healing, clone == nil,
               let wet = settings.roundDynamics.wetMix, wet.isActive else { return nil }
         return wet
     }
-    private var rendersPigment: Bool { settings.roundDynamics.renderingSettings.isActive || wetMix != nil }
+    private var rendersPigment: Bool { settings.roundDynamics.renderingSettings.isActive || wetMix != nil || colorDynamics != nil }
     private var carriedColor: SIMD3<Float>? = nil
     private var pickupSelectionImage: CGImage?
     private var pickupSelectionData: Data?
@@ -398,8 +406,11 @@ final class BrushStroke {
     /// layer. Other edits of a mask stay within it.
     init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false, seed: UInt64 = 0) throws {
         var settings = settings
-        guard settings.roundDynamics.wetMix?.isValid ?? true else { throw ProjectError.tooLarge }
-        if mask || settings.erasing || settings.healing { settings.roundDynamics.wetMix = nil }
+        guard (settings.roundDynamics.wetMix?.isValid ?? true), (settings.roundDynamics.colorDynamics?.isValid ?? true) else { throw ProjectError.tooLarge }
+        if mask || settings.erasing || settings.healing {
+            settings.roundDynamics.wetMix = nil; settings.roundDynamics.colorDynamics = nil
+        }
+        strokeColorResponse = settings.roundDynamics.colorDynamics?.stroke.randomized(seed: seed, index: 0, channel: 1300) ?? BrushColorResponse()
         if let properties = settings.roundDynamics.properties, properties.isValid {
             settings.diameter = min(properties.maximumSize, max(properties.minimumSize, settings.diameter))
             settings.opacity = min(properties.maximumOpacity, max(properties.minimumOpacity, settings.opacity))
@@ -408,7 +419,7 @@ final class BrushStroke {
         let rendering = settings.roundDynamics.renderingSettings
         let stampShape = settings.roundDynamics.shapeSettings
         let grainSupportedByMetal = settings.roundDynamics.grain.map { $0.filtering != .none } ?? true
-        let metalStampSupported = settings.roundDynamics.wetMix?.isActive != true && stampShape.filtering != .none
+        let metalStampSupported = settings.roundDynamics.colorDynamics?.isActive != true && settings.roundDynamics.wetMix?.isActive != true && stampShape.filtering != .none
             && grainSupportedByMetal && rendering.dualSource == nil
             && rendering.mode.pickup == 0
             && rendering.strokeBlend == .normal && !rendering.luminanceBlending && rendering.alphaThreshold == nil
@@ -476,7 +487,8 @@ final class BrushStroke {
               (1...DocumentLimits.maxSide).contains(originalWidth), (1...DocumentLimits.maxSide).contains(originalHeight),
               settings.diameter.isFinite, (1...Self.maxDiameter).contains(settings.diameter),
               settings.hardness.isFinite, (0...1).contains(settings.hardness),
-              settings.opacity.isFinite, (0.01...1).contains(settings.opacity), settings.roundDynamics.isValid else { throw ProjectError.tooLarge }
+              settings.opacity.isFinite, (0.01...1).contains(settings.opacity), settings.roundDynamics.isValid,
+              PaletteColor(red: settings.red, green: settings.green, blue: settings.blue).isValid else { throw ProjectError.tooLarge }
         let space = mask ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!
         let components: [CGFloat] = mask ? [settings.red, 1] : [settings.red, settings.green, settings.blue, 1]
         paintColor = CGColor(colorSpace: space, components: components)!
@@ -540,11 +552,13 @@ final class BrushStroke {
         if old.effectivePressure != new.effectivePressure { return true }
         let path = settings.roundDynamics.path
         let shape = settings.roundDynamics.shapeSettings
+        let color = colorDynamics
+        if color?.pressure.isActive == true, old.pressure != new.pressure { return true }
         func uses(_ input: StrokePathSettings.Input) -> Bool {
             (path.lateralJitter > 0 && path.lateralInput == input) || (path.linearJitter > 0 && path.linearInput == input)
         }
-        return ((uses(.tilt) || shape.inputStyle != .touch || shape.tiltRoundness > 0) && old.tilt != new.tilt)
-            || ((uses(.rotation) || shape.inputStyle == .barrel) && old.rotation != new.rotation)
+        return ((uses(.tilt) || shape.inputStyle != .touch || shape.tiltRoundness > 0 || color?.tilt.isActive == true) && old.tilt != new.tilt)
+            || ((uses(.rotation) || shape.inputStyle == .barrel || color?.rotation.isActive == true) && old.rotation != new.rotation)
     }
     func append(_ point: CGPoint, input: BrushInput) throws {
         var changed = Set<Int>()
@@ -1597,6 +1611,8 @@ final class BrushStroke {
         if let pressure = input.pressure { roundness *= max(0.05, 1 - shape.pressureRoundness * options.pressureCurve.value(pressure)) }
         if let tilt = input.tilt { roundness *= max(0.05, 1 - shape.tiltRoundness * min(1, hypot(tilt.x, tilt.y))) }
         for copy in 0..<count {
+            let dabColor = colorDynamics?.color(pigment, stroke: strokeColorResponse, input: input,
+                curve: options.pressureCurve, seed: seed, index: index, copy: copy) ?? pigment
             let angle = options.angle + orientation + scatterAngle(index: index, copy: copy)
             let co = cos(angle), si = sin(angle)
             let horizontal = max(0.05, 1 - shape.horizontalJitter * shape.horizontalInput.factor(input, curve: options.pressureCurve) * brushRandomUnit(seed: seed, index: index, channel: 256 + copy * 2))
@@ -1630,7 +1646,7 @@ final class BrushStroke {
                     var densityValues = state.density; state.density = []
                     var capValues = state.cap; state.cap = []
                     var pigmentValues = state.pigment; state.pigment = []
-                    if (rendering.mode.pickup > 0 || wet != nil) && pigmentValues.isEmpty { pigmentValues = [Float](repeating: 0, count: count * 3) }
+                    if (rendering.mode.pickup > 0 || wet != nil || colorDynamics != nil) && pigmentValues.isEmpty { pigmentValues = [Float](repeating: 0, count: count * 3) }
                     let grain = options.grain ?? BrushGrain()
                     let grainScale = grain.scale * (1 - grain.zoom) + settings.diameter * grain.zoom
                     let gc = cos(grain.rotation) / grainScale, gs = sin(grain.rotation) / grainScale
@@ -1670,7 +1686,7 @@ final class BrushStroke {
                                             Int(touched.minX), Int(touched.minY), Int(touched.maxX), Int(touched.maxY),
                                             u0, v0, ux, uy, vx, vy, Float(self.settings.hardness + (1 - self.settings.hardness) * (wet?.grade ?? 0)), Float(options.flow * wetFlow), Float(response.strength),
                                             tip, self.shapeSide, shape.filtering == .none ? 0 : shape.filtering == .classic ? 1 : 2,
-                                            rendering.mode.index, Float(rendering.wetEdges), pigment[0], pigment[1], pigment[2], secondary,
+                                            rendering.mode.index, Float(rendering.wetEdges), dabColor[0], dabColor[1], dabColor[2], secondary,
                                             self.secondarySide, Float(rendering.secondaryScale), rendering.classicDualNormal ? 1 : 0,
                                             grain, self.grainSide, parameters.baseAddress)
                                         }

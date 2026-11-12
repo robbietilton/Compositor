@@ -684,11 +684,39 @@ struct BrushEditorSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         case "Color Dynamics":
-            ForEach(["Stamp", "Stroke", "Pressure", "Tilt", "Rotation"], id: \.self) { group in
-                pending(["Hue", "Saturation", "Lightness", "Darkness", "Secondary Color"].map { group + " " + $0 }, title: group + " · Coming soon")
-            }
+            if brush.isRenderable {
+                Toggle("Enable Color Dynamics", isOn: Binding(get: { brush.roundDynamics.colorDynamics != nil },
+                    set: { brush.roundDynamics.colorDynamics = $0 ? BrushColorDynamics() : nil }))
+                if brush.roundDynamics.colorDynamics != nil {
+                    ColorPicker("Secondary Paint Color", selection: Binding(get: {
+                        (brush.roundDynamics.colorDynamics?.secondaryColor ?? .white).swiftUI
+                    }, set: { if let color = PaletteColor(NSColor($0)) {
+                        setting(\.colorDynamics, BrushColorDynamics(), \.secondaryColor).wrappedValue = color
+                    } }), supportsOpacity: false)
+                    Text("Secondary paint is saved with this brush. Stroke varies once per stroke; Stamp varies each dab and count copy. Missing pen channels have no color effect. The preview backdrop supplies no pigment.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    colorGroup("Stroke", \.stroke, random: true)
+                    colorGroup("Stamp", \.stamp, random: true)
+                    colorGroup("Pressure", \.pressure)
+                    colorGroup("Tilt", \.tilt)
+                    colorGroup("Rotation", \.rotation)
+                    Text("Native sRGB/HSL responses; proprietary source color equations and mappings are not reproduced. Masks and erasing ignore Color Dynamics.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else { pending(["Stamp", "Stroke", "Pressure", "Tilt", "Rotation"], title: "Required shape, grain or component rendering unavailable") }
         default:
             pending(planned[category] ?? [])
+        }
+    }
+    private func colorGroup(_ title: String, _ key: WritableKeyPath<BrushColorDynamics, BrushColorResponse>, random: Bool = false) -> some View {
+        let response = setting(\.colorDynamics, BrushColorDynamics(), key)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.subheadline)
+            slider("Hue", value: response.hue, range: random ? 0...1 : -1...1, unit: "%", factor: 100, accessibilityTitle: title + " Hue")
+            slider("Saturation", value: response.saturation, range: random ? 0...1 : -1...1, unit: "%", factor: 100, accessibilityTitle: title + " Saturation")
+            slider("Lightness", value: response.lightness, range: 0...1, unit: "%", factor: 100, accessibilityTitle: title + " Lightness")
+            slider("Darkness", value: response.darkness, range: 0...1, unit: "%", factor: 100, accessibilityTitle: title + " Darkness")
+            slider("Secondary Color", value: response.secondary, range: 0...1, unit: "%", factor: 100, accessibilityTitle: title + " Secondary Color")
         }
     }
     private var selectedTip: BrushShapeTip? {
@@ -859,7 +887,8 @@ struct BrushEditorSheet: View {
             }
         }
     }
-    private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>, unit: String, factor: CGFloat = 1) -> some View {
+    private func slider(_ title: String, value: Binding<CGFloat>, range: ClosedRange<CGFloat>, unit: String, factor: CGFloat = 1, accessibilityTitle: String? = nil) -> some View {
+        let spokenTitle = accessibilityTitle ?? title
         let set: (Double) -> Void = { number in
             guard number.isFinite else { return }
             value.wrappedValue = min(range.upperBound, max(range.lowerBound, CGFloat(number) / factor))
@@ -867,12 +896,12 @@ struct BrushEditorSheet: View {
         return HStack(spacing: 10) {
             Text(title).frame(width: 66, alignment: .leading)
                 .scrubbable(sensitivity: 1 / factor, value: value, range: range)
-            Slider(value: value, in: range).accessibilityLabel(title)
+            Slider(value: value, in: range).accessibilityLabel(spokenTitle)
                 .accessibilityValue((Double(value.wrappedValue * factor)).formatted(.number.precision(.fractionLength(0))) + " " + unit)
             TextField(title, value: Binding(get: { Double(value.wrappedValue * factor) }, set: set),
                       format: .number.precision(.fractionLength(0)))
                 .frame(width: 48).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
-                .accessibilityLabel(title + (unit.isEmpty ? "" : " in " + unit))
+                .accessibilityLabel(spokenTitle + (unit.isEmpty ? "" : " in " + unit))
                 .arrowSteps(value: { Double(value.wrappedValue * factor) }, change: set).unitSuffix(unit).fixedSize()
         }
     }
@@ -918,7 +947,7 @@ final class BrushDrawingView: NSView {
         let size = CGSize(width: 320 * scale, height: 240 * scale)
         return CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
     }
-    private var strokes: [(samples: [(point: CGPoint, input: BrushInput)], seed: UInt64, color: PaletteColor)] = []
+    private var strokes: [(samples: [(point: CGPoint, input: BrushInput)], seed: UInt64, color: PaletteColor, secondaryColor: PaletteColor)] = []
     private var drawing = false
     private var pendingReplay: Task<Void, Never>?
     /// Settings can arrive at drag-event rate. Replay only the latest draft after a short idle period.
@@ -951,11 +980,14 @@ final class BrushDrawingView: NSView {
             let samples = record.samples
             guard let first = samples.first else { continue }
             session.foregroundColor = record.color
+            session.brushSettings.roundDynamics.colorDynamics?.secondaryColor = record.secondaryColor
             session.beginBrush(at: first.point, input: first.input, seed: record.seed, deferTaperRendering: true)
             for sample in samples.dropFirst() { session.continueBrush(at: sample.point, input: sample.input) }
             session.finishBrushImmediately()
         }
         session.history.reset()
+        session.brushSettings = preset.applying(to: session.brushSettings)
+        session.foregroundColor = color
         needsDisplay = true
     }
     private func point(_ event: NSEvent) -> CGPoint {
@@ -971,7 +1003,9 @@ final class BrushDrawingView: NSView {
         drawing = true
         let input = input ?? BrushInput(pressure: pressure)
         let seed = UInt64.random(in: .min ... .max)
-        strokes.append(([(point, input)], seed, color))
+        session.brushSettings = preset.applying(to: session.brushSettings)
+        let secondary = session.brushSettings.roundDynamics.colorDynamics?.secondaryColor ?? .white
+        strokes.append(([(point, input)], seed, color, secondary))
         session.foregroundColor = color
         session.beginBrush(at: point, input: input, seed: seed)
         onError(session.brushError); needsDisplay = true

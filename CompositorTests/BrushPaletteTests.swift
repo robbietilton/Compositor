@@ -5,6 +5,11 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct BrushPaletteTests {
+    private func panelControls(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView, scroll.bounds.width > 300, scroll.bounds.width < 500 { return scroll }
+        return view.subviews.lazy.compactMap { panelControls(in: $0) }.first
+    }
+
     @Test func previewBackgroundIsOpaqueWhiteOrBlackWithoutChangingPaint() throws {
         let preview = BrushDrawingView(frame: NSRect(x: 0, y: 0, width: 320, height: 240))
         preview.reset()
@@ -32,7 +37,8 @@ struct BrushPaletteTests {
         brush.roundDynamics.pressureTaper = BrushTaper(start: 0.2, end: 0.2)
         brush.roundDynamics.touchTaper = BrushTaper(start: 0.1, end: 0.3)
         brush.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, pull: 0.5, grade: 0.4, blur: 0.3)
-        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape", "Wet Mix"] {
+        brush.roundDynamics.colorDynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.15, green: 0.3, blue: 0.8), stroke: BrushColorResponse(hue: 0.5), stamp: BrushColorResponse(secondary: 0.3), pressure: BrushColorResponse(darkness: 0.4))
+        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape", "Wet Mix", "Color Dynamics"] {
             let name = "completedEditor-" + category
             let panel = FloatingPanelController(name: name)
             panel.show(title: "Brush Editor", content: BrushEditorSheet(brush: brush, color: PaletteColor(red: 0.2, green: 0.3, blue: 0.7),
@@ -49,7 +55,34 @@ struct BrushPaletteTests {
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
             Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "editor-gap-" + category + ".png")
+            if category == "Color Dynamics", let scroll = panelControls(in: view), let document = scroll.documentView {
+                scroll.contentView.scroll(to: CGPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                try await Task.sleep(for: .milliseconds(100))
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "editor-color-dynamics-bottom.png")
+            }
         }
+    }
+
+    @Test func colorDynamicsPreviewRetainsBothPaintColorsWhenReplayed() async throws {
+        let preview = BrushDrawingView(frame: NSRect(x: 0, y: 0, width: 320, height: 240))
+        preview.preset.roundDynamics.spacing = 0.25; preview.preset.roundDynamics.flow = 0.4
+        preview.preset.roundDynamics.colorDynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.1, green: 0.2, blue: 0.9), stamp: BrushColorResponse(secondary: 0.8))
+        preview.color = PaletteColor(red: 0.8, green: 0.2, blue: 0.1)
+        preview.reset()
+        preview.beginStroke(at: CGPoint(x: 40, y: 100)); preview.continueStroke(at: CGPoint(x: 270, y: 100)); preview.endStroke()
+        preview.preset.roundDynamics.colorDynamics?.secondaryColor = PaletteColor(red: 0.1, green: 0.9, blue: 0.2)
+        preview.color = PaletteColor(red: 0.6, green: 0.2, blue: 0.7)
+        preview.beginStroke(at: CGPoint(x: 150, y: 50)); preview.continueStroke(at: CGPoint(x: 150, y: 180)); preview.endStroke()
+        let before = try await ImageExporter.shared.render(try #require(preview.session.projectSnapshot())).image
+        preview.preset.roundDynamics.colorDynamics?.secondaryColor = .black
+        preview.blackBackground = true
+        preview.reset(clearing: false)
+        let after = try await ImageExporter.shared.render(try #require(preview.session.projectSnapshot())).image
+        #expect(NSBitmapImageRep(cgImage: before).representation(using: .png, properties: [:]) == NSBitmapImageRep(cgImage: after).representation(using: .png, properties: [:]))
+        #expect(preview.session.brushSettings.roundDynamics.colorDynamics?.secondaryColor == .black)
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: after).representation(using: .png, properties: [:])), named: "color-dynamics-preview-paint-colors.png")
     }
 
     @Test func renderingPreviewKeepsStrokeColorsDuringSettingsReplay() async throws {
@@ -94,11 +127,7 @@ struct BrushPaletteTests {
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
             Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "rendering-editor-\(advanced)-top.png")
-            func controls(in view: NSView) -> NSScrollView? {
-                if let scroll = view as? NSScrollView, scroll.bounds.width > 300, scroll.bounds.width < 500 { return scroll }
-                return view.subviews.lazy.compactMap { controls(in: $0) }.first
-            }
-            if let scroll = controls(in: view), let document = scroll.documentView {
+            if let scroll = panelControls(in: view), let document = scroll.documentView {
                 scroll.contentView.scroll(to: CGPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
                 scroll.reflectScrolledClipView(scroll.contentView)
                 try await Task.sleep(for: .milliseconds(100))

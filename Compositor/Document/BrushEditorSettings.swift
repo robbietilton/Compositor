@@ -116,3 +116,72 @@ nonisolated struct BrushWetMix: Codable, Equatable, Hashable, Sendable {
             .allSatisfy { $0.isFinite && (0...1).contains($0) }
     }
 }
+
+/// Normalized native color responses; zero is an exact identity.
+nonisolated struct BrushColorResponse: Codable, Equatable, Hashable, Sendable {
+    var hue: CGFloat = 0
+    var saturation: CGFloat = 0
+    var lightness: CGFloat = 0
+    var darkness: CGFloat = 0
+    var secondary: CGFloat = 0
+    var isActive: Bool { self != Self() }
+    var isValid: Bool {
+        [hue, saturation].allSatisfy { $0.isFinite && (-1...1).contains($0) }
+            && [lightness, darkness, secondary].allSatisfy { $0.isFinite && (0...1).contains($0) }
+    }
+    func randomized(seed: UInt64, index: Int, channel: Int) -> Self {
+        guard isActive else { return self }
+        return Self(hue: hue * (2 * brushRandomUnit(seed: seed, index: index, channel: channel) - 1),
+            saturation: saturation * (2 * brushRandomUnit(seed: seed, index: index, channel: channel + 1) - 1),
+            lightness: lightness * brushRandomUnit(seed: seed, index: index, channel: channel + 2),
+            darkness: darkness * brushRandomUnit(seed: seed, index: index, channel: channel + 3),
+            secondary: secondary * brushRandomUnit(seed: seed, index: index, channel: channel + 4))
+    }
+    func applying(to color: PaletteColor, secondaryColor: PaletteColor, factor: CGFloat = 1) -> PaletteColor {
+        guard isActive, factor > 0 else { return color }
+        let mix = secondary * factor
+        let mixed = PaletteColor(red: color.red + (secondaryColor.red - color.red) * mix,
+            green: color.green + (secondaryColor.green - color.green) * mix,
+            blue: color.blue + (secondaryColor.blue - color.blue) * mix)
+        guard hue != 0 || saturation != 0 || lightness != 0 || darkness != 0 else { return mixed }
+        var (h, s, l) = HueSaturationFilter.toHSL(red: Double(mixed.red), green: Double(mixed.green), blue: Double(mixed.blue))
+        h = (h + Double(hue * factor) * 180).truncatingRemainder(dividingBy: 360)
+        if h < 0 { h += 360 }
+        s = min(1, max(0, s + Double(saturation * factor)))
+        l += (1 - l) * Double(lightness * factor)
+        l *= 1 - Double(darkness * factor)
+        let rgb = HueSaturationFilter.toRGB(hue: h, saturation: s, lightness: l)
+        return PaletteColor(red: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue))
+    }
+}
+
+nonisolated struct BrushColorDynamics: Codable, Equatable, Hashable, Sendable {
+    var secondaryColor = PaletteColor.white
+    var stroke = BrushColorResponse()
+    var stamp = BrushColorResponse()
+    var pressure = BrushColorResponse()
+    var tilt = BrushColorResponse()
+    var rotation = BrushColorResponse()
+    var isActive: Bool { [stroke, stamp, pressure, tilt, rotation].contains { $0.isActive } }
+    var isValid: Bool {
+        secondaryColor.isValid && [stroke, stamp, pressure, tilt, rotation].allSatisfy(\.isValid)
+            && [stroke, stamp].allSatisfy { $0.hue >= 0 && $0.saturation >= 0 }
+    }
+    /// Pickup precedes color responses. Stroke randomness is resolved once by BrushStroke.
+    func color(_ pigment: SIMD3<Float>, stroke response: BrushColorResponse, input: BrushInput,
+               curve: PressureCurve, seed: UInt64, index: Int, copy: Int) -> SIMD3<Float> {
+        var color = PaletteColor(red: CGFloat(pigment.x), green: CGFloat(pigment.y), blue: CGFloat(pigment.z))
+        color = response.applying(to: color, secondaryColor: secondaryColor)
+        color = stamp.randomized(seed: seed, index: index * 16 + copy, channel: 1400).applying(to: color, secondaryColor: secondaryColor)
+        if input.pressure != nil {
+            color = pressure.applying(to: color, secondaryColor: secondaryColor, factor: StrokePathSettings.Input.pressure.factor(input, curve: curve))
+        }
+        if input.tilt != nil {
+            color = tilt.applying(to: color, secondaryColor: secondaryColor, factor: StrokePathSettings.Input.tilt.factor(input, curve: curve))
+        }
+        if input.rotation != nil {
+            color = rotation.applying(to: color, secondaryColor: secondaryColor, factor: StrokePathSettings.Input.rotation.factor(input, curve: curve))
+        }
+        return SIMD3(Float(color.red), Float(color.green), Float(color.blue))
+    }
+}
