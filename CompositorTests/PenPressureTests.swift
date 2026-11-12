@@ -116,6 +116,15 @@ struct PenPressureTests {
         return try #require(NSEvent(cgEvent: event))
     }
 
+    @Test func tabletEraserEndIsReportedOnlyForTabletPoints() throws {
+        let event = try tabletEvent()
+        #expect(PenInput.isTabletPoint(event))
+        #expect(event.pointingDeviceType == .unknown || event.pointingDeviceType == .pen)
+        let mouse = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
+            timestamp: 11, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        #expect(!PenInput.isTabletPoint(mouse))
+    }
+
     @Test func tabletChannelsRequireValidEventsAndDeviceCapabilities() throws {
         let pen = PenInput()
         let mask = Int(NX_TABLET_CAPABILITY_PRESSUREMASK | NX_TABLET_CAPABILITY_TILTXMASK

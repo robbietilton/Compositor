@@ -1867,6 +1867,10 @@ final class CanvasView: NSView {
         updateBrushCursor()
     }
     override func mouseDown(with event: NSEvent) {
+        if PenInput.isTabletPoint(event), event.pointingDeviceType == .eraser, session.tool == .brush,
+           !session.isMaskSelected {
+            session.brushMode = .erase
+        }
         session.effectSelection = nil
         optionHeld = event.modifierFlags.contains(.option)
         window?.makeFirstResponder(self)
