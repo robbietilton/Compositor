@@ -85,14 +85,15 @@ nonisolated struct RoundBrushDynamics: Codable, Equatable, Hashable, Sendable {
     var touchTaper: BrushTaper? = nil
     var tipAnimation: Bool? = nil
     var classicTaper: Bool? = nil
+    var wetMix: BrushWetMix? = nil
     var grain: BrushGrain? = nil
     var hasTaper: Bool { taperStart > 0 || taperEnd > 0 || pressureTaper?.isActive == true || touchTaper?.isActive == true }
 
     var usesStamps: Bool {
-        grain != nil || properties != nil || renderingSettings.isActive || spacing != nil || flow != 1 || hasTaper || roundness != 1 || count != 1 || path.isActive || shapeSettings.isActive
+        wetMix?.isActive == true || grain != nil || properties != nil || renderingSettings.isActive || spacing != nil || flow != 1 || hasTaper || roundness != 1 || count != 1 || path.isActive || shapeSettings.isActive
     }
     var isValid: Bool {
-        (properties?.isValid ?? true) && (stabilization?.isValid ?? true) && (pressureTaper?.isValid ?? true) && (touchTaper?.isValid ?? true) && (grain?.isValid ?? true) && pressureCurve.isValid && renderingSettings.isValid && path.isValid && shapeSettings.isValid && (spacing.map { $0.isFinite && (0...4).contains($0) } ?? true)
+        (wetMix?.isValid ?? true) && (properties?.isValid ?? true) && (stabilization?.isValid ?? true) && (pressureTaper?.isValid ?? true) && (touchTaper?.isValid ?? true) && (grain?.isValid ?? true) && pressureCurve.isValid && renderingSettings.isValid && path.isValid && shapeSettings.isValid && (spacing.map { $0.isFinite && (0...4).contains($0) } ?? true)
             && flow.isFinite && (0...1).contains(flow)
             && taperStart.isFinite && (0...1).contains(taperStart) && taperEnd.isFinite && (0...1).contains(taperEnd)
             && roundness.isFinite && (0.05...1).contains(roundness)

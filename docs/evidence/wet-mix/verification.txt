@@ -1,0 +1,45 @@
+Focused Wet Mix, final code
+/tmp/compositor-wet-mix-focused.xcresult
+7 passed, 0 failed, 7 distinct tests
+
+BrushDynamics + BrushLibrary + BrushPalette, final code (Debug)
+/tmp/compositor-wet-mix-release-check.xcresult
+58 passed, 2 failed, 60 distinct tests
+BrushDynamicsTests/presetsRoundTripAndRejectInvalidDynamicsAtomically()
+Caught error: Error Domain=NSCocoaErrorDomain Code=1570 "%{PROPERTY}@ is a required value."
+BrushDynamicsTests/transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen()
+Expectation failed: alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 && abs(alpha(pixels, 250, 64) - 20) <= 2
+alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 → true
+abs(alpha(pixels, 250, 64) - 20) <= 2 → false
+
+Broader brush/input/import/sibling regression run before final image-tip Grade extension
+/tmp/compositor-wet-mix-handoff.xcresult
+104 passed, 3 failed, 107 distinct tests
+CloneStampTests/cloneStampKeepsItsOwnSoftBrushTip()
+Expectation failed: session.brushSettings.hardness == 1
+session.brushSettings.hardness → 0.0
+1 → 1.0
+BrushDynamicsTests/presetsRoundTripAndRejectInvalidDynamicsAtomically()
+Caught error: Error Domain=NSCocoaErrorDomain Code=1570 "%{PROPERTY}@ is a required value."
+BrushDynamicsTests/transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen()
+Expectation failed: alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 && abs(alpha(pixels, 250, 64) - 20) <= 2
+alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 → true
+abs(alpha(pixels, 250, 64) - 20) <= 2 → false
+
+Untouched main BrushDynamics baseline
+/tmp/compositor-wet-mix-baseline-checked.xcresult
+36 passed, 2 failed, 38 distinct tests
+BrushDynamicsTests/presetsRoundTripAndRejectInvalidDynamicsAtomically()
+Caught error: Error Domain=NSCocoaErrorDomain Code=1570 "%{PROPERTY}@ is a required value."
+BrushDynamicsTests/transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen()
+Expectation failed: alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 && abs(alpha(pixels, 250, 64) - 20) <= 2
+alpha(pixels, 150, 64) == 255 && alpha(pixels, 350, 64) == 255 → true
+abs(alpha(pixels, 250, 64) - 20) <= 2 → false
+
+Untouched main CloneStamp baseline
+/tmp/compositor-wet-mix-clone-baseline.xcresult
+1 passed, 1 failed, 2 distinct tests
+CloneStampTests/cloneStampKeepsItsOwnSoftBrushTip()
+Expectation failed: session.brushSettings.hardness == 1
+session.brushSettings.hardness → 0.0
+1 → 1.0

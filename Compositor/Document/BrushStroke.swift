@@ -203,6 +203,13 @@ final class BrushStroke {
     private let shapeHasInk: Bool
     private let secondaryMask: Data?
     private let secondarySide: Int
+    private var wetReservoir: CGFloat? = nil
+    private var wetMix: BrushWetMix? {
+        guard !isMask, !settings.erasing, !settings.healing, clone == nil,
+              let wet = settings.roundDynamics.wetMix, wet.isActive else { return nil }
+        return wet
+    }
+    private var rendersPigment: Bool { settings.roundDynamics.renderingSettings.isActive || wetMix != nil }
     private var carriedColor: SIMD3<Float>? = nil
     private var pickupSelectionImage: CGImage?
     private var pickupSelectionData: Data?
@@ -311,6 +318,8 @@ final class BrushStroke {
     /// layer. Other edits of a mask stay within it.
     init(layer: ImageLayer, mask: Bool, settings: BrushSettings, canvas: CGSize, useGPU: Bool = true, growsMask: Bool = false, seed: UInt64 = 0) throws {
         var settings = settings
+        guard settings.roundDynamics.wetMix?.isValid ?? true else { throw ProjectError.tooLarge }
+        if mask || settings.erasing || settings.healing { settings.roundDynamics.wetMix = nil }
         if let properties = settings.roundDynamics.properties, properties.isValid {
             settings.diameter = min(properties.maximumSize, max(properties.minimumSize, settings.diameter))
             settings.opacity = min(properties.maximumOpacity, max(properties.minimumOpacity, settings.opacity))
@@ -322,13 +331,18 @@ final class BrushStroke {
         guard shape.source == .procedural || tip?.isValid == true else {
             throw NSError(domain: "BrushShape", code: 1, userInfo: [NSLocalizedDescriptionKey: "Selected shape image is missing or invalid. Choose a source in Shape settings."])
         }
-        let maskData = shape.source == .procedural ? nil : tip?.mask(shape.source == .generated ? .luminance : shape.mask)
+        let grade = settings.roundDynamics.wetMix?.grade ?? 0
+        func gradedMask(_ data: Data?) -> Data? {
+            guard grade > 0 else { return data }
+            return data.map { Data($0.map { UInt8((255 * pow(Double($0) / 255, 1 + 3 * Double(grade))).rounded()) }) }
+        }
+        let maskData = gradedMask(shape.source == .procedural ? nil : tip?.mask(shape.source == .generated ? .luminance : shape.mask))
         let rendering = settings.roundDynamics.renderingSettings
         let secondary = rendering.dualSource == .generated ? rendering.secondary.make() : settings.secondaryShapeTip
         guard rendering.dualSource == nil || secondary?.isValid == true else {
             throw NSError(domain: "BrushRendering", code: 1, userInfo: [NSLocalizedDescriptionKey: "The selected secondary shape is missing or invalid."])
         }
-        secondaryMask = rendering.dualSource == nil ? nil : secondary?.luminance
+        secondaryMask = rendering.dualSource == nil ? nil : gradedMask(secondary?.luminance)
         secondarySide = rendering.dualSource == nil ? 0 : secondary?.side ?? 0
         let grain = settings.roundDynamics.grain
         let texture = grain?.source == .generated ? BrushGrain.texture() : grain?.source == .custom ? grain?.custom : settings.grainTip
@@ -613,10 +627,10 @@ final class BrushStroke {
                 }
             }
         }
-        let saved = (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor)
+        let saved = (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor, wetReservoir)
         let savedCount = taperDabs.count
         try walk(to: end, input: input, speed: sampleSpeed(from: start, to: end, inputs: (previousWalkInput, input)), changed: &changed)
-        (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor) = saved
+        (previous, distanceToNext, previousWalkInput, travelled, dabIndex, carriedColor, wetReservoir) = saved
         if taperDabs.count > savedCount { taperDabs.removeLast(taperDabs.count - savedCount) }
     }
 
@@ -736,13 +750,23 @@ final class BrushStroke {
         let foreground = SIMD3(Float(settings.red), Float(settings.green), Float(settings.blue))
         guard amount > 0, !isMask, !settings.erasing, canvas.contains(point) else { return foreground }
         var carried = carriedColor ?? foreground
+        let sampled = try sampledPigment(at: point)
+        carried = carried * (1 - amount * sampled.alpha) + sampled.color * (amount * sampled.alpha)
+        carriedColor = carried
+        return carried
+    }
+
+    /// Layer-grid sampling is shared by Rendering pickup and the bounded Wet Mix blur kernel.
+    private func sampledPigment(at point: CGPoint) throws -> (color: SIMD3<Float>, alpha: Float) {
+        let foreground = SIMD3(Float(settings.red), Float(settings.green), Float(settings.blue))
+        guard canvas.contains(point) else { return (.zero, 0) }
         let pixel = point.applying(pixelToDocument.inverted())
         let x = Int(floor(pixel.x)), y = Int(floor(pixel.y))
-        guard x >= 0, y >= 0, x < width, y < height else { return carried }
+        guard x >= 0, y >= 0, x < width, y < height else { return (.zero, 0) }
         let columns = (width + Self.tileSize - 1) / Self.tileSize
         let key = (y / Self.tileSize) * columns + x / Self.tileSize
         try allocateTile(key, x: x / Self.tileSize, y: y / Self.tileSize)
-        guard let tile = tiles[key] else { return carried }
+        guard let tile = tiles[key] else { return (.zero, 0) }
         let i = (y - Int(tile.rect.minY)) * Int(tile.rect.width) + x - Int(tile.rect.minX)
         var alpha: Float = 0
         var color = SIMD3<Float>(repeating: 0)
@@ -762,9 +786,32 @@ final class BrushStroke {
             if combined > 0 { color = (pigment * a + color * (alpha * (1 - a))) / combined }
             alpha = combined
         }
-        carried = carried * (1 - amount * alpha) + color * (amount * alpha)
-        carriedColor = carried
-        return carried
+        if wetMix != nil { alpha *= pickupSelectionAmount(at: point) }
+        return (color, alpha)
+    }
+
+    private func wetPigment(at point: CGPoint, wet: BrushWetMix, index: Int) throws -> SIMD3<Float> {
+        let foreground = SIMD3(Float(settings.red), Float(settings.green), Float(settings.blue))
+        let carried = carriedColor ?? foreground
+        let pickup = 1 - (1 - wet.pull) * (1 - CGFloat(settings.roundDynamics.renderingSettings.mode.pickup))
+        guard pickup > 0 else { return carried }
+        let radius = settings.diameter * 0.5 * wet.blur
+            * (1 - wet.blurJitter * brushRandomUnit(seed: seed, index: index, channel: 1200))
+        let offsets: [CGPoint] = radius > 0
+            ? [.zero, CGPoint(x: radius, y: 0), CGPoint(x: -radius, y: 0), CGPoint(x: 0, y: radius), CGPoint(x: 0, y: -radius)] : [.zero]
+        var color = SIMD3<Float>.zero, alpha: Float = 0
+        for offset in offsets {
+            let sample = try sampledPigment(at: CGPoint(x: point.x + offset.x, y: point.y + offset.y))
+            color += sample.color * sample.alpha
+            alpha += sample.alpha
+        }
+        if alpha > 0 { color /= alpha }
+        alpha /= Float(offsets.count)
+        let amount = Float(pickup) * alpha
+        let mixed = carried * (1 - amount) + color * amount
+        carriedColor = mixed
+        wetReservoir = min(1, (wetReservoir ?? wet.charge) + (1 - (wetReservoir ?? wet.charge)) * CGFloat(amount))
+        return mixed
     }
 
     private func renderingCoverage(_ state: StampedCoverage, at index: Int) -> Float {
@@ -880,11 +927,11 @@ final class BrushStroke {
                     // Erasing takes the coverage out of the layer's alpha, leaving the pixels under it transparent.
                     tile.context.saveGState()
                     tile.context.setBlendMode(.destinationOut)
-                    if settings.roundDynamics.renderingSettings.isActive, let state = stampedCoverage[key] {
+                    if rendersPigment, let state = stampedCoverage[key] {
                         BrushRaster.fill(Self.eraseColor, coverage: try renderingMask(state, tile: tile), in: local, alpha: 1, context: tile.context)
                     } else { BrushRaster.fill(Self.eraseColor, coverage: mask, in: local, alpha: settings.opacity, context: tile.context) }
                     tile.context.restoreGState()
-                } else if settings.roundDynamics.renderingSettings.isActive, let state = stampedCoverage[key] {
+                } else if rendersPigment, let state = stampedCoverage[key] {
                     if isMask {
                         BrushRaster.fill(paintColor, coverage: try renderingMask(state, tile: tile), in: local, alpha: 1, context: tile.context)
                     } else { BrushRaster.draw(try renderingImage(state, tile: tile), in: local, mask: false, context: tile.context) }
@@ -1059,7 +1106,17 @@ final class BrushStroke {
         response.strength *= opacityScale
         response.strength *= options.path.opacity(at: distance, diameter: settings.diameter)
         guard options.flow > 0, response.strength > 0, scale > 0, shapeHasInk else { return }
-        let pigment = try pickupColor(at: point, amount: rendering.mode.pickup)
+        let wet = wetMix
+        let pigment: SIMD3<Float>
+        var wetFlow: CGFloat = 1
+        if let wet {
+            pigment = try wetPigment(at: point, wet: wet, index: index)
+            let load = wetReservoir ?? wet.charge
+            wetFlow = load * wet.attack * (1 - wet.dilution)
+                * (1 - wet.wetnessJitter * brushRandomUnit(seed: seed, index: index, channel: 1201))
+            wetReservoir = max(0, load - (1 - wet.charge) * options.flow * response.strength * wet.attack / 20)
+        } else { pigment = try pickupColor(at: point, amount: rendering.mode.pickup) }
+        guard wetFlow > 0 else { return }
         let radius = settings.diameter / 2 * response.scale * scale
         let reach = radius * shapeExtent
         let circle = CGRect(x: point.x - reach, y: point.y - reach, width: reach * 2, height: reach * 2)
@@ -1116,7 +1173,7 @@ final class BrushStroke {
                     var capValues = state.cap; state.cap = []
                     var pigmentValues = state.pigment; state.pigment = []
                     var edgeValues = state.edge; state.edge = []
-                    if rendering.mode.pickup > 0 && pigmentValues.isEmpty { pigmentValues = [Float](repeating: 0, count: count * 3) }
+                    if (rendering.mode.pickup > 0 || wet != nil) && pigmentValues.isEmpty { pigmentValues = [Float](repeating: 0, count: count * 3) }
                     if rendering.burntEdges > 0 && edgeValues.isEmpty { edgeValues = [Float](repeating: 0, count: count) }
                     let grain = options.grain ?? BrushGrain()
                     let grainScale = grain.scale * (1 - grain.zoom) + settings.diameter * grain.zoom
@@ -1130,7 +1187,7 @@ final class BrushStroke {
                     let grainValues: [Double] = [Double(gc*gx+gs*gy+jitter+phase), Double(-gs*gx+gc*gy+jitter),
                         Double(gc*pixelToDocument.a+gs*pixelToDocument.b), Double(gc*pixelToDocument.c+gs*pixelToDocument.d),
                         Double(-gs*pixelToDocument.a+gc*pixelToDocument.b), Double(-gs*pixelToDocument.c+gc*pixelToDocument.d),
-                        Double(depth), Double(grain.brightness), Double(grain.contrast), Double(BrushGrain.Blend.allCases.firstIndex(of: grain.blend)!),
+                        Double(depth), Double(grain.brightness), Double(grain.contrast + (1 - grain.contrast) * (wet?.grade ?? 0)), Double(BrushGrain.Blend.allCases.firstIndex(of: grain.blend)!),
                         grain.filtering == .none ? 0 : grain.filtering == .classic ? 1 : 2, grain.mode == .texturized ? 1 : 0]
                     let render: (UnsafePointer<UInt8>?, UnsafePointer<UInt8>?, UnsafePointer<UInt8>?) -> Void = { tip, secondary, grain in
                         densityValues.withUnsafeMutableBufferPointer { density in
@@ -1141,7 +1198,7 @@ final class BrushStroke {
                                         brush_render_stamp(density.baseAddress, cap.isEmpty ? nil : cap.baseAddress,
                                             colors.isEmpty ? nil : colors.baseAddress, edges.isEmpty ? nil : edges.baseAddress, Int(tile.rect.width),
                                             Int(touched.minX), Int(touched.minY), Int(touched.maxX), Int(touched.maxY),
-                                            u0, v0, ux, uy, vx, vy, Float(self.settings.hardness), Float(options.flow), Float(response.strength),
+                                            u0, v0, ux, uy, vx, vy, Float(self.settings.hardness + (1 - self.settings.hardness) * (wet?.grade ?? 0)), Float(options.flow * wetFlow), Float(response.strength),
                                             tip, self.shapeSide, shape.filtering == .none ? 0 : shape.filtering == .classic ? 1 : 2,
                                             rendering.mode.index, Float(rendering.wetEdges), pigment[0], pigment[1], pigment[2], secondary,
                                             self.secondarySide, Float(rendering.secondaryScale), rendering.classicDualNormal ? 1 : 0,
@@ -1181,6 +1238,7 @@ final class BrushStroke {
         }
         stampedCoverage = [:]
         carriedColor = nil
+        wetReservoir = nil
         for (index, dab) in taperDabs.enumerated() {
             let options = settings.roundDynamics
             let taper = dab.input.pressure == nil ? options.touchTaper : options.pressureTaper
@@ -1232,7 +1290,7 @@ final class BrushStroke {
                 BrushRaster.draw(source, in: initialRect, mask: isMask, context: context)
             }
         }
-        let original = settings.roundDynamics.renderingSettings.mode.pickup > 0 && !isMask
+        let original = (settings.roundDynamics.renderingSettings.mode.pickup > 0 || settings.roundDynamics.wetMix?.isActive == true) && !isMask
             ? context.data.map { Data(bytes: $0, count: context.bytesPerRow * context.height) } : nil
         tiles[key] = Tile(rect: rect, context: context, base: context.makeImage(), basePixels: original)
     }

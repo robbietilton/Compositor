@@ -100,6 +100,7 @@ struct BrushLibraryTests {
         brush.source = source
         try library.save(brush)
         brush.name = "Edited native name"; brush.diameter = 71
+        brush.roundDynamics.wetMix = BrushWetMix(dilution: 0.3, charge: 0.7, pull: 0.5, grade: 0.2)
         try library.save(brush)
         let reopened = BrushLibrary(url: url)
         #expect(reopened.current == brush)

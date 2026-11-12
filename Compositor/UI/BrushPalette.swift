@@ -607,7 +607,24 @@ struct BrushEditorSheet: View {
                         brush.usesShapeApproximation = $0; brush.usesRoundApproximation = false
                     })).disabled(!brush.canApproximateShape)
                 }
-                Text("Blending carries existing paint on the active layer. The white/black preview backdrop is display-only. These native behaviors do not reproduce source kernels or implement the separate Wet Mix category. Mask colors stay unchanged.")
+                Text("Blending carries existing paint on the active layer. The white/black preview backdrop is display-only. These native behaviors do not reproduce source kernels. Mask colors stay unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else { pending(planned[category] ?? [], title: "Required shape, grain or component rendering unavailable") }
+        case "Wet Mix":
+            if brush.isRenderable {
+                Toggle("Enable Wet Mix", isOn: Binding(get: { brush.roundDynamics.wetMix != nil },
+                    set: { brush.roundDynamics.wetMix = $0 ? BrushWetMix() : nil }))
+                if brush.roundDynamics.wetMix != nil {
+                    slider("Dilution", value: setting(\.wetMix, BrushWetMix(), \.dilution), range: 0...1, unit: "%", factor: 100)
+                    slider("Charge", value: setting(\.wetMix, BrushWetMix(), \.charge), range: 0...1, unit: "%", factor: 100)
+                    slider("Attack", value: setting(\.wetMix, BrushWetMix(), \.attack), range: 0...1, unit: "%", factor: 100)
+                    slider("Pull", value: setting(\.wetMix, BrushWetMix(), \.pull), range: 0...1, unit: "%", factor: 100)
+                    slider("Grade", value: setting(\.wetMix, BrushWetMix(), \.grade), range: 0...1, unit: "%", factor: 100)
+                    slider("Blur", value: setting(\.wetMix, BrushWetMix(), \.blur), range: 0...1, unit: "%", factor: 100)
+                    slider("Blur Jitter", value: setting(\.wetMix, BrushWetMix(), \.blurJitter), range: 0...1, unit: "%", factor: 100)
+                    slider("Wetness Jitter", value: setting(\.wetMix, BrushWetMix(), \.wetnessJitter), range: 0...1, unit: "%", factor: 100)
+                }
+                Text("Charge reloads each stroke; below 100% it runs out. Grade sharpens tip and grain contrast. Pull picks up paint from the active layer. Blur spreads color sampling within half the brush diameter and needs Pull or a Blending mode. Dilution reduces deposition; 100% deposits nothing. Wet Mix does not affect masks or erasing. These are native responses, not a fluid simulation or source-equivalent mixing.")
                     .font(.caption).foregroundStyle(.secondary)
             } else { pending(planned[category] ?? [], title: "Required shape, grain or component rendering unavailable") }
         case "Taper":
