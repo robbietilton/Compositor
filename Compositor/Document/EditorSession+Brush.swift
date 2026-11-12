@@ -123,7 +123,7 @@ extension EditorSession {
             // being painted again partway through, which would stall it for a moment.
             if let limit = stroke.growthLimit, stroke.width * stroke.height > limit, stroke.reachesPastSource(at: point) {
                 let resized = try makeRasterEdit(for: try Self.atDisplayedSize(stroke.layer), settings: settings,
-                                                 growsMask: tool == .brush, seed: stroke.seed)
+                                                 growsMask: tool == .brush, seed: stroke.seed, useGPU: useGPU)
                 resized.defersTaperRendering = stroke.defersTaperRendering
                 resized.originalLayer = stroke.originalLayer
                 stroke = resized

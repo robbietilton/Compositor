@@ -154,16 +154,20 @@ struct BrushTests {
         #expect(try pixel(result, x: 60, y: 40)[3] == 0)
         #expect(try pixel(result, x: 60, y: 60) == [255, 0, 0, 255])
     }
-    @Test func gpuFailureCancelsWithoutCommittingPartialPixels() throws {
+    @Test func gpuFailureReplaysOnCPUWithoutCommittingPartialPixels() throws {
         let session = makeSession()
         let undoCount = session.history.undoCount
         session.beginBrush(at: CGPoint(x: 20, y: 40))
         session.continueBrush(at: CGPoint(x: 120, y: 40))
         let stroke = try #require(session.brushStroke)
         stroke.onGPUError?("Injected Metal failure")
-        #expect(session.brushStroke == nil)
-        #expect(session.brushError == "Injected Metal failure")
+        let recovered = try #require(session.brushStroke)
+        #expect(recovered !== stroke && !recovered.usesGPU && session.brushError == nil)
         #expect(session.activeLayer?.asset == nil && session.history.undoCount == undoCount)
+        #expect(session.finishBrushImmediately() && session.brushError == nil)
+        #expect(session.activeLayer?.asset != nil && session.history.undoCount == undoCount + 1)
+        session.undo()
+        #expect(session.activeLayer?.asset == nil)
     }
     @Test func closingSessionWithGPUWorkPendingDoesNotRetainSession() async throws {
         var session: EditorSession? = makeSession()

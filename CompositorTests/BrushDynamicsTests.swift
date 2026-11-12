@@ -502,6 +502,119 @@ struct BrushDynamicsTests {
         return try #require(context.makeImage())
     }
 
+    @Test func wetMixDefaultsPersistenceAndInvalidSettings() throws {
+        let defaults = BrushWetMix()
+        #expect(defaults.isValid && !defaults.isActive)
+        var options = RoundBrushDynamics(); options.wetMix = defaults
+        #expect(!options.usesStamps)
+        let legacy = try make(RoundBrushDynamics()), neutral = try make(options)
+        try trace(legacy, steps: 8); try trace(neutral, steps: 8)
+        #expect(difference(try raster(legacy), try raster(neutral)) == 0)
+        let fields: [WritableKeyPath<BrushWetMix, CGFloat>] = [\.dilution, \.charge, \.attack, \.pull, \.grade, \.blur, \.blurJitter, \.wetnessJitter]
+        for field in fields {
+            for value: CGFloat in [-0.01, 1.01, .infinity, .nan] {
+                var wet = defaults; wet[keyPath: field] = value; options.wetMix = wet
+                #expect(!options.isValid)
+                #expect(throws: (any Error).self) { _ = try make(options) }
+            }
+        }
+        options.wetMix = BrushWetMix(dilution: 0.3, charge: 0.5, attack: 0.7, pull: 0.6, grade: 0.4, blur: 0.5, blurJitter: 0.4, wetnessJitter: 0.2)
+        #expect(try JSONDecoder().decode(RoundBrushDynamics.self, from: JSONEncoder().encode(options)) == options)
+    }
+
+    @Test func wetMixExhaustsReloadsAndPullRechargesWithoutCreatingPaintOnEmptyPixels() throws {
+        var options = RoundBrushDynamics(); options.spacing = 0.1; options.flow = 1
+        options.wetMix = BrushWetMix(charge: 0.2, grade: 1)
+        let exhausted = try make(options), reloaded = try make(options)
+        try trace(exhausted, steps: 8); try trace(reloaded, steps: 8)
+        let result = try raster(exhausted)
+        #expect(alpha(result, 32, 64) > 0 && alpha(result, 400, 64) == 0)
+        #expect(difference(result, try raster(reloaded)) == 0)
+        for wet in [BrushWetMix(dilution: 1), BrushWetMix(charge: 0), BrushWetMix(attack: 0), BrushWetMix(charge: 0, pull: 1)] {
+            options.wetMix = wet
+            let empty = try make(options); try trace(empty, steps: 8)
+            let pixels = try raster(empty)
+            #expect(alpha(pixels, 64, 64) == 0)
+        }
+        options.wetMix = BrushWetMix(charge: 0, pull: 1)
+        let pulled = try renderingStroke(BrushRenderingSettings(), base: renderingBackdrop(), options: options)
+        try trace(pulled, steps: 8)
+        #expect(!pulled.patches.isEmpty)
+    }
+
+    @Test func wetMixGradeChangesImageTipContrast() throws {
+        var options = RoundBrushDynamics(); options.flow = 0.4; options.spacing = 0.2
+        options.shape = ShapeBrushSettings(source: .generated, generator: .softRound)
+        let smooth = try make(options)
+        options.wetMix = BrushWetMix(grade: 1)
+        let graded = try make(options)
+        try trace(smooth, steps: 8); try trace(graded, steps: 8)
+        #expect(difference(try raster(smooth), try raster(graded)) > 0)
+    }
+
+    @Test func wetMixControlledNativeStrokeComparisons() throws {
+        let cases = [BrushWetMix(), BrushWetMix(dilution: 0.7), BrushWetMix(charge: 0.2, grade: 1),
+                     BrushWetMix(attack: 0.3), BrushWetMix(wetnessJitter: 1)]
+        let atlas = try BrushRaster.context(width: 512, height: cases.count * 128, mask: false)
+        atlas.setFillColor(NSColor.white.cgColor); atlas.fill(CGRect(x: 0, y: 0, width: 512, height: cases.count * 128))
+        for (row, wet) in cases.enumerated() {
+            var options = RoundBrushDynamics(); options.spacing = 0.2; options.flow = 0.3; options.wetMix = wet
+            let stroke = try renderingStroke(BrushRenderingSettings(), options: options)
+            try trace(stroke, steps: 16)
+            let transform = LayerTransform(origin: CGPoint(x: 0, y: row * 128), size: size)
+            LayerRenderer.draw(try #require(try raster(stroke).makeImage()), transform: transform, center: transform.center, in: atlas)
+        }
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: atlas.makeImage()!).representation(using: .png, properties: [:])), named: "wet-mix-native-comparisons.png")
+    }
+
+    @Test func wetMixIsIgnoredByMasksAndErasing() throws {
+        for mask in [false, true] {
+            var settings = BrushSettings(diameter: 32, hardness: 0.4, red: 1, erasing: !mask)
+            let image = try renderingBackdrop()
+            let layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: image, name: "Backdrop"), origin: .zero)
+            let legacy = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, seed: 42)
+            settings.roundDynamics.wetMix = BrushWetMix(dilution: 1, charge: 0, pull: 1, grade: 1)
+            let wet = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, seed: 42)
+            #expect(wet.settings.roundDynamics.wetMix == nil)
+            try trace(legacy, steps: 8); try trace(wet, steps: 8)
+            #expect(difference(try raster(legacy), try raster(wet)) == 0)
+        }
+    }
+
+    @Test func wetMixControlsChangeDepositedPixels() throws {
+        let backdrop = try renderingBackdrop()
+        var options = RoundBrushDynamics(); options.spacing = 0.2; options.flow = 0.4
+        let reference = BrushWetMix(dilution: 0.2, charge: 0.6, attack: 0.7, pull: 0.4, grade: 0.3, blur: 0.8, blurJitter: 0.2, wetnessJitter: 0.2)
+        func draw(_ wet: BrushWetMix) throws -> CGContext {
+            options.wetMix = wet
+            let stroke = try renderingStroke(BrushRenderingSettings(), base: backdrop, options: options)
+            try trace(stroke, steps: 16)
+            return try raster(stroke)
+        }
+        let original = try draw(reference)
+        for field: WritableKeyPath<BrushWetMix, CGFloat> in [\.dilution, \.charge, \.attack, \.pull, \.grade, \.blur, \.blurJitter, \.wetnessJitter] {
+            var changed = reference; changed[keyPath: field] = field == \.blurJitter ? 1 : 0
+            #expect(difference(original, try draw(changed)) > 0, "Wet control did not change pixels: \(field)")
+        }
+    }
+
+    @Test func wetMixPickupJitterAndTaperReplayAreDeterministic() throws {
+        var options = RoundBrushDynamics(); options.flow = 0.3; options.spacing = 0.2
+        options.wetMix = BrushWetMix(dilution: 0.2, charge: 0.6, attack: 0.8, pull: 0.5, grade: 0.5, blur: 0.6, blurJitter: 0.7, wetnessJitter: 0.8)
+        options.taperStart = 0.1; options.taperEnd = 0.2
+        let backdrop = try renderingBackdrop()
+        let sparse = try renderingStroke(BrushRenderingSettings(), base: backdrop, options: options)
+        let dense = try renderingStroke(BrushRenderingSettings(), base: backdrop, options: options, gpu: false)
+        let deferred = try renderingStroke(BrushRenderingSettings(), base: backdrop, options: options)
+        deferred.defersTaperRendering = true
+        try trace(sparse, steps: 1); try trace(dense, steps: 64); try trace(deferred, steps: 1)
+        let result = try raster(sparse)
+        #expect(difference(result, try raster(dense)) <= 1)
+        #expect(difference(result, try raster(deferred)) <= 1)
+        try sparse.flush(); #expect(difference(result, try raster(sparse)) == 0)
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: result.makeImage()!).representation(using: .png, properties: [:])), named: "wet-mix-pickup-taper.png")
+    }
+
     @Test func renderingMetadataIsValidatedPersistedAndLegacySafe() throws {
         #expect(!RoundBrushDynamics().renderingSettings.isActive && !RoundBrushDynamics().usesStamps)
         var rendering = BrushRenderingSettings(mode: .intenseBlending, wetEdges: 0.4, burntEdges: 0.7, backruns: 0.55,
@@ -648,6 +761,7 @@ struct BrushDynamicsTests {
             .init(path: "Brush.archive", shapeReference: "Tip.png", shapeResolution: .embedded(path: "Tip.png"), tip: tip),
             .init(path: "Sub01/Brush.archive", shapeReference: "Tip.png", shapeResolution: .embedded(path: "Sub01/Tip.png"), tip: GeneratedBrushTip.speckle.make())])
         preset.roundDynamics.shape = ShapeBrushSettings(source: .embedded)
+        preset.roundDynamics.wetMix = BrushWetMix(pull: 0.5)
         preset.usesShapeApproximation = true
         #expect(!preset.isRenderable)
         preset.roundDynamics.rendering = BrushRenderingSettings(dualSource: .original, secondaryScale: 1.5)
@@ -686,6 +800,7 @@ struct BrushDynamicsTests {
         session.setSelection(DocumentSelection(path: CGPath(rect: CGRect(x: 200, y: 0, width: 100, height: 128), transform: nil)), name: "Clip")
         session.brushSettings.roundDynamics.flow = 0.3; session.brushSettings.roundDynamics.spacing = 0.2
         session.brushSettings.roundDynamics.taperEnd = 0.1
+        session.brushSettings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6)
         session.brushSettings.roundDynamics.rendering = BrushRenderingSettings(mode: .intenseGlaze, wetEdges: 1, burntEdges: 0.7,
             strokeBlend: .screen, luminanceBlending: true, alphaThreshold: 0.1, dualSource: .generated, secondary: .bristles, classicDualNormal: true)
         session.beginBrush(at: CGPoint(x: 32, y: 64), seed: 42); session.continueBrush(at: CGPoint(x: 480, y: 64))
@@ -703,6 +818,8 @@ struct BrushDynamicsTests {
         let reopened = try await ImageExporter.shared.render(try await ProjectStore.shared.load(from: url)).image
         #expect(difference(pixels, try BrushRaster.copy(reopened)) == 0)
         session.undo(); session.isMaskSelected = false
+        // Isolate color deposition/clipping from pickup of the white backdrop.
+        session.brushSettings.roundDynamics.wetMix?.pull = 0
         session.brushSettings.red = 0.8; session.brushSettings.green = 0.2; session.brushSettings.blue = 0.1
         session.brushSettings.roundDynamics.rendering = BrushRenderingSettings(mode: .intenseGlaze, wetEdges: 0.6,
             burntEdges: 0.5, strokeBlend: .multiply)
@@ -719,6 +836,7 @@ struct BrushDynamicsTests {
         settings.roundDynamics.spacing = 0.25; settings.roundDynamics.flow = 0.25
         settings.roundDynamics.shape = ShapeBrushSettings(source: .custom, customTip: asymmetricBrushShapeTip())
         settings.roundDynamics.grain = BrushGrain(scale: 23, depth: 0.7)
+        settings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6)
         settings.roundDynamics.rendering = BrushRenderingSettings(mode: .intenseBlending, wetEdges: 0.8, burntEdges: 0.7,
             edgeBlend: .colorBurn, strokeBlend: .multiply, luminanceBlending: true, alphaThreshold: 0.05,
             dualSource: .generated, secondary: .speckle, secondaryScale: 1.25)
@@ -744,11 +862,12 @@ struct BrushDynamicsTests {
 
     @Test func renderingFourKTimingAndTileBudget() throws {
         var report = "4K Debug Rendering: 2400 px path, 12 updates, 25% spacing. Native CPU advanced path.\n"
-        for diameter: CGFloat in [40, 800] { for configuration in 0..<3 {
+        for diameter: CGFloat in [40, 800] { for configuration in 0..<4 {
             let mode: BrushRenderingSettings.Mode = configuration == 0 ? .uniformGlaze : .intenseBlending
             var settings = BrushSettings(diameter: diameter, hardness: 0.4, red: 0.7, green: 0.3, blue: 0.1)
             settings.roundDynamics.spacing = 0.25; settings.roundDynamics.flow = 0.3
             settings.roundDynamics.rendering = BrushRenderingSettings(mode: mode, wetEdges: 0.5, burntEdges: 0.5, strokeBlend: .multiply)
+            if configuration == 3 { settings.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, charge: 0.7, pull: 0.5, grade: 0.3, blur: 0.6, blurJitter: 0.4, wetnessJitter: 0.3) }
             if configuration == 2 { settings.roundDynamics.grain = BrushGrain(scale: 23, depth: 0.8, filtering: .improved) }
             let stroke = try BrushStroke(layer: ImageLayer(name: "4K", blankSize: CGSize(width: 4000, height: 4000)), mask: false,
                 settings: settings, canvas: CGSize(width: 4000, height: 4000))
@@ -760,7 +879,7 @@ struct BrushDynamicsTests {
             }
             let start = CFAbsoluteTimeGetCurrent(); try stroke.flush(); let flush = (CFAbsoluteTimeGetCurrent() - start) * 1000
             times.sort(); #expect(!stroke.patches.isEmpty && stroke.patches.count < 120)
-            report += "diameter=\(diameter) mode=\(mode.rawValue) grain=\(configuration == 2) median=\(times[times.count / 2])ms max=\(times.last!)ms flush=\(flush)ms tiles=\(stroke.patches.count)\n"
+            report += "diameter=\(diameter) mode=\(mode.rawValue) grain=\(configuration == 2) wetMix=\(configuration == 3) median=\(times[times.count / 2])ms max=\(times.last!)ms flush=\(flush)ms tiles=\(stroke.patches.count)\n"
         } }
         Attachment.record(Data(report.utf8), named: "rendering-4k-timing.txt")
     }

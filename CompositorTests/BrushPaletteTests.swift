@@ -31,7 +31,8 @@ struct BrushPaletteTests {
         brush.roundDynamics.stabilization = BrushStabilization(streamline: 0.2, pressure: 0.4)
         brush.roundDynamics.pressureTaper = BrushTaper(start: 0.2, end: 0.2)
         brush.roundDynamics.touchTaper = BrushTaper(start: 0.1, end: 0.3)
-        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape"] {
+        brush.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, pull: 0.5, grade: 0.4, blur: 0.3)
+        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape", "Wet Mix"] {
             let name = "completedEditor-" + category
             let panel = FloatingPanelController(name: name)
             panel.show(title: "Brush Editor", content: BrushEditorSheet(brush: brush, color: PaletteColor(red: 0.2, green: 0.3, blue: 0.7),
@@ -54,6 +55,7 @@ struct BrushPaletteTests {
     @Test func renderingPreviewKeepsStrokeColorsDuringSettingsReplay() async throws {
         let preview = BrushDrawingView(frame: NSRect(x: 0, y: 0, width: 320, height: 240))
         preview.preset.roundDynamics.rendering = BrushRenderingSettings(mode: .uniformBlending, wetEdges: 0.5, burntEdges: 0.4)
+        preview.preset.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, pull: 0.5, grade: 0.4, blur: 0.3)
         preview.preset.roundDynamics.flow = 0.3; preview.preset.roundDynamics.spacing = 0.2
         preview.color = PaletteColor(red: 0.1, green: 0.7, blue: 0.3); preview.reset()
         preview.beginStroke(at: CGPoint(x: 40, y: 100)); preview.continueStroke(at: CGPoint(x: 270, y: 100)); preview.endStroke()

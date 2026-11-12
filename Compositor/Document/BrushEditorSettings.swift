@@ -99,3 +99,20 @@ nonisolated struct BrushGrain: Codable, Equatable, Hashable, Sendable {
         return BrushShapeTip(side: side, luminance: pixels, alpha: Data(repeating: 255, count: side * side), name: "Native Woven Texture")
     }()
 }
+
+/// Native normalized wet controls; absent or default settings preserve dry Rendering.
+nonisolated struct BrushWetMix: Codable, Equatable, Hashable, Sendable {
+    var dilution: CGFloat = 0
+    var charge: CGFloat = 1
+    var attack: CGFloat = 1
+    var pull: CGFloat = 0
+    var grade: CGFloat = 0
+    var blur: CGFloat = 0
+    var blurJitter: CGFloat = 0
+    var wetnessJitter: CGFloat = 0
+    var isActive: Bool { self != Self() }
+    var isValid: Bool {
+        [dilution, charge, attack, pull, grade, blur, blurJitter, wetnessJitter]
+            .allSatisfy { $0.isFinite && (0...1).contains($0) }
+    }
+}

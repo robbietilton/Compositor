@@ -237,6 +237,7 @@ struct PenPressureTests {
         view.tabletPoint(with: try tabletEvent(device: 72, pressure: 0.1))
         #expect(session.brushStroke?.lastInput?.pressure == 1, "A second pen must not change the active stroke")
         view.tabletPoint(with: try tabletEvent(pressure: 0.4))
+        try session.flushQueuedBrushInputSamples()
         #expect(abs(try #require(session.brushStroke?.lastInput).effectivePressure - 0.4) < 0.01)
         #expect(session.brushPointer == CGPoint(x: 50, y: 50), "A windowless native event must retain the known cursor position")
         session.cancelBrush()
