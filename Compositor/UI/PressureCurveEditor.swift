@@ -2,12 +2,13 @@ import SwiftUI
 
 struct PressureCurveEditor: View {
     @Binding var curve: PressureCurve
+    var title = "Pressure Curve"
     @State private var selectedPoint = 0
     private var selectedIndex: Int { min(selectedPoint, curve.points.count - 1) }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Pressure Curve").font(.subheadline.bold())
+                Text(title).font(.subheadline.bold())
                 Spacer()
                 Button("Reset") { curve = PressureCurve() }
             }
@@ -55,7 +56,7 @@ struct PressureCurveEditor: View {
                 Text("Easing")
                 Slider(value: Binding(get: { curve.easing(at: selectedIndex) },
                     set: { curve.points[selectedIndex].easing = $0 }), in: 0...1)
-                    .accessibilityLabel("Pressure curve point \(selectedIndex) easing")
+                    .accessibilityLabel("\(title) point \(selectedIndex) easing")
                 Text("\(Int(curve.easing(at: selectedIndex) * 100))%").monospacedDigit().frame(width: 38)
             }
             Text("Drag a point, then adjust its easing: 0% straight, 100% smooth.")
@@ -67,19 +68,19 @@ struct PressureCurveEditor: View {
                         Spacer()
                         if index > 0 && index < curve.points.count - 1 {
                             Button("Remove") { curve.points.remove(at: index) }
-                                .accessibilityLabel("Remove pressure curve point \(index)")
+                                .accessibilityLabel("Remove \(title) point \(index)")
                         }
                     }
                     if index > 0 && index < curve.points.count - 1 {
                         Text("Input \(Int(curve.points[index].x * 100))%")
                         Slider(value: Binding(get: { curve.points[index].x }, set: { curve.points[index].x = $0 }),
                         in: curve.points[index - 1].x.nextUp...curve.points[index + 1].x.nextDown)
-                        .accessibilityLabel("Pressure curve point \(index) input")
+                        .accessibilityLabel("\(title) point \(index) input")
                     }
                     Text("Output \(Int(curve.points[index].y * 100))%")
                     Slider(value: Binding(get: { curve.points[index].y }, set: { curve.points[index].y = $0 }),
                         in: 0...1)
-                        .accessibilityLabel("Pressure curve point \(index) output")
+                        .accessibilityLabel("\(title) point \(index) output")
                 }
             }
             Button("Add Point") {

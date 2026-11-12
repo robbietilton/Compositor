@@ -36,6 +36,110 @@ struct BrushDynamicsTests {
         return (0..<(a.bytesPerRow * a.height)).map { abs(Int(x[$0]) - Int(y[$0])) }.max() ?? 0
     }
 
+    @Test func penResponsesEvaluateCurvesAndMissingChannels() throws {
+        var pen = BrushPenDynamics()
+        pen.flow.amount = 1; pen.bleed.amount = 1
+        pen.tilt.size.amount = 1; pen.tilt.opacity.amount = -1
+        pen.rotation.flow.amount = 1; pen.gradation.amount = 1
+        var settings = BrushSettings(diameter: 100, opacity: 1)
+        settings.roundDynamics.penDynamics = pen
+        let absent = settings.dynamics(BrushInput())
+        #expect(absent.scale == 1 && absent.strength == 1 && absent.flow == 1 && absent.bleed == 0)
+        let response = settings.dynamics(BrushInput(pressure: 0.5, tilt: CGPoint(x: 0.5, y: 0), rotation: 0))
+        #expect(response.scale == 0.5 && response.strength == 0.5 && response.bleed == 0.5)
+        #expect(response.flow == 0.5 * 0.5 * 0.625 && response.gradation == 0.5)
+        let pressureless = settings.dynamics(BrushInput(tilt: CGPoint(x: 0.5, y: 0)))
+        #expect(pressureless.scale == 0.5 && pressureless.flow == 0.625 && pressureless.bleed == 0)
+        let upright = settings.dynamics(BrushInput(tilt: .zero))
+        #expect(upright.scale == 0.01 && upright.strength == 1 && upright.gradation == 0)
+        let a = settings.dynamics(BrushInput(rotation: -.pi + 0.000001))
+        let b = settings.dynamics(BrushInput(rotation: .pi - 0.000001))
+        #expect(abs(a.flow - b.flow) < 0.00001)
+        let half = PressureCurve(points: [.init(x: 0, y: 0.5), .init(x: 1, y: 0.5)])
+        pen.sizeCurve = half; pen.opacityCurve = half
+        settings.roundDynamics.penDynamics = pen
+        settings.pressureSize = true; settings.pressureOpacity = true
+        #expect(settings.dynamics(BrushInput()).scale == 1 && settings.dynamics(BrushInput()).strength == 1)
+        #expect(settings.dynamics(BrushInput(pressure: 1)).scale == 0.5)
+        #expect(try JSONDecoder().decode(BrushPenDynamics.self, from: JSONEncoder().encode(pen)) == pen)
+        pen.rotation.bleed.amount = .nan; #expect(!pen.isValid)
+        pen.rotation.bleed.amount = 1.01; #expect(!pen.isValid)
+        pen.rotation.bleed.amount = 0; pen.flow.curve = PressureCurve(points: [])
+        #expect(!pen.isValid)
+    }
+
+    @Test func penResponsesChangePixelsAndDefaultsStayExact() throws {
+        func click(_ pen: BrushPenDynamics?, _ input: BrushInput = BrushInput()) throws -> CGContext {
+            var options = RoundBrushDynamics(); options.spacing = 0.2; options.penDynamics = pen
+            let stroke = try make(options, diameter: 100, hardness: 0.8, gpu: false)
+            try stroke.append(CGPoint(x: 256, y: 64), input: input); try stroke.flush()
+            return try raster(stroke)
+        }
+        var defaults = RoundBrushDynamics(); defaults.penDynamics = BrushPenDynamics()
+        let legacy = try make(RoundBrushDynamics(), gpu: false), neutral = try make(defaults, gpu: false)
+        try trace(legacy, steps: 8); try trace(neutral, steps: 8)
+        #expect(difference(try raster(legacy), try raster(neutral)) == 0)
+        let baseline = try click(nil)
+        #expect(difference(baseline, try click(BrushPenDynamics())) == 0)
+        let fields: [WritableKeyPath<BrushPenDynamics, BrushPropertyResponse>] = [
+            \.flow, \.bleed, \.tilt.size, \.tilt.opacity, \.tilt.flow, \.tilt.bleed,
+            \.rotation.size, \.rotation.opacity, \.rotation.flow, \.rotation.bleed, \.gradation]
+        let input = BrushInput(pressure: 0.5, tilt: CGPoint(x: 0.5, y: 0), rotation: 0)
+        let atlas = try BrushRaster.context(width: 512, height: 128 * (fields.count + 1), mask: false)
+        BrushRaster.draw(try #require(baseline.makeImage()), in: CGRect(x: 0, y: 0, width: 512, height: 128), mask: false, context: atlas)
+        for (row, field) in fields.enumerated() {
+            var pen = BrushPenDynamics(); pen[keyPath: field].amount = 1
+            #expect(difference(baseline, try click(pen)) == 0, "Missing channels must be neutral: \(field)")
+            let painted = try click(pen, input)
+            #expect(difference(baseline, painted) > 0, "Must affect painted pixels: \(field)")
+            BrushRaster.draw(try #require(painted.makeImage()), in: CGRect(x: 0, y: (row + 1) * 128, width: 512, height: 128), mask: false, context: atlas)
+        }
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: atlas.makeImage()!).representation(using: .png, properties: [:])), named: "pen-response-native-comparisons.png")
+        var pen = BrushPenDynamics(); pen.bleed.amount = 1
+        var options = RoundBrushDynamics(); options.penDynamics = pen
+        let wide = try make(options, diameter: 128, gpu: false)
+        try wide.append(CGPoint(x: 256, y: 64), input: BrushInput(pressure: 1)); try wide.flush()
+        #expect(alpha(try raster(wide), 342, 64) > 0, "Wet spread must fit inside conservative dab bounds")
+        options.penDynamics?.tilt.flow.amount = -0.6
+        options.penDynamics?.rotation.opacity.amount = 0.5
+        options.pressureTaper = BrushTaper(start: 0.2, end: 0.3, size: 0.4, opacity: 0.3)
+        let first = try make(options, gpu: false), replay = try make(options, gpu: false)
+        let samples = (0...20).map { step in
+            BrushStroke.InputSample(point: CGPoint(x: 32 + step * 20, y: 64),
+                input: BrushInput(pressure: 0.5, tilt: CGPoint(x: CGFloat(step) / 20, y: 0), rotation: CGFloat(step) / 5, timestamp: Double(step), deviceID: 7))
+        }
+        for sample in samples { try first.append(sample.point, input: sample.input) }
+        try replay.append(batch: samples); try first.flush(); try replay.flush()
+        #expect(difference(try raster(first), try raster(replay)) == 0)
+    }
+
+    @Test func penResponsesKeepStationaryChannelsAndCoverageTools() throws {
+        var options = RoundBrushDynamics()
+        options.penDynamics = BrushPenDynamics(tilt: BrushSensorResponses(opacity: BrushPropertyResponse(amount: 1)),
+            rotation: BrushSensorResponses(flow: BrushPropertyResponse(amount: 1)))
+        let stroke = try make(options, gpu: false)
+        let point = CGPoint(x: 256, y: 64)
+        try stroke.append(point, input: BrushInput(tilt: .zero, rotation: -.pi / 2, deviceID: 7))
+        try stroke.append(point, input: BrushInput(tilt: CGPoint(x: 1, y: 0), rotation: .pi / 2, deviceID: 7))
+        try stroke.append(point, input: BrushInput(deviceID: 7))
+        #expect(stroke.inputSamples.count == 3)
+        try stroke.flush()
+        #expect(alpha(try raster(stroke), 256, 64) > 0)
+        for mask in [false, true] {
+            let image = try renderingBackdrop()
+            let layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: image, name: "Coverage"), origin: .zero)
+            var settings = BrushSettings(diameter: 64, hardness: 1, red: 1, erasing: !mask)
+            settings.roundDynamics.spacing = 0.2
+            let legacy = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, useGPU: false)
+            settings.roundDynamics.penDynamics = BrushPenDynamics(flow: BrushPropertyResponse(amount: 1))
+            let mapped = try BrushStroke(layer: layer, mask: mask, settings: settings, canvas: size, useGPU: false)
+            try legacy.append(point, input: BrushInput(pressure: 0)); try legacy.flush()
+            try mapped.append(point, input: BrushInput(pressure: 0)); try mapped.flush()
+            #expect(mapped.settings.roundDynamics.penDynamics != nil)
+            #expect(difference(try raster(legacy), try raster(mapped)) > 0, "Flow controls coverage for masks and erasing")
+        }
+    }
+
     @Test func pressureCurveValidationAndLegacyDefaults() throws {
         let identity = PressureCurve()
         #expect(identity.isValid && identity.isIdentity && identity.value(0.37) == 0.37)

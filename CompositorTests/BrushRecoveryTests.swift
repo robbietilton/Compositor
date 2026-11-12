@@ -115,6 +115,7 @@ import Testing
         session.brushSettings.diameter = 20
         session.brushSettings.roundDynamics.spacing = 0.25
         session.brushSettings.roundDynamics.wetMix = BrushWetMix(charge: 0.7, pull: 0.3, grade: 0.2, wetnessJitter: 0.8)
+        session.brushSettings.roundDynamics.penDynamics = BrushPenDynamics(flow: BrushPropertyResponse(amount: 0.7), tilt: BrushSensorResponses(size: BrushPropertyResponse(amount: 0.5)))
         let first = BrushInput(pressure: 0.3, tilt: CGPoint(x: 0.2, y: 0.4), rotation: 0.5, timestamp: 1, deviceID: 7)
         let second = BrushInput(pressure: 0.8, tilt: CGPoint(x: 0.7, y: 0.1), rotation: 1.2, timestamp: 2, deviceID: 7)
         session.beginBrush(at: CGPoint(x: 1450, y: 1500), input: first, seed: 42, useGPU: false)
@@ -126,6 +127,7 @@ import Testing
         #expect(recovered.seed == 42 && recovered.lastInput == second)
         #expect(session.brushReplayInputs.map(\.input) == [first, second])
         #expect(recovered.settings.roundDynamics.wetMix == initial.settings.roundDynamics.wetMix)
+        #expect(recovered.settings.roundDynamics.penDynamics == initial.settings.roundDynamics.penDynamics)
         #expect(session.finishBrushImmediately() && session.brushError == nil)
         session.undo()
         #expect(session.activeLayer?.asset?.image.width == 1371)

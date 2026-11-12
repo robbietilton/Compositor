@@ -194,6 +194,7 @@ struct BrushLibraryTests {
         brush.name = "Edited native name"; brush.diameter = 71
         brush.roundDynamics.wetMix = BrushWetMix(dilution: 0.3, charge: 0.7, pull: 0.5, grade: 0.2)
         brush.roundDynamics.colorDynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.2, green: 0.8, blue: 0.4), stamp: BrushColorResponse(hue: 0.4), pressure: BrushColorResponse(secondary: 0.7))
+        brush.roundDynamics.penDynamics = BrushPenDynamics(flow: BrushPropertyResponse(amount: 0.7), tilt: BrushSensorResponses(size: BrushPropertyResponse(amount: -0.5)))
         try library.save(brush)
         let reopened = BrushLibrary(url: url)
         #expect(reopened.current == brush)
@@ -206,6 +207,9 @@ struct BrushLibraryTests {
         #expect(throws: (any Error).self) { try session.activateBrushPreset(brush, library: reopened) }
         let saved = try Data(contentsOf: url)
         var invalid = brush; invalid.roundDynamics.colorDynamics?.rotation.darkness = .nan
+        #expect(throws: (any Error).self) { try reopened.save(invalid) }
+        #expect(try Data(contentsOf: url) == saved)
+        invalid = brush; invalid.roundDynamics.penDynamics?.tilt.flow.amount = .nan
         #expect(throws: (any Error).self) { try reopened.save(invalid) }
         #expect(try Data(contentsOf: url) == saved)
         invalid = brush; invalid.source?.archiveDigest = "../../outside"

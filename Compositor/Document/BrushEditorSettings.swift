@@ -185,3 +185,42 @@ nonisolated struct BrushColorDynamics: Codable, Equatable, Hashable, Sendable {
         return SIMD3(Float(color.red), Float(color.green), Float(color.blue))
     }
 }
+
+/// Signed amount: positive follows the channel, negative reverses it; zero is neutral.
+nonisolated struct BrushPropertyResponse: Codable, Equatable, Hashable, Sendable {
+    var amount: CGFloat = 0
+    var curve: PressureCurve? = nil
+    var isActive: Bool { amount != 0 }
+    var isValid: Bool { amount.isFinite && (-1...1).contains(amount) && (curve?.isValid ?? true) }
+    func signal(_ value: CGFloat) -> CGFloat {
+        let value = curve?.value(value) ?? value
+        return abs(amount) * (amount >= 0 ? value : 1 - value)
+    }
+    func gain(_ value: CGFloat) -> CGFloat { 1 - abs(amount) + signal(value) }
+}
+
+nonisolated struct BrushSensorResponses: Codable, Equatable, Hashable, Sendable {
+    var size = BrushPropertyResponse()
+    var opacity = BrushPropertyResponse()
+    var flow = BrushPropertyResponse()
+    var bleed = BrushPropertyResponse()
+    var isActive: Bool { [size, opacity, flow, bleed].contains { $0.isActive } }
+    var isValid: Bool { [size, opacity, flow, bleed].allSatisfy(\.isValid) }
+}
+
+nonisolated struct BrushPenDynamics: Codable, Equatable, Hashable, Sendable {
+    var sizeCurve: PressureCurve? = nil
+    var opacityCurve: PressureCurve? = nil
+    var flow = BrushPropertyResponse()
+    var bleed = BrushPropertyResponse()
+    var tilt = BrushSensorResponses()
+    var rotation = BrushSensorResponses()
+    var gradation = BrushPropertyResponse()
+    var isActive: Bool { flow.isActive || bleed.isActive || tilt.isActive || rotation.isActive || gradation.isActive }
+    var hasBleed: Bool { bleed.isActive || tilt.bleed.isActive || rotation.bleed.isActive }
+    var hasOpacity: Bool { tilt.opacity.isActive || rotation.opacity.isActive }
+    var isValid: Bool {
+        (sizeCurve?.isValid ?? true) && (opacityCurve?.isValid ?? true)
+            && [flow, bleed, gradation].allSatisfy(\.isValid) && tilt.isValid && rotation.isValid
+    }
+}

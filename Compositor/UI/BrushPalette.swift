@@ -503,7 +503,23 @@ struct BrushEditorSheet: View {
             } else { pending(["Pressure for size", "Pressure for opacity"], title: "Source mapping: Coming soon") }
             if brush.isRenderable { PressureCurveEditor(curve: dynamic(\.pressureCurve)) }
             else { pending(["Pressure Curve"], title: "Source mapping: Coming soon") }
-            pending(["Pressure Flow", "Pressure Bleed", "Individual Property Response", "Tilt Response", "Barrel Rotation"])
+            if brush.isRenderable {
+                propertyResponse("Pressure Flow", value: setting(\.penDynamics, BrushPenDynamics(), \.flow))
+                propertyResponse("Pressure Bleed", value: setting(\.penDynamics, BrushPenDynamics(), \.bleed))
+                DisclosureGroup("Individual Property Response") {
+                    responseCurve("Size", value: setting(\.penDynamics, BrushPenDynamics(), \.sizeCurve))
+                    responseCurve("Opacity", value: setting(\.penDynamics, BrushPenDynamics(), \.opacityCurve))
+                }
+                DisclosureGroup("Tilt Response") {
+                    sensorResponses("Tilt", value: setting(\.penDynamics, BrushPenDynamics(), \.tilt))
+                    propertyResponse("Gradation", value: setting(\.penDynamics, BrushPenDynamics(), \.gradation), group: "Tilt")
+                }
+                DisclosureGroup("Barrel Rotation") {
+                    sensorResponses("Barrel Rotation", value: setting(\.penDynamics, BrushPenDynamics(), \.rotation))
+                }
+                Text("Positive responses follow the sensor; negative responses reverse it. Bleed adds wet-edge diffusion. Gradation softens shading. Missing channels are neutral. These are native responses, not source algorithm mappings.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else { pending(["Pressure Flow", "Pressure Bleed", "Individual Property Response", "Tilt Response", "Barrel Rotation"], title: "Source mapping: Coming soon") }
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 Text(pen.activeDeviceID == nil ? "Bring a tablet pen into range." : "Tablet device \(pen.activeDeviceID!)")
@@ -515,7 +531,7 @@ struct BrushEditorSheet: View {
                     if let angle = input.rotation { Text(String(format: "Rotation %.1f°", Double(angle * 180 / .pi))) }
                     if let time = input.timestamp { Text(String(format: "Sample time %.3f s", time)) }
                 }
-                Text("Mouse paints at full pressure. Saved mappings remain intact when a pen leaves range. Tilt/rotation mappings are available in Stroke Path and Shape. Other responses: Coming soon.")
+                Text("Mouse paints at full pressure. Saved mappings remain intact when a pen leaves range. Tilt/rotation mappings are available in Stroke Path and Shape. Property responses are available above.")
             }.font(.caption).foregroundStyle(.secondary)
             DisclosureGroup("Tablet calibration") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -780,6 +796,30 @@ struct BrushEditorSheet: View {
             settings[keyPath: field] = $0
             brush.roundDynamics[keyPath: group] = settings
         })
+    }
+    private func responseCurve(_ title: String, value: Binding<PressureCurve?>) -> some View {
+        DisclosureGroup("\(title) response curve") {
+            Toggle("Custom curve", isOn: Binding(get: { value.wrappedValue != nil },
+                set: { value.wrappedValue = $0 ? PressureCurve() : nil })).accessibilityLabel("\(title) custom response curve")
+            if value.wrappedValue != nil {
+                PressureCurveEditor(curve: Binding(get: { value.wrappedValue ?? PressureCurve() },
+                    set: { value.wrappedValue = $0 }), title: "\(title) Response")
+            }
+        }
+    }
+    private func propertyResponse(_ title: String, value: Binding<BrushPropertyResponse>, group: String = "") -> some View {
+        VStack(alignment: .leading) {
+            slider(title, value: value.amount, range: -1...1, unit: "%", factor: 100, accessibilityTitle: [group, title].filter { !$0.isEmpty }.joined(separator: " "))
+            responseCurve([group, title].filter { !$0.isEmpty }.joined(separator: " "), value: value.curve)
+        }
+    }
+    private func sensorResponses(_ title: String, value: Binding<BrushSensorResponses>) -> some View {
+        VStack(alignment: .leading) {
+            propertyResponse("Size", value: value.size, group: title)
+            propertyResponse("Opacity", value: value.opacity, group: title)
+            propertyResponse("Flow", value: value.flow, group: title)
+            propertyResponse("Bleed", value: value.bleed, group: title)
+        }
     }
     private func pathValue<Value>(_ keyPath: WritableKeyPath<StrokePathSettings, Value>) -> Binding<Value> {
         Binding(get: { brush.roundDynamics.path[keyPath: keyPath] }, set: {

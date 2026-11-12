@@ -44,3 +44,7 @@ Physical acceptance remains open:
 4. Run native UI acceptance after the requested pressure-first ordering. No physical calibration, direct MacBook Pencil support or Apple Pencil event stream is certified by automated checks.
 
 API evidence: [Apple's tablet event handling guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/HandlingTabletEvents/HandlingTabletEvents.html) explicitly includes native pressure-only events; [capabilityMask](https://developer.apple.com/documentation/appkit/nsevent/capabilitymask) is a driver-provided mask, and the installed SDK's `IOKit/hidsystem/IOLLEvent.h` supplies the standard channel masks. Driver semantics and physical calibration remain separate from input validation.
+
+## Native property response follow-up · November 12, 2026
+
+[Native pen property responses](pen-brush-responses.md) implements the remaining pressure Flow/Bleed, individual curves, tilt shading/properties and named barrel-property mappings through this same transport. Hardware qualification remains in the original tablet task; no physical acceptance checkbox is closed by the synthetic/property work.

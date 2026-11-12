@@ -38,7 +38,7 @@ struct BrushPaletteTests {
         brush.roundDynamics.touchTaper = BrushTaper(start: 0.1, end: 0.3)
         brush.roundDynamics.wetMix = BrushWetMix(dilution: 0.2, pull: 0.5, grade: 0.4, blur: 0.3)
         brush.roundDynamics.colorDynamics = BrushColorDynamics(secondaryColor: PaletteColor(red: 0.15, green: 0.3, blue: 0.8), stroke: BrushColorResponse(hue: 0.5), stamp: BrushColorResponse(secondary: 0.3), pressure: BrushColorResponse(darkness: 0.4))
-        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape", "Wet Mix", "Color Dynamics"] {
+        for category in ["Grain", "Properties", "Taper", "Stabilization", "Shape", "Wet Mix", "Color Dynamics", "Pen / Tablet"] {
             let name = "completedEditor-" + category
             let panel = FloatingPanelController(name: name)
             panel.show(title: "Brush Editor", content: BrushEditorSheet(brush: brush, color: PaletteColor(red: 0.2, green: 0.3, blue: 0.7),
@@ -55,12 +55,12 @@ struct BrushPaletteTests {
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
             Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "editor-gap-" + category + ".png")
-            if category == "Color Dynamics", let scroll = panelControls(in: view), let document = scroll.documentView {
+            if ["Color Dynamics", "Pen / Tablet"].contains(category), let scroll = panelControls(in: view), let document = scroll.documentView {
                 scroll.contentView.scroll(to: CGPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
                 scroll.reflectScrolledClipView(scroll.contentView)
                 try await Task.sleep(for: .milliseconds(100))
                 view.cacheDisplay(in: view.bounds, to: bitmap)
-                Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "editor-color-dynamics-bottom.png")
+                Attachment.record(try #require(bitmap.representation(using: .png, properties: [:])), named: "editor-" + category + "-bottom.png")
             }
         }
     }

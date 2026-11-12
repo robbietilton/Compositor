@@ -108,17 +108,49 @@ nonisolated struct BrushSettings: Sendable {
 
     var usesStampDynamics: Bool {
         roundDynamics.usesStamps || ((pressureSize || pressureOpacity) && !roundDynamics.pressureCurve.isIdentity)
+            || (pressureSize && roundDynamics.penDynamics?.sizeCurve?.isIdentity == false)
+            || (pressureOpacity && roundDynamics.penDynamics?.opacityCurve?.isIdentity == false)
     }
 
     /// What a press of `pressure` (0–1) does to the tip: its size as a share of the full diameter, and its strength.
     func dynamics(_ pressure: CGFloat?) -> (scale: CGFloat, strength: CGFloat) {
-        let pressure = pressure.map { roundDynamics.pressureCurve.value($0) } ?? 1
+        let response = dynamics(BrushInput(pressure: pressure))
+        return (response.scale, response.strength)
+    }
+
+    /// Shared dab evaluation: global pressure, property curves, sensor gains, then property floors.
+    func dynamics(_ input: BrushInput) -> (scale: CGFloat, strength: CGFloat, flow: CGFloat, bleed: CGFloat, gradation: CGFloat) {
+        let pen = roundDynamics.penDynamics
+        let pressure = input.pressure.map { roundDynamics.pressureCurve.value($0) } ?? 1
+        var size = pressureSize && input.pressure != nil ? (pen?.sizeCurve?.value(pressure) ?? pressure) : 1
+        var strength = pressureOpacity && input.pressure != nil ? (pen?.opacityCurve?.value(pressure) ?? pressure) : 1
+        var flow: CGFloat = 1
+        var bleed = roundDynamics.renderingSettings.wetEdges
+        var gradation: CGFloat = 0
+        if let pen {
+            if input.pressure != nil {
+                flow *= pen.flow.gain(pressure)
+                bleed += (1 - bleed) * pen.bleed.signal(pressure)
+            }
+            for (channel, responses) in [(StrokePathSettings.Input.tilt, pen.tilt), (.rotation, pen.rotation)] {
+                guard channel == .tilt ? input.tilt != nil : input.rotation != nil else { continue }
+                let value = channel.factor(input, curve: roundDynamics.pressureCurve)
+                size *= responses.size.gain(value)
+                strength *= responses.opacity.gain(value)
+                flow *= responses.flow.gain(value)
+                bleed += (1 - bleed) * responses.bleed.signal(value)
+            }
+            if input.tilt != nil {
+                gradation = pen.gradation.signal(StrokePathSettings.Input.tilt.factor(input, curve: roundDynamics.pressureCurve))
+                flow *= 1 - 0.75 * gradation
+            }
+        }
         let properties = roundDynamics.properties
         let sizeFloor = min(1, (properties?.minimumSize ?? 1) / diameter)
-        let strength = pressureOpacity ? pressure : 1
-        // Never smaller than a pixel across, so the lightest touch still leaves a line.
-        return (pressureSize ? max(pressure, sizeFloor) : 1, max(min(1, (properties?.minimumOpacity ?? 0) / max(0.01, opacity)), strength))
+        let opacityFloor = min(1, (properties?.minimumOpacity ?? 0) / max(0.01, opacity))
+        return (max(size, sizeFloor), max(strength, opacityFloor), flow, bleed, gradation)
     }
+
 }
 
 /// One piece of a continuous stroke for the GPU: the line, and the tip's radius and strength at each end.
@@ -347,7 +379,7 @@ final class BrushStroke {
         let rendering = settings.roundDynamics.renderingSettings
         let primary = shapeMask == nil ? 1 : sqrt(2) * (1 + (settings.roundDynamics.shapeSettings.filtering == .none ? 0 : 1 / CGFloat(shapeSide)))
         let secondary = secondarySide == 0 ? 0 : sqrt(2) * rendering.secondaryScale * (1 + 1 / CGFloat(secondarySide))
-        return max(primary, secondary) + sqrt(2) * 0.2 * rendering.wetEdges
+        return max(primary, secondary) + sqrt(2) * 0.36 * (settings.roundDynamics.penDynamics?.hasBleed == true ? 1 : rendering.wetEdges)
     }
     private var distanceToNext: CGFloat = 0
     private(set) var dirtyDocumentRect: CGRect?
@@ -419,7 +451,7 @@ final class BrushStroke {
         let rendering = settings.roundDynamics.renderingSettings
         let stampShape = settings.roundDynamics.shapeSettings
         let grainSupportedByMetal = settings.roundDynamics.grain.map { $0.filtering != .none } ?? true
-        let metalStampSupported = settings.roundDynamics.colorDynamics?.isActive != true && settings.roundDynamics.wetMix?.isActive != true && stampShape.filtering != .none
+        let metalStampSupported = settings.roundDynamics.penDynamics?.isActive != true && settings.roundDynamics.colorDynamics?.isActive != true && settings.roundDynamics.wetMix?.isActive != true && stampShape.filtering != .none
             && grainSupportedByMetal && rendering.dualSource == nil
             && rendering.mode.pickup == 0
             && rendering.strokeBlend == .normal && !rendering.luminanceBlending && rendering.alphaThreshold == nil
@@ -553,12 +585,16 @@ final class BrushStroke {
         let path = settings.roundDynamics.path
         let shape = settings.roundDynamics.shapeSettings
         let color = colorDynamics
+        let pen = settings.roundDynamics.penDynamics
+        if (pen?.flow.isActive == true || pen?.bleed.isActive == true
+            || (settings.pressureSize && pen?.sizeCurve?.isIdentity == false)
+            || (settings.pressureOpacity && pen?.opacityCurve?.isIdentity == false)), old.pressure != new.pressure { return true }
         if color?.pressure.isActive == true, old.pressure != new.pressure { return true }
         func uses(_ input: StrokePathSettings.Input) -> Bool {
             (path.lateralJitter > 0 && path.lateralInput == input) || (path.linearJitter > 0 && path.linearInput == input)
         }
-        return ((uses(.tilt) || shape.inputStyle != .touch || shape.tiltRoundness > 0 || color?.tilt.isActive == true) && old.tilt != new.tilt)
-            || ((uses(.rotation) || shape.inputStyle == .barrel || color?.rotation.isActive == true) && old.rotation != new.rotation)
+        return ((uses(.tilt) || shape.inputStyle != .touch || shape.tiltRoundness > 0 || color?.tilt.isActive == true || pen?.tilt.isActive == true || pen?.gradation.isActive == true) && old.tilt != new.tilt)
+            || ((uses(.rotation) || shape.inputStyle == .barrel || color?.rotation.isActive == true || pen?.rotation.isActive == true) && old.rotation != new.rotation)
     }
     func append(_ point: CGPoint, input: BrushInput) throws {
         var changed = Set<Int>()
@@ -1574,10 +1610,12 @@ final class BrushStroke {
         let options = settings.roundDynamics
         let shape = options.shapeSettings
         let rendering = options.renderingSettings
-        var response = settings.dynamics(input.pressure)
+        var response = settings.dynamics(input)
+        let flow = options.flow * response.flow
+        let hardness = settings.hardness * (1 - response.gradation)
         response.strength *= opacityScale
         response.strength *= options.path.opacity(at: distance, diameter: settings.diameter)
-        guard options.flow > 0, response.strength > 0, scale > 0, shapeHasInk else { return }
+        guard flow > 0, response.strength > 0, scale > 0, shapeHasInk else { return }
         let wet = wetMix
         let pigment: SIMD3<Float>
         var wetFlow: CGFloat = 1
@@ -1586,7 +1624,7 @@ final class BrushStroke {
             let load = wetReservoir ?? wet.charge
             wetFlow = load * wet.attack * (1 - wet.dilution)
                 * (1 - wet.wetnessJitter * brushRandomUnit(seed: seed, index: index, channel: 1201))
-            wetReservoir = max(0, load - (1 - wet.charge) * options.flow * response.strength * wet.attack / 20)
+            wetReservoir = max(0, load - (1 - wet.charge) * flow * response.strength * wet.attack / 20)
         } else { pigment = try pickupColor(at: point, amount: rendering.mode.pickup) }
         guard wetFlow > 0 else { return }
         let radius = settings.diameter / 2 * response.scale * scale
@@ -1638,7 +1676,7 @@ final class BrushStroke {
                     let count = Int(tile.rect.width * tile.rect.height)
                     var state = stampedCoverage.removeValue(forKey: key)
                         ?? StampedCoverage(density: [Float](repeating: 0, count: count),
-                            cap: options.grain?.mode == .texturized || settings.pressureOpacity || opacityScale < 1 || (options.pressureTaper?.opacity ?? 0) > 0 || (options.touchTaper?.opacity ?? 0) > 0 || options.path.falloff > 0 ? [Float](repeating: 0, count: count) : [])
+                            cap: options.grain?.mode == .texturized || settings.pressureOpacity || options.penDynamics?.hasOpacity == true || opacityScale < 1 || (options.pressureTaper?.opacity ?? 0) > 0 || (options.touchTaper?.opacity ?? 0) > 0 || options.path.falloff > 0 ? [Float](repeating: 0, count: count) : [])
                     let origin = CGPoint(x: tile.rect.minX + 0.5, y: tile.rect.minY + 0.5).applying(pixelToDocument)
                     let dx = origin.x - point.x, dy = origin.y - point.y
                     let u0 = Float((co * dx + si * dy) / major), v0 = Float((-si * dx + co * dy) / minor)
@@ -1684,9 +1722,9 @@ final class BrushStroke {
                                         brush_render_stamp(density.baseAddress, cap.isEmpty ? nil : cap.baseAddress,
                                             colors.isEmpty ? nil : colors.baseAddress, nil, Int(tile.rect.width),
                                             Int(touched.minX), Int(touched.minY), Int(touched.maxX), Int(touched.maxY),
-                                            u0, v0, ux, uy, vx, vy, Float(self.settings.hardness + (1 - self.settings.hardness) * (wet?.grade ?? 0)), Float(options.flow * wetFlow), Float(response.strength),
+                                            u0, v0, ux, uy, vx, vy, Float(hardness + (1 - hardness) * (wet?.grade ?? 0)), Float(flow * wetFlow), Float(response.strength),
                                             tip, self.shapeSide, shape.filtering == .none ? 0 : shape.filtering == .classic ? 1 : 2,
-                                            rendering.mode.index, Float(rendering.wetEdges), dabColor[0], dabColor[1], dabColor[2], secondary,
+                                            rendering.mode.index, Float(response.bleed), dabColor[0], dabColor[1], dabColor[2], secondary,
                                             self.secondarySide, Float(rendering.secondaryScale), rendering.classicDualNormal ? 1 : 0,
                                             grain, self.grainSide, parameters.baseAddress)
                                         }
