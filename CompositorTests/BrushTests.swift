@@ -27,6 +27,7 @@ struct BrushTests {
         try await ImageExporter.shared.render(try #require(session.projectSnapshot())).image
     }
     private func preview(_ stroke: BrushStroke, canvas: CGSize) throws -> CGImage {
+        try stroke.waitForGPUPreview()
         let context = try BrushRaster.context(width: Int(canvas.width), height: Int(canvas.height), mask: false)
         LayerRenderer.drawBrushPreview(stroke.layer.asset?.image, transform: stroke.paintTransform, center: stroke.paintTransform.center,
             scale: 1, opacity: stroke.layer.opacity, blendMode: stroke.layer.blendMode, mask: stroke.layer.mask?.enabledImage,
@@ -122,11 +123,14 @@ struct BrushTests {
         session.beginBrush(at: CGPoint(x: 20, y: 40))
         session.continueBrush(at: CGPoint(x: 580, y: 40))
         let stroke = try #require(session.brushStroke)
+        #expect(stroke.hasPendingGPUWork)
+        try stroke.waitForGPUPreview()
+        #expect(!stroke.hasPendingGPUWork)
         #expect(stroke.patches.count == 3)
         #expect(session.activeLayer?.asset == nil && session.history.undoCount == count)
         let live = try preview(stroke, canvas: session.document!.size)
         for x in [20, 255, 256, 511, 512, 579] { #expect(try pixel(live, x: x, y: 40) == [255, 0, 0, 255]) }
-        await session.finishBrush()
+        #expect(session.finishBrushImmediately())
         #expect(session.brushError == nil && session.brushStroke == nil)
         #expect(session.history.undoCount == count + 1)
         let result = try await render(session)
@@ -136,6 +140,74 @@ struct BrushTests {
         #expect(session.activeLayer?.asset == nil)
         session.redo()
         #expect(session.activeLayer?.asset != nil)
+    }
+    @Test func canceledGPUStrokeCannotPublishIntoTheNextStroke() async throws {
+        let session = makeSession()
+        session.beginBrush(at: CGPoint(x: 20, y: 40))
+        session.continueBrush(at: CGPoint(x: 120, y: 40))
+        session.cancelBrush()
+        session.beginBrush(at: CGPoint(x: 20, y: 60))
+        session.continueBrush(at: CGPoint(x: 120, y: 60))
+        await session.finishBrush()
+        #expect(session.brushError == nil)
+        let result = try await render(session)
+        #expect(try pixel(result, x: 60, y: 40)[3] == 0)
+        #expect(try pixel(result, x: 60, y: 60) == [255, 0, 0, 255])
+    }
+    @Test func gpuFailureCancelsWithoutCommittingPartialPixels() throws {
+        let session = makeSession()
+        let undoCount = session.history.undoCount
+        session.beginBrush(at: CGPoint(x: 20, y: 40))
+        session.continueBrush(at: CGPoint(x: 120, y: 40))
+        let stroke = try #require(session.brushStroke)
+        stroke.onGPUError?("Injected Metal failure")
+        #expect(session.brushStroke == nil)
+        #expect(session.brushError == "Injected Metal failure")
+        #expect(session.activeLayer?.asset == nil && session.history.undoCount == undoCount)
+    }
+    @Test func closingSessionWithGPUWorkPendingDoesNotRetainSession() async throws {
+        var session: EditorSession? = makeSession()
+        weak var weakSession = session
+        session?.beginBrush(at: CGPoint(x: 20, y: 40))
+        session?.continueBrush(at: CGPoint(x: 120, y: 40))
+        #expect(try #require(session?.brushStroke).hasPendingGPUWork)
+        session?.cancelBrush()
+        session = nil
+        try await Task.sleep(for: .milliseconds(40))
+        #expect(weakSession == nil)
+    }
+    @Test func mouseUpFlushesPendingGPUWorkBeforeSnapshotAndUndo() async throws {
+        let session = makeSession()
+        let undoCount = session.history.undoCount
+        session.beginBrush(at: CGPoint(x: 20, y: 40))
+        session.continueBrush(at: CGPoint(x: 120, y: 40))
+        let stroke = try #require(session.brushStroke)
+        #expect(stroke.hasPendingGPUWork)
+        #expect(session.finishBrushImmediately())
+        #expect(!stroke.hasPendingGPUWork)
+        #expect(session.history.undoCount == undoCount + 1)
+        let snapshot = try #require(session.projectSnapshot())
+        let rendered = try await ImageExporter.shared.render(snapshot).image
+        #expect(try pixel(rendered, x: 60, y: 40) == [255, 0, 0, 255])
+        session.undo()
+        #expect(session.history.undoCount == undoCount)
+        #expect(session.activeLayer?.asset == nil)
+    }
+
+    @Test func mouseUpFlushesGPUPreviewBeforeProjectSaveAndExport() async throws {
+        let session = makeSession()
+        session.beginBrush(at: CGPoint(x: 20, y: 40))
+        session.continueBrush(at: CGPoint(x: 120, y: 40))
+        #expect(try #require(session.brushStroke).hasPendingGPUWork)
+        #expect(session.finishBrushImmediately())
+        #expect(session.brushError == nil && session.brushStroke == nil)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("PendingBrush-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await ProjectStore.shared.save(try #require(session.projectSnapshot()), to: url)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        let result = try await ImageExporter.shared.render(loaded)
+        #expect(try pixel(result.image, x: 80, y: 40) == [255, 0, 0, 255])
+        #expect(try pixel(result.image, x: 80, y: 5)[3] == 0)
     }
     @Test func softBrushProducesPartialAlphaAndCancelPreservesDocument() async throws {
         let session = makeSession(width: 80, height: 80)
@@ -439,6 +511,7 @@ struct BrushTests {
     @Test func largeBlankCanvasOnlyAllocatesTouchedTilesUntilCommit() throws {
         let session = makeSession(width: 10_000, height: 10_000)
         session.beginBrush(at: CGPoint(x: 100, y: 100))
+        try #require(session.brushStroke).waitForGPUPreview()
         let patches = try #require(session.brushStroke).patches
         #expect(patches.count == 1)
         #expect(patches.reduce(0) { $0 + $1.image.bytesPerRow * $1.image.height } <= 256 * 256 * 4)

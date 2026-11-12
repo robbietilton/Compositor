@@ -55,3 +55,145 @@ struct BrushControls: View {
                             session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                         }
                     }
+                    // Pressure mappings can be configured without a pen in range.
+                    if session.tool == .brush {
+                        Toggle(isOn: $session.brushSettings.pressureSize) { Image(systemName: "pencil.tip.crop.circle") }
+                            .toggleStyle(PenPressureToggleStyle())
+                            .help("Pen pressure sets the size: a light touch paints a thinner line")
+                            .accessibilityLabel("Pressure for size")
+                    }
+                    if session.tool != .brush || session.brushSettings.roundDynamics.shapeSettings.source == .procedural {
+                        Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
+                        AppSlider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
+                        TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
+                                                                     set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
+                                  format: .number.precision(.fractionLength(0)))
+                        .frame(width: 42).textFieldStyle(.roundedBorder)
+                        .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
+                                    change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
+                        .unitSuffix("%")
+                    }
+                    Text(session.tool == .blur ? "Strength" : "Opacity")
+                        .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
+                    AppSlider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
+                    TextField("Opacity", value: Binding<Double>(get: { Double(session.brushSettings.opacity * 100) },
+                                                                set: { session.brushSettings.opacity = $0.isFinite ? CGFloat(min(100, max(1, $0)) / 100) : 1 }),
+                              format: .number.precision(.fractionLength(0)))
+                    .frame(width: 42).textFieldStyle(.roundedBorder)
+                    .arrowSteps(value: { Double(session.brushSettings.opacity * 100) },
+                                change: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
+                    .help("Press 1–9 for 10–90%, 0 for 100%")
+                    .unitSuffix("%")
+                    if session.tool == .brush {
+                        Toggle(isOn: $session.brushSettings.pressureOpacity) { Image(systemName: "pencil.tip.crop.circle") }
+                            .toggleStyle(PenPressureToggleStyle())
+                            .help("Pen pressure sets the opacity: a light touch paints fainter, up to the brush’s Opacity")
+                            .accessibilityLabel("Pressure for opacity")
+                    }
+                    if session.tool == .brush {
+                        Text("Flow").scrubbable(sensitivity: 0.01, value: $session.brushSettings.roundDynamics.flow, range: 0...1)
+                        TextField("Flow", value: Binding<Double>(get: { Double(session.brushSettings.roundDynamics.flow * 100) },
+                            set: { if $0.isFinite { session.brushSettings.roundDynamics.flow = CGFloat(min(100, max(0, $0)) / 100) } }),
+                            format: .number.precision(.fractionLength(0)))
+                            .frame(width: 42).textFieldStyle(.roundedBorder)
+                            .arrowSteps(value: { Double(session.brushSettings.roundDynamics.flow * 100) },
+                                change: { session.brushSettings.roundDynamics.flow = CGFloat(min(100, max(0, $0)) / 100) })
+                            .unitSuffix("%")
+                            .help("Paint deposited by each stamp. Lower flow builds gradually; Opacity caps the whole stroke.")
+                    }
+                    // Blur softens by a radius of its own, apart from how strongly it lays the softening down.
+                    if session.tool == .blur, session.blurMode == .blur {
+                        Text("Radius").scrubbable(sensitivity: 0.1, value: $session.brushSettings.blurRadius, range: 0.5...50)
+                        // The slider covers everyday radii; typing or scrubbing reaches up to 50.
+                        AppSlider(value: Binding(get: { min(20, session.brushSettings.blurRadius) },
+                                              set: { session.brushSettings.blurRadius = $0 }), in: 0.5...20).frame(width: 100)
+                        TextField("Radius", value: Binding<Double>(get: { Double(session.brushSettings.blurRadius) },
+                                                                   set: { session.brushSettings.blurRadius = $0.isFinite ? CGFloat(min(50, max(0.5, $0))) : 5 }),
+                                  format: .number.precision(.fractionLength(0...1)))
+                        .frame(width: 42).textFieldStyle(.roundedBorder)
+                        .arrowSteps(value: { Double(session.brushSettings.blurRadius) },
+                                    change: { session.brushSettings.blurRadius = CGFloat(min(50, max(0.5, $0))) })
+                        .help("How far the blur softens, in pixels")
+                    }
+                    // Paint and Erase only: healing, cloning and smearing have their own feel.
+                    if session.tool == .brush {
+                        Text("Smoothing")
+                            .scrubbable(sensitivity: 1, value: $session.brushSettings.smoothing, range: 0...100)
+                        AppSlider(value: $session.brushSettings.smoothing, in: 0...100).frame(width: 100)
+                        TextField("Smoothing", value: Binding<Double>(get: { Double(session.brushSettings.smoothing) },
+                                                                      set: { session.brushSettings.smoothing = $0.isFinite ? CGFloat(min(100, max(0, $0))) : 0 }),
+                                  format: .number.precision(.fractionLength(0)))
+                        .frame(width: 42).textFieldStyle(.roundedBorder)
+                        .arrowSteps(value: { Double(session.brushSettings.smoothing) },
+                                    change: { session.brushSettings.smoothing = CGFloat(min(100, max(0, $0))) })
+                        .help("The brush trails the pointer on a string this long, so a shaky hand still draws a smooth line")
+                    }
+                    if session.isMaskSelected {
+                        Picker("Paint", selection: $session.maskPaintWhite) {
+                            Text("Black · Hide").tag(false)
+                            Text("White · Reveal").tag(true)
+                        }.frame(width: 180)
+                    } else if session.tool != .cloneStamp, session.tool != .blur {
+                        // Same foreground color and Color Picker as the tool-rail swatch.
+                        HStack(spacing: 6) {
+                            Text("Color")
+                            Button { session.openColorPicker(background: false) } label: {
+                                ColorSwatch(color: session.foregroundColor.swiftUI)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!session.canEditPalette)
+                            .help("Foreground color")
+                            .accessibilityLabel("Foreground color")
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if session.tool == .cloneStamp, session.cloneSource == nil {
+                        Text("Option-click to set the source").foregroundStyle(.secondary)
+                    }
+                    if session.isMaskSelected { Text("Mask").foregroundStyle(.secondary) }
+                }
+            }
+            .scrollIndicators(.never)
+        }
+        .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
+        .disabled(session.showsBusy)
+        .onChange(of: session.activeBrushPreset) { _, _ in
+            do { try session.persistActiveBrushSettings() }
+            catch { session.brushError = error.localizedDescription }
+        }
+    }
+}
+
+/// A pressure button: square, the height of the field beside it, which it sits close to.
+private struct PenPressureToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+            configuration.label
+                .foregroundStyle(configuration.isOn ? .white : .primary)
+                .frame(width: 22, height: 22)
+                .background(configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: shape)
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, -6)
+        .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
+    }
+}
+
+/// A rubber stamp for the tool rail (SF Symbols has none): round handle, neck, body, and pad.
+struct CloneStampToolIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let w = size.width, h = size.height
+            var stamp = Path()
+            stamp.addEllipse(in: CGRect(x: w * 0.33, y: h * 0.02, width: w * 0.34, height: h * 0.30))
+            stamp.addRect(CGRect(x: w * 0.43, y: h * 0.28, width: w * 0.14, height: h * 0.28))
+            stamp.addRoundedRect(in: CGRect(x: w * 0.12, y: h * 0.54, width: w * 0.76, height: h * 0.22),
+                                 cornerSize: CGSize(width: w * 0.08, height: w * 0.08))
+            stamp.addRect(CGRect(x: w * 0.06, y: h * 0.82, width: w * 0.88, height: h * 0.12))
+            context.fill(stamp, with: .foreground)
+        }
+        .accessibilityHidden(true)
+    }
+}

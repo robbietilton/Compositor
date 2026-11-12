@@ -504,7 +504,7 @@ struct BrushDynamicsTests {
 
     @Test func renderingMetadataIsValidatedPersistedAndLegacySafe() throws {
         #expect(!RoundBrushDynamics().renderingSettings.isActive && !RoundBrushDynamics().usesStamps)
-        var rendering = BrushRenderingSettings(mode: .intenseBlending, wetEdges: 0.4, burntEdges: 0.7,
+        var rendering = BrushRenderingSettings(mode: .intenseBlending, wetEdges: 0.4, burntEdges: 0.7, backruns: 0.55,
             edgeBlend: .colorBurn, strokeBlend: .screen, luminanceBlending: true, alphaThreshold: 0.3,
             dualSource: .generated, secondary: .bristles, secondaryScale: 1.2, classicDualNormal: true)
         var preset = BrushPreset(name: "Rendering"); preset.roundDynamics.rendering = rendering
@@ -518,8 +518,10 @@ struct BrushDynamicsTests {
         rendering.wetEdges = .nan; preset.roundDynamics.rendering = rendering
         #expect(throws: (any Error).self) { try library.save(preset) }
         #expect(try Data(contentsOf: url) == bytes)
-        for invalid in [BrushRenderingSettings(wetEdges: -0.1), BrushRenderingSettings(alphaThreshold: 1.1),
+        for invalid in [BrushRenderingSettings(wetEdges: -0.1), BrushRenderingSettings(backruns: 1.1), BrushRenderingSettings(alphaThreshold: 1.1),
                         BrushRenderingSettings(secondaryScale: .infinity)] { #expect(!invalid.isValid) }
+        let oldRendering = Data("{\"mode\":\"Standard\",\"wetEdges\":0.2,\"burntEdges\":0.3}".utf8)
+        #expect(try JSONDecoder().decode(BrushRenderingSettings.self, from: oldRendering).backruns == 0)
         let old = Data("{\"pressureCurve\":{\"points\":[{\"x\":0,\"y\":0},{\"x\":1,\"y\":1}]},\"flow\":1,\"taperStart\":0,\"taperEnd\":0,\"roundness\":1,\"angle\":0,\"count\":1,\"scatter\":0}".utf8)
         #expect(try JSONDecoder().decode(RoundBrushDynamics.self, from: old).renderingSettings == BrushRenderingSettings())
     }
@@ -611,6 +613,32 @@ struct BrushDynamicsTests {
             #expect(alpha(result, 240, 64) == 255)
             #expect(renderingPixel(result, 100, 10) == renderingPixel(normal, 100, 10), "Blend changed untouched pixels: \(mode)")
         }
+    }
+
+    @Test func burntEdgePoolingIsDeferredContinuousAndStableAcrossTiles() throws {
+        var options = RoundBrushDynamics()
+        options.spacing = 0.12
+        options.flow = 0.38
+        options.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+        options.rendering = BrushRenderingSettings(burntEdges: 1)
+        let pooled = try make(options, diameter: 52, seed: 0xA77E)
+        options.rendering = BrushRenderingSettings()
+        let plain = try make(options, diameter: 52, seed: 0xA77E)
+        for stroke in [pooled, plain] {
+            for index in 0...32 {
+                try stroke.append(CGPoint(x: 100 + index * 8, y: 64 + (index % 3 - 1) * 2))
+            }
+        }
+        let livePooled = try raster(pooled), livePlain = try raster(plain)
+        #expect(difference(livePooled, livePlain) == 0, "Pooling is deferred until the stroke is settled")
+        try pooled.flush(); try plain.flush()
+        let final = try raster(pooled), unpooled = try raster(plain)
+        #expect(difference(final, unpooled) > 8, "Settled pooling adds a visible, continuous dark edge")
+        let beforeRepeat = try raster(pooled)
+        try pooled.flush()
+        #expect(difference(beforeRepeat, try raster(pooled)) == 0, "Settled edge pooling must be deterministic and idempotent")
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: final.makeImage()!).representation(using: .png, properties: [:])),
+            named: "rendering-burnt-edge-pooled.png")
     }
 
     @Test func renderingDualNormalOwnsBothSourcesAndKeepsMissingGates() throws {
@@ -769,6 +797,14 @@ struct BrushDynamicsTests {
             #expect(difference(image, try raster(dense)) <= 1)
             let transform = LayerTransform(origin: CGPoint(x: 0, y: row * 128), size: size)
             LayerRenderer.draw(try #require(image.makeImage()), transform: transform, center: transform.center, in: atlas)
+            for filtering in [ShapeBrushSettings.Filtering.classic, .improved] {
+                options.grain?.filtering = filtering
+                let cpu = try make(options, gpu: false), metal = try make(options)
+                #expect(metal.usesMetalStampRenderer)
+                try trace(cpu, steps: 32); try trace(metal, steps: 32)
+                #expect(difference(try raster(cpu), try raster(metal)) <= 1,
+                    "\(mode.rawValue) grain with \(filtering.rawValue) filtering must match CPU output")
+            }
         }
         #expect(difference(modes[0], modes[1]) > 1, "Moving grain must differ from canvas-anchored grain")
         for (index, blend) in BrushGrain.Blend.allCases.enumerated() {
@@ -795,6 +831,222 @@ struct BrushDynamicsTests {
         #expect(!source.isRenderable)
         source.roundDynamics.grain = BrushGrain(); #expect(source.isRenderable)
         source.roundDynamics.grain?.source = .original; #expect(!source.isValid && !source.isRenderable)
+    }
+
+    @Test func gpuGlazeModesMatchCpuForGrainedStrokes() throws {
+        for (index, mode) in [BrushRenderingSettings.Mode.lightGlaze, .uniformGlaze, .intenseGlaze, .heavyGlaze].enumerated() {
+            var options = RoundBrushDynamics()
+            options.spacing = 0.2
+            options.flow = 0.7
+            options.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+            options.grain = BrushGrain(mode: index.isMultiple(of: 2) ? .moving : .texturized,
+                scale: 21, depth: 0.73, brightness: 0.08, contrast: 0.2, movement: 0.35,
+                depthJitter: 0.17, offsetJitter: 0.13, rotation: 0.2, blend: BrushGrain.Blend.allCases[index])
+            options.rendering = BrushRenderingSettings(mode: mode)
+            let cpu = try make(options, diameter: 28, gpu: false, seed: 0xB71571E5)
+            let metal = try make(options, diameter: 28, seed: 0xB71571E5)
+            #expect(metal.usesMetalStampRenderer)
+            try trace(cpu, steps: 24)
+            try trace(metal, steps: 24)
+            #expect(difference(try raster(cpu), try raster(metal)) <= 1,
+                "\(mode.rawValue) grain output must match the CPU reference within one byte")
+        }
+    }
+
+    @Test func gpuWatercolorEdgesMatchCPUThroughTileCrossingAndTailReplay() throws {
+        var options = RoundBrushDynamics()
+        options.spacing = 0.18
+        options.flow = 0.62
+        options.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+        options.grain = BrushGrain(mode: .texturized, scale: 23, depth: 0.81,
+            brightness: 0.07, contrast: 0.16, blend: .multiply, filtering: .improved)
+        options.rendering = BrushRenderingSettings(wetEdges: 0.72, burntEdges: 0.68, edgeBlend: .multiply)
+        let cpu = try make(options, diameter: 48, gpu: false, seed: 0xB71571E5)
+        let metal = try make(options, diameter: 48, seed: 0xB71571E5)
+        #expect(metal.usesMetalStampRenderer)
+
+        for (index, x) in [190, 222, 254, 286, 318, 350].enumerated() {
+            let input = BrushInput(pressure: 0.38 + CGFloat(index) * 0.08,
+                tilt: CGPoint(x: 0.2, y: 0.7), rotation: 0.15 * CGFloat(index), timestamp: Double(index) / 60)
+            try cpu.append(CGPoint(x: x, y: 64), input: input)
+            try metal.append(CGPoint(x: x, y: 64), input: input)
+        }
+        try cpu.flush(); try metal.flush()
+        let reference = try raster(cpu)
+        #expect(difference(reference, try raster(metal)) <= 1,
+            "Wet tip shape and accumulated burnt edges must survive tile crossing and provisional-tail replacement")
+        try cpu.flush(); try metal.flush()
+        #expect(difference(reference, try raster(metal)) <= 1, "Repeated flush must not re-accumulate burnt edges")
+    }
+
+    @Test func orderedBrushInputBatchesMatchIndividualSamples() throws {
+        var options = RoundBrushDynamics()
+        options.spacing = 0.18
+        options.flow = 0.64
+        options.count = 2
+        options.scatter = 0.08
+        options.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+        options.grain = BrushGrain(mode: .texturized, scale: 23, depth: 0.71,
+            brightness: 0.04, contrast: 0.12, blend: .multiply, filtering: .improved)
+        options.rendering = BrushRenderingSettings(wetEdges: 0.35, burntEdges: 0.42, edgeBlend: .multiply)
+        let samples = (0...48).map { index -> BrushStroke.InputSample in
+            let t = CGFloat(index) / 48
+            let previousT = CGFloat(max(0, index - 1)) / 48
+            let repeatedPoint = index == 25
+            let positionT = repeatedPoint ? previousT : t
+            return BrushStroke.InputSample(point: CGPoint(x: 28 + 456 * positionT,
+                y: 64 + sin(positionT * .pi * 2) * 16), input: BrushInput(
+                    pressure: index == 25 ? 0.93 : 0.28 + 0.68 * t,
+                    tilt: CGPoint(x: 0.25, y: 0.7), rotation: 0.11 * t,
+                    timestamp: Double(index) / 60, deviceID: 17))
+        }
+
+        for useGPU in [false, true] {
+            let individual = try make(options, diameter: 46, gpu: useGPU, seed: 0xB71571E5)
+            let batched = try make(options, diameter: 46, gpu: useGPU, seed: 0xB71571E5)
+            for sample in samples { try individual.append(sample.point, input: sample.input) }
+            for start in stride(from: 0, to: samples.count, by: 8) {
+                try batched.append(batch: Array(samples[start..<min(samples.count, start + 8)]))
+            }
+            try individual.flush(); try batched.flush()
+            let expected = try raster(individual), actual = try raster(batched)
+            #expect(difference(expected, actual) <= 1,
+                "Batching may reduce publication frequency but must preserve ordered pressure, tilt, rotation, and tile-crossing pixels")
+            #expect(batched.tilePublicationCount < individual.tilePublicationCount,
+                "Each input batch should publish at most once")
+        }
+    }
+
+    @Test func sessionFrameBatchPreservesInputFilteringAndPixels() throws {
+        func session() -> EditorSession {
+            let value = EditorSession()
+            value.createDocument(width: 512, height: 128)
+            value.addBlankLayer()
+            value.selectTool(.brush)
+            value.brushSettings.diameter = 42
+            value.brushSettings.pressureSize = true
+            value.brushSettings.smoothing = 0.14
+            value.brushSettings.roundDynamics.spacing = 0.19
+            value.brushSettings.roundDynamics.strokePath = StrokePathSettings(speedSpacing: 0.35)
+            value.brushSettings.roundDynamics.stabilization = BrushStabilization(
+                streamline: 0.2, pressure: 0.3, stabilization: 0.18, motion: 0.05, expression: 0.1)
+            return value
+        }
+        let individual = session()
+        let first = BrushInput(pressure: 0.2, tilt: CGPoint(x: 0.2, y: 0.7), rotation: 0.1,
+                               timestamp: 0, deviceID: 17)
+        individual.beginBrush(at: CGPoint(x: 32, y: 64), input: first, seed: 501)
+        let samples = (1...48).map { index -> BrushStroke.InputSample in
+            let t = CGFloat(index) / 48
+            let stationary = index == 24
+            let previousT = CGFloat(index - 1) / 48
+            let positionT = stationary ? previousT : t
+            return BrushStroke.InputSample(point: CGPoint(x: 32 + 448 * positionT,
+                y: 64 + sin(positionT * .pi * 2) * 14), input: BrushInput(
+                    pressure: index == 24 ? 0.95 : 0.2 + 0.75 * t,
+                    tilt: CGPoint(x: 0.2 + 0.4 * t, y: 0.7), rotation: 0.1 + 0.3 * t,
+                    timestamp: Double(index) / 60, deviceID: 17))
+        }
+        for sample in samples {
+            individual.continueBrush(at: sample.point, input: sample.input)
+        }
+        let individualStroke = try #require(individual.brushStroke)
+        #expect(individual.finishBrushImmediately(), "The reference stroke should commit")
+        let expected = try raster(individualStroke)
+        for samplesPerFrame in [1, 4, 12, 48] {
+            let batched = session()
+            batched.beginBrush(at: CGPoint(x: 32, y: 64), input: first, seed: 501)
+            for (index, sample) in samples.enumerated() {
+                batched.queueBrushInput(at: sample.point, input: sample.input)
+                if (index + 1).isMultiple(of: samplesPerFrame) || index == samples.count - 1 {
+                    try batched.flushQueuedBrushInputSamples()
+                }
+            }
+            let batchedStroke = try #require(batched.brushStroke)
+            #expect(batched.finishBrushImmediately(), "Mouse-up must commit after cadence (samplesPerFrame)")
+            #expect(difference(expected, try raster(batchedStroke)) <= 1,
+                "(samplesPerFrame) samples per frame changed output despite identical ordered input, speed spacing, pressure, smoothing, and stabilization")
+        }
+    }
+
+    @Test func queuedSessionInputIsBoundedAndCancelDropsOnlyPendingTail() throws {
+        let session = EditorSession()
+        session.createDocument(width: 512, height: 128)
+        session.addBlankLayer(); session.selectTool(.brush)
+        session.brushSettings.diameter = 20
+        session.beginBrush(at: CGPoint(x: 80, y: 64), input: BrushInput(pressure: 0.5, timestamp: 0, deviceID: 9), seed: 83)
+        for index in 1...4097 {
+            session.queueBrushInput(at: CGPoint(x: 80, y: 64),
+                input: BrushInput(pressure: 0.5, timestamp: Double(index) / 60, deviceID: 9))
+        }
+        #expect(session.pendingBrushInputSamples.count == 1, "The 4096-sample frame buffer must flush before it can grow further")
+        #expect(session.brushStroke?.lastInput?.timestamp == 4096.0 / 60,
+                "The capacity flush must retain all older accepted input in order")
+        session.cancelBrush()
+        #expect(session.pendingBrushInputSamples.isEmpty && session.brushStroke == nil,
+                "Cancellation must discard the unsubmitted tail and release the stroke")
+    }
+
+    @Test func queuedBrushSamplesBlockToolAndProjectTransitionsUntilMouseUp() throws {
+        let session = EditorSession()
+        session.createDocument(width: 256, height: 128)
+        session.addBlankLayer(); session.selectTool(.brush)
+        let projects = ProjectController(session: session)
+        session.beginBrush(at: CGPoint(x: 24, y: 64), input: BrushInput(pressure: 0.5, timestamp: 0, deviceID: 4), seed: 94)
+        for index in 1...8 {
+            session.queueBrushInput(at: CGPoint(x: 24 + index * 12, y: 64),
+                input: BrushInput(pressure: 0.5, timestamp: Double(index) / 60, deviceID: 4))
+        }
+
+        #expect(session.pendingBrushInputSamples.count == 8)
+        #expect(!projects.canStart, "Project replacement and save entry points must remain gated during the active stroke")
+        session.selectTool(.move)
+        #expect(session.tool == .brush && session.pendingBrushInputSamples.count == 8,
+            "A tool change must not strand or discard queued brush input")
+
+        #expect(session.finishBrushImmediately())
+        #expect(session.pendingBrushInputSamples.isEmpty && session.brushStroke == nil)
+        #expect(session.activeLayer?.asset?.image != nil)
+        #expect(projects.canStart, "Project operations become available after mouse-up commits the queued batch")
+        session.selectTool(.move)
+        #expect(session.tool == .move)
+    }
+
+    @Test func backrunsCreateSeededStaticBloomsOverGrainedWash() throws {
+        var options = RoundBrushDynamics()
+        options.spacing = 0.2
+        options.flow = 0.55
+        options.shape = ShapeBrushSettings(source: .generated, generator: .bristles, filtering: .improved)
+        options.grain = BrushGrain(mode: .texturized, scale: 31, depth: 0.72,
+            brightness: 0.06, contrast: 0.18, blend: .multiply, filtering: .improved)
+        let plain = try make(options, diameter: 64, seed: 0xA17E)
+        options.rendering = BrushRenderingSettings(wetEdges: 0.32, burntEdges: 0.45, backruns: 0.82)
+        let metal = try make(options, diameter: 64, seed: 0xA17E)
+        let cpu = try make(options, diameter: 64, gpu: false, seed: 0xA17E)
+        let otherSeed = try make(options, diameter: 64, seed: 0xB100)
+        #expect(metal.usesMetalStampRenderer)
+        for stroke in [plain, metal, cpu, otherSeed] {
+            for index in 0...48 {
+                let t = CGFloat(index) / 48
+                let point = CGPoint(x: 32 + 448 * t, y: 54 + sin(t * .pi * 2) * 14)
+                let input = BrushInput(pressure: 0.25 + 0.7 * t, timestamp: Double(t))
+                try stroke.append(point, input: input)
+            }
+            try stroke.flush()
+        }
+        let wash = try raster(metal), reference = try raster(cpu)
+        #expect(difference(wash, reference) <= 2, "Settled backrun output must remain within two channel levels across CPU and Metal stamp accumulation")
+        #expect(difference(wash, try raster(plain)) > 8, "Backruns should alter the final grainy wash")
+        #expect(difference(wash, try raster(otherSeed)) > 1, "Bloom placement must vary deterministically with the stroke seed")
+        let final = try raster(metal)
+        try metal.flush()
+        #expect(difference(final, try raster(metal)) == 0, "Repeated finalization must not animate or accumulate backruns")
+        let atlas = try BrushRaster.context(width: 512, height: 128, mask: false)
+        atlas.setFillColor(NSColor.white.cgColor); atlas.fill(CGRect(x: 0, y: 0, width: 512, height: 128))
+        LayerRenderer.draw(try #require(wash.makeImage()), transform: LayerTransform(origin: .zero, size: size),
+            center: CGPoint(x: size.width / 2, y: size.height / 2), in: atlas)
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: atlas.makeImage()!).representation(using: .png, properties: [:])),
+            named: "rendering-backrun-grain.png")
     }
 
     @Test func propertyBoundsAffectStrokeAndPressureWithoutSquaringOpacity() throws {

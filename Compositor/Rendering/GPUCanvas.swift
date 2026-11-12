@@ -11,7 +11,18 @@ import QuartzCore
 /// row is its row 0, and the frame's row 0 is the top of the view. Blending happens in sRGB, not linear light, as it
 /// does on the canvas and in Photoshop.
 @MainActor final class GPUCanvasRenderer {
-    static let shared: GPUCanvasRenderer? = GPUCanvasRenderer()
+    private static var existing: GPUCanvasRenderer?
+    private static var didAttemptCreation = false
+    static var shared: GPUCanvasRenderer? {
+        if !didAttemptCreation {
+            didAttemptCreation = true
+            existing = GPUCanvasRenderer()
+        }
+        return existing
+    }
+    static func discardIfPresent(_ stroke: BrushStroke) {
+        existing?.discard(stroke)
+    }
 
     let device: MTLDevice
     let queue: MTLCommandQueue
@@ -40,13 +51,29 @@ import QuartzCore
     private final class StrokeTexture {
         let texture: MTLTexture
         let image: CIImage
+        let base: CIImage
         var written: [CGPoint: ObjectIdentifier] = [:]
-        init(texture: MTLTexture, image: CIImage) {
+        var coverageWritten: [CGPoint: ObjectIdentifier] = [:]
+        var cpuPatchUploadBytes = 0
+        init(texture: MTLTexture, image: CIImage, base: CIImage) {
             self.texture = texture
             self.image = image
+            self.base = base
         }
     }
     private var strokes: [ObjectIdentifier: (stroke: BrushStroke, texture: StrokeTexture, used: Int)] = [:]
+
+    func discard(_ stroke: BrushStroke) {
+        strokes.removeValue(forKey: ObjectIdentifier(stroke))
+    }
+
+    func cpuPatchUploadBytes(for stroke: BrushStroke) -> Int {
+        strokes[ObjectIdentifier(stroke)]?.texture.cpuPatchUploadBytes ?? 0
+    }
+
+    func hasCachedStroke(_ stroke: BrushStroke) -> Bool {
+        strokes[ObjectIdentifier(stroke)] != nil
+    }
 
     private init?() {
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { return nil }
@@ -172,14 +199,51 @@ import QuartzCore
             context.render(start, to: texture, commandBuffer: buffer, bounds: grid, colorSpace: space)
             buffer.commit()
             buffer.waitUntilCompleted()
-            entry = StrokeTexture(texture: texture, image: image)
+            entry = StrokeTexture(texture: texture, image: image, base: start)
         }
         strokes[id] = (stroke, entry, frame)
+        if stroke.canPresentGPUCoverage, !stroke.gpuPresentationTiles.isEmpty,
+           let buffer = queue.makeCommandBuffer() {
+            var presented = true
+            for (rect, texture) in stroke.gpuPresentationTiles {
+                let key = rect.origin, identity = ObjectIdentifier(texture)
+                guard entry.coverageWritten[key] != identity else { continue }
+                guard let coverage = CIImage(mtlTexture: texture, options: [.colorSpace: NSNull()]) else {
+                    presented = false
+                    break
+                }
+                let tileCoverage = coverage.transformed(by: CGAffineTransform(translationX: rect.minX, y: rect.minY))
+                    .cropped(to: rect)
+                    .applyingFilter("CIColorMatrix", parameters: [
+                        "inputRVector": CIVector(x: stroke.settings.opacity, y: 0, z: 0, w: 0),
+                        "inputGVector": CIVector(x: stroke.settings.opacity, y: 0, z: 0, w: 0),
+                        "inputBVector": CIVector(x: stroke.settings.opacity, y: 0, z: 0, w: 0),
+                        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                        "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+                    ])
+                let background = entry.base.cropped(to: rect)
+                let foreground = stroke.settings.erasing && !stroke.isMask ? CIImage.clear.cropped(to: rect)
+                    : CIImage(color: CIColor(cgColor: stroke.gpuPresentationColor)).cropped(to: rect)
+                let output = foreground.applyingFilter("CIBlendWithMask", parameters: [
+                    kCIInputBackgroundImageKey: background,
+                    kCIInputMaskImageKey: tileCoverage,
+                ]).cropped(to: rect)
+                context.render(output, to: entry.texture, commandBuffer: buffer, bounds: rect, colorSpace: space)
+                entry.coverageWritten[key] = identity
+            }
+            if presented {
+                buffer.commit()
+                return entry.image
+            }
+        }
         let writes = TileWrites(renderer: self, into: entry.texture, mask: stroke.isMask)
         for patch in stroke.patches {
             let key = patch.rect.origin, identity = ObjectIdentifier(patch.image)
             guard entry.written[key] != identity else { continue }
-            if writes.place(patch.image, at: patch.rect) { entry.written[key] = identity }
+            if writes.place(patch.image, at: patch.rect) {
+                entry.written[key] = identity
+                entry.cpuPatchUploadBytes += patch.image.width * patch.image.height * (stroke.isMask ? 1 : 4)
+            }
         }
         writes.commit()
         return entry.image

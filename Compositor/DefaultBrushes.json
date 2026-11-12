@@ -287,6 +287,113 @@
       "diameter": 14,
       "usesRoundApproximation": false,
       "opacity": 1
+    },
+    {
+      "smoothing": 0,
+      "pressureSize": true,
+      "pressureOpacity": true,
+      "roundDynamics": {
+        "count": 1,
+        "roundness": 1,
+        "pressureCurve": {
+          "points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 0.5,
+              "y": 0.75
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ]
+        },
+        "flow": 0.8,
+        "properties": {
+          "maximumSize": 2000,
+          "orientToScreen": true,
+          "minimumSize": 1,
+          "minimumOpacity": 0.5564036051432292,
+          "maximumOpacity": 1,
+          "smudgePull": 1
+        },
+        "strokePath": {
+          "linearJitter": 0.008,
+          "falloff": 0,
+          "lateralJitter": 0.035,
+          "linearInput": "None",
+          "speedReference": 1000,
+          "spacingInput": "None",
+          "lateralInput": "None",
+          "speedSpacing": 0,
+          "spacingJitter": 0.04
+        },
+        "scatter": 0,
+        "taperEnd": 0,
+        "angle": 0,
+        "taperStart": 0,
+        "rendering": {
+          "wetEdges": 0.32,
+          "edgeBlend": "Multiply",
+          "secondaryScale": 1,
+          "secondary": "Soft Round",
+          "strokeBlend": "Normal",
+          "mode": "Uniform Glaze",
+          "burntEdges": 1,
+          "luminanceBlending": false,
+          "classicDualNormal": false,
+          "backruns": 0.24
+        },
+        "shape": {
+          "countJitter": 0,
+          "relativeBarrel": false,
+          "filtering": "Improved",
+          "flipY": false,
+          "horizontalJitter": 0,
+          "generator": "Soft Round",
+          "verticalInput": "None",
+          "source": "Generated Substitute",
+          "randomized": false,
+          "mask": "White paints",
+          "rotationResponse": 0.0015767415364582593,
+          "tiltRoundness": 0,
+          "verticalJitter": 0,
+          "inputStyle": "Pen Azimuth",
+          "horizontalInput": "None",
+          "pressureRoundness": 1,
+          "flipX": false
+        },
+        "spacing": 0.12,
+        "grain": {
+          "source": "Native Texture",
+          "mode": "Texturized",
+          "scale": 36,
+          "depth": 0.34,
+          "brightness": 0,
+          "contrast": 0.12,
+          "movement": 0.55,
+          "zoom": 0.12,
+          "depthJitter": 0,
+          "offsetJitter": 0,
+          "rotation": 0,
+          "blend": "Multiply",
+          "filtering": "Improved"
+        }
+      },
+      "hardness": 0.52,
+      "usesShapeApproximation": false,
+      "name": "Watercolor Wash",
+      "id": "7C2516B3-7968-4B1E-A8F4-7C7A04A8EA10",
+      "diameter": 180,
+      "usesRoundApproximation": false,
+      "opacity": 1
     }
   ],
   "version": 1,

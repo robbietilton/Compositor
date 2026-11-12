@@ -4,17 +4,30 @@ import Testing
 
 @MainActor
 struct BrushLibraryTests {
-    @Test func bundledStarterBrushesArePortableEditableAndOnlySeedNewCollections() throws {
+    @Test func bundledStarterBrushesArePortableAndStoredSeparatelyFromUserPresets() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("brushes.json")
         let library = BrushLibrary(url: url)
         #expect(library.error == nil)
-        #expect(library.brushes.map(\.name) == ["Flat Marker", "Default Painting Brush", "Pencil"])
+        #expect(library.brushes.map(\.name) == ["Flat Marker", "Default Painting Brush", "Pencil", "Watercolor Wash"])
         #expect(library.current.name == "Default Painting Brush")
         #expect(library.brushes.allSatisfy { $0.isValid && $0.isRenderable && $0.source == nil
             && $0.roundDynamics.shapeSettings.customTip == nil && $0.roundDynamics.grain?.custom == nil })
         #expect(library.brushes[0].roundDynamics.shapeSettings.generatedKind == .ink)
+        let watercolor = try #require(library.brushes.first { $0.name == "Watercolor Wash" })
+        #expect(watercolor.roundDynamics.shapeSettings.generatedKind == .softRound)
+        #expect(watercolor.roundDynamics.grain?.mode == .texturized)
+        #expect(watercolor.roundDynamics.grain?.filtering == .improved)
+        #expect(watercolor.roundDynamics.renderingSettings.mode == .uniformGlaze)
+        #expect(watercolor.roundDynamics.renderingSettings.wetEdges == 0.32)
+        #expect(watercolor.roundDynamics.renderingSettings.burntEdges > 0)
+        #expect(watercolor.roundDynamics.flow == 0.8)
+        #expect(watercolor.roundDynamics.renderingSettings.backruns == 0.24)
+        #expect(watercolor.roundDynamics.path.lateralJitter == 0.035 && watercolor.roundDynamics.path.spacingJitter == 0.04)
+        #expect(watercolor.roundDynamics.renderingSettings.burntEdges == 1)
+        #expect(watercolor.roundDynamics.grain?.scale == 36 && watercolor.roundDynamics.grain?.depth == 0.34)
+        #expect(watercolor.applying(to: BrushSettings()).usesStampDynamics)
         for brush in library.brushes {
             let session = EditorSession(); session.createDocument(width: 160, height: 80); session.addBlankLayer(); session.selectTool(.brush)
             try session.activateBrushPreset(brush, library: library)
@@ -26,8 +39,86 @@ struct BrushLibraryTests {
         try library.save(edited)
         try library.delete([library.brushes[2].id])
         let reopened = BrushLibrary(url: url)
-        #expect(reopened.error == nil && reopened.brushes.count == 2)
+        #expect(reopened.error == nil && reopened.brushes.count == 3)
         #expect(reopened.brushes[0].name == "My Marker" && !reopened.brushes.contains { $0.name == "Pencil" })
+        #expect(reopened.brushes.contains { $0.name == "Watercolor Wash" })
+    }
+
+    @Test func watercolorWashProducesASettledTexturedEdgeAgainstPaper() throws {
+        let library = BrushLibrary(url: nil)
+        let preset = try #require(library.brushes.first { $0.name == "Watercolor Wash" })
+        func paint(flow: CGFloat, burntEdges: CGFloat, backruns: CGFloat) throws -> CGImage {
+            var brush = preset.applying(to: BrushSettings(red: 0.12, green: 0.34, blue: 0.55))
+            brush.roundDynamics.flow = flow
+            var rendering = brush.roundDynamics.renderingSettings
+            rendering.burntEdges = burntEdges
+            rendering.backruns = backruns
+            brush.roundDynamics.rendering = rendering
+            let size = CGSize(width: 512, height: 512)
+            let layer = ImageLayer(name: "Paper", blankSize: size)
+            let stroke = try BrushStroke(layer: layer, mask: false, settings: brush, canvas: size, seed: 4004)
+            for index in 0...40 {
+                let t = CGFloat(index) / 40
+                try stroke.append(CGPoint(x: 56 + 400 * t, y: 256 + sin(t * .pi * 2) * 4),
+                    input: BrushInput(pressure: 0.78, timestamp: Double(index) / 60))
+            }
+            try stroke.flush()
+            print("WATERCOLOR STROKE flow=\(flow) burnt=\(burntEdges) diameter=\(stroke.settings.diameter) patches=\(stroke.patches.count) edgeCPU=\(stroke.edgePoolingMilliseconds)ms")
+            let paper = try BrushRaster.context(width: 512, height: 512, mask: false)
+            paper.setFillColor(NSColor.white.cgColor); paper.fill(CGRect(origin: .zero, size: size))
+            LayerRenderer.drawBrushPreview(layer.asset?.image, transform: stroke.paintTransform,
+                center: stroke.paintTransform.center, scale: 1, opacity: 1, blendMode: .normal,
+                mask: nil, patches: stroke.patches, pixelWidth: stroke.width, pixelHeight: stroke.height,
+                paintingMask: false, in: paper)
+            return try #require(paper.makeImage())
+        }
+        let wash = try paint(flow: preset.roundDynamics.flow, burntEdges: preset.roundDynamics.renderingSettings.burntEdges,
+            backruns: preset.roundDynamics.renderingSettings.backruns)
+        let plain = try paint(flow: preset.roundDynamics.flow, burntEdges: 0, backruns: preset.roundDynamics.renderingSettings.backruns)
+        let noFlow = try paint(flow: preset.roundDynamics.flow, burntEdges: 0, backruns: 0)
+        let flowData = try #require(plain.dataProvider?.data) as Data
+        let noFlowData = try #require(noFlow.dataProvider?.data) as Data
+        let flowDifference = zip(flowData, noFlowData).reduce(into: 0) { if abs(Int($1.0) - Int($1.1)) > 8 { $0 += 1 } }
+        print("WATERCOLOR FLOW changedChannels=\(flowDifference)")
+        #expect(flowDifference > 20, "Settled flow should move a pale wash beyond the generated stroke silhouette")
+        let washData = try #require(wash.dataProvider?.data) as Data
+        let plainData = try #require(plain.dataProvider?.data) as Data
+        let difference = zip(washData, plainData).reduce(into: 0) { if abs(Int($1.0) - Int($1.1)) > 8 { $0 += 1 } }
+        let maxDifference = zip(washData, plainData).reduce(into: 0) { $0 = max($0, abs(Int($1.0) - Int($1.1))) }
+        print("WATERCOLOR PRESET diameter=\(preset.diameter) hardness=\(preset.hardness) flow=\(preset.roundDynamics.flow) burnt=\(preset.roundDynamics.renderingSettings.burntEdges) changedChannels=\(difference)")
+        print("WATERCOLOR PRESET maxChannelDifference=\(maxDifference)")
+        #expect(difference > 20, "The settled edge must visibly darken the prototype-style paper wash")
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: plain).representation(using: .png, properties: [:])),
+            named: "watercolor-wash-no-pooled-edge.png")
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: noFlow).representation(using: .png, properties: [:])),
+            named: "watercolor-wash-no-flow.png")
+        Attachment.record(try #require(NSBitmapImageRep(cgImage: wash).representation(using: .png, properties: [:])),
+            named: "watercolor-wash-settled-edge.png")
+    }
+
+    @Test func legacyCollectionKeepsUserBrushesAndLoadsNewBundledPresets() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("brushes.json")
+        let legacy = BrushPreset(name: "My Saved Brush")
+        let collection: [String: Any] = [
+            "version": 1,
+            "brushes": [["id": legacy.id.uuidString, "name": legacy.name]],
+            "selectedID": legacy.id.uuidString
+        ]
+        try JSONSerialization.data(withJSONObject: collection).write(to: url)
+
+        let library = BrushLibrary(url: url)
+        #expect(library.error == nil)
+        #expect(library.current.name == "My Saved Brush")
+        #expect(library.brushes.contains { $0.name == "Watercolor Wash" })
+        #expect(!library.brushes.contains { $0.name == "Pencil" }, "Deleted legacy bundled presets stay hidden during migration")
+        try library.save(library.current)
+        let reopened = BrushLibrary(url: url)
+        #expect(reopened.error == nil && reopened.current.name == "My Saved Brush")
+        #expect(reopened.brushes.contains { $0.name == "Watercolor Wash" })
+        #expect(!reopened.brushes.contains { $0.name == "Pencil" })
     }
 
     @Test func presetsRoundTripWithoutChangingToolContextAndProtectUnknownData() throws {
@@ -80,6 +171,7 @@ struct BrushLibraryTests {
         let id = UUID()
         try Data("{\"version\":1,\"brushes\":[{\"id\":\"\(id)\",\"name\":\"Legacy\"}]}".utf8).write(to: url)
         let library = BrushLibrary(url: url)
+        #expect(library.error == nil)
         let defaults = BrushSettings()
         #expect(library.current.id == id && library.current.diameter == defaults.diameter)
         #expect(library.current.hardness == defaults.hardness && library.current.opacity == defaults.opacity)
@@ -182,11 +274,11 @@ struct BrushLibraryTests {
         #expect(session.selectedBrushPresetID == active)
         #expect(!BrushLibrary(url: url).brushes.contains { $0.id == imported.id || $0.id == second.id })
         #expect(try library.sourceData(for: imported.source!) == original)
-        try session.deleteBrushPresets([active], library: library)
+        let bundledIDs = Set(library.brushes.filter { $0.source == nil }.map(\.id))
+        try session.deleteBrushPresets(bundledIDs, library: library)
         #expect(session.selectedBrushPresetID != active)
         #expect(session.selectedBrushPresetID == library.current.id)
         #expect(session.brushSettings.diameter == library.current.diameter)
-        try session.deleteBrushPresets([library.current.id], library: library)
         let reopened = BrushLibrary(url: url)
         #expect(reopened.error == nil && reopened.brushes.count == 1)
         #expect(reopened.current.source == nil && reopened.current.id == session.selectedBrushPresetID)

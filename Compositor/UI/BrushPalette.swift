@@ -569,6 +569,9 @@ struct BrushEditorSheet: View {
                     .font(.caption).foregroundStyle(.secondary)
                 slider("Wet Edges", value: renderingValue(\.wetEdges), range: 0...1, unit: "%", factor: 100)
                 slider("Burnt Edges", value: renderingValue(\.burntEdges), range: 0...1, unit: "%", factor: 100)
+                slider("Backruns", value: renderingValue(\.backruns), range: 0...1, unit: "%", factor: 100)
+                Text("Adds settled watercolor blooms and pale blooms with pooled edges. Grain and stroke buildup shape the final result.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Edge Blend Mode", selection: renderingValue(\.edgeBlend)) {
                     ForEach(LayerBlendMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }.disabled(brush.roundDynamics.renderingSettings.burntEdges == 0)
@@ -859,7 +862,7 @@ struct BrushEditorSheet: View {
     private var planned: [String: [String]] { [
         "Stroke Path": ["Spacing", "Spacing Jitter", "Lateral Jitter", "Linear Jitter", "Falloff", "Speed Spacing"],
         "Grain": ["Custom Grain Source", "Moving Grain", "Texturized Grain", "Movement", "Scale", "Zoom", "Rotation", "Depth", "Depth Jitter", "Offset Jitter", "Blend Mode", "Brightness", "Contrast", "Filtering", "Source Tiling"],
-        "Rendering": ["Light Glaze", "Uniform Glaze", "Intense Glaze", "Heavy Glaze", "Uniform Blending", "Intense Blending", "Flow", "Wet Edges", "Burnt Edges", "Edge Blend Mode", "Stroke Blend Mode", "Luminance Blending", "Alpha Threshold", "Classic Dual-Normal"],
+        "Rendering": ["Light Glaze", "Uniform Glaze", "Intense Glaze", "Heavy Glaze", "Uniform Blending", "Intense Blending", "Flow", "Wet Edges", "Burnt Edges", "Backruns", "Edge Blend Mode", "Stroke Blend Mode", "Luminance Blending", "Alpha Threshold", "Classic Dual-Normal"],
         "Wet Mix": ["Dilution", "Charge", "Attack", "Pull", "Grade", "Blur", "Blur Jitter", "Wetness Jitter"],
         "Dynamics": ["Speed Size", "Speed Opacity", "Speed Spacing", "Size Jitter", "Opacity Jitter"],
         "Dual Brush": ["Primary Component", "Secondary Component", "Combination Settings"]
