@@ -2292,7 +2292,8 @@ final class CanvasView: NSView {
         guard transformDrag == nil, cropDrag == nil, !guideDragging, session.brushStroke == nil, session.warpStroke == nil else { return }
         guard session.document != nil else { return }
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.option) {
-            session.zoom(to: session.viewport.zoom * exp(-event.scrollingDeltaY * 0.015),
+            session.zoom(to: session.viewport.zoom * Self.wheelZoomFactor(deltaY: event.scrollingDeltaY,
+                                                                         inverted: event.isDirectionInvertedFromDevice),
                          anchor: convert(event.locationInWindow, from: nil))
         } else {
             let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 12
@@ -2300,6 +2301,13 @@ final class CanvasView: NSView {
                                                   height: event.scrollingDeltaY * multiplier))
             redrawRulers()
         }
+    }
+    /// How much an Option- or Command-scroll zooms: in as the wheel turns away from you, out as it turns toward you, as in
+    /// Photoshop and every other editor, whichever way macOS's natural scrolling is set. That setting flips the deltas,
+    /// so they're turned back to the way the wheel or fingers actually moved; read as they came, the zoom went backwards
+    /// for anyone with natural scrolling off.
+    static func wheelZoomFactor(deltaY: CGFloat, inverted: Bool) -> CGFloat {
+        exp((inverted ? -deltaY : deltaY) * 0.015)
     }
     override func magnify(with event: NSEvent) {
         guard transformDrag == nil, cropDrag == nil, !guideDragging, session.brushStroke == nil, session.warpStroke == nil else { return }
