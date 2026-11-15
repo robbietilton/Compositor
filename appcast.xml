@@ -3,15 +3,16 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.6</title>
-      <pubDate>Sun, 08 Nov 2026 01:27:10 +0000</pubDate>
-      <sparkle:version>65</sparkle:version>
-      <sparkle:shortVersionString>1.6.6</sparkle:shortVersionString>
+      <title>Version 1.6.7</title>
+      <pubDate>Sun, 15 Nov 2026 05:18:20 +0000</pubDate>
+      <sparkle:version>66</sparkle:version>
+      <sparkle:shortVersionString>1.6.7</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.6</link>
-      <changes><![CDATA[Opening a PNG or other image names the canvas after the file, and Export and Save start with its name and folder
-Export As remembers the format you last used and opens with ⌥⇧⌘S, Photoshop's familiar shortcut]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.6/Compositor.dmg" sparkle:edSignature="bdO+t+SenkeeembufneooQQ26xspE4Sg+jnYyiSaIAJ7TtZJiHJ4mGtv2f6yHJ7ipJISWW4sX4pogpXGHS3QDw==" length="8867874" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.7</link>
+      <changes><![CDATA[Turn off Anti-alias on the Brush for hard pixel edges, like a pencil, to paint or erase
+The Brush bar no longer repeats the foreground color, which stays in the tool rail
+Fixed Option-scroll zoom going the wrong way with natural scrolling turned off]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.7/Compositor.dmg" sparkle:edSignature="ltjAXbXIk9QsFS+PCBpYLnqOAAOH0RhJe90m950tVHX9aBEXYImcBtes6po0vrnU87CryRsCSlAXpwYLTLM/BA==" length="8867141" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
