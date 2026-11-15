@@ -1,0 +1,7 @@
+4K Debug image-tip timing in Xcode, 2400 px path, 12 updates, 25% spacing, seeded 2-count rotated asymmetric image.
+diameter=40.0 filtering=None median=3.9769411087036133ms max=6.9599151611328125ms flush=2.351999282836914ms tiles=11 coreTileBytesEstimate=6488064
+diameter=40.0 filtering=Classic median=4.944086074829102ms max=5.671977996826172ms flush=2.9549598693847656ms tiles=11 coreTileBytesEstimate=6488064
+diameter=40.0 filtering=Improved median=13.693928718566895ms max=14.248967170715332ms flush=7.052898406982422ms tiles=11 coreTileBytesEstimate=6488064
+diameter=800.0 filtering=None median=50.006985664367676ms max=55.1680326461792ms flush=31.42404556274414ms tiles=90 coreTileBytesEstimate=53084160
+diameter=800.0 filtering=Classic median=66.54000282287598ms max=69.30291652679443ms flush=40.544986724853516ms tiles=90 coreTileBytesEstimate=53084160
+diameter=800.0 filtering=Improved median=234.1020107269287ms max=346.1930751800537ms flush=126.87098979949951ms tiles=90 coreTileBytesEstimate=53084160

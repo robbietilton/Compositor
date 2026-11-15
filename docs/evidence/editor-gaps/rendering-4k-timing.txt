@@ -1,0 +1,7 @@
+4K Debug Rendering: 2400 px path, 12 updates, 25% spacing. Native CPU advanced path.
+diameter=40.0 mode=Uniform Glaze grain=false median=10.930061340332031ms max=11.005997657775879ms flush=6.734013557434082ms tiles=11
+diameter=40.0 mode=Intense Blending grain=false median=12.040972709655762ms max=12.393951416015625ms flush=7.067084312438965ms tiles=11
+diameter=40.0 mode=Intense Blending grain=true median=14.787077903747559ms max=15.075922012329102ms flush=8.545994758605957ms tiles=11
+diameter=800.0 mode=Uniform Glaze grain=false median=134.22107696533203ms max=144.95301246643066ms flush=83.39297771453857ms tiles=56
+diameter=800.0 mode=Intense Blending grain=false median=147.99606800079346ms max=157.6399803161621ms flush=89.32292461395264ms tiles=56
+diameter=800.0 mode=Intense Blending grain=true median=198.6149549484253ms max=213.78099918365479ms flush=115.65196514129639ms tiles=56

@@ -1,0 +1,22 @@
+Native pen responses · November 12, 2026
+
+Debug macOS build: passed.
+Final selected regression run: /tmp/compositor-pen-qualified.xcresult
+136 tests passed, 0 failed.
+Command:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Compositor.xcodeproj -scheme Compositor -destination platform=macOS test -resultBundlePath /tmp/compositor-pen-qualified.xcresult "-only-testing:CompositorTests/BrushDynamicsTests" "-skip-testing:CompositorTests/BrushDynamicsTests/presetsRoundTripAndRejectInvalidDynamicsAtomically()" "-skip-testing:CompositorTests/BrushDynamicsTests/transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen()" "-only-testing:CompositorTests/BrushLibraryTests" "-only-testing:CompositorTests/BrushRecoveryTests" "-only-testing:CompositorTests/PenPressureTests" "-only-testing:CompositorTests/BrushPaletteTests" "-only-testing:CompositorTests/BrushTests" "-only-testing:CompositorTests/BrushIntersectionTests" "-only-testing:CompositorTests/ProcreateBrushImportTests" "-skip-testing:CompositorTests/ProcreateBrushImportTests/suppliedProcreateExportsWhenAvailable()" "-only-testing:CompositorTests/CloneStampTests" "-skip-testing:CompositorTests/CloneStampTests/cloneStampKeepsItsOwnSoftBrushTip()" "-only-testing:CompositorTests/BlurBrushTests"
+
+Explicit exclusions: three previously independently reproduced baseline failures, and optional suppliedProcreateExportsWhenAvailable external fixtures.
+BrushDynamicsTests.presetsRoundTripAndRejectInvalidDynamicsAtomically: Cocoa validation 1570.
+BrushDynamicsTests.transformedTipsAndSelectedMasksPreservePixelsUndoAndReopen: mask alpha expectation.
+CloneStampTests.cloneStampKeepsItsOwnSoftBrushTip: default hardness expected 1, actual 0.
+
+Initial broader run /tmp/compositor-pen-regressions.xcresult: 135 passed, 4 failed. Three are the known baseline failures above; the new missing-channel pixel test compared continuous legacy vs stamped rendering. Its fixture now fixes spacing to compare the same path, with separate nil/default legacy exact-pixel coverage. All three new tests pass in final run. No full-suite green claim.
+
+Native captures exported from the final xcresult and visually inspected. Editor captures are AppKit-hosted test windows, 850px wide, within existing panel bounds. Device 71/capabilities shown are synthetic test state, not physical tablet evidence. Expanded curve editing/VoiceOver and actual owner pen feel are not live-qualified.
+
+Native response image rows, top down: baseline, Pressure Flow, Pressure Bleed, Tilt Size, Tilt Opacity, Tilt Flow, Tilt Bleed, Barrel Size, Barrel Opacity, Barrel Flow, Barrel Bleed, Tilt Gradation. Same stamped brush, 100px diameter, hardness0.8; present synthetic pressure0.5/tilt(0.5,0)/rotation0. Transparent PNG; opacity/flow differences appear over a background.
+
+Source visual equivalence and physical hardware remain unqualified. PTH-851/K operator gestures/rotation-capable pen identification and Sidecar/Pencil session are required in tablet task task-fd8b0747-a907-4de7-a613-fca669387254. No input-to-display latency or release performance claim.
+
+git diff --check: passed. No dependencies, source-equation mappings, original asset modifications or project-format change.

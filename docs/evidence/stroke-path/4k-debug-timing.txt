@@ -1,0 +1,7 @@
+4K Debug timing in Xcode; CPU discrete path versus unchanged automatic renderer. Same 2400 px path, 12 updates.
+diameter=40.0 mode=0 updateMedian=1.0489225387573242ms max=2.6990175247192383ms flush=0.6160736083984375ms tiles=11 coreTileBytesEstimate=2883584
+diameter=40.0 mode=1 updateMedian=1.56402587890625ms max=4.032015800476074ms flush=0.9540319442749023ms tiles=11 coreTileBytesEstimate=9371648
+diameter=40.0 mode=2 updateMedian=7.69197940826416ms max=10.310053825378418ms flush=3.8639307022094727ms tiles=11 coreTileBytesEstimate=9371648
+diameter=800.0 mode=0 updateMedian=5.499005317687988ms max=10.957002639770508ms flush=8.84699821472168ms tiles=52 coreTileBytesEstimate=13631488
+diameter=800.0 mode=1 updateMedian=14.81008529663086ms max=23.78106117248535ms flush=6.33692741394043ms tiles=51 coreTileBytesEstimate=43450368
+diameter=800.0 mode=2 updateMedian=101.39298439025879ms max=113.45505714416504ms flush=60.75394153594971ms tiles=69 coreTileBytesEstimate=58785792

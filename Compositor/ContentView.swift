@@ -251,6 +251,7 @@ struct ContentView: View {
 
     var body: some View {
         editorChrome
+        .modifier(BrushPalettePresenter(session: session))
         .onChange(of: session.levels == nil) { _, closed in
             if closed { levelsPanel.close() }
             else {

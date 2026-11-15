@@ -53,7 +53,7 @@ final class WarpStroke {
         self.mode = mode
         diameter = max(2, settings.diameter)
         hardness = min(0.98, max(0, settings.hardness))
-        strength = min(1, max(0.01, settings.opacity))
+        strength = min(1, max(0.01, settings.opacity)) * (mode == .smudge ? settings.roundDynamics.properties?.smudgePull ?? 1 : 1)
         width = Int(canvas.width); height = Int(canvas.height)
         var gpu: MetalWarp?
         if useGPU, let deep, MetalWarp.pipelines != nil {
@@ -246,6 +246,7 @@ extension EditorSession {
             settings.diameter = warp.diameter + 4
             settings.hardness = 1
             settings.opacity = 1
+            settings.roundDynamics = RoundBrushDynamics(); settings.shapeTip = nil
             let stroke = try makeRasterEdit(for: current, settings: settings)
             stroke.clone = (result, CGRect(x: 0, y: 0, width: result.width, height: result.height), false)
             // A 16-bit working copy goes into the layer's 16-bit pixels.

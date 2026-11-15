@@ -1,0 +1,401 @@
+{
+  "brushes": [
+    {
+      "pressureSize": false,
+      "opacity": 1,
+      "id": "686B9CF6-D0D3-4CBF-BECA-2737E8DD7D86",
+      "usesShapeApproximation": false,
+      "diameter": 34,
+      "name": "Flat Marker",
+      "hardness": 1,
+      "pressureOpacity": true,
+      "smoothing": 0,
+      "roundDynamics": {
+        "strokePath": {
+          "speedSpacing": 0,
+          "falloff": 0,
+          "linearJitter": 0,
+          "lateralInput": "None",
+          "spacingJitter": 0,
+          "speedReference": 1000,
+          "linearInput": "None",
+          "lateralJitter": 0,
+          "spacingInput": "None"
+        },
+        "flow": 0.16961263020833334,
+        "shape": {
+          "countJitter": 0,
+          "relativeBarrel": true,
+          "filtering": "Improved",
+          "flipY": false,
+          "horizontalJitter": 0,
+          "verticalInput": "Pressure",
+          "source": "Generated Substitute",
+          "randomized": false,
+          "rotationResponse": -0.232147216796875,
+          "mask": "White paints",
+          "tiltRoundness": 0.14322916666666666,
+          "inputStyle": "Pen Azimuth",
+          "verticalJitter": 0,
+          "horizontalInput": "Pressure",
+          "pressureRoundness": 0.15052083333333333,
+          "flipX": false,
+          "generator": "Ink Dab"
+        },
+        "pressureTaper": {
+          "linked": true,
+          "pressure": 0.5333333333333333,
+          "size": 1,
+          "opacity": 0,
+          "tip": 0.5,
+          "end": 0,
+          "start": 0
+        },
+        "roundness": 0.3166927083333333,
+        "taperEnd": 0,
+        "pressureCurve": {
+          "points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ]
+        },
+        "count": 1,
+        "properties": {
+          "minimumOpacity": 0,
+          "smudgePull": 0.5661458333333333,
+          "maximumSize": 669.783088235294,
+          "orientToScreen": true,
+          "minimumSize": 37.615086659663866,
+          "maximumOpacity": 1
+        },
+        "scatter": 0,
+        "taperStart": 0,
+        "spacing": 0.09791666666666667,
+        "rendering": {
+          "luminanceBlending": false,
+          "strokeBlend": "Multiply",
+          "secondaryScale": 1,
+          "secondary": "Soft Round",
+          "classicDualNormal": false,
+          "burntEdges": 0,
+          "edgeBlend": "Multiply",
+          "wetEdges": 1,
+          "mode": "Intense Glaze"
+        },
+        "angle": 0.09218850393537181
+      },
+      "usesRoundApproximation": false
+    },
+    {
+      "smoothing": 0,
+      "pressureSize": false,
+      "pressureOpacity": true,
+      "roundDynamics": {
+        "count": 1,
+        "roundness": 1,
+        "pressureCurve": {
+          "points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 0.5,
+              "y": 0.75
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ]
+        },
+        "flow": 0.61812744140625,
+        "properties": {
+          "maximumSize": 2000,
+          "orientToScreen": true,
+          "minimumSize": 1,
+          "minimumOpacity": 0.5564036051432292,
+          "maximumOpacity": 1,
+          "smudgePull": 1
+        },
+        "strokePath": {
+          "linearJitter": 0,
+          "falloff": 0,
+          "lateralJitter": 0,
+          "linearInput": "None",
+          "speedReference": 1000,
+          "spacingInput": "None",
+          "lateralInput": "None",
+          "speedSpacing": 0,
+          "spacingJitter": 0
+        },
+        "scatter": 0,
+        "taperEnd": 0,
+        "angle": 0,
+        "taperStart": 0,
+        "rendering": {
+          "wetEdges": 0,
+          "edgeBlend": "Multiply",
+          "secondaryScale": 1,
+          "secondary": "Soft Round",
+          "strokeBlend": "Normal",
+          "mode": "Intense Glaze",
+          "burntEdges": 0,
+          "luminanceBlending": false,
+          "classicDualNormal": false
+        },
+        "shape": {
+          "countJitter": 0,
+          "relativeBarrel": false,
+          "filtering": "Improved",
+          "flipY": false,
+          "horizontalJitter": 0,
+          "generator": "Dry Bristles",
+          "verticalInput": "None",
+          "source": "Procedural",
+          "randomized": true,
+          "mask": "White paints",
+          "rotationResponse": 0.0015767415364582593,
+          "tiltRoundness": 0,
+          "verticalJitter": 0,
+          "inputStyle": "Pen Azimuth",
+          "horizontalInput": "None",
+          "pressureRoundness": 1,
+          "flipX": false
+        },
+        "spacing": 0.04127909342447917
+      },
+      "hardness": 0,
+      "usesShapeApproximation": false,
+      "name": "Default Painting Brush",
+      "id": "33506A33-1B6A-47A2-A275-33CDE39C0E37",
+      "diameter": 16,
+      "usesRoundApproximation": false,
+      "opacity": 1
+    },
+    {
+      "smoothing": 0,
+      "pressureSize": false,
+      "pressureOpacity": true,
+      "roundDynamics": {
+        "properties": {
+          "maximumSize": 280.2720588235294,
+          "orientToScreen": true,
+          "minimumSize": 1,
+          "minimumOpacity": 0.39010416666666664,
+          "maximumOpacity": 1,
+          "smudgePull": 0.43439127604166666
+        },
+        "angle": -1.1525558414084505,
+        "taperEnd": 0,
+        "roundness": 0.37656249999999997,
+        "grain": {
+          "mode": "Moving",
+          "scale": 38.82902770483193,
+          "contrast": 0,
+          "depth": 0.4203125,
+          "offsetJitter": 0,
+          "rotation": 0,
+          "movement": 0.6901041666666666,
+          "brightness": 0,
+          "depthJitter": 0,
+          "source": "Native Texture",
+          "blend": "Subtract",
+          "filtering": "Classic",
+          "zoom": 0
+        },
+        "count": 1,
+        "strokePath": {
+          "linearJitter": 0,
+          "falloff": 0,
+          "lateralJitter": 0,
+          "linearInput": "None",
+          "speedReference": 13432.88322368421,
+          "spacingInput": "None",
+          "lateralInput": "None",
+          "speedSpacing": 0.678662109375,
+          "spacingJitter": 0
+        },
+        "flow": 1,
+        "scatter": 0,
+        "shape": {
+          "horizontalInput": "None",
+          "filtering": "Classic",
+          "verticalJitter": 0,
+          "tiltRoundness": 0,
+          "rotationResponse": 0.3208333333333333,
+          "pressureRoundness": 0,
+          "randomized": false,
+          "inputStyle": "Pen Azimuth",
+          "flipX": false,
+          "relativeBarrel": false,
+          "mask": "White paints",
+          "source": "Generated Substitute",
+          "verticalInput": "None",
+          "countJitter": 0,
+          "generator": "Speckle",
+          "horizontalJitter": 0,
+          "flipY": false
+        },
+        "taperStart": 0,
+        "rendering": {
+          "burntEdges": 0,
+          "edgeBlend": "Normal",
+          "mode": "Standard",
+          "classicDualNormal": false,
+          "secondaryScale": 1,
+          "strokeBlend": "Normal",
+          "wetEdges": 0,
+          "luminanceBlending": false,
+          "secondary": "Soft Round"
+        },
+        "pressureCurve": {
+          "points": [
+            {
+              "y": 0.2741586538461539,
+              "x": 0
+            },
+            {
+              "y": 0.7453125,
+              "x": 0.234375
+            },
+            {
+              "y": 0.9135817307692308,
+              "x": 0.5431985294117647
+            },
+            {
+              "y": 1,
+              "x": 1
+            }
+          ]
+        }
+      },
+      "hardness": 0,
+      "usesShapeApproximation": false,
+      "id": "4AB9F776-02D1-4188-BADB-6F8EA6A76C30",
+      "name": "Pencil",
+      "diameter": 14,
+      "usesRoundApproximation": false,
+      "opacity": 1
+    },
+    {
+      "smoothing": 0,
+      "pressureSize": true,
+      "pressureOpacity": true,
+      "roundDynamics": {
+        "count": 1,
+        "roundness": 1,
+        "pressureCurve": {
+          "points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.25,
+              "y": 0.5
+            },
+            {
+              "x": 0.5,
+              "y": 0.75
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ]
+        },
+        "flow": 0.8,
+        "properties": {
+          "maximumSize": 2000,
+          "orientToScreen": true,
+          "minimumSize": 1,
+          "minimumOpacity": 0.5564036051432292,
+          "maximumOpacity": 1,
+          "smudgePull": 1
+        },
+        "strokePath": {
+          "linearJitter": 0.008,
+          "falloff": 0,
+          "lateralJitter": 0.035,
+          "linearInput": "None",
+          "speedReference": 1000,
+          "spacingInput": "None",
+          "lateralInput": "None",
+          "speedSpacing": 0,
+          "spacingJitter": 0.04
+        },
+        "scatter": 0,
+        "taperEnd": 0,
+        "angle": 0,
+        "taperStart": 0,
+        "rendering": {
+          "wetEdges": 0.32,
+          "edgeBlend": "Multiply",
+          "secondaryScale": 1,
+          "secondary": "Soft Round",
+          "strokeBlend": "Normal",
+          "mode": "Uniform Glaze",
+          "burntEdges": 1,
+          "luminanceBlending": false,
+          "classicDualNormal": false,
+          "backruns": 0.24
+        },
+        "shape": {
+          "countJitter": 0,
+          "relativeBarrel": false,
+          "filtering": "Improved",
+          "flipY": false,
+          "horizontalJitter": 0,
+          "generator": "Soft Round",
+          "verticalInput": "None",
+          "source": "Generated Substitute",
+          "randomized": false,
+          "mask": "White paints",
+          "rotationResponse": 0.0015767415364582593,
+          "tiltRoundness": 0,
+          "verticalJitter": 0,
+          "inputStyle": "Pen Azimuth",
+          "horizontalInput": "None",
+          "pressureRoundness": 1,
+          "flipX": false
+        },
+        "spacing": 0.12,
+        "grain": {
+          "source": "Native Texture",
+          "mode": "Texturized",
+          "scale": 36,
+          "depth": 0.34,
+          "brightness": 0,
+          "contrast": 0.12,
+          "movement": 0.55,
+          "zoom": 0.12,
+          "depthJitter": 0,
+          "offsetJitter": 0,
+          "rotation": 0,
+          "blend": "Multiply",
+          "filtering": "Improved"
+        }
+      },
+      "hardness": 0.52,
+      "usesShapeApproximation": false,
+      "name": "Watercolor Wash",
+      "id": "7C2516B3-7968-4B1E-A8F4-7C7A04A8EA10",
+      "diameter": 180,
+      "usesRoundApproximation": false,
+      "opacity": 1
+    }
+  ],
+  "version": 1,
+  "selectedID": "33506A33-1B6A-47A2-A275-33CDE39C0E37"
+}

@@ -356,7 +356,7 @@ nonisolated enum HueSaturationFilter {
         return shifted < 0 ? shifted + 360 : shifted
     }
 
-    private static func toHSL(red: Double, green: Double, blue: Double) -> (Double, Double, Double) {
+    static func toHSL(red: Double, green: Double, blue: Double) -> (Double, Double, Double) {
         let high = max(red, green, blue), low = min(red, green, blue)
         let lightness = (high + low) / 2
         let delta = high - low
@@ -371,7 +371,7 @@ nonisolated enum HueSaturationFilter {
         return (hue, min(1, saturation), lightness)
     }
 
-    private static func toRGB(hue: Double, saturation: Double, lightness: Double)
+    static func toRGB(hue: Double, saturation: Double, lightness: Double)
         -> (red: Double, green: Double, blue: Double) {
         guard saturation > 0 else { return (lightness, lightness, lightness) }
         let chroma = (1 - abs(2 * lightness - 1)) * saturation

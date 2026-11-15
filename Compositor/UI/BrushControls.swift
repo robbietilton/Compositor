@@ -8,6 +8,11 @@ struct BrushControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     if session.tool == .brush {
+                        Button { session.showsBrushPalette.toggle() } label: {
+                            Label("Brushes", systemImage: "paintbrush.pointed")
+                        }
+                        .help("Browse and edit brushes").accessibilityLabel("Browse brushes")
+                        .accessibilityIdentifier("brushPaletteButton")
                         Picker("Mode", selection: $session.brushMode) {
                             ForEach(BrushToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                         }
@@ -50,23 +55,24 @@ struct BrushControls: View {
                             session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                         }
                     }
-                    // A pen's pressure, as Photoshop's buttons beside Size and Opacity: only once a tablet pen has
-                    // been used since the app opened.
-                    if session.tool == .brush, PenInput.shared.seen {
+                    // Pressure mappings can be configured without a pen in range.
+                    if session.tool == .brush {
                         Toggle(isOn: $session.brushSettings.pressureSize) { Image(systemName: "pencil.tip.crop.circle") }
                             .toggleStyle(PenPressureToggleStyle())
                             .help("Pen pressure sets the size: a light touch paints a thinner line")
                             .accessibilityLabel("Pressure for size")
                     }
-                    Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
-                    AppSlider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
-                    TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
-                                                                 set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
-                              format: .number.precision(.fractionLength(0)))
-                    .frame(width: 42).textFieldStyle(.roundedBorder)
-                    .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
-                                change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
-                    .unitSuffix("%")
+                    if session.tool != .brush || session.brushSettings.roundDynamics.shapeSettings.source == .procedural {
+                        Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
+                        AppSlider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
+                        TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
+                                                                     set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
+                                  format: .number.precision(.fractionLength(0)))
+                        .frame(width: 42).textFieldStyle(.roundedBorder)
+                        .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
+                                    change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
+                        .unitSuffix("%")
+                    }
                     Text(session.tool == .blur ? "Strength" : "Opacity")
                         .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
                     AppSlider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
@@ -78,11 +84,22 @@ struct BrushControls: View {
                                 change: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
                     .help("Press 1–9 for 10–90%, 0 for 100%")
                     .unitSuffix("%")
-                    if session.tool == .brush, PenInput.shared.seen {
+                    if session.tool == .brush {
                         Toggle(isOn: $session.brushSettings.pressureOpacity) { Image(systemName: "pencil.tip.crop.circle") }
                             .toggleStyle(PenPressureToggleStyle())
                             .help("Pen pressure sets the opacity: a light touch paints fainter, up to the brush’s Opacity")
                             .accessibilityLabel("Pressure for opacity")
+                    }
+                    if session.tool == .brush {
+                        Text("Flow").scrubbable(sensitivity: 0.01, value: $session.brushSettings.roundDynamics.flow, range: 0...1)
+                        TextField("Flow", value: Binding<Double>(get: { Double(session.brushSettings.roundDynamics.flow * 100) },
+                            set: { if $0.isFinite { session.brushSettings.roundDynamics.flow = CGFloat(min(100, max(0, $0)) / 100) } }),
+                            format: .number.precision(.fractionLength(0)))
+                            .frame(width: 42).textFieldStyle(.roundedBorder)
+                            .arrowSteps(value: { Double(session.brushSettings.roundDynamics.flow * 100) },
+                                change: { session.brushSettings.roundDynamics.flow = CGFloat(min(100, max(0, $0)) / 100) })
+                            .unitSuffix("%")
+                            .help("Paint deposited by each stamp. Lower flow builds gradually; Opacity caps the whole stroke.")
                     }
                     // Blur softens by a radius of its own, apart from how strongly it lays the softening down.
                     if session.tool == .blur, session.blurMode == .blur {
@@ -140,6 +157,10 @@ struct BrushControls: View {
         }
         .padding(.horizontal, 18).toolHeaderBar().releasesFocusOnCommit(session)
         .disabled(session.showsBusy)
+        .onChange(of: session.activeBrushPreset) { _, _ in
+            do { try session.persistActiveBrushSettings() }
+            catch { session.brushError = error.localizedDescription }
+        }
     }
 }
 
