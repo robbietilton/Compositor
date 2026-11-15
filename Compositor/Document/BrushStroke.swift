@@ -28,6 +28,8 @@ nonisolated struct BrushSettings: Sendable {
     /// pressure buttons do. A mouse or trackpad always presses fully.
     var pressureSize = false
     var pressureOpacity = false
+    /// Off for hard, pixel-sharp edges, like a pencil: each pixel is painted fully or not at all.
+    var antialiased = true
 
     /// What a press of `pressure` (0–1) does to the tip: its size as a share of the full diameter, and its strength.
     func dynamics(_ pressure: CGFloat) -> (scale: CGFloat, strength: CGFloat) {
@@ -277,12 +279,12 @@ final class BrushStroke {
         let square = abs(pixelToDocument.b) < 1e-9 && abs(pixelToDocument.c) < 1e-9
             && scaleX > 1e-9 && abs(scaleX - scaleY) < 1e-9
         let gridDiameter = settings.diameter / scaleX
-        gridTip = gpu == nil && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
+        gridTip = gpu == nil && settings.antialiased && square && gridDiameter >= 1 && gridDiameter <= Self.gridTipLimit
             ? try Self.tip(diameter: gridDiameter, hardness: settings.hardness, falloff: falloff) : nil
         // Drawn through the tile transform, the stamp is rendered as finely as the layer's pixels: magnified onto
         // the finer grid of a scaled-down layer, it left blocky dabs that showed once the layer was scaled back up.
         let stampDiameter = settings.diameter / min(1, scaleX, scaleY)
-        stamp = gpu == nil && gridTip == nil && stampDiameter <= Self.stampLimit
+        stamp = gpu == nil && settings.antialiased && gridTip == nil && stampDiameter <= Self.stampLimit
             ? try Self.tip(diameter: stampDiameter, hardness: settings.hardness, falloff: falloff) : nil
     }
 
@@ -732,6 +734,7 @@ final class BrushStroke {
                 context.translateBy(x: -tile.rect.minX, y: -tile.rect.minY)
                 context.concatenate(inverse)
                 context.clip(to: canvas)
+                context.setShouldAntialias(settings.antialiased)
                 context.setBlendMode(settings.hardness >= 1 ? .lighten : .screen)
                 if settings.hardness >= 1, dynamics.strength < 1 {
                     // Lighten with a gray as strong as the press: the stroke builds to the firmest press, never past it.

@@ -58,15 +58,19 @@ struct BrushControls: View {
                             .help("Pen pressure sets the size: a light touch paints a thinner line")
                             .accessibilityLabel("Pressure for size")
                     }
-                    Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
-                    AppSlider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
-                    TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
-                                                                 set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
-                              format: .number.precision(.fractionLength(0)))
-                    .frame(width: 42).textFieldStyle(.roundedBorder)
-                    .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
-                                change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
-                    .unitSuffix("%")
+                    // A pencil is always hard, so Hardness has nothing to do with Anti-alias off.
+                    Group {
+                        Text("Hardness").scrubbable(sensitivity: 0.01, value: $session.brushSettings.hardness, range: 0...1)
+                        AppSlider(value: $session.brushSettings.hardness, in: 0...1).frame(width: 100)
+                        TextField("Hardness", value: Binding<Double>(get: { Double(session.brushSettings.hardness * 100) },
+                                                                     set: { session.brushSettings.hardness = $0.isFinite ? CGFloat(min(1, max(0, $0 / 100))) : 1 }),
+                                  format: .number.precision(.fractionLength(0)))
+                        .frame(width: 42).textFieldStyle(.roundedBorder)
+                        .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
+                                    change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
+                        .unitSuffix("%")
+                    }
+                    .disabled(session.tool == .brush && !session.brushSettings.antialiased)
                     Text(session.tool == .blur ? "Strength" : "Opacity")
                         .scrubbable(sensitivity: 0.01, value: $session.brushSettings.opacity, range: 0.01...1)
                     AppSlider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
@@ -111,23 +115,15 @@ struct BrushControls: View {
                                     change: { session.brushSettings.smoothing = CGFloat(min(100, max(0, $0))) })
                         .help("The brush trails the pointer on a string this long, so a shaky hand still draws a smooth line")
                     }
+                    if session.tool == .brush {
+                        Toggle("Anti-alias", isOn: $session.brushSettings.antialiased)
+                            .help("Smooth edges; turn off for hard pixel edges, like a pencil")
+                    }
                     if session.isMaskSelected {
                         Picker("Paint", selection: $session.maskPaintWhite) {
                             Text("Black · Hide").tag(false)
                             Text("White · Reveal").tag(true)
                         }.frame(width: 180)
-                    } else if session.tool != .cloneStamp, session.tool != .blur {
-                        // Same foreground color and Color Picker as the tool-rail swatch.
-                        HStack(spacing: 6) {
-                            Text("Color")
-                            Button { session.openColorPicker(background: false) } label: {
-                                ColorSwatch(color: session.foregroundColor.swiftUI)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!session.canEditPalette)
-                            .help("Foreground color")
-                            .accessibilityLabel("Foreground color")
-                        }
                     }
                     Spacer(minLength: 0)
                     if session.tool == .cloneStamp, session.cloneSource == nil {

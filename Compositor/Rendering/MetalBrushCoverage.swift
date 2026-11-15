@@ -66,7 +66,7 @@ final class MetalBrushCoverage {
                 geometry: SIMD4(Float(origin.x), Float(origin.y), Float(settings.diameter / 2), Float(settings.hardness)),
                 canvas: SIMD4(Float(canvas.width), Float(canvas.height), Float(max(0.001, min(hypot(mapping.a, mapping.b), hypot(mapping.c, mapping.d)))), Float(max(0.25, settings.diameter * BrushStroke.spacingFraction(settings.hardness)))),
                 counts: SIMD4(UInt32(rect.width), UInt32(rect.height), UInt32(settled.count), UInt32(segments.count)),
-                options: SIMD4(tile.cap == nil ? 0 : 1, 0, 0, 0))
+                options: SIMD4(tile.cap == nil ? 0 : 1, settings.antialiased ? 0 : 1, 0, 0))
             encoder.setBuffer(tile.permanent, offset: 0, index: 0)
             // Without a cap the shader never reads it; any buffer fills the slot.
             encoder.setBuffer(tile.cap ?? tile.permanent, offset: 0, index: 4)
@@ -96,7 +96,7 @@ struct BrushUniforms {
     float4 geometry; // document origin of tile, radius, hardness
     float4 canvas; // width, height, antialias width, deposition spacing
     uint4 counts; // tile width, height, committed segment count, total segment count
-    uint4 options; // whether `cap` holds the firmest press per pixel
+    uint4 options; // whether `cap` holds the firmest press per pixel; whether edges are aliased (a pencil)
 };
 
 // dynamics: the tip's radius at the start and end, and its strength at the start and end (a pen's pressure).
@@ -118,6 +118,8 @@ float segmentDistanceSquared(float2 p, float4 segment, float t) {
 
 float brushCoverage(float distanceSquared, float radius, constant BrushUniforms &u) {
     float distance = sqrt(distanceSquared);
+    // A pencil: a pixel whose center the tip reaches is painted fully, any other not at all.
+    if (u.options.y != 0) return distance < radius ? 1.0f : 0.0f;
     if (u.geometry.w >= 1.0f) {
         return clamp((radius - distance) / u.canvas.z + 0.5f, 0.0f, 1.0f);
     }

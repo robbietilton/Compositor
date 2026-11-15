@@ -81,7 +81,9 @@ extension EditorSession {
             settings.erasing = tool == .brush && brushMode == .erase && !isMaskSelected
             settings.healingMode = spotHealingMode
             // The pressure buttons belong to the Brush; the other brush tools paint at full pressure.
-            if tool != .brush { settings.pressureSize = false; settings.pressureOpacity = false }
+            if tool != .brush { settings.pressureSize = false; settings.pressureOpacity = false; settings.antialiased = true }
+            // A pencil is always hard.
+            if !settings.antialiased { settings.hardness = 1 }
             if isMaskSelected { settings.red = maskPaintWhite ? 1 : 0; settings.green = settings.red; settings.blue = settings.red }
             var stroke = try makeRasterEdit(for: layer, settings: settings, growsMask: tool == .brush)
             if let offset = sourceOffset {
