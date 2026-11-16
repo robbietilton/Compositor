@@ -474,7 +474,9 @@ final class CanvasView: NSView {
             context.rotate(by: turn)
             // Facing right: a gentle arc bulging outward around a center behind it, and at each end a solid head
             // pointing on along the arc, so the curve and its arrows read apart even this small.
-            let radius: CGFloat = 10.5, center = CGPoint(x: -6.5, y: 0), sweep: CGFloat = .pi / 4.4
+            // Three quarters of its first size, so it sits level with the corner resize arrows; the lines keep their weight.
+            let scale: CGFloat = 0.75
+            let radius: CGFloat = 10.5 * scale, center = CGPoint(x: -6.5 * scale, y: 0), sweep: CGFloat = .pi / 4.4
             let arc = CGMutablePath()
             arc.addArc(center: center, radius: radius, startAngle: -sweep, endAngle: sweep, clockwise: false)
             let heads = CGMutablePath()
@@ -484,9 +486,9 @@ final class CanvasView: NSView {
                 let sign: CGFloat = end > 0 ? 1 : -1
                 let along = CGVector(dx: -sin(end) * sign, dy: cos(end) * sign)
                 let side = CGVector(dx: -along.dy, dy: along.dx)
-                heads.move(to: CGPoint(x: base.x + along.dx * 5.5, y: base.y + along.dy * 5.5))
-                heads.addLine(to: CGPoint(x: base.x + side.dx * 3.6, y: base.y + side.dy * 3.6))
-                heads.addLine(to: CGPoint(x: base.x - side.dx * 3.6, y: base.y - side.dy * 3.6))
+                heads.move(to: CGPoint(x: base.x + along.dx * 5.5 * scale, y: base.y + along.dy * 5.5 * scale))
+                heads.addLine(to: CGPoint(x: base.x + side.dx * 3.6 * scale, y: base.y + side.dy * 3.6 * scale))
+                heads.addLine(to: CGPoint(x: base.x - side.dx * 3.6 * scale, y: base.y - side.dy * 3.6 * scale))
                 heads.closeSubpath()
             }
             // A white outline first, so it shows on dark and light alike, then the black arrow over it.
@@ -2187,6 +2189,11 @@ final class CanvasView: NSView {
                 else { session.distanceLines = [] }
                 if case .resize = drag.mode {
                     session.resizeSize = ("\(Int(abs(draft.size.width).rounded())) × \(Int(abs(draft.size.height).rounded())) px", pixel)
+                }
+                // The angle beside the pointer as it turns, as the size is beside it as it scales: −180° to 180°.
+                if case .rotate = drag.mode {
+                    let degrees = Int(draft.rotation.rounded())
+                    session.resizeSize = ("\(((degrees + 180) % 360 + 360) % 360 - 180)°", pixel)
                 }
                 session.previewTransform(draft)
             }
