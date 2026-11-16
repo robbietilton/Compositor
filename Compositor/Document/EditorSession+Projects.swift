@@ -83,10 +83,12 @@ extension EditorSession {
         history.reset()
     }
 
-    func createNewProject(width: Int, height: Int, resolution: Double = 72, background: CGColor? = nil) {
-        guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return }
+    @discardableResult
+    func createNewProject(width: Int, height: Int, resolution: Double = 72, background: CGColor? = nil) -> Bool {
+        guard !isProjectBusy, !isImporting, (1...DocumentLimits.maxSide).contains(width), (1...DocumentLimits.maxSide).contains(height) else { return false }
         clearProject()
         createDocument(width: width, height: height, emptyLayer: true, resolution: resolution, background: background)
+        return true
     }
 }
 
