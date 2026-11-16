@@ -3,16 +3,16 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.7</title>
-      <pubDate>Sun, 15 Nov 2026 05:18:20 +0000</pubDate>
-      <sparkle:version>66</sparkle:version>
-      <sparkle:shortVersionString>1.6.7</sparkle:shortVersionString>
+      <title>Version 1.6.8</title>
+      <pubDate>Mon, 16 Nov 2026 16:17:59 +0000</pubDate>
+      <sparkle:version>67</sparkle:version>
+      <sparkle:shortVersionString>1.6.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.7</link>
-      <changes><![CDATA[Turn off Anti-alias on the Brush for hard pixel edges, like a pencil, to paint or erase
-The Brush bar no longer repeats the foreground color, which stays in the tool rail
-Fixed Option-scroll zoom going the wrong way with natural scrolling turned off]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.7/Compositor.dmg" sparkle:edSignature="ltjAXbXIk9QsFS+PCBpYLnqOAAOH0RhJe90m950tVHX9aBEXYImcBtes6po0vrnU87CryRsCSlAXpwYLTLM/BA==" length="8867141" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.8</link>
+      <changes><![CDATA[Rotate a layer from just outside any corner, with a curved arrow at each corner
+The Color Picker updates as you type hex or RGB, Return confirms it, and you can sample your foreground and background colors while it's open
+A clearer pointer when Option-dragging to duplicate]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.8/Compositor.dmg" sparkle:edSignature="NR1GyXYX1K3n2eWUC5K8yjzJz/3NdazVSXLo68QOZY1/a6/w+AR8tX6aBNpIfvAF28VkJ3Sr4ur2zqSXmwCCDA==" length="8849340" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
