@@ -3,16 +3,15 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.8</title>
-      <pubDate>Mon, 16 Nov 2026 16:17:59 +0000</pubDate>
-      <sparkle:version>67</sparkle:version>
-      <sparkle:shortVersionString>1.6.8</sparkle:shortVersionString>
+      <title>Version 1.6.9</title>
+      <pubDate>Mon, 16 Nov 2026 17:09:26 +0000</pubDate>
+      <sparkle:version>68</sparkle:version>
+      <sparkle:shortVersionString>1.6.9</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.8</link>
-      <changes><![CDATA[Rotate a layer from just outside any corner, with a curved arrow at each corner
-The Color Picker updates as you type hex or RGB, Return confirms it, and you can sample your foreground and background colors while it's open
-A clearer pointer when Option-dragging to duplicate]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.8/Compositor.dmg" sparkle:edSignature="NR1GyXYX1K3n2eWUC5K8yjzJz/3NdazVSXLo68QOZY1/a6/w+AR8tX6aBNpIfvAF28VkJ3Sr4ur2zqSXmwCCDA==" length="8849340" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.9</link>
+      <changes><![CDATA[Rotating a layer shows its angle beside the pointer, as resizing shows its size
+A smaller, neater rotate pointer at the corners]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.9/Compositor.dmg" sparkle:edSignature="RW/9PlkEIX64NzYe0Xj80j+T1Iy1RzKys8TpLGojTzbw2myFiAM/VB8eCbUls3+hfYz2QAxFcz0n1oNxGL0BBg==" length="8849853" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
