@@ -209,6 +209,9 @@ final class EditorSession {
     /// The image file the document began as, opened or dropped into an empty window: until the document is saved as a
     /// project, Export offers that file's name, folder and format, so editing a PNG and writing it back is quick.
     @ObservationIgnored var sourceImageURL: URL?
+    /// Where the Layers panel is in its window (top-left origin): a layer dragged in the list stays in the list until
+    /// the pointer leaves the panel.
+    @ObservationIgnored var layersPanelFrame: CGRect = .zero
     /// Blocks overlapping edits immediately. Not observed by the UI: controls only dim via
     /// `showsBusy`, after an operation has run long enough to be worth showing, so quick
     /// edits (invert, fills, stroke commits) never flash the interface.

@@ -534,6 +534,18 @@ struct NativeLayerList: NSViewRepresentable {
             session.endEdit()
             return placed
         }
+        /// Whether `ids` may go above `row`, or into it when it's a folder: what `validateDrop` allows.
+        func canDrop(_ ids: [UUID], at row: Int, intoFolder: Bool) -> Bool {
+            guard session.canEditLayers, !ids.isEmpty, (0...rows.count).contains(row) else { return false }
+            if intoFolder, !(rows.indices.contains(row) && rows[row].isGroup) { return false }
+            let parent = intoFolder ? rows[row].id : (rows.indices.contains(row) ? rows[row].parentID : nil)
+            return ids.allSatisfy { session.canPlaceLayer($0, in: parent) }
+        }
+        /// Moves (or copies) `ids` to `row`, as a drop there would.
+        @discardableResult func drop(_ ids: [UUID], at row: Int, intoFolder: Bool, copying: Bool) -> Bool {
+            guard canDrop(ids, at: row, intoFolder: intoFolder) else { return false }
+            return place(ids, at: row, intoFolder: intoFolder, copying: copying)
+        }
         private func draggedMask(_ info: NSDraggingInfo) -> UUID? {
             info.draggingPasteboard.string(forType: Self.maskType).flatMap(UUID.init(uuidString:))
         }
@@ -831,7 +843,185 @@ final class LayerTableView: NSTableView {
             window?.makeFirstResponder(self)
             displayIfNeeded()
         }
-        super.mouseDown(with: event)
+        trackRowPress(event)
+    }
+
+    // MARK: Dragging rows, drawn by the list itself, as Photoshop does
+
+    /// Each step of a row drag, for tests: the picked-up row's picture and where a release would land.
+    static var rowDragStepForTesting: ((LayerTableView, NSView, (row: Int, intoFolder: Bool)?) -> Void)?
+    /// Takes over from the list's own drag once the pointer leaves the Layers panel; tests swap it to watch.
+    var beginsOutsideDrag: (LayerTableView, [UUID], NSImage?, NSRect, NSEvent) -> Void = { table, ids, image, frame, event in
+        table.beginSystemDrag(ids: ids, image: image, frame: frame, event: event)
+    }
+
+    /// A press on a row: a click is the list's own, as before; a drag moves the rows within the list, held inside it
+    /// (it can't follow the pointer up over the blend and opacity controls, where a release puts the rows first),
+    /// until the pointer leaves the Layers panel, when it becomes an ordinary drag, to copy into another tab or onto
+    /// the canvas. The system's own drag, used before, left the list the moment the pointer did.
+    private func trackRowPress(_ down: NSEvent) {
+        let start = convert(down.locationInWindow, from: nil)
+        let pressed = row(at: start)
+        guard let window, let session, session.canEditLayers, displayedRows.indices.contains(pressed),
+              down.modifierFlags.intersection([.command, .shift]).isEmpty, down.clickCount == 1 else {
+            super.mouseDown(with: down)
+            return
+        }
+        while let event = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if event.type == .leftMouseUp {
+                // A click: handed back, so the list takes it as it always has.
+                window.postEvent(event, atStart: true)
+                super.mouseDown(with: down)
+                return
+            }
+            let point = convert(event.locationInWindow, from: nil)
+            if hypot(point.x - start.x, point.y - start.y) >= 4 {
+                dragRows(pressed: pressed, start: start, event: event)
+                return
+            }
+        }
+    }
+
+    /// The rows a drag from `pressed` carries: the selection when it's one of them, otherwise just that row, in list
+    /// order, leaving out anything inside a dragged folder, which the folder brings along.
+    private func draggedIDs(pressed: Int) -> [UUID] {
+        let rows = displayedRows
+        let indexes = selectedRowIndexes.contains(pressed) ? selectedRowIndexes : IndexSet(integer: pressed)
+        let picked = indexes.compactMap { rows.indices.contains($0) ? rows[$0].id : nil }
+        guard let session else { return picked }
+        let carried = picked.reduce(into: Set<UUID>()) { $0.formUnion(session.descendantIDs(of: $1)) }
+        return picked.filter { !carried.contains($0) }
+    }
+
+    /// Where a release at `y` (list coordinates) lands: above a row, past the last, or into a folder over its middle.
+    private func dropTarget(at y: CGFloat) -> (row: Int, intoFolder: Bool) {
+        let rows = displayedRows
+        guard !rows.isEmpty else { return (0, false) }
+        if y < rect(ofRow: 0).minY { return (0, false) }
+        let index = row(at: NSPoint(x: 1, y: y))
+        if index < 0 { return (rows.count, false) }
+        let frame = rect(ofRow: index)
+        if rows[index].isGroup, abs(y - frame.midY) < frame.height / 4 { return (index, true) }
+        return (y < frame.midY ? index : index + 1, false)
+    }
+
+    private func pointerIsInPanel(_ event: NSEvent) -> Bool {
+        guard let window, let content = window.contentView, let frame = session?.layersPanelFrame, !frame.isEmpty else { return true }
+        let point = event.locationInWindow
+        return frame.contains(CGPoint(x: point.x, y: content.bounds.height - point.y))
+    }
+
+    private func snapshot(of view: NSView) -> NSImage? {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let image = NSImage(size: view.bounds.size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    private func dragRows(pressed: Int, start: NSPoint, event first: NSEvent) {
+        guard let window, let scroll = enclosingScrollView,
+              let coordinator = delegate as? NativeLayerList.Coordinator else { return }
+        let ids = draggedIDs(pressed: pressed)
+        guard !ids.isEmpty else { return }
+        let rowFrame = rect(ofRow: pressed)
+        let image = rowView(atRow: pressed, makeIfNecessary: false).flatMap(snapshot)
+        // The picked-up row: half strength, so the list shows through it, above the rows but within the list.
+        let picture = NSImageView(frame: .zero)
+        picture.image = image
+        picture.imageScaling = .scaleNone
+        picture.alphaValue = 0.5
+        scroll.addSubview(picture, positioned: .above, relativeTo: nil)
+        let marker = NSView(frame: .zero)
+        marker.wantsLayer = true
+        addSubview(marker)
+        defer { picture.removeFromSuperview(); marker.removeFromSuperview() }
+        let grab = NSPoint(x: start.x - rowFrame.minX, y: start.y - rowFrame.minY)
+        var target: (row: Int, intoFolder: Bool)?
+
+        func follow(_ event: NSEvent) {
+            var pointer = convert(event.locationInWindow, from: nil)
+            // Held at or past the list's top or bottom edge, the list scrolls on.
+            let visible = scroll.contentView.bounds
+            let most = max(0, bounds.height - visible.height)
+            if pointer.y < visible.minY + 6 { scroll.contentView.scroll(to: NSPoint(x: visible.minX, y: max(0, visible.minY - 8))) }
+            else if pointer.y > visible.maxY - 6 { scroll.contentView.scroll(to: NSPoint(x: visible.minX, y: min(most, visible.minY + 8))) }
+            scroll.reflectScrolledClipView(scroll.contentView)
+            let shown = scroll.contentView.bounds
+            pointer.y = min(max(pointer.y, shown.minY), shown.maxY - 1)
+            // The picture follows the pointer, kept inside the list up and down; sideways it moves freely.
+            let top = min(max(pointer.y - grab.y, shown.minY), shown.maxY - rowFrame.height)
+            let x = convert(event.locationInWindow, from: nil).x - grab.x
+            let corner = scroll.convert(NSPoint(x: x, y: top), from: self)
+            picture.frame = NSRect(x: corner.x, y: scroll.isFlipped ? corner.y : corner.y - rowFrame.height,
+                                   width: rowFrame.width, height: rowFrame.height)
+            let candidate = dropTarget(at: pointer.y)
+            if coordinator.canDrop(ids, at: candidate.row, intoFolder: candidate.intoFolder) {
+                target = candidate
+                let rows = displayedRows
+                if candidate.intoFolder {
+                    marker.frame = rect(ofRow: candidate.row).insetBy(dx: 2, dy: 1)
+                    marker.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.25).cgColor
+                    marker.layer?.cornerRadius = 5
+                } else {
+                    let lineY = candidate.row < rows.count ? rect(ofRow: candidate.row).minY : rect(ofRow: rows.count - 1).maxY
+                    marker.frame = NSRect(x: 4, y: max(0, lineY - 1), width: bounds.width - 8, height: 2)
+                    marker.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+                    marker.layer?.cornerRadius = 1
+                }
+                marker.isHidden = false
+            } else {
+                target = nil
+                marker.isHidden = true
+            }
+            Self.rowDragStepForTesting?(self, picture, target)
+        }
+
+        follow(first)
+        var last = first
+        while true {
+            guard let event = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp, .keyDown],
+                                               until: Date(timeIntervalSinceNow: 0.05), inMode: .eventTracking, dequeue: true) else {
+                follow(last) // held near an edge: it keeps scrolling
+                continue
+            }
+            switch event.type {
+            case .leftMouseUp:
+                if let target {
+                    coordinator.drop(ids, at: target.row, intoFolder: target.intoFolder,
+                                     copying: event.modifierFlags.contains(.option))
+                }
+                return
+            case .keyDown where event.keyCode == 53:
+                return
+            case .leftMouseDragged:
+                last = event
+                if !pointerIsInPanel(event) {
+                    // Out of the Layers panel: the ordinary drag, to copy into another tab or onto the canvas.
+                    let pointer = convert(event.locationInWindow, from: nil)
+                    let frame = NSRect(x: pointer.x - grab.x, y: pointer.y - grab.y, width: rowFrame.width, height: rowFrame.height)
+                    picture.removeFromSuperview()
+                    marker.removeFromSuperview()
+                    beginsOutsideDrag(self, ids, image, frame, event)
+                    return
+                }
+                follow(event)
+            default:
+                break
+            }
+        }
+    }
+
+    /// The system's drag, carrying each row's layer as the list's own drags did, so the tabs and the canvas take it.
+    func beginSystemDrag(ids: [UUID], image: NSImage?, frame: NSRect, event: NSEvent) {
+        let items = ids.enumerated().map { index, id in
+            let item = NSPasteboardItem()
+            item.setString(id.uuidString, forType: NativeLayerList.Coordinator.layerType)
+            let dragging = NSDraggingItem(pasteboardWriter: item)
+            dragging.setDraggingFrame(frame.offsetBy(dx: 0, dy: CGFloat(index) * 4), contents: image)
+            return dragging
+        }
+        beginDraggingSession(with: items, event: event, source: self)
     }
     override func keyDown(with event: NSEvent) {
         guard let event = ShortcutSettings.shared.canvasEvent(event) else { return }

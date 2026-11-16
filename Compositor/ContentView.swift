@@ -150,6 +150,7 @@ struct ContentView: View {
                     PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
                     // Clamped: a width saved when the panel could go narrower is brought into range.
                     LayersPanel(session: session, width: min(LayersPanel.widths.upperBound, max(LayersPanel.widths.lowerBound, layersPanelWidth)))
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.layersPanelFrame = $0 }
                 }
             }
             if !session.canvasOnly {
