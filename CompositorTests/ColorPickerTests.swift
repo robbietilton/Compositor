@@ -4,6 +4,34 @@ import Testing
 
 @MainActor
 struct ColorPickerTests {
+    /// A hex value being typed sets the color with each digit, the missing ones read as zeros.
+    @Test func aHexValueBeingTypedReadsAsItStands() {
+        #expect(PaletteColor(typedHex: "F") == PaletteColor(hex: "F00000"))
+        #expect(PaletteColor(typedHex: "#FF8") == PaletteColor(hex: "FF8000"))
+        #expect(PaletteColor(typedHex: "FF800") == PaletteColor(hex: "FF8000"))
+        #expect(PaletteColor(typedHex: "12AB34") == PaletteColor(hex: "12AB34"))
+        #expect(PaletteColor(typedHex: "") == nil)
+        #expect(PaletteColor(typedHex: "FG") == nil)
+        #expect(PaletteColor(typedHex: "1234567") == nil)
+    }
+
+    /// With a picker open, a click on the foreground or background swatch samples its color, as the canvas does.
+    @Test func thePalettesSwatchesSampleIntoAnOpenPicker() throws {
+        let session = EditorSession()
+        session.createDocument(width: 20, height: 20)
+        session.foregroundColor = PaletteColor(red: 1, green: 0, blue: 0)
+        session.backgroundColor = PaletteColor(red: 0, green: 0, blue: 1)
+        session.openColorPicker(background: true)
+        let picker = try #require(session.colorPicker)
+        session.sampleSwatchIntoColorPicker(background: false)
+        #expect(picker.color == PaletteColor(red: 1, green: 0, blue: 0))
+        session.sampleSwatchIntoColorPicker(background: true)
+        #expect(picker.color == PaletteColor(red: 0, green: 0, blue: 1))
+        // Only the picker's working color moved: the palette is as it was until OK.
+        #expect(session.backgroundColor == PaletteColor(red: 0, green: 0, blue: 1))
+        #expect(session.foregroundColor == PaletteColor(red: 1, green: 0, blue: 0))
+    }
+
     @Test func hexParsesFullShorthandAndRejectsInvalid() {
         #expect(PaletteColor(hex: "#FF8000") == PaletteColor(red: 1, green: 128.0 / 255, blue: 0))
         #expect(PaletteColor(hex: "0f0") == PaletteColor(red: 0, green: 1, blue: 0))

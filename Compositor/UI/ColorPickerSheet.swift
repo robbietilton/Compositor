@@ -9,6 +9,9 @@ struct ColorPickerSheet: View {
     let finish: (Bool) -> Void
     @State private var hexDraft = ""
     @FocusState private var hexFocused: Bool
+    /// What's typed in R, G and B, which sets the color with each digit.
+    @State private var channelDrafts = ["", "", ""]
+    @FocusState private var focusedChannel: Int?
     private let fieldSize: CGFloat = 245
 
     private var hsb: PickerHSB {
@@ -44,9 +47,19 @@ struct ColorPickerSheet: View {
         }
         .padding(20)
         .fixedSize()
-        .onAppear { hexDraft = color.hex }
-        .onChange(of: color) { _, new in if !hexFocused { hexDraft = new.hex } }
+        .onAppear { hexDraft = color.hex; syncChannels() }
+        // The fields follow the color, except the one being typed in, which would otherwise rewrite itself mid-entry.
+        .onChange(of: color) { _, new in
+            if !hexFocused { hexDraft = new.hex }
+            syncChannels()
+        }
         .onChange(of: hexFocused) { _, focused in if !focused { commitHex() } }
+        .onChange(of: focusedChannel) { _, _ in syncChannels() }
+        // Each digit typed sets the color: the value as it stands, the missing digits read as zeros.
+        .onChange(of: hexDraft) { _, draft in
+            guard hexFocused, let parsed = PaletteColor(typedHex: draft), parsed != color else { return }
+            hsb.setRGB(parsed)
+        }
     }
 
     private var saturationBrightnessField: some View {
@@ -128,41 +141,51 @@ struct ColorPickerSheet: View {
 
     private var fields: some View {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-            channelRow("R", \.red)
-            channelRow("G", \.green)
-            channelRow("B", \.blue)
+            channelRow("R", 0, \.red)
+            channelRow("G", 1, \.green)
+            channelRow("B", 2, \.blue)
             GridRow {
                 Text("#").frame(width: 12, alignment: .leading)
                 TextField("Hex", text: $hexDraft)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 62)
                     .focused($hexFocused)
-                    .onSubmit(commitHex)
+                    // A field's own submit swallows Return, so it confirms the picker itself, as OK does.
+                    .onSubmit { commitHex(); finish(true) }
                     .accessibilityLabel("Hex color")
             }
         }
     }
 
-    private func channelRow(_ label: String, _ channel: WritableKeyPath<PaletteColor, CGFloat>) -> some View {
-        let channelValue = Binding<Int>(
-            get: { Int((color[keyPath: channel] * 255).rounded()) },
-            set: { newValue in
-                var rgb = color
-                rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue))) / 255
-                hsb.setRGB(rgb)
-            })
+    private func channelRow(_ label: String, _ index: Int, _ channel: WritableKeyPath<PaletteColor, CGFloat>) -> some View {
+        func set(_ value: Int) {
+            var rgb = color
+            rgb[keyPath: channel] = CGFloat(min(255, max(0, value))) / 255
+            hsb.setRGB(rgb)
+        }
+        let channelValue = Binding<Int>(get: { Int((color[keyPath: channel] * 255).rounded()) }, set: set)
+        // Each digit typed sets the channel; an empty field leaves it as it was until something is typed.
+        let draft = Binding<String>(get: { channelDrafts[index] }, set: { text in
+            channelDrafts[index] = text
+            if let value = Int(text.trimmingCharacters(in: .whitespaces)) { set(value) }
+        })
         return GridRow {
             Text(label).frame(width: 12, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: channelValue, range: 0...255)
-            TextField(label, value: channelValue, format: .number)
+            TextField(label, text: draft)
                 .frame(width: 52)
-                .arrowSteps(value: { Double(Int((color[keyPath: channel] * 255).rounded())) },
-                            change: { newValue in
-                                var rgb = color
-                                rgb[keyPath: channel] = CGFloat(min(255, max(0, newValue.rounded()))) / 255
-                                hsb.setRGB(rgb)
-                            })
+                .focused($focusedChannel, equals: index)
+                .onSubmit { finish(true) }
+                .arrowSteps(value: { Double(channelValue.wrappedValue) }, change: { set(Int($0.rounded())) })
                 .accessibilityLabel(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")
+        }
+    }
+
+    /// Puts each channel's value in its field, but the one being typed in.
+    private func syncChannels() {
+        for (index, channel) in [\PaletteColor.red, \.green, \.blue].enumerated() where focusedChannel != index {
+            let value = String(Int((color[keyPath: channel] * 255).rounded()))
+            if channelDrafts[index] != value { channelDrafts[index] = value }
         }
     }
 

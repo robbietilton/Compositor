@@ -269,6 +269,11 @@ extension EditorSession {
         guard settings != edit.settings else { return }
         updateFilter(settings, preview: edit.preview)
     }
+    /// Loads a palette swatch's color into the open picker: the foreground or background color is one more to sample.
+    func sampleSwatchIntoColorPicker(background: Bool) {
+        colorPicker?.hsb.setRGB(paletteColor(background: background))
+    }
+
     /// Loads the canvas color under a document point into the open picker.
     func sampleIntoColorPicker(at point: CGPoint) {
         guard let colorPicker, let color = sampleCompositeColor(at: point) else { return }
@@ -417,5 +422,14 @@ extension PaletteColor {
         if text.count == 3 { text = text.map { "\($0)\($0)" }.joined() }
         guard text.count == 6, let value = UInt32(text, radix: 16) else { return nil }
         self.init(red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255)
+    }
+
+    /// A hex value part-way through being typed, read as it stands with the missing digits as zeros, so the color
+    /// follows each digit: "F" is F00000, "FF8" FF8000. Nil for anything that isn't one to six hex digits.
+    init?(typedHex text: String) {
+        var digits = text.trimmingCharacters(in: .whitespaces)
+        if digits.hasPrefix("#") { digits.removeFirst() }
+        guard (1...6).contains(digits.count), digits.allSatisfy(\.isHexDigit) else { return nil }
+        self.init(hex: digits.padding(toLength: 6, withPad: "0", startingAt: 0))
     }
 }

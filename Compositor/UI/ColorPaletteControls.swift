@@ -55,6 +55,7 @@ struct ColorPaletteControls: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(!session.canEditPalette)
                 .help("Reset colors to black and white (D)")
                 .accessibilityLabel("Reset colors")
                 Button { session.swapPaletteColors() } label: {
@@ -65,11 +66,13 @@ struct ColorPaletteControls: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .disabled(!session.canEditPalette)
                 .help("Swap foreground and background (X)")
                 .accessibilityLabel("Swap colors")
             }
         }
-        .disabled(!session.canEditPalette)
+        // While a picker is open the swatches can be sampled into it, even where the palette itself can't change.
+        .disabled(!session.canEditPalette && session.colorPicker == nil)
         .popover(isPresented: Binding(get: { choosingMaskBackground != nil }, set: { if !$0 { choosingMaskBackground = nil } })) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(choosingMaskBackground == true ? "Mask background" : "Mask foreground").font(.headline)
@@ -91,12 +94,17 @@ struct ColorPaletteControls: View {
     private func swatch(background: Bool) -> some View {
         let label = background ? "Background color" : "Foreground color"
         return Button {
+            // With a picker open, the swatch is one more color to sample into it, as the canvas is.
+            if session.colorPicker != nil { session.sampleSwatchIntoColorPicker(background: background); return }
             if session.isMaskSelected { choosingMaskBackground = background }
             else { session.openColorPicker(background: background) }
         } label: {
             ColorSwatch(color: Color(nsColor: session.paletteColor(background: background).nsColor), size: 24)
         }
         .buttonStyle(.plain).help(label).accessibilityLabel(label)
+        .onHover { inside in
+            if inside, session.colorPicker != nil { CanvasView.eyedropperCursor.set() } else if !inside { NSCursor.arrow.set() }
+        }
     }
     private func chooseMask(_ color: PaletteColor) {
         guard let background = choosingMaskBackground else { return }
