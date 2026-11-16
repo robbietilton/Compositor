@@ -746,8 +746,16 @@ final class LayerTableView: NSTableView {
         return nil
     }
     override func mouseEntered(with event: NSEvent) { refreshClippingCursor(event.modifierFlags, at: event.locationInWindow) }
-    override func mouseMoved(with event: NSEvent) { refreshClippingCursor(event.modifierFlags, at: event.locationInWindow) }
-    override func cursorUpdate(with event: NSEvent) { refreshClippingCursor(event.modifierFlags, at: event.locationInWindow) }
+    override func mouseMoved(with event: NSEvent) { refreshCursorAfterMove(event) }
+    override func cursorUpdate(with event: NSEvent) { refreshCursorAfterMove(event) }
+    /// The panel around the list puts its own arrow back as the pointer moves, after the list has set its cursor, which
+    /// lost the duplicate cursor the moment Option-held hovering moved at all. So with Option held the list sets it
+    /// again once this event is through, as it does for a modifier change.
+    private func refreshCursorAfterMove(_ event: NSEvent) {
+        refreshClippingCursor(event.modifierFlags, at: event.locationInWindow)
+        guard event.modifierFlags.contains(.option) else { return }
+        DispatchQueue.main.async { [weak self] in self?.refreshClippingCursor(NSEvent.modifierFlags) }
+    }
     override func mouseExited(with event: NSEvent) {
         // Reloading rows (after a brush stroke, say) rebuilds the tracking areas, which sends an exit even though
         // the pointer never left: taking the cursor back then makes it flicker. Only a real exit resets it.

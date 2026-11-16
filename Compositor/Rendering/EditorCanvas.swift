@@ -221,7 +221,32 @@ final class CanvasView: NSView {
     }
     /// Photoshop's duplicate pointer: a black arrow over a white one offset behind it. Shown where a
     /// drag copies — Option-dragging a layer, Cmd-Option-dragging selected pixels.
-    static let duplicateCursor = arrowCursor([(offset: 5, fill: .white, outline: .black), (offset: 0, fill: .black, outline: .white)])
+    /// Option-dragging a layer copies it: Photoshop's pointer for that, a black arrowhead with a white one behind it to the
+    /// right, neither with a stem, so the two stay apart at cursor size. The black one's tip is the click point.
+    static let duplicateCursor: NSCursor = {
+        // Room round the tip for the outline and shadow, as the other arrows have.
+        let margin: CGFloat = 4
+        func head(_ dx: CGFloat, _ dy: CGFloat) -> NSBezierPath {
+            let path = NSBezierPath()
+            // Drawn a point above the hot spot, so it sits where the system arrow and the Move and transform
+            // pointers do: switching to it with Option, nothing seems to jump.
+            let top = margin - 1
+            path.move(to: NSPoint(x: margin + dx, y: top + dy))
+            path.line(to: NSPoint(x: margin + dx, y: top + dy + 13))
+            path.line(to: NSPoint(x: margin + dx + 3.8, y: top + dy + 10))
+            path.line(to: NSPoint(x: margin + dx + 9.5, y: top + dy + 10))
+            path.close()
+            path.lineJoinStyle = .round
+            return path
+        }
+        // Outlined and shadowed as the app's other pointers are: each line width is twice the outline that shows.
+        let copy = head(7.5, 3.5)
+        copy.lineWidth = 1.1
+        let pointer = head(0, 0)
+        pointer.lineWidth = 2.2
+        return outlinedCursor(size: NSSize(width: 28, height: 28), hotSpot: NSPoint(x: margin, y: margin),
+                              [(copy, .white, .black), (pointer, .black, .white)])
+    }()
     /// A white arrow over a transform handle that distorts when dragged (Cmd held, or already distorted).
     static let distortCursor = arrowCursor([(offset: 0, fill: .white, outline: .black)])
     /// Photoshop's Move pointer: the arrow with a small four-way arrow at its lower right. Shown wherever
