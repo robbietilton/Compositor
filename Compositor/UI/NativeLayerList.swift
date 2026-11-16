@@ -427,6 +427,26 @@ struct NativeLayerList: NSViewRepresentable {
             item.setString(rows[row].id.uuidString, forType: Self.layerType)
             return item
         }
+        /// The dragged rows are drawn at half strength, so the list shows through them as they move.
+        func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
+                       forRowIndexes rowIndexes: IndexSet) {
+            session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
+                let frame = item.draggingFrame
+                guard let components = item.imageComponents, !components.isEmpty, frame.width > 0, frame.height > 0 else { return }
+                let image = NSImage(size: frame.size, flipped: false) { _ in
+                    for component in components {
+                        let contents: NSImage?
+                        if let image = component.contents as? NSImage { contents = image }
+                        else if let raw = component.contents, CFGetTypeID(raw as CFTypeRef) == CGImage.typeID {
+                            contents = NSImage(cgImage: raw as! CGImage, size: component.frame.size)
+                        } else { contents = nil }
+                        contents?.draw(in: component.frame, from: .zero, operation: .sourceOver, fraction: 0.5)
+                    }
+                    return true
+                }
+                item.setDraggingFrame(frame, contents: image)
+            }
+        }
         func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
                        proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
             if let source = info.draggingSource as? LayerEffectRow {
