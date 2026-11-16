@@ -434,23 +434,61 @@ final class CanvasView: NSView {
     private var displayedCropRect: CGRect?
     private var displayedTransformGeometry: TransformOverlayGeometry?
     private var hoverTrackingArea: NSTrackingArea?
-    private static let rotationCursor: NSCursor = {
-        let symbol = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Rotate")!
-        let white = symbol.withSymbolConfiguration(.init(paletteColors: [.white]))!
-        let black = symbol.withSymbolConfiguration(.init(paletteColors: [.black]))!
-        let image = NSImage(size: NSSize(width: 24, height: 24), flipped: false) { _ in
-            let glyph = CGRect(x: 2, y: 2, width: 20, height: 20)
-            // Expand the white silhouette, then draw the black symbol on top.
-            for step in 0..<16 {
-                let angle = CGFloat(step) * .pi / 8
-                white.draw(in: glyph.offsetBy(dx: cos(angle) * 1.25, dy: sin(angle) * 1.25))
+    /// The rotate pointer: a curved double arrow wrapped around the corner it's beside, turned to face out from the
+    /// box through that corner (`angle`, y up), in sixteen steps, made once each.
+    private static var rotationCursors: [Int: NSCursor] = [:]
+    static func rotationCursor(angle: CGFloat) -> NSCursor {
+        let steps = 16
+        let step = ((Int((angle / (2 * .pi) * CGFloat(steps)).rounded()) % steps) + steps) % steps
+        if let cursor = rotationCursors[step] { return cursor }
+        let turn = CGFloat(step) / CGFloat(steps) * 2 * .pi
+        let size: CGFloat = 28
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.translateBy(x: size / 2, y: size / 2)
+            context.rotate(by: turn)
+            // Facing right: a gentle arc bulging outward around a center behind it, and at each end a solid head
+            // pointing on along the arc, so the curve and its arrows read apart even this small.
+            let radius: CGFloat = 10.5, center = CGPoint(x: -6.5, y: 0), sweep: CGFloat = .pi / 4.4
+            let arc = CGMutablePath()
+            arc.addArc(center: center, radius: radius, startAngle: -sweep, endAngle: sweep, clockwise: false)
+            let heads = CGMutablePath()
+            for end in [-sweep, sweep] {
+                let base = CGPoint(x: center.x + cos(end) * radius, y: center.y + sin(end) * radius)
+                // The way the arc runs at this end, away from its middle.
+                let sign: CGFloat = end > 0 ? 1 : -1
+                let along = CGVector(dx: -sin(end) * sign, dy: cos(end) * sign)
+                let side = CGVector(dx: -along.dy, dy: along.dx)
+                heads.move(to: CGPoint(x: base.x + along.dx * 5.5, y: base.y + along.dy * 5.5))
+                heads.addLine(to: CGPoint(x: base.x + side.dx * 3.6, y: base.y + side.dy * 3.6))
+                heads.addLine(to: CGPoint(x: base.x - side.dx * 3.6, y: base.y - side.dy * 3.6))
+                heads.closeSubpath()
             }
-            black.draw(in: glyph)
+            // A white outline first, so it shows on dark and light alike, then the black arrow over it.
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.setStrokeColor(NSColor.white.cgColor)
+            context.setFillColor(NSColor.white.cgColor)
+            context.setLineWidth(4.2)
+            context.addPath(arc)
+            context.strokePath()
+            context.setLineWidth(2.6)
+            context.addPath(heads)
+            context.drawPath(using: .fillStroke)
+            context.setStrokeColor(NSColor.black.cgColor)
+            context.setFillColor(NSColor.black.cgColor)
+            context.setLineWidth(1.5)
+            context.addPath(arc)
+            context.strokePath()
+            context.addPath(heads)
+            context.fillPath()
             return true
         }
-        return NSCursor(image: image, hotSpot: NSPoint(x: 12, y: 12))
-    }()
-    private static let eyedropperCursor = makeEyedropperCursor(badge: nil)
+        let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+        rotationCursors[step] = cursor
+        return cursor
+    }
+    static let eyedropperCursor = makeEyedropperCursor(badge: nil)
     /// Color Range's eyedroppers while Shift (add) or Option (take away) is held, or its + or − one is chosen.
     private static let eyedropperAddCursor = makeEyedropperCursor(badge: "plus")
     private static let eyedropperRemoveCursor = makeEyedropperCursor(badge: "minus")
@@ -1719,7 +1757,7 @@ final class CanvasView: NSView {
                 // Distorting (Cmd held, or already distorted) moves corners freely: the white arrow says so.
                 let distorting = session.transformEdit?.corners != nil || flags.contains(.command)
                 return distorting ? Self.distortCursor : geometry.resizeCursor(for: index)
-            case .rotate: return Self.rotationCursor
+            case .rotate: return Self.rotationCursor(angle: geometry.rotationAngle(at: point))
             case .move: return duplicate ? Self.duplicateCursor : Self.moveCursor
             case .distort: return Self.distortCursor
             }
@@ -2774,7 +2812,7 @@ final class CanvasView: NSView {
         transformDrag = TransformDrag(original: transform, start: pixel, mode: mode, originalCorners: session.transformEdit?.corners)
         switch mode {
         case .resize(let index): dragCursor = transformOverlay.geometry?.resizeCursor(for: index) ?? .arrow
-        case .rotate: dragCursor = Self.rotationCursor
+        case .rotate: dragCursor = transformOverlay.geometry.map { Self.rotationCursor(angle: $0.rotationAngle(at: point)) } ?? .arrow
         case .move: dragCursor = duplicatesTransformOnDrag ? Self.duplicateCursor : Self.moveCursor
         case .distort: dragCursor = Self.distortCursor
         }

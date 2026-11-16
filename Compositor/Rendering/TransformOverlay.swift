@@ -2,14 +2,13 @@ import AppKit
 
 struct TransformOverlayGeometry: Equatable {
     let handles: [CGPoint]
-    let rotationHandle: CGPoint
-    /// A distortion has no single rotation, so its rotation handle is hidden.
+    /// A distortion has no single rotation, so it can't be rotated.
     let showsRotation: Bool
+    /// How far past a corner, outside the box, a press rotates rather than missing, as in Photoshop.
+    static let rotationReach: CGFloat = 26
 
     init(transform: LayerTransform, viewport: CanvasViewport, documentSize: CGSize) {
         handles = LayerTransform.handles.map { viewport.viewPoint(from: transform.point($0), documentSize: documentSize) }
-        rotationHandle = CGPoint(x: handles[1].x + sin(transform.radians) * 28,
-                                 y: handles[1].y - cos(transform.radians) * 28)
         showsRotation = true
     }
 
@@ -19,13 +18,11 @@ struct TransformOverlayGeometry: Equatable {
         func middle(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
         handles = [view[0], middle(view[0], view[1]), view[1], middle(view[1], view[2]),
                    view[2], middle(view[2], view[3]), view[3], middle(view[3], view[0])]
-        rotationHandle = handles[1]
         showsRotation = false
     }
 
     func hit(_ point: CGPoint) -> TransformDrag.Mode? {
         func near(_ other: CGPoint) -> Bool { hypot(point.x - other.x, point.y - other.y) <= 10 }
-        if showsRotation, near(rotationHandle) { return .rotate }
         if let index = handles.firstIndex(where: near) { return .resize(index) }
         for (start, end, handle) in [(0, 2, 1), (2, 4, 3), (4, 6, 5), (6, 0, 7)] {
             let a = handles[start], b = handles[end]
@@ -37,7 +34,29 @@ struct TransformOverlayGeometry: Equatable {
                 return .resize(handle)
             }
         }
+        // Just outside the box, around a corner: rotates, from wherever the press lands.
+        if showsRotation, !box.contains(point),
+           [0, 2, 4, 6].contains(where: { hypot(point.x - handles[$0].x, point.y - handles[$0].y) <= Self.rotationReach }) {
+            return .rotate
+        }
         return nil
+    }
+
+    /// Which way the rotate pointer at `point` faces: out from the box's middle through its nearest corner, as an angle
+    /// with y up, so each corner has its own curved arrow wrapped around it, as Photoshop's does.
+    func rotationAngle(at point: CGPoint) -> CGFloat {
+        let corners = [0, 2, 4, 6].map { handles[$0] }
+        let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
+        let corner = corners.min { hypot($0.x - point.x, $0.y - point.y) < hypot($1.x - point.x, $1.y - point.y) }!
+        return atan2(-(corner.y - middle.y), corner.x - middle.x)
+    }
+
+    /// The box through the four corner handles.
+    var box: CGPath {
+        let path = CGMutablePath()
+        path.addLines(between: [handles[0], handles[2], handles[4], handles[6]])
+        path.closeSubpath()
+        return path
     }
 
     func resizeCursor(for index: Int) -> NSCursor {
@@ -439,10 +458,6 @@ final class TransformOverlay: NSView {
         path.move(to: geometry.handles[0])
         for index in [2, 4, 6] { path.addLine(to: geometry.handles[index]) }
         path.closeSubpath()
-        if geometry.showsRotation {
-            path.move(to: geometry.handles[1])
-            path.addLine(to: geometry.rotationHandle)
-        }
         // Just the accent line: a dark line behind it read as a grey halo around the box.
         context.addPath(path)
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
@@ -455,11 +470,6 @@ final class TransformOverlay: NSView {
             context.fill(rect)
             context.stroke(rect)
         }
-        guard geometry.showsRotation else { return }
-        let point = geometry.rotationHandle
-        let rect = CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)
-        context.fillEllipse(in: rect)
-        context.strokeEllipse(in: rect)
     }
 
     var cropViewRect: CGRect? {
