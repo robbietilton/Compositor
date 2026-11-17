@@ -38,6 +38,8 @@ extension EditorSession {
             // Type paints in the foreground color, so text being edited follows the swatch. A text layer merely
             // selected keeps its color: it changes only while its text is open for editing.
             if tool == .type, textDraft != nil { setDraftTextColor(color) }
+            // A line being dragged uses this color, the one the Line bar is showing.
+            if var draft = shapeDraft, draft.kind == .line { draft.fill = color; shapeDraft = draft }
         }
     }
     func swapPaletteColors() {

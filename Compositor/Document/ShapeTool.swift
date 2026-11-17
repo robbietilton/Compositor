@@ -250,9 +250,10 @@ extension EditorSession {
     func beginShape(at point: CGPoint) {
         guard tool == .shape, canEditLayers, point.x.isFinite, point.y.isFinite else { return }
         let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
-        // The bar is showing this shape, so the one being dragged starts from those same values.
-        let editing = editingShapeLayer?.liveShape?.style
-        let line = editingLineLayer?.liveShape?.style
+        // A line uses the Line bar: the selected line when one is being edited, otherwise the color and width set
+        // for the next line. A selected rectangle's fill must not paint the line.
+        let editing = shapeKind == .line ? nil : editingShapeLayer?.liveShape?.style
+        let line = shapeKind == .line ? editingLineLayer?.liveShape?.style : nil
         let radius = editing?.kind == .rectangle ? editing?.cornerRadius : nil
         let smooth = editing?.kind == .rectangle ? editing?.smoothing == true : nil
         shapeDraft = ShapeDraft(kind: shapeKind, anchor: anchor, rect: CGRect(origin: anchor, size: .zero),
@@ -499,10 +500,13 @@ extension EditorSession {
         return layer
     }
 
-    /// What the Fill swatch shows. A selected shape's own color; otherwise the foreground color.
+    /// What the Fill swatch shows. In Line mode, with no line selected, it is the foreground color the next line uses.
     var displayedShapeFill: PaletteColor {
         if let picker = colorPicker, case .shapeFill = picker.target { return picker.color }
-        return (editingShapeLayer ?? editingLineLayer)?.liveShape?.style.color ?? foregroundColor
+        if let draft = shapeDraft, draft.kind == .line { return draft.fill }
+        if let line = editingLineLayer?.liveShape { return line.style.color }
+        if shapeKind != .line, let shape = editingShapeLayer?.liveShape { return shape.style.color }
+        return foregroundColor
     }
 
     /// What the Stroke swatch shows. A selected shape's stroke, or the color the next stroke will use.
@@ -524,6 +528,7 @@ extension EditorSession {
     }
 
     var displayedLineWidth: Double {
+        if let draft = shapeDraft, draft.kind == .line { return Double(draft.lineWidth) }
         if let width = editingLineLayer?.liveShape?.style.lineWidth { return Double(width) }
         return shapeLineWidth
     }
@@ -571,6 +576,12 @@ extension EditorSession {
 
     func setDisplayedLineWidth(_ width: Double) {
         let width = width.isFinite ? min(5000, max(1, width)) : 4
+        if var draft = shapeDraft, draft.kind == .line {
+            draft.lineWidth = CGFloat(width)
+            shapeDraft = draft
+            shapeLineWidth = width
+            return
+        }
         guard editingLineLayer != nil else { shapeLineWidth = width; return }
         changeLiveLine { style, transform in
             relayoutLine(&style, transform: &transform, width: CGFloat(width))
@@ -598,7 +609,14 @@ extension EditorSession {
 
     func openShapeFillPicker() {
         guard canEditPalette, colorPicker == nil, tool == .shape else { return }
-        if let layer = editingShapeLayer ?? editingLineLayer, let shape = layer.liveShape {
+        // The line under the pointer is the one being created: its color is the foreground, not a shape already selected.
+        if shapeDraft?.kind == .line {
+            openColorPicker(background: false)
+            return
+        }
+        if let layer = editingLineLayer, let shape = layer.liveShape {
+            colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
+        } else if shapeKind != .line, let layer = editingShapeLayer, let shape = layer.liveShape {
             colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
         } else {
             openColorPicker(background: false)

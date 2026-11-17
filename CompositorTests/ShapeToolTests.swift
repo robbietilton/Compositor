@@ -408,6 +408,28 @@ struct ShapeToolTests {
         #expect(session.activeLayer?.liveShape?.style.green == 1)
     }
 
+    /// Choosing Line and setting a width and color applies them to the line that is then drawn, even while another
+    /// shape is selected. Afterwards the bar edits that line, without selecting it again.
+    @Test func aNewLineUsesTheWidthAndColorChosenBeforeItIsDrawn() async throws {
+        let session = makeSession()
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 40, y: 30))
+        let rectangle = try #require(session.activeLayer?.id)
+        session.shapeKind = .line
+        session.setDisplayedLineWidth(16)
+        session.foregroundColor = PaletteColor(red: 0, green: 0, blue: 1)
+        #expect(session.shapeLineWidth == 16)
+        #expect(session.document?.layers.first { $0.id == rectangle }?.liveShape?.style.strokeWidth == nil)
+        drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 70, y: 50))
+        let line = try #require(session.activeLayer)
+        #expect(line.id != rectangle)
+        #expect(line.liveShape?.style.lineWidth == 16)
+        #expect(line.liveShape?.style.blue == 1)
+        #expect(session.editingLineLayer?.id == line.id)
+        session.setDisplayedLineWidth(8)
+        #expect(session.activeLayer?.liveShape?.style.lineWidth == 8)
+        #expect(session.document?.layers.first { $0.id == rectangle }?.liveShape?.style.strokeWidth == nil)
+    }
+
     /// The next rectangle takes the stroke the bar is showing on the selected shape.
     @Test func theNextShapeCopiesTheBar() async throws {
         let session = makeSession()

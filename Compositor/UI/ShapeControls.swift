@@ -3,16 +3,17 @@ import SwiftUI
 struct ShapeControls: View {
     @Bindable var session: EditorSession
 
-    /// A selected rectangle or ellipse takes the fill, stroke and radius. A selected line takes its color and width.
-    private var editsSelection: Bool { session.editingShapeLayer != nil }
-    private var editsLine: Bool { session.editingLineLayer != nil }
-    private var showsStroke: Bool { !editsLine && (editsSelection || session.shapeKind != .line) }
+    /// A selected rectangle or ellipse takes the fill, stroke and radius, unless Line is chosen: that bar is the
+    /// line being drawn, then the line just created.
+    private var editsSelection: Bool { session.editingShapeLayer != nil && session.shapeKind != .line }
+    private var editsLine: Bool { session.editingLineLayer != nil && (session.shapeKind == .line || session.editingShapeLayer == nil) }
+    private var showsLine: Bool { session.shapeKind == .line || editsLine }
+    private var showsStroke: Bool { !showsLine && (editsSelection || session.shapeKind != .line) }
     private var showsRadius: Bool {
-        if editsLine { return false }
+        if showsLine { return false }
         if let kind = session.editingShapeLayer?.liveShape?.style.kind { return kind == .rectangle }
         return session.shapeKind == .rectangle
     }
-    private var showsLine: Bool { editsLine || (!editsSelection && session.shapeKind == .line) }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -33,6 +34,7 @@ struct ShapeControls: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Fill color")
                 .help(editsLine ? "Color of the selected line"
+                      : session.shapeKind == .line ? "Color of the next line"
                       : editsSelection ? "Fill color of the selected shape"
                       : "Shapes fill with the foreground color; click to change it")
             }
