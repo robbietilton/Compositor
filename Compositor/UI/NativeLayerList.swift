@@ -506,13 +506,15 @@ struct NativeLayerList: NSViewRepresentable {
             guard (0...rows.count).contains(row) else { return false }
             return place([id], at: row, intoFolder: false, copying: false)
         }
-        private func place(_ ids: [UUID], at row: Int, intoFolder: Bool, copying: Bool) -> Bool {
+        private func place(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil, copying: Bool) -> Bool {
             // Where the drop lands is worked out once: each layer placed shifts the rows beneath it.
             // The filtered rows, so a drop's indexes mean the rows the panel is showing.
             let current = session.filteredLayerRows
             let parent: UUID?, above: UUID?, atBottom: Bool
             if intoFolder {
                 parent = rows[row].id; above = nil; atBottom = false
+            } else if let folder {
+                parent = folder; above = nil; atBottom = true
             } else if row >= current.count {
                 parent = nil; above = nil; atBottom = true
             } else {
@@ -541,16 +543,16 @@ struct NativeLayerList: NSViewRepresentable {
             return (info.draggingSource as? LayerRowDragSource)?.table === table
         }
         /// Whether `ids` may go above `row`, or into it when it's a folder: what `validateDrop` allows.
-        func canDrop(_ ids: [UUID], at row: Int, intoFolder: Bool) -> Bool {
+        func canDrop(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil) -> Bool {
             guard session.canEditLayers, !ids.isEmpty, (0...rows.count).contains(row) else { return false }
             if intoFolder, !(rows.indices.contains(row) && rows[row].isGroup) { return false }
-            let parent = intoFolder ? rows[row].id : (rows.indices.contains(row) ? rows[row].parentID : nil)
+            let parent = intoFolder ? rows[row].id : folder ?? (rows.indices.contains(row) ? rows[row].parentID : nil)
             return ids.allSatisfy { session.canPlaceLayer($0, in: parent) }
         }
         /// Moves (or copies) `ids` to `row`, as a drop there would.
-        @discardableResult func drop(_ ids: [UUID], at row: Int, intoFolder: Bool, copying: Bool) -> Bool {
-            guard canDrop(ids, at: row, intoFolder: intoFolder) else { return false }
-            return place(ids, at: row, intoFolder: intoFolder, copying: copying)
+        @discardableResult func drop(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil, copying: Bool) -> Bool {
+            guard canDrop(ids, at: row, intoFolder: intoFolder, bottomOf: folder) else { return false }
+            return place(ids, at: row, intoFolder: intoFolder, bottomOf: folder, copying: copying)
         }
         private func draggedMask(_ info: NSDraggingInfo) -> UUID? {
             info.draggingPasteboard.string(forType: Self.maskType).flatMap(UUID.init(uuidString:))
@@ -857,7 +859,7 @@ final class LayerTableView: NSTableView {
     /// The source of a row drag carried on outside the list, kept while it lasts.
     fileprivate var outsideDragSource: LayerRowDragSource?
     /// Each step of a row drag, for tests: the picked-up row's picture and where a release would land.
-    static var rowDragStepForTesting: ((LayerTableView, NSView, (row: Int, intoFolder: Bool)?) -> Void)?
+    static var rowDragStepForTesting: ((LayerTableView, NSView, DropTarget?) -> Void)?
     /// Takes over from the list's own drag once the pointer leaves the Layers panel; tests swap it to watch.
     var beginsOutsideDrag: (LayerTableView, [UUID], NSImage?, NSRect, NSEvent) -> Void = { table, ids, image, frame, event in
         table.beginSystemDrag(ids: ids, image: image, frame: frame, event: event)
@@ -902,15 +904,68 @@ final class LayerTableView: NSTableView {
     }
 
     /// Where a release at `y` (list coordinates) lands: above a row, past the last, or into a folder over its middle.
-    private func dropTarget(at y: CGFloat) -> (row: Int, intoFolder: Bool) {
+    /// Where a dragged row would land: above `row` (or below the last row), into the folder at `row`, or, in the gap
+    /// under a folder's last layer, at the bottom of that folder, `bottomOf`.
+    struct DropTarget: Equatable {
+        var row: Int
+        var intoFolder = false
+        var bottomOf: UUID?
+    }
+
+    private func dropTarget(at y: CGFloat) -> DropTarget {
         let rows = displayedRows
-        guard !rows.isEmpty else { return (0, false) }
-        if y < rect(ofRow: 0).minY { return (0, false) }
+        guard !rows.isEmpty else { return DropTarget(row: 0) }
+        if y < rect(ofRow: 0).minY { return DropTarget(row: 0) }
         let index = row(at: NSPoint(x: 1, y: y))
-        if index < 0 { return (rows.count, false) }
-        let frame = rect(ofRow: index)
-        if rows[index].isGroup, abs(y - frame.midY) < frame.height / 4 { return (index, true) }
-        return (y < frame.midY ? index : index + 1, false)
+        if index >= 0 {
+            let frame = rect(ofRow: index)
+            if rows[index].isGroup, abs(y - frame.midY) < frame.height / 4 { return DropTarget(row: index, intoFolder: true) }
+        }
+        let gap = index < 0 ? rows.count : (y < rect(ofRow: index).midY ? index : index + 1)
+        return DropTarget(row: gap, bottomOf: folderEnding(at: gap, y: y))
+    }
+
+    /// The gap above `gap` closes one or more folders when the row over it sits deeper than the row under it: the
+    /// last layer of a folder, then the next layer outside it. There the gap is split by height, as in Photoshop:
+    /// nearer the folder's layer the drop goes in at the bottom of the folder (the innermost first), nearer the
+    /// next row it goes beside the folder. Nil for beside, or for a gap that closes no folder.
+    private func folderEnding(at gap: Int, y: CGFloat) -> UUID? {
+        let rows = displayedRows
+        guard gap > 0, rows.indices.contains(gap - 1) else { return nil }
+        let outer = rows.indices.contains(gap) ? rows[gap].parentID : nil
+        // The folders the gap closes, innermost first.
+        var closing: [UUID] = []
+        var parent = rows[gap - 1].parentID
+        let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        while let id = parent, id != outer, closing.count < 64 {
+            closing.append(id)
+            parent = byID[id]?.parentID
+        }
+        // Under a folder's own row (its first layer below) or anywhere the row below isn't outside these folders, the
+        // gap closes nothing.
+        guard !closing.isEmpty, parent == outer else { return nil }
+        // The span a drop at this gap covers: from the middle of the row above to the middle of the row below (a
+        // folder's quarter, its middle being "into"), or half a row past the last row.
+        let above = rect(ofRow: gap - 1)
+        let top = above.midY
+        let bottom: CGFloat
+        if rows.indices.contains(gap) {
+            let below = rect(ofRow: gap)
+            bottom = rows[gap].isGroup ? below.minY + below.height / 4 : below.midY
+        } else {
+            bottom = above.maxY + above.height / 2
+        }
+        let bands = closing.count + 1
+        let band = min(bands - 1, max(0, Int((y - top) / max(1, bottom - top) * CGFloat(bands))))
+        return band < closing.count ? closing[band] : nil
+    }
+
+    /// How deep `id` sits among folders, for indenting the drop line.
+    private func depth(of id: UUID?) -> Int {
+        let byID = Dictionary(displayedRows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var depth = 0, parent = id.flatMap { byID[$0] }?.parentID
+        while let current = parent, depth < 64 { depth += 1; parent = byID[current]?.parentID }
+        return depth
     }
 
     /// Whether a drag at `event` is still the list's: over the Layers panel and no higher than its blend and opacity
@@ -956,7 +1011,7 @@ final class LayerTableView: NSTableView {
             if !leftList { session?.layerDragIsOutside = false }
         }
         let grab = NSPoint(x: start.x - rowFrame.minX, y: start.y - rowFrame.minY)
-        var target: (row: Int, intoFolder: Bool)?
+        var target: DropTarget?
 
         func follow(_ event: NSEvent) {
             var pointer = convert(event.locationInWindow, from: nil)
@@ -976,7 +1031,7 @@ final class LayerTableView: NSTableView {
             // Above the list, the release puts the rows first.
             pointer.y = min(max(pointer.y, shown.minY), shown.maxY - 1)
             let candidate = dropTarget(at: pointer.y)
-            if coordinator.canDrop(ids, at: candidate.row, intoFolder: candidate.intoFolder) {
+            if coordinator.canDrop(ids, at: candidate.row, intoFolder: candidate.intoFolder, bottomOf: candidate.bottomOf) {
                 target = candidate
                 let rows = displayedRows
                 if candidate.intoFolder {
@@ -985,7 +1040,12 @@ final class LayerTableView: NSTableView {
                     marker.layer?.cornerRadius = 5
                 } else {
                     let lineY = candidate.row < rows.count ? rect(ofRow: candidate.row).minY : rect(ofRow: rows.count - 1).maxY
-                    marker.frame = NSRect(x: 4, y: max(0, lineY - 1), width: bounds.width - 8, height: 2)
+                    // Indented to the depth the layer would land at: inside a folder, in line with its layers.
+                    let level: Int
+                    if let folder = candidate.bottomOf { level = depth(of: folder) + 1 }
+                    else { level = candidate.row < rows.count ? depth(of: rows[candidate.row].id) : 0 }
+                    let indent = 4 + CGFloat(min(level, 8)) * 24
+                    marker.frame = NSRect(x: indent, y: max(0, lineY - 1), width: bounds.width - indent - 4, height: 2)
                     marker.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
                     marker.layer?.cornerRadius = 1
                 }
@@ -1008,7 +1068,7 @@ final class LayerTableView: NSTableView {
             switch event.type {
             case .leftMouseUp:
                 if let target {
-                    coordinator.drop(ids, at: target.row, intoFolder: target.intoFolder,
+                    coordinator.drop(ids, at: target.row, intoFolder: target.intoFolder, bottomOf: target.bottomOf,
                                      copying: event.modifierFlags.contains(.option))
                 }
                 return
