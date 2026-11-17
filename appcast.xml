@@ -3,19 +3,16 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.10</title>
-      <pubDate>Tue, 17 Nov 2026 03:17:01 +0000</pubDate>
-      <sparkle:version>69</sparkle:version>
-      <sparkle:shortVersionString>1.6.10</sparkle:shortVersionString>
+      <title>Version 1.6.11</title>
+      <pubDate>Tue, 17 Nov 2026 20:04:30 +0000</pubDate>
+      <sparkle:version>70</sparkle:version>
+      <sparkle:shortVersionString>1.6.11</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.10</link>
-      <changes><![CDATA[Larger drag area to allow easier dragging of layers and folders to first slot in layer panel
-Drag and drop a layer at the bottom of a folder: let go in the upper half of the gap under the folder's last layer to put it inside, or the lower half to put it outside
-The drop line indents to show which folder a layer will land in
-A dragged layer is see-through, so you can see the list under it
-A dragged layer stays full size as it leaves the Layers panel and comes back
-New Canvas remembers the last size you used]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.10/Compositor.dmg" sparkle:edSignature="IKKiTL0XOIZfqyEzfcYsw8wvfPkrcz9JvqGBpO391lQJSKQcMazJEeQ74BQcAYuSqqkfmq8X6wXi9SvurMjzCw==" length="8878877" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.11</link>
+      <changes><![CDATA[Pasting while a folder is selected now puts the layer above the folder, not inside it
+New layers added between clipped layers are clipped too
+When dragging a layer to the top of a group of clipped layers, drop it a little higher to leave it unclipped, or a little lower to clip it]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.11/Compositor.dmg" sparkle:edSignature="Xvg6TiK4kfX/V9/jTPsF6h5ak9sgpN4uTn8zEvupxpLxjkOXvnJx8rrryST0HrnSwp5/CKG7XQVGP/KWeGRzDw==" length="8882559" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
