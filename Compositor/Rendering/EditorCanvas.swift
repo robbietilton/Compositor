@@ -1359,8 +1359,26 @@ final class CanvasView: NSView {
             context.strokeShapeLine(from: center(ends.start), to: center(ends.end), width: thickness,
                                     style: draft.lineStyle, cap: draft.lineCap)
         } else {
-            context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, smoothing: draft.smoothing))
+            let path = draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, smoothing: draft.smoothing)
+            context.addPath(path)
             context.fillPath()
+            // The same inside stroke the finished shape gets: twice the width, clipped to the path, so it shows
+            // while the box is still being dragged rather than only once the mouse is released.
+            let limit = min(rect.width, rect.height) / 2
+            let width = min(draft.strokeWidth * scale, limit)
+            if width > 0, limit > 0 {
+                context.saveGState()
+                context.addPath(path)
+                context.clip()
+                context.addPath(path)
+                context.setStrokeColor(draft.strokeColor.nsColor.cgColor)
+                context.setLineWidth(width * 2)
+                context.setLineJoin(.miter)
+                context.setLineCap(.butt)
+                context.setMiterLimit(10)
+                context.strokePath()
+                context.restoreGState()
+            }
         }
         context.restoreGState()
     }
