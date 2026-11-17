@@ -56,6 +56,8 @@ extension EditorSession {
         // A text layer that is still text takes the color as its own, rather than being painted over: the letters
         // change color and stay editable.
         if !isMaskSelected, selection == nil, layer.liveText != nil, recolorText(layer.id, to: value) { return }
+        // A shape that is still a shape takes the color as its fill and stays editable, stroke included.
+        if !isMaskSelected, selection == nil, layer.liveShape != nil, recolorShape(layer.id, to: value) { return }
         let color = isMaskSelected
             ? CGColor(gray: value.red, alpha: 1)
             : CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: [value.red, value.green, value.blue, 1])!

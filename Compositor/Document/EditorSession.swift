@@ -165,13 +165,23 @@ final class EditorSession {
     @ObservationIgnored private var gifFrameSelectionRequestID: UUID?
 
     /// Frame navigation stays in runtime state; pixel edits are immutable assets stored on the animation.
+    /// A shape color being chosen is drawn in place of the committed pixels and is not part of the saved document.
     func displayedAsset(for layer: ImageLayer) -> ImportedImage? {
+        let saved = savedAsset(for: layer)
+        if let preview = shapeColorPreview, preview.layerID == layer.id, let saved {
+            return ImportedImage(image: preview.image, thumbnail: saved.thumbnail, name: saved.name)
+        }
+        return saved
+    }
+
+    /// The asset a save writes: the committed layer, or a GIF frame, never a shape-color preview.
+    func savedAsset(for layer: ImageLayer) -> ImportedImage? {
         guard let timeline = gifTimeline(for: layer) else { return layer.asset }
         return layer.gifAnimation?.framePixels[timeline.selectedFrameIndex] ?? timeline.displayedAsset ?? layer.asset
     }
 
     func displayedLayer(for layer: ImageLayer) -> ImageLayer {
-        guard gifTimeline(for: layer) != nil, let asset = displayedAsset(for: layer) else { return layer }
+        guard let asset = displayedAsset(for: layer), asset.image !== layer.asset?.image else { return layer }
         var displayed = layer
         displayed.asset = asset
         return displayed
@@ -371,6 +381,13 @@ final class EditorSession {
     /// A Line shape's dash pattern and the finish on its ends (and on each dash).
     var shapeLineStyle = ShapeLineStyle.solid
     var shapeLineCap = ShapeLineCap.square
+    /// The next rectangle or ellipse's inside stroke. 0 draws none, which is how every shape started.
+    var shapeStrokeWidth: Double = 0
+    var shapeStrokeColor = PaletteColor.black
+    /// The layer whose stroke or radius a drag is changing, so the drag is one undo step.
+    var shapeStyleEditLayerID: UUID?
+    /// The preview drawn while a shape's fill or stroke color is being chosen. Not part of the document or its history.
+    var shapeColorPreview: (layerID: UUID, image: CGImage)?
     /// The shape being dragged out with the Shape tool, before it becomes a layer.
     var shapeDraft: ShapeDraft?
     var selectionModeChoice = SelectionMode.replace
@@ -535,6 +552,7 @@ final class EditorSession {
         if id != activeLayerID { commitTransform(); resolveGradient() }
         activeLayerID = id
         revealActiveLayer()
+        if tool == .shape { adoptShapeKindFromSelection() }
     }
     func selectTool(_ value: NavigationTool) {
         if tool != value, !finishText() { return }
@@ -550,6 +568,7 @@ final class EditorSession {
             brushSettings = settings
         }
         tool = value
+        if value == .shape { adoptShapeKindFromSelection() }
         if value.isBrushTool { _ = MetalBrushCoverage.shared }
         if value == .crop, cropRect == nil, let document {
             cropRatioChoice = "Free"
@@ -815,6 +834,8 @@ final class EditorSession {
     var canRedo: Bool { canUseHistory && history.canRedo }
 
     func undo() {
+        // A shape color that was only being previewed is not an edit, so it gets out of the way first.
+        cancelShapeColorPreview()
         // Like Photoshop, the first Undo discards a pending gradient.
         if gradientEdit != nil { cancelGradient(); return }
         guard canUndo, let snapshot = history.undo() else { return }
@@ -822,6 +843,7 @@ final class EditorSession {
     }
 
     func redo() {
+        cancelShapeColorPreview()
         guard canRedo, let snapshot = history.redo() else { return }
         restore(snapshot)
     }

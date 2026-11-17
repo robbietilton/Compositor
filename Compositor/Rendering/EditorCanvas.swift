@@ -1350,17 +1350,35 @@ final class CanvasView: NSView {
         let rect = CGRect(x: middle.x - draft.rect.width * scale / 2, y: middle.y - draft.rect.height * scale / 2,
                           width: draft.rect.width * scale, height: draft.rect.height * scale)
         context.saveGState()
-        context.setFillColor(session.foregroundColor.nsColor.cgColor)
+        context.setFillColor(draft.fill.nsColor.cgColor)
         if draft.kind == .line {
             guard let ends = session.shapeLineEnds else { context.restoreGState(); return }
-            let thickness = max(1, CGFloat(session.shapeLineWidth) * scale)
-            context.setStrokeColor(session.foregroundColor.nsColor.cgColor)
+            let thickness = max(1, draft.lineWidth * scale)
+            context.setStrokeColor(draft.fill.nsColor.cgColor)
             // Exactly the two points being dragged between, so the start never shifts.
             context.strokeShapeLine(from: center(ends.start), to: center(ends.end), width: thickness,
                                     style: draft.lineStyle, cap: draft.lineCap)
         } else {
-            context.addPath(draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, smoothing: draft.smoothing))
+            let path = draft.kind.path(in: rect, cornerRadius: draft.cornerRadius * scale, smoothing: draft.smoothing)
+            context.addPath(path)
             context.fillPath()
+            // The same inside stroke the finished shape gets: twice the width, clipped to the path, so it shows
+            // while the box is still being dragged rather than only once the mouse is released.
+            let limit = min(rect.width, rect.height) / 2
+            let width = min(draft.strokeWidth * scale, limit)
+            if width > 0, limit > 0 {
+                context.saveGState()
+                context.addPath(path)
+                context.clip()
+                context.addPath(path)
+                context.setStrokeColor(draft.strokeColor.nsColor.cgColor)
+                context.setLineWidth(width * 2)
+                context.setLineJoin(.miter)
+                context.setLineCap(.butt)
+                context.setMiterLimit(10)
+                context.strokePath()
+                context.restoreGState()
+            }
         }
         context.restoreGState()
     }
@@ -2956,7 +2974,7 @@ extension CanvasView {
     /// The shape being dragged out, drawn by `drawShapeDraft` into a bitmap just big enough for it, in frame pixels.
     private func shapeDraftImage(placement: GPUPlacement) -> CIImage? {
         guard let draft = session.shapeDraft, let renderer = GPUCanvasRenderer.shared else { return nil }
-        let reach = CGFloat(session.shapeLineWidth) * placement.scale + 4
+        let reach = (draft.kind == .line ? draft.lineWidth * placement.scale : 0) + 4
         let box = draft.rect.applying(placement.mapping).insetBy(dx: -reach, dy: -reach).integral
         guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
               let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }

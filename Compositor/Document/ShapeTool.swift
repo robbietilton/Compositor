@@ -173,7 +173,33 @@ nonisolated struct LayerShapeStyle: Codable, Equatable, Sendable {
     /// was before caps could be chosen, so those save as lines always have.
     var lineStyle: ShapeLineStyle? = nil
     var lineCap: ShapeLineCap? = nil
+    /// A rectangle or ellipse's stroke, drawn inside its box (format version 22). Nil means no stroke, as every
+    /// shape was before one could be set. Width is document pixels; the color is kept only while the width is above 0.
+    var strokeWidth: CGFloat? = nil
+    var strokeRed: CGFloat? = nil
+    var strokeGreen: CGFloat? = nil
+    var strokeBlue: CGFloat? = nil
     var color: PaletteColor { PaletteColor(red: red, green: green, blue: blue) }
+    var strokeColor: PaletteColor? {
+        guard let strokeRed, let strokeGreen, let strokeBlue else { return nil }
+        return PaletteColor(red: strokeRed, green: strokeGreen, blue: strokeBlue)
+    }
+
+    /// Remembers a stroke, or forgets it when the width is 0. Lines have none: their thickness is `lineWidth`.
+    mutating func setStroke(width: CGFloat, color: PaletteColor) {
+        guard kind != .line, width.isFinite, width > 0, width <= 5000,
+              color.red.isFinite, color.green.isFinite, color.blue.isFinite else {
+            strokeWidth = nil
+            strokeRed = nil
+            strokeGreen = nil
+            strokeBlue = nil
+            return
+        }
+        strokeWidth = width
+        strokeRed = min(1, max(0, color.red))
+        strokeGreen = min(1, max(0, color.green))
+        strokeBlue = min(1, max(0, color.blue))
+    }
 }
 
 /// A layer made with the Shape tool. Its pixels are an ordinary raster, so it clips, masks, blends and filters like
@@ -210,6 +236,11 @@ struct ShapeDraft: Equatable {
     /// A line's dashes and caps, fixed when the drag starts.
     var lineStyle = ShapeLineStyle.solid
     var lineCap = ShapeLineCap.square
+    /// The fill, a line's thickness, and a rectangle or ellipse's inside stroke, fixed when the drag starts.
+    var fill = PaletteColor.black
+    var lineWidth: CGFloat = 4
+    var strokeWidth: CGFloat = 0
+    var strokeColor = PaletteColor.black
 }
 
 extension EditorSession {
@@ -219,16 +250,27 @@ extension EditorSession {
     func beginShape(at point: CGPoint) {
         guard tool == .shape, canEditLayers, point.x.isFinite, point.y.isFinite else { return }
         let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
+        // A line uses the Line bar: the selected line when one is being edited, otherwise the color and width set
+        // for the next line. A selected rectangle's fill must not paint the line.
+        let editing = shapeKind == .line ? nil : editingShapeLayer?.liveShape?.style
+        let line = shapeKind == .line ? editingLineLayer?.liveShape?.style : nil
+        let radius = editing?.kind == .rectangle ? editing?.cornerRadius : nil
+        let smooth = editing?.kind == .rectangle ? editing?.smoothing == true : nil
         shapeDraft = ShapeDraft(kind: shapeKind, anchor: anchor, rect: CGRect(origin: anchor, size: .zero),
-                                cornerRadius: shapeKind == .rectangle ? CGFloat(shapeCornerRadius) : 0,
-                                smoothing: shapeKind == .rectangle && shapeSmoothing,
-                                lineStyle: shapeLineStyle, lineCap: shapeLineCap)
+                                cornerRadius: shapeKind == .rectangle ? (radius ?? CGFloat(shapeCornerRadius)) : 0,
+                                smoothing: shapeKind == .rectangle && (smooth ?? shapeSmoothing),
+                                lineStyle: line.map { $0.lineStyle ?? .solid } ?? shapeLineStyle,
+                                lineCap: line.map { $0.lineCap ?? .round } ?? shapeLineCap,
+                                fill: line?.color ?? editing?.color ?? foregroundColor,
+                                lineWidth: line?.lineWidth ?? CGFloat(shapeLineWidth),
+                                strokeWidth: shapeKind == .line ? 0 : (editing == nil ? CGFloat(shapeStrokeWidth) : (editing?.strokeWidth ?? 0)),
+                                strokeColor: editing?.strokeColor ?? shapeStrokeColor)
     }
 
     /// The line being dragged, from where it began to where the pointer is, in document pixels.
     var shapeLineEnds: (start: CGPoint, end: CGPoint)? {
         guard let draft = shapeDraft, draft.kind == .line, let end = draft.end else { return nil }
-        let shift = Self.lineGridShift(width: CGFloat(shapeLineWidth))
+        let shift = Self.lineGridShift(width: draft.lineWidth)
         return (CGPoint(x: draft.anchor.x + shift, y: draft.anchor.y + shift), CGPoint(x: end.x + shift, y: end.y + shift))
     }
 
@@ -289,6 +331,13 @@ extension EditorSession {
         if shapeDraft != nil { shapeDraft = nil }
     }
 
+    /// The Shape tool opens on the kind of the live shape that is selected, so a line is not edited as a rectangle.
+    func adoptShapeKindFromSelection() {
+        guard selectedLayerIDs.count <= 1, let kind = activeLayer?.liveShape?.style.kind else { return }
+        if shapeKind != kind { cancelShape() }
+        shapeKind = kind
+    }
+
     /// Shift-U (and Tab): the Shape tool steps through Rectangle, Ellipse and Line.
     func toggleShapeKind() {
         cancelShape()
@@ -296,13 +345,13 @@ extension EditorSession {
         shapeKind = kinds[((kinds.firstIndex(of: shapeKind) ?? 0) + 1) % kinds.count]
     }
 
-    /// Fills the dragged shape with the foreground color on a new layer above the active one,
-    /// in one undo step. A click without a drag makes nothing; the selection is left alone.
+    /// Fills the dragged shape on a new layer above the active one, in one undo step. The fill and stroke are the
+    /// ones the bar is showing. A click without a drag makes nothing; the selection is left alone.
     func finishShape() {
         guard let draft = shapeDraft else { return }
         shapeDraft = nil
         var rect = draft.rect
-        let thickness = CGFloat(shapeLineWidth)
+        let thickness = draft.kind == .line ? draft.lineWidth : CGFloat(shapeLineWidth)
         // A line keeps the two points it was dragged between; the layer is their box with room for the stroke's own
         // thickness (and its caps) around them.
         var ends: (start: CGPoint, end: CGPoint)?
@@ -326,15 +375,14 @@ extension EditorSession {
                         y: rect.height > 0 ? (point.y - rect.minY) / rect.height : 0.5)
             }
             let start = ends.map { unit($0.start) }, finish = ends.map { unit($0.end) }
-            let image = try Self.shapeImage(draft.kind, size: rect.size, color: foregroundColor, cornerRadius: draft.cornerRadius, smoothing: draft.smoothing,
-                                            lineWidth: thickness, start: start, end: finish,
-                                            lineStyle: draft.lineStyle, lineCap: draft.lineCap)
             let line = draft.kind == .line
-            let style = LayerShapeStyle(kind: draft.kind, red: foregroundColor.red, green: foregroundColor.green,
-                                        blue: foregroundColor.blue, cornerRadius: draft.cornerRadius, smoothing: draft.smoothing ? true : nil,
+            var style = LayerShapeStyle(kind: draft.kind, red: draft.fill.red, green: draft.fill.green,
+                                        blue: draft.fill.blue, cornerRadius: draft.cornerRadius, smoothing: draft.smoothing ? true : nil,
                                         lineWidth: line ? thickness : nil, start: start, end: finish,
                                         lineStyle: line && draft.lineStyle != .solid ? draft.lineStyle : nil,
                                         lineCap: line && draft.lineCap != .round ? draft.lineCap : nil)
+            if !line { style.setStroke(width: draft.strokeWidth, color: draft.strokeColor) }
+            let image = try Self.shapeImage(style, size: rect.size)
             addPixelLayer(image, at: rect.origin, name: nextShapeName(draft.kind), editName: draft.kind.rawValue,
                           dropsSelection: false, shape: LayerShape(style: style, image: image))
         } catch { brushError = error.localizedDescription }
@@ -357,11 +405,7 @@ extension EditorSession {
         guard width != asset.image.width || height != asset.image.height else { return }
         if shape.style.kind == .line { document?.layers[index].shape = nil; return }
         guard width * height <= Self.maxShapePixels,
-              let image = try? Self.shapeImage(shape.style.kind, size: CGSize(width: width, height: height),
-                                               color: shape.style.color, cornerRadius: shape.style.cornerRadius, smoothing: shape.style.smoothing == true,
-                                               lineWidth: shape.style.lineWidth ?? 0,
-                                               start: shape.style.start, end: shape.style.end,
-                                               lineStyle: shape.style.lineStyle ?? .solid, lineCap: shape.style.lineCap ?? .round),
+              let image = try? Self.shapeImage(shape.style, size: CGSize(width: width, height: height)),
               let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
         // A mask that follows the layer's pixel grid stays exactly where it is while that grid changes size.
         if let mask = layer.mask, mask.placement == nil { document?.layers[index].mask?.placement = layer.maskTransform }
@@ -369,30 +413,40 @@ extension EditorSession {
         document?.layers[index].shape = LayerShape(style: shape.style, image: image)
     }
 
-    /// While a rounded rectangle is being scaled, the shape drawn at the size it's being dragged to, so its corners
-    /// keep their radius during the drag rather than only once it's applied. At most 2048 pixels across (the radius
-    /// scales down with it); nil for any other layer, which just stretches until the redraw at commit.
+    /// While a rounded or stroked shape is being scaled, the shape drawn at the size it's being dragged to, so its
+    /// corners and its inside stroke keep their document-pixel size during the drag rather than only once it's applied.
+    /// At most 2048 pixels across (the radius and stroke scale down with it); nil for any other layer, which just
+    /// stretches until the redraw at commit.
     func shapeTransformPreview(for layer: ImageLayer, transform: LayerTransform) -> CGImage? {
-        guard transformEdit != nil, let shape = layer.liveShape, shape.style.kind == .rectangle, shape.style.cornerRadius > 0 else {
-            if !shapeTransformPreviewCache.isEmpty, transformEdit == nil { shapeTransformPreviewCache = [:] }
+        if transformEdit == nil {
+            if !shapeTransformPreviewCache.isEmpty { shapeTransformPreviewCache = [:] }
             return nil
         }
+        // A plain fill stretches the same as a redraw. A radius or an inside stroke does not: both stay in document
+        // pixels, so the drag shows the shape drawn again rather than a stretched picture of it.
+        guard let shape = layer.liveShape, shape.style.kind != .line,
+              shape.style.cornerRadius > 0 || (shape.style.strokeWidth ?? 0) > 0 else { return nil }
         let size = transform.size
         guard size.width >= 1, size.height >= 1,
               abs(size.width - CGFloat(shape.image.width)) >= 0.5 || abs(size.height - CGFloat(shape.image.height)) >= 0.5 else { return nil }
         let factor = min(1, 2048 / max(size.width, size.height))
         let drawn = CGSize(width: max(1, (size.width * factor).rounded()), height: max(1, (size.height * factor).rounded()))
         if let cached = shapeTransformPreviewCache[layer.id], cached.size == drawn { return cached.image }
-        guard let image = try? Self.shapeImage(.rectangle, size: drawn, color: shape.style.color,
-                                               cornerRadius: shape.style.cornerRadius * factor, smoothing: shape.style.smoothing == true) else { return nil }
+        var style = shape.style
+        style.cornerRadius *= factor
+        if let width = style.strokeWidth { style.strokeWidth = width * factor }
+        guard let image = try? Self.shapeImage(style, size: drawn) else { return nil }
         shapeTransformPreviewCache[layer.id] = (drawn, image)
         return image
     }
 
-    /// The shape filling its box, anti-aliased where it curves.
+    /// The shape filling its box, anti-aliased where it curves. A rectangle or ellipse's stroke is drawn inside that
+    /// box: the path is filled, then stroked at twice the width and clipped to the path, so the outer edge stays put
+    /// and the fill gives way. The width is capped at half the shorter side, so it meets in the middle and no further.
     nonisolated static func shapeImage(_ kind: ShapeKind, size: CGSize, color: PaletteColor, cornerRadius: CGFloat = 0, smoothing: Bool = false,
                            lineWidth: CGFloat = 0, start: CGPoint? = nil, end: CGPoint? = nil,
-                           lineStyle: ShapeLineStyle = .solid, lineCap: ShapeLineCap = .round) throws -> CGImage {
+                           lineStyle: ShapeLineStyle = .solid, lineCap: ShapeLineCap = .round,
+                           strokeWidth: CGFloat = 0, strokeColor: PaletteColor? = nil) throws -> CGImage {
         let context = try BrushRaster.context(width: Int(size.width), height: Int(size.height), mask: false)
         let bounds = CGRect(origin: .zero, size: size)
         if kind == .line {
@@ -408,10 +462,384 @@ extension EditorSession {
             guard let image = context.makeImage() else { throw ExportError.render }
             return image
         }
+        let path = kind.path(in: bounds, cornerRadius: cornerRadius, smoothing: smoothing)
         context.setFillColor(CGColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1))
-        context.addPath(kind.path(in: bounds, cornerRadius: cornerRadius, smoothing: smoothing))
+        context.addPath(path)
         context.fillPath()
+        let limit = min(size.width, size.height) / 2
+        if strokeWidth > 0, let strokeColor, limit > 0 {
+            context.saveGState()
+            context.addPath(path)
+            context.clip()
+            context.addPath(path)
+            context.setStrokeColor(CGColor(srgbRed: strokeColor.red, green: strokeColor.green, blue: strokeColor.blue, alpha: 1))
+            context.setLineWidth(min(strokeWidth, limit) * 2)
+            context.setLineJoin(.miter)
+            context.setLineCap(.butt)
+            context.setMiterLimit(10)
+            context.strokePath()
+            context.restoreGState()
+        }
         guard let image = context.makeImage() else { throw ExportError.render }
         return image
+    }
+
+    /// `style` drawn into a box of `size`.
+    nonisolated static func shapeImage(_ style: LayerShapeStyle, size: CGSize) throws -> CGImage {
+        try shapeImage(style.kind, size: size, color: style.color, cornerRadius: style.cornerRadius,
+                       smoothing: style.smoothing == true, lineWidth: style.lineWidth ?? 0,
+                       start: style.start, end: style.end, lineStyle: style.lineStyle ?? .solid,
+                       lineCap: style.lineCap ?? .round,
+                       strokeWidth: style.kind == .line ? 0 : (style.strokeWidth ?? 0), strokeColor: style.strokeColor)
+    }
+
+    /// The rectangle or ellipse the Shape bar edits: the only selected layer, still the shape it was drawn as.
+    var editingShapeLayer: ImageLayer? {
+        guard tool == .shape, !isMaskSelected, selectedLayerIDs.count <= 1, let layer = activeLayer,
+              let shape = layer.liveShape, shape.style.kind != .line else { return nil }
+        return layer
+    }
+
+    /// The line the Shape bar edits. Its color, width, dashes and caps redraw that line.
+    var editingLineLayer: ImageLayer? {
+        guard tool == .shape, !isMaskSelected, selectedLayerIDs.count <= 1, let layer = activeLayer,
+              let shape = layer.liveShape, shape.style.kind == .line else { return nil }
+        return layer
+    }
+
+    /// What the Fill swatch shows. In Line mode, with no line selected, it is the foreground color the next line uses.
+    var displayedShapeFill: PaletteColor {
+        if let picker = colorPicker, case .shapeFill = picker.target { return picker.color }
+        if let draft = shapeDraft, draft.kind == .line { return draft.fill }
+        if let line = editingLineLayer?.liveShape { return line.style.color }
+        if shapeKind != .line, let shape = editingShapeLayer?.liveShape { return shape.style.color }
+        return foregroundColor
+    }
+
+    /// What the Stroke swatch shows. A selected shape's stroke, or the color the next stroke will use.
+    var displayedShapeStroke: PaletteColor {
+        if let picker = colorPicker, case .shapeStroke = picker.target { return picker.color }
+        return editingShapeLayer?.liveShape?.style.strokeColor ?? shapeStrokeColor
+    }
+
+    var displayedStrokeWidth: Double {
+        if let width = editingShapeLayer?.liveShape?.style.strokeWidth { return Double(width) }
+        return editingShapeLayer == nil ? shapeStrokeWidth : 0
+    }
+
+    var displayedCornerRadius: Double {
+        if let shape = editingShapeLayer?.liveShape, shape.style.kind == .rectangle {
+            return Double(shape.style.cornerRadius)
+        }
+        return shapeCornerRadius
+    }
+
+    var displayedLineWidth: Double {
+        if let draft = shapeDraft, draft.kind == .line { return Double(draft.lineWidth) }
+        if let width = editingLineLayer?.liveShape?.style.lineWidth { return Double(width) }
+        return shapeLineWidth
+    }
+    var displayedLineStyle: ShapeLineStyle {
+        editingLineLayer?.liveShape?.style.lineStyle ?? (editingLineLayer == nil ? shapeLineStyle : .solid)
+    }
+    var displayedLineCap: ShapeLineCap {
+        editingLineLayer?.liveShape?.style.lineCap ?? (editingLineLayer == nil ? shapeLineCap : .round)
+    }
+
+    var displayedShapeSmoothing: Bool {
+        if let shape = editingShapeLayer?.liveShape, shape.style.kind == .rectangle {
+            return shape.style.smoothing == true
+        }
+        return shapeSmoothing
+    }
+
+    func beginShapeStyleEdit() {
+        guard shapeStyleEditLayerID == nil, let layer = editingShapeLayer ?? editingLineLayer, canEditLayers else { return }
+        if shapeColorPickerIsOpen { closeColorPicker(commit: true) }
+        finishOpacityEdit()
+        beginEdit("Shape Style")
+        shapeStyleEditLayerID = layer.id
+    }
+
+    func finishShapeStyleEdit() {
+        guard shapeStyleEditLayerID != nil else { return }
+        shapeStyleEditLayerID = nil
+        endEdit()
+    }
+
+    func setDisplayedStrokeWidth(_ width: Double) {
+        let width = width.isFinite ? min(5000, max(0, width)) : 0
+        guard editingShapeLayer != nil else { shapeStrokeWidth = width; return }
+        changeLiveShape { style in
+            style.setStroke(width: CGFloat(width), color: style.strokeColor ?? shapeStrokeColor)
+        }
+    }
+
+    func setDisplayedCornerRadius(_ radius: Double) {
+        let radius = radius.isFinite ? min(5000, max(0, radius)) : 0
+        guard editingShapeLayer?.liveShape?.style.kind == .rectangle else { shapeCornerRadius = radius; return }
+        changeLiveShape { $0.cornerRadius = CGFloat(radius) }
+    }
+
+    func setDisplayedLineWidth(_ width: Double) {
+        let width = width.isFinite ? min(5000, max(1, width)) : 4
+        if var draft = shapeDraft, draft.kind == .line {
+            draft.lineWidth = CGFloat(width)
+            shapeDraft = draft
+            shapeLineWidth = width
+            return
+        }
+        guard editingLineLayer != nil else { shapeLineWidth = width; return }
+        changeLiveLine { style, transform in
+            relayoutLine(&style, transform: &transform, width: CGFloat(width))
+        }
+    }
+
+    func setDisplayedLineStyle(_ style: ShapeLineStyle) {
+        guard editingLineLayer != nil else { shapeLineStyle = style; return }
+        changeLiveLine { line, _ in
+            line.lineStyle = style == .solid ? nil : style
+        }
+    }
+
+    func setDisplayedLineCap(_ cap: ShapeLineCap) {
+        guard editingLineLayer != nil else { shapeLineCap = cap; return }
+        changeLiveLine { style, transform in
+            style.lineCap = cap == .round ? nil : cap
+            relayoutLine(&style, transform: &transform, width: style.lineWidth ?? CGFloat(shapeLineWidth))
+        }
+    }
+    func setDisplayedShapeSmoothing(_ on: Bool) {
+        guard editingShapeLayer?.liveShape?.style.kind == .rectangle else { shapeSmoothing = on; return }
+        changeLiveShape { $0.smoothing = on ? true : nil }
+    }
+
+    func openShapeFillPicker() {
+        guard canEditPalette, colorPicker == nil, tool == .shape else { return }
+        // The line under the pointer is the one being created: its color is the foreground, not a shape already selected.
+        if shapeDraft?.kind == .line {
+            openColorPicker(background: false)
+            return
+        }
+        if let layer = editingLineLayer, let shape = layer.liveShape {
+            colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
+        } else if shapeKind != .line, let layer = editingShapeLayer, let shape = layer.liveShape {
+            colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
+        } else {
+            openColorPicker(background: false)
+        }
+    }
+
+    func openShapeStrokePicker() {
+        guard canEditPalette, colorPicker == nil, tool == .shape else { return }
+        let style = editingShapeLayer?.liveShape?.style
+        let bound = (style?.strokeWidth ?? 0) > 0
+        colorPicker = ColorPickerState(target: .shapeStroke(layerID: bound ? editingShapeLayer?.id : nil),
+                                       original: bound ? (style?.strokeColor ?? shapeStrokeColor) : shapeStrokeColor)
+    }
+
+    /// The canvas follows the picker's working color. The layer itself is unchanged until OK, so a save keeps the
+    /// committed fill.
+    func previewShapeColor() {
+        guard let picker = colorPicker else { return }
+        let layerID: UUID
+        let fill: Bool
+        switch picker.target {
+        case .shapeFill(let id): layerID = id; fill = true
+        case .shapeStroke(let id?): layerID = id; fill = false
+        default: return
+        }
+        guard let layer = document?.layers.first(where: { $0.id == layerID }),
+              let shape = layer.liveShape, let asset = layer.asset else { return }
+        if !fill, shape.style.kind == .line { return }
+        var style = shape.style
+        if fill {
+            style.red = picker.color.red
+            style.green = picker.color.green
+            style.blue = picker.color.blue
+        } else if (style.strokeWidth ?? 0) > 0 {
+            style.setStroke(width: style.strokeWidth ?? 0, color: picker.color)
+        } else {
+            shapeColorPreview = nil
+            refreshCanvasPreview?()
+            return
+        }
+        let size = CGSize(width: asset.image.width, height: asset.image.height)
+        guard let image = try? Self.shapeImage(style, size: size) else { return }
+        shapeColorPreview = (layerID, image)
+        refreshCanvasPreview?()
+    }
+
+    /// OK records one edit from the shape as it was when the picker opened. Cancel drops the preview and records nothing.
+    func finishShapeColorPick(commit: Bool) {
+        let picker = colorPicker
+        shapeColorPreview = nil
+        guard commit, let picker else { refreshCanvasPreview?(); return }
+        switch picker.target {
+        case .shapeStroke(nil):
+            shapeStrokeColor = picker.color
+        case .shapeFill(let layerID):
+            applyShapeColor(picker.color, fill: true, layerID: layerID)
+        case .shapeStroke(let layerID?):
+            applyShapeColor(picker.color, fill: false, layerID: layerID)
+        default:
+            break
+        }
+        refreshCanvasPreview?()
+    }
+
+    /// Drops the preview and closes the picker. The layer was never changed, so there is nothing to undo.
+    func cancelShapeColorPreview() {
+        guard shapeColorPreview != nil || shapeColorPickerIsOpen else { return }
+        shapeColorPreview = nil
+        if shapeColorPickerIsOpen { colorPicker = nil }
+        refreshCanvasPreview?()
+    }
+
+    /// Paints a live shape's fill, keeping its stroke and the fact that it is still a shape. False when it isn't a
+    /// live shape or it couldn't be redrawn, so the caller fills the pixels as usual.
+    @discardableResult
+    func recolorShape(_ id: UUID, to color: PaletteColor) -> Bool {
+        if shapeColorPreview != nil { cancelShapeColorPreview() }
+        guard canEditLayers, let index = document?.layers.firstIndex(where: { $0.id == id }),
+              let layer = document?.layers[index], let shape = layer.liveShape, let asset = layer.asset else { return false }
+        var style = shape.style
+        guard style.red != color.red || style.green != color.green || style.blue != color.blue else { return true }
+        style.red = color.red
+        style.green = color.green
+        style.blue = color.blue
+        guard let image = try? Self.shapeImage(style, size: CGSize(width: asset.image.width, height: asset.image.height)),
+              let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
+        finishShapeStyleEdit()
+        finishOpacityEdit()
+        beginEdit("Fill")
+        document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
+        document?.layers[index].shape = LayerShape(style: style, image: image)
+        endEdit()
+        return true
+    }
+
+    private var shapeColorPickerIsOpen: Bool {
+        switch colorPicker?.target {
+        case .shapeFill, .shapeStroke: true
+        default: false
+        }
+    }
+
+    private func changeLiveShape(_ change: (inout LayerShapeStyle) -> Void) {
+        if shapeStyleEditLayerID == nil, shapeColorPickerIsOpen { closeColorPicker(commit: true) }
+        guard canEditLayers, let layer = editingShapeLayer, var style = layer.liveShape?.style,
+              let index = document?.layers.firstIndex(where: { $0.id == layer.id }),
+              let asset = layer.asset else { return }
+        let before = style
+        change(&style)
+        guard style != before else { return }
+        let open = shapeStyleEditLayerID != nil
+        if !open { finishOpacityEdit(); beginEdit("Shape Style") }
+        if !paintShape(at: index, style: style, asset: asset), !open {
+            endEdit()
+            return
+        }
+        if !open { endEdit() }
+    }
+
+    private func applyShapeColor(_ color: PaletteColor, fill: Bool, layerID: UUID) {
+        guard let index = document?.layers.firstIndex(where: { $0.id == layerID }),
+              let layer = document?.layers[index], let shape = layer.liveShape, let asset = layer.asset else { return }
+        if !fill, shape.style.kind == .line { return }
+        var style = shape.style
+        if fill {
+            guard style.red != color.red || style.green != color.green || style.blue != color.blue else { return }
+            style.red = color.red
+            style.green = color.green
+            style.blue = color.blue
+        } else {
+            guard (style.strokeWidth ?? 0) > 0 else { return }
+            let before = style.strokeColor
+            style.setStroke(width: style.strokeWidth ?? 0, color: color)
+            guard style.strokeColor != before else { return }
+        }
+        finishShapeStyleEdit()
+        finishOpacityEdit()
+        beginEdit("Shape Style")
+        _ = paintShape(at: index, style: style, asset: asset)
+        endEdit()
+    }
+
+    @discardableResult
+    private func paintShape(at index: Int, style: LayerShapeStyle, asset: ImportedImage) -> Bool {
+        let size = CGSize(width: asset.image.width, height: asset.image.height)
+        guard let image = try? Self.shapeImage(style, size: size),
+              let thumbnail = try? PixelInvert.thumbnail(of: image) else { return false }
+        document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: asset.name)
+        document?.layers[index].shape = LayerShape(style: style, image: image)
+        return true
+    }
+
+    /// Redraws the selected line. A new width or cap grows the layer around the same two points, so the stroke still fits.
+    private func changeLiveLine(_ change: (inout LayerShapeStyle, inout LayerTransform) -> Void) {
+        if shapeStyleEditLayerID == nil, shapeColorPickerIsOpen { closeColorPicker(commit: true) }
+        guard canEditLayers, let layer = editingLineLayer, var style = layer.liveShape?.style,
+              let index = document?.layers.firstIndex(where: { $0.id == layer.id }) else { return }
+        var transform = layer.transform
+        let beforeStyle = style, beforeTransform = transform
+        change(&style, &transform)
+        guard style != beforeStyle || transform != beforeTransform, transform.isValid,
+              Int(transform.size.width) * Int(transform.size.height) <= Self.maxShapePixels else { return }
+        let open = shapeStyleEditLayerID != nil
+        if !open { finishOpacityEdit(); beginEdit("Shape Style") }
+        guard let image = try? Self.shapeImage(style, size: transform.size),
+              let thumbnail = try? PixelInvert.thumbnail(of: image) else {
+            if !open { endEdit() }
+            return
+        }
+        if layer.asset.map({ $0.image.width != image.width || $0.image.height != image.height }) == true,
+           let mask = layer.mask, mask.placement == nil {
+            document?.layers[index].mask?.placement = layer.maskTransform
+        }
+        document?.layers[index].transform = transform
+        document?.layers[index].asset = ImportedImage(image: image, thumbnail: thumbnail, name: layer.asset?.name ?? layer.name)
+        document?.layers[index].shape = LayerShape(style: style, image: image)
+        if !open { endEdit() }
+    }
+
+    /// Puts `width` on the line and rebuilds its box around the same two points. Older lines, with no ends stored, ran
+    /// corner to corner inset by half their thickness.
+    private func relayoutLine(_ style: inout LayerShapeStyle, transform: inout LayerTransform, width: CGFloat) {
+        let width = min(5000, max(1, width))
+        let oldWidth = style.lineWidth ?? width
+        let oldShift = Self.lineGridShift(width: oldWidth)
+        let newShift = Self.lineGridShift(width: width)
+        func placed(_ unit: CGPoint) -> CGPoint {
+            CGPoint(x: transform.origin.x + unit.x * transform.size.width,
+                    y: transform.origin.y + unit.y * transform.size.height)
+        }
+        let from: CGPoint
+        let to: CGPoint
+        if let start = style.start, let end = style.end {
+            let nudge = newShift - oldShift
+            from = CGPoint(x: placed(start).x + nudge, y: placed(start).y + nudge)
+            to = CGPoint(x: placed(end).x + nudge, y: placed(end).y + nudge)
+        } else {
+            let reach = oldWidth / 2
+            let box = CGRect(origin: transform.origin, size: transform.size).insetBy(dx: reach, dy: reach)
+            from = CGPoint(x: box.minX + newShift, y: box.minY + newShift)
+            to = CGPoint(x: box.maxX + newShift, y: box.maxY + newShift)
+        }
+        let cap = style.lineCap ?? .round
+        let reach = cap.reach(from: from, to: to, width: width)
+        var rect = CGRect(x: min(from.x, to.x), y: min(from.y, to.y),
+                          width: abs(to.x - from.x), height: abs(to.y - from.y)).insetBy(dx: -reach, dy: -reach)
+        if rect.width < 1 { rect.size.width = 1 }
+        if rect.height < 1 { rect.size.height = 1 }
+        func unit(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: rect.width > 0 ? (point.x - rect.minX) / rect.width : 0.5,
+                    y: rect.height > 0 ? (point.y - rect.minY) / rect.height : 0.5)
+        }
+        style.lineWidth = width
+        style.start = unit(from)
+        style.end = unit(to)
+        transform.origin = rect.origin
+        transform.size = rect.size
     }
 }

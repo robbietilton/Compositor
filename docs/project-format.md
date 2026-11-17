@@ -1,4 +1,4 @@
-# Compositor project format, versions 1–21
+# Compositor project format, versions 1–22
 
 A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
@@ -41,7 +41,7 @@ Version 11 lets those letters use different faces too: optional `fontRuns` in th
 Later fields are optional and not gated on the version, so older readers ignore them and keep the pixels or the linked mask as they were:
 
 - `maskPlacement` and `maskLinked`: an unlinked mask (`maskLinked` false; missing means linked) keeps its own transform in `maskPlacement`, a document-space rectangle like the layer transform, and no longer follows the layer when it moves. Both require a `maskFile`.
-- `shape`: a layer made with the Shape tool keeps its style (`kind`, `red`/`green`/`blue`, `cornerRadius` in document pixels, and for lines `lineWidth` plus `start` and `end` as fractions of the layer box, and optional `lineStyle` and `lineCap` (version 15)) so it redraws cleanly when scaled. Its PNG is still an ordinary raster; once anything else changes those pixels the metadata is dropped.
+- `shape`: a layer made with the Shape tool keeps its style (`kind`, `red`/`green`/`blue`, `cornerRadius` in document pixels, and for lines `lineWidth` plus `start` and `end` as fractions of the layer box, and optional `lineStyle` and `lineCap` (version 15), and for rectangles and ellipses an optional inside stroke `strokeWidth` plus `strokeRed`/`strokeGreen`/`strokeBlue` (version 22)) so it redraws cleanly when scaled. Its PNG is still an ordinary raster; once anything else changes those pixels the metadata is dropped.
 
 ### Editable text
 
@@ -70,3 +70,5 @@ Version 19 adds the `Sharpen` adjustment kind: an unsharp mask, its settings in 
 Version 20 adds `prismFringe` 0–100 to the `lens` settings: how far Prism splits each copy's red and blue apart, in hundredths of a percent of the document's longer side (0 keeps the copies crisp). Left out, it takes 30, the split earlier versions always drew. Older app builds reject v20.
 
 Version 21 adds the `Reduce Noise` adjustment kind, its settings in a `reduceNoise` object inside `filterLayerSettings`: `strength` (how much grain is smoothed from the brightness), `details` (how much texture is kept from it) and `color` (how much colored speckle is smoothed), each 0–100. Files declaring 1–20 cannot contain it, and older app builds reject v21.
+
+Version 22 lets a rectangle or ellipse carry an inside stroke on its `shape` style: `strokeWidth` in document pixels (above 0, at most 5000) and `strokeRed`, `strokeGreen`, `strokeBlue` (0–1). The stroke is drawn inside the shape's box, so the layer keeps the size it was dragged out to, and the width stays in document pixels when the shape is scaled, as the corner radius does. Missing means no stroke. Lines cannot carry these fields. Files declaring 1–21 cannot contain them, and older app builds reject v22.

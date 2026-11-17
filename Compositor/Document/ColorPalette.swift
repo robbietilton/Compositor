@@ -38,6 +38,8 @@ extension EditorSession {
             // Type paints in the foreground color, so text being edited follows the swatch. A text layer merely
             // selected keeps its color: it changes only while its text is open for editing.
             if tool == .type, textDraft != nil { setDraftTextColor(color) }
+            // A line being dragged uses this color, the one the Line bar is showing.
+            if var draft = shapeDraft, draft.kind == .line { draft.fill = color; shapeDraft = draft }
         }
     }
     func swapPaletteColors() {
@@ -135,6 +137,8 @@ extension EditorSession {
             case .dialog:
                 dialogColorChange?(commit ? colorPicker.color : colorPicker.original)
                 dialogColorChange = nil
+            case .shapeFill, .shapeStroke:
+                finishShapeColorPick(commit: commit)
             }
         }
         colorPicker = nil
@@ -320,11 +324,17 @@ enum ColorPickerTarget: Equatable {
     /// Dither's Two Colors: the dark one or the light one.
     case dither(light: Bool)
     case text(draftID: UUID?)
+    /// A selected rectangle or ellipse's fill.
+    case shapeFill(layerID: UUID)
+    /// Its inside stroke, or — with no layer — the stroke color of the next rectangle or ellipse.
+    case shapeStroke(layerID: UUID?)
     /// A dialog's own color, such as Export JPEG's background for transparency. The dialog is told as it changes.
     case dialog(title: String)
     var title: String {
         switch self {
         case .text: return "Color Picker (Text Color)"
+        case .shapeFill: return "Color Picker (Fill Color)"
+        case .shapeStroke: return "Color Picker (Stroke Color)"
         case .effect(let kind): return "Color Picker (\(kind.rawValue) Color)"
         case .palette(let background): return background ? "Color Picker (Background Color)" : "Color Picker (Foreground Color)"
         case .gradientMap(let highlights): return highlights ? "Color Picker (Gradient Map Highlights)" : "Color Picker (Gradient Map Shadows)"
