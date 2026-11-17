@@ -106,6 +106,9 @@ import Testing
                 session.toggleClippingMask(third)
             }
             defer { rig.window.orderOut(nil) }
+            // Never the system's drag, which waits on a real mouse.
+            rig.table.beginsOutsideDrag = { _, _, _, _, _ in }
+            try #require(rig.table.numberOfRows == 4, "the list shows every layer before the drag")
             let rows = rig.session.filteredLayerRows.map(\.layer)
             #expect(rows.map(\.name) == ["Layer 4", "Layer 3", "Layer 2", "Layer 1"])
             let base = rows[2].id

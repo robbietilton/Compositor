@@ -1110,6 +1110,8 @@ final class LayerTableView: NSTableView {
         while true {
             guard let event = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp, .keyDown],
                                                until: Date(timeIntervalSinceNow: 0.05), inMode: .eventTracking, dequeue: true) else {
+                // The button let go without its mouse-up reaching the list: the drag is over, rather than held forever.
+                guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
                 follow(last) // held near an edge: it keeps scrolling
                 continue
             }
