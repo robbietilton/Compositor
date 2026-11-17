@@ -353,6 +353,30 @@ struct ShapeToolTests {
         #expect(session.activeLayer?.liveShape?.style.cornerRadius == 0)
     }
 
+    /// The rim of a stroked shape is the stroke alone: its anti-aliased edge pixels carry none of the fill.
+    @Test func aStrokedEdgeHasNoFringeOfTheFill() throws {
+        let image = try EditorSession.shapeImage(.ellipse, size: CGSize(width: 40, height: 40), color: PaletteColor(red: 1, green: 1, blue: 1),
+                                                 strokeWidth: 4, strokeColor: .black)
+        let context = try #require(CGContext(data: nil, width: 40, height: 40, bitsPerComponent: 8, bytesPerRow: 160,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 40, height: 40))
+        let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+        var rim = 0
+        for y in 0..<40 {
+            for x in 0..<40 {
+                // Pixels on the outer edge only: the inner edge of the stroke rightly blends into the fill.
+                guard hypot(CGFloat(x) + 0.5 - 20, CGFloat(y) + 0.5 - 20) > 19 else { continue }
+                let index = (y * 40 + x) * 4
+                guard bytes[index + 3] > 0, bytes[index + 3] < 255 else { continue }
+                rim += 1
+                #expect(bytes[index] == 0, "white fill showing in the black rim at \(x), \(y)")
+            }
+        }
+        #expect(rim > 20, "the rim is anti-aliased")
+        let full = Int(bytes[(20 * 40 + 20) * 4 + 3])
+        #expect(full == 255)
+    }
+
     @Test func anEllipseStrokeStaysInsideAndALineIgnoresTheStrokeWidth() async throws {
         let session = makeSession()
         session.shapeKind = .ellipse
@@ -552,7 +576,7 @@ struct ShapeToolTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Stroke-\(UUID()).comp")
         defer { try? FileManager.default.removeItem(at: url) }
         let snapshot = try #require(session.projectSnapshot())
-        #expect(snapshot.manifest.version == 22)
+        #expect(snapshot.manifest.version == ProjectManifest.current)
         try await ProjectStore.shared.save(snapshot, to: url)
         let loaded = try await ProjectStore.shared.load(from: url)
         let style = try #require(loaded.manifest.layers.last?.shape)

@@ -463,25 +463,34 @@ extension EditorSession {
             return image
         }
         let path = kind.path(in: bounds, cornerRadius: cornerRadius, smoothing: smoothing)
-        context.setFillColor(CGColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1))
-        context.addPath(path)
-        context.fillPath()
-        let limit = min(size.width, size.height) / 2
-        if strokeWidth > 0, let strokeColor, limit > 0 {
-            context.saveGState()
-            context.addPath(path)
-            context.clip()
-            context.addPath(path)
-            context.setStrokeColor(CGColor(srgbRed: strokeColor.red, green: strokeColor.green, blue: strokeColor.blue, alpha: 1))
-            context.setLineWidth(min(strokeWidth, limit) * 2)
-            context.setLineJoin(.miter)
-            context.setLineCap(.butt)
-            context.setMiterLimit(10)
-            context.strokePath()
-            context.restoreGState()
-        }
+        fillShape(path, color: CGColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: 1),
+                  stroke: strokeColor.map { CGColor(srgbRed: $0.red, green: $0.green, blue: $0.blue, alpha: 1) },
+                  strokeWidth: min(strokeWidth, min(size.width, size.height) / 2), in: context)
         guard let image = context.makeImage() else { throw ExportError.render }
         return image
+    }
+
+    /// Fills `path`, with an inside stroke `strokeWidth` wide when there is one: the whole shape in the stroke color,
+    /// then what lies inside the stroke in the fill color. Each edge pixel is drawn once, so the anti-aliased rim is
+    /// the stroke alone. Filling first and stroking over it, clipped to the shape, drew those pixels twice: a faint
+    /// ring of the fill and a heavier edge.
+    nonisolated static func fillShape(_ path: CGPath, color: CGColor, stroke: CGColor?, strokeWidth: CGFloat, in context: CGContext) {
+        guard strokeWidth > 0, let stroke else {
+            context.setFillColor(color)
+            context.addPath(path)
+            context.fillPath()
+            return
+        }
+        context.setFillColor(stroke)
+        context.addPath(path)
+        context.fillPath()
+        // Inside the stroke: the shape less a band twice the width centered on its edge, half of which falls outside.
+        let band = path.copy(strokingWithWidth: strokeWidth * 2, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
+        let inside = path.subtracting(band)
+        guard !inside.isEmpty else { return }
+        context.setFillColor(color)
+        context.addPath(inside)
+        context.fillPath()
     }
 
     /// `style` drawn into a box of `size`.
