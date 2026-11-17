@@ -662,6 +662,24 @@ import Testing
         #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
     }
 
+    /// A shape dragged out over the top of a clipping stack: the new layer won't be clipped, so both canvases show it
+    /// in full, above the stack, past the base's edges too.
+    @Test func matchesWhileDrawingAShapeOverAClippingStack() throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = try paintable()
+        let image = try pattern(300, 200, seed: 5)
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Clipped"))
+        let clipped = try #require(session.activeLayerID)
+        session.toggleClippingMask(clipped)
+        #expect(session.activeLayer?.maskSourceID != nil)
+        session.selectTool(.shape)
+        session.beginShape(at: CGPoint(x: 20, y: 20))
+        session.dragShape(to: CGPoint(x: 580, y: 480), square: false, fromCenter: false)
+        session.zoom(to: 1)
+        let difference = try compare(session, name: "shape-over-stack")
+        #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+    }
+
     enum EffectsCase: String, CaseIterable {
         case paintingWithEffects, gradientWithEffects, gradientOnAMask, movingOnAMaskedLayer, movingWithEffects, paintingAPlacedMask
     }

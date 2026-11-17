@@ -1254,9 +1254,18 @@ final class CanvasView: NSView {
         }
         // The shape being dragged out previews where its layer will go — above the active layer — rather than over
         // everything, so the layers above it cover it as they will once it is made.
+        // Over the top of a clipping stack, the new layer won't be clipped, so the shape previews above the whole stack,
+        // unclipped, rather than clipped and then showing in full on release.
+        let renderIDs = document.renderLayers.map(\.id)
+        let stackTop: (base: UUID, top: UUID)? = {
+            guard let active = session.activeLayer, let base = active.maskSourceID,
+                  let index = renderIDs.firstIndex(of: active.id) else { return nil }
+            let next = renderIDs.indices.contains(index + 1) ? byID[renderIDs[index + 1]] : nil
+            return next?.maskSourceID == base && next?.parentID == active.parentID ? nil : (base, active.id)
+        }()
         func drawOwnWithDraft(_ id: UUID, _ context: CGContext) {
             drawOwn(id, context)
-            guard id == session.activeLayerID else { return }
+            guard id == session.activeLayerID, stackTop?.top != id else { return }
             drawShapeDraft(scale: scale, center: center, in: context)
             drawNewText(context)
         }
@@ -1304,7 +1313,13 @@ final class CanvasView: NSView {
             let clip = FolderMaskClip(image: displayImage(mask.asset.image, width: transform.size.width * scale, in: context), transform: transform)
             let origin = center(transform.center)
             return { clip.apply(scale: scale, center: origin, in: $0) }
-        }, in: context) { live.drawComposite($0, in: context) }
+        }, in: context) { id in
+            live.drawComposite(id, in: context)
+            if let stackTop, id == stackTop.base {
+                drawShapeDraft(scale: scale, center: center, in: context)
+                drawNewText(context)
+            }
+        }
         drawNewText(context)
     }
 
@@ -3555,11 +3570,13 @@ extension CanvasView {
                         prints.append("layer \(childID) \(session.displayedBlendMode(for: child))")
                         group = GPUBlend.blend(image, over: group, mode: session.displayedBlendMode(for: child))
                     } else if unsupported { return nil }
-                    group = drafts(after: childID, over: group)
+                    // Over the top of the stack, the new layer won't be clipped: it goes over the stack, below.
+                    if childID != children.last { group = drafts(after: childID, over: group) }
                 }
                 let stack = group.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(),
                                                                                        kCIInputMaskImageKey: base])
                 result = GPUBlend.blend(clippedByFolders(id, stack), over: result, mode: mode)
+                if let top = children.last { result = drafts(after: top, over: result) }
                 continue
             }
             // A layer masked by another's coverage, outside a clipping stack.
