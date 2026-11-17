@@ -56,6 +56,7 @@ struct NativeLayerList: NSViewRepresentable {
         init(session: EditorSession) { self.session = session }
 
         func update(_ table: NSTableView) {
+            session.layerList = table
             let selectionChanged = activeLayerID != session.activeLayerID
             activeLayerID = session.activeLayerID
             // The panel's search and type filter narrow what is listed; every row index below is one of these.
@@ -463,7 +464,7 @@ struct NativeLayerList: NSViewRepresentable {
                 tableView.setDropRow(target, dropOperation: .on)
                 return .copy
             }
-            guard session.canEditLayers, info.draggingSource as? NSTableView === tableView,
+            guard session.canEditLayers, Self.isOwnRowDrag(info, of: tableView),
                   (0...rows.count).contains(row) else { return [] }
             let ids = draggedLayers(info)
             guard !ids.isEmpty else { return [] }
@@ -488,7 +489,7 @@ struct NativeLayerList: NSViewRepresentable {
                 session.copyMask(from: source, to: rows[row].id)
                 return true
             }
-            guard info.draggingSource as? NSTableView === tableView else { return false }
+            guard Self.isOwnRowDrag(info, of: tableView) else { return false }
             let ids = draggedLayers(info)
             guard !ids.isEmpty else { return false }
             let copying = info.draggingSourceOperationMask == .copy
@@ -533,6 +534,11 @@ struct NativeLayerList: NSViewRepresentable {
             if placed, !copying { session.selectLayers(Set(ids), primary: ids.first) }
             session.endEdit()
             return placed
+        }
+        /// A drag of this list's own rows: started by the list, or carried on outside it by `LayerRowDragSource`.
+        static func isOwnRowDrag(_ info: NSDraggingInfo, of table: NSTableView) -> Bool {
+            if let list = info.draggingSource as? NSTableView { return list === table }
+            return (info.draggingSource as? LayerRowDragSource)?.table === table
         }
         /// Whether `ids` may go above `row`, or into it when it's a folder: what `validateDrop` allows.
         func canDrop(_ ids: [UUID], at row: Int, intoFolder: Bool) -> Bool {
@@ -848,6 +854,8 @@ final class LayerTableView: NSTableView {
 
     // MARK: Dragging rows, drawn by the list itself, as Photoshop does
 
+    /// The source of a row drag carried on outside the list, kept while it lasts.
+    fileprivate var outsideDragSource: LayerRowDragSource?
     /// Each step of a row drag, for tests: the picked-up row's picture and where a release would land.
     static var rowDragStepForTesting: ((LayerTableView, NSView, (row: Int, intoFolder: Bool)?) -> Void)?
     /// Takes over from the list's own drag once the pointer leaves the Layers panel; tests swap it to watch.
@@ -855,10 +863,10 @@ final class LayerTableView: NSTableView {
         table.beginSystemDrag(ids: ids, image: image, frame: frame, event: event)
     }
 
-    /// A press on a row: a click is the list's own, as before; a drag moves the rows within the list, held inside it
-    /// (it can't follow the pointer up over the blend and opacity controls, where a release puts the rows first),
-    /// until the pointer leaves the Layers panel, when it becomes an ordinary drag, to copy into another tab or onto
-    /// the canvas. The system's own drag, used before, left the list the moment the pointer did.
+    /// A press on a row: a click is the list's own, as before; a drag moves the rows within the list, and over the
+    /// blend and opacity controls too, where a release puts them first, until the pointer leaves the Layers panel or
+    /// rises above those controls, when it becomes an ordinary drag, to copy into another tab or onto the canvas. The
+    /// system's own drag, used before, left the list the moment the pointer did.
     private func trackRowPress(_ down: NSEvent) {
         let start = convert(down.locationInWindow, from: nil)
         let pressed = row(at: start)
@@ -905,10 +913,13 @@ final class LayerTableView: NSTableView {
         return (y < frame.midY ? index : index + 1, false)
     }
 
-    private func pointerIsInPanel(_ event: NSEvent) -> Bool {
-        guard let window, let content = window.contentView, let frame = session?.layersPanelFrame, !frame.isEmpty else { return true }
-        let point = event.locationInWindow
-        return frame.contains(CGPoint(x: point.x, y: content.bounds.height - point.y))
+    /// Whether a drag at `event` is still the list's: over the Layers panel and no higher than its blend and opacity
+    /// controls. Past either, it leaves for an ordinary drag.
+    private func dragStaysInList(_ event: NSEvent) -> Bool {
+        guard let window, let content = window.contentView, let session, !session.layersPanelFrame.isEmpty else { return true }
+        let point = CGPoint(x: event.locationInWindow.x, y: content.bounds.height - event.locationInWindow.y)
+        guard session.layersPanelFrame.contains(point) else { return false }
+        return session.layerControlsFrame.isEmpty || point.y >= session.layerControlsFrame.minY
     }
 
     private func snapshot(of view: NSView) -> NSImage? {
@@ -920,18 +931,19 @@ final class LayerTableView: NSTableView {
     }
 
     private func dragRows(pressed: Int, start: NSPoint, event first: NSEvent) {
-        guard let window, let scroll = enclosingScrollView,
+        guard let window, let scroll = enclosingScrollView, let content = window.contentView,
               let coordinator = delegate as? NativeLayerList.Coordinator else { return }
         let ids = draggedIDs(pressed: pressed)
         guard !ids.isEmpty else { return }
         let rowFrame = rect(ofRow: pressed)
         let image = rowView(atRow: pressed, makeIfNecessary: false).flatMap(snapshot)
-        // The picked-up row: half strength, so the list shows through it, above the rows but within the list.
+        // The picked-up row: half strength, so the list shows through it. It sits over the whole window, so it can follow
+        // the pointer up over the blend and opacity controls.
         let picture = NSImageView(frame: .zero)
         picture.image = image
         picture.imageScaling = .scaleNone
         picture.alphaValue = 0.5
-        scroll.addSubview(picture, positioned: .above, relativeTo: nil)
+        content.addSubview(picture, positioned: .above, relativeTo: nil)
         let marker = NSView(frame: .zero)
         marker.wantsLayer = true
         addSubview(marker)
@@ -948,13 +960,14 @@ final class LayerTableView: NSTableView {
             else if pointer.y > visible.maxY - 6 { scroll.contentView.scroll(to: NSPoint(x: visible.minX, y: min(most, visible.minY + 8))) }
             scroll.reflectScrolledClipView(scroll.contentView)
             let shown = scroll.contentView.bounds
-            pointer.y = min(max(pointer.y, shown.minY), shown.maxY - 1)
-            // The picture follows the pointer, kept inside the list up and down; sideways it moves freely.
-            let top = min(max(pointer.y - grab.y, shown.minY), shown.maxY - rowFrame.height)
+            // The picture follows the pointer, up over the controls too, but no lower than the list's last rows.
+            let top = min(pointer.y - grab.y, shown.maxY - rowFrame.height)
             let x = convert(event.locationInWindow, from: nil).x - grab.x
-            let corner = scroll.convert(NSPoint(x: x, y: top), from: self)
-            picture.frame = NSRect(x: corner.x, y: scroll.isFlipped ? corner.y : corner.y - rowFrame.height,
+            let corner = content.convert(NSPoint(x: x, y: top), from: self)
+            picture.frame = NSRect(x: corner.x, y: content.isFlipped ? corner.y : corner.y - rowFrame.height,
                                    width: rowFrame.width, height: rowFrame.height)
+            // Above the list, the release puts the rows first.
+            pointer.y = min(max(pointer.y, shown.minY), shown.maxY - 1)
             let candidate = dropTarget(at: pointer.y)
             if coordinator.canDrop(ids, at: candidate.row, intoFolder: candidate.intoFolder) {
                 target = candidate
@@ -996,8 +1009,9 @@ final class LayerTableView: NSTableView {
                 return
             case .leftMouseDragged:
                 last = event
-                if !pointerIsInPanel(event) {
-                    // Out of the Layers panel: the ordinary drag, to copy into another tab or onto the canvas.
+                if !dragStaysInList(event) {
+                    // Out of the Layers panel, or above its controls: the ordinary drag, to copy into another tab or
+                    // onto the canvas.
                     let pointer = convert(event.locationInWindow, from: nil)
                     let frame = NSRect(x: pointer.x - grab.x, y: pointer.y - grab.y, width: rowFrame.width, height: rowFrame.height)
                     picture.removeFromSuperview()
@@ -1014,6 +1028,8 @@ final class LayerTableView: NSTableView {
 
     /// The system's drag, carrying each row's layer as the list's own drags did, so the tabs and the canvas take it.
     func beginSystemDrag(ids: [UUID], image: NSImage?, frame: NSRect, event: NSEvent) {
+        session?.layerDragImage = image
+        session?.layerDragIsOutside = true
         let items = ids.enumerated().map { index, id in
             let item = NSPasteboardItem()
             item.setString(id.uuidString, forType: NativeLayerList.Coordinator.layerType)
@@ -1021,7 +1037,12 @@ final class LayerTableView: NSTableView {
             dragging.setDraggingFrame(frame.offsetBy(dx: 0, dy: CGFloat(index) * 4), contents: image)
             return dragging
         }
-        beginDraggingSession(with: items, event: event, source: self)
+        // Its own source rather than the list, which would redo the dragged picture at its own, smaller size.
+        let source = LayerRowDragSource(table: self)
+        outsideDragSource = source
+        let dragging = beginDraggingSession(with: items, event: event, source: source)
+        // Kept as the row looks in the list, full size, rather than gathered into the smaller stacked image.
+        dragging.draggingFormation = .none
     }
     override func keyDown(with event: NSEvent) {
         guard let event = ShortcutSettings.shared.canvasEvent(event) else { return }
@@ -1734,5 +1755,45 @@ extension ImageLayer {
         if gifAnimation != nil { return "GIF" }
         guard let asset, asset.deep != nil, liveText == nil, adjustment == nil, !isGroup else { return nil }
         return asset.isHDR ? "HDR" : "16-Bit"
+    }
+}
+
+/// The source of a row drag once it has left the Layers list (see `LayerTableView.beginSystemDrag`): moves within the
+/// app, copies with Option held, and when it ends, wherever that is, the panel's controls stop taking it back.
+final class LayerRowDragSource: NSObject, NSDraggingSource {
+    weak var table: LayerTableView?
+    init(table: LayerTableView) { self.table = table }
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .withinApplication ? [.move, .copy] : []
+    }
+    /// Where the drag was when it last moved: over the blend and opacity controls, over the list, or elsewhere; nil
+    /// before it first moves.
+    private enum Area { case controls, list, elsewhere }
+    private var lastArea: Area?
+    /// macOS draws a drag as a smaller preview of its picture whenever it's handed one afresh (as the drag begins, and as
+    /// it leaves the controls or the list, which show it their own way) and keeps doing so until the picture is set
+    /// again. So it's set again each time the drag moves into a different area, and stays full size throughout.
+    func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+        guard let image = table?.session?.layerDragImage else { return }
+        let area = self.area(at: screenPoint)
+        defer { lastArea = area }
+        guard area != lastArea else { return }
+        session.draggingFormation = .none
+        session.enumerateDraggingItems(options: [], for: nil, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
+            item.setDraggingFrame(NSRect(origin: item.draggingFrame.origin, size: image.size), contents: image)
+        }
+    }
+    private func area(at screenPoint: NSPoint) -> Area {
+        guard let table, let window = table.window, let content = window.contentView, let session = table.session else { return .elsewhere }
+        let inWindow = window.convertPoint(fromScreen: screenPoint)
+        let point = CGPoint(x: inWindow.x, y: content.bounds.height - inWindow.y)
+        if session.layerControlsFrame.contains(point) { return .controls }
+        if let scroll = table.enclosingScrollView, scroll.bounds.contains(scroll.convert(inWindow, from: nil)) { return .list }
+        return .elsewhere
+    }
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        table?.session?.layerDragIsOutside = false
+        table?.session?.layerDragImage = nil
+        table?.outsideDragSource = nil
     }
 }

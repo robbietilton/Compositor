@@ -212,6 +212,15 @@ final class EditorSession {
     /// Where the Layers panel is in its window (top-left origin): a layer dragged in the list stays in the list until
     /// the pointer leaves the panel.
     @ObservationIgnored var layersPanelFrame: CGRect = .zero
+    /// Where the panel's blend and opacity controls are, likewise: a row dragged up over them stays the list's, and
+    /// above them it leaves the list.
+    @ObservationIgnored var layerControlsFrame: CGRect = .zero
+    /// A layer drag has left the list for the system's drag (above the panel's controls, or out of the panel): while it
+    /// lasts, the controls take it back for the list if it returns over them (`LayerDropForwarder`).
+    var layerDragIsOutside = false
+    /// The list, and the dragged row as it draws it, for `LayerDropForwarder`.
+    @ObservationIgnored weak var layerList: NSTableView?
+    @ObservationIgnored var layerDragImage: NSImage?
     /// Blocks overlapping edits immediately. Not observed by the UI: controls only dim via
     /// `showsBusy`, after an operation has run long enough to be worth showing, so quick
     /// edits (invert, fills, stroke commits) never flash the interface.

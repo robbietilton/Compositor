@@ -27,6 +27,8 @@ import Testing
         window.orderFront(nil)
         host.layoutSubtreeIfNeeded()
         session.layersPanelFrame = CGRect(origin: .zero, size: host.frame.size)
+        // The controls' place, as the panel reports it once laid out.
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants($0) } }
         let table = try #require(descendants(host).compactMap { $0 as? LayerTableView }.first)
         return Rig(session: session, window: window, host: host, table: table)
@@ -83,14 +85,58 @@ import Testing
         rig.table.mouseDown(with: try mouse(.leftMouseDown, start, in: rig.window))
         #expect(!handedOver, "it left the list for an ordinary drag while still over the panel")
         #expect(steps.count >= 4, "the drag never ran: \(steps.count) steps")
-        // Window y grows upward, so "above the list's top" is a larger y.
-        for step in steps { #expect(step.top <= step.listTop + 0.5, "the row's picture left the list: \(step.top) above \(step.listTop)") }
+        // Window y grows upward: over the controls the row's picture has followed the pointer up past the list's top.
+        #expect((steps.last?.top ?? 0) > (steps.last?.listTop ?? 0), "the picture should follow up over the controls")
         #expect(steps.last?.target == 0, "over the controls it should land first, not \(String(describing: steps.last?.target))")
         let after = names(rig.session)
         #expect(after.first == before[2], "the dragged layer should be first: \(after)")
         for (index, data) in shots.enumerated() where index == 1 || index == 3 || index == shots.count - 1 {
             Attachment.record(data, named: "drag-step-\(index).png")
         }
+    }
+
+    @Test func aboveTheControlsItBecomesAnOrdinaryDrag() throws {
+        let rig = try rig()
+        defer { rig.window.orderOut(nil) }
+        #expect(!rig.session.layerControlsFrame.isEmpty, "the panel reported where its controls are")
+        let before = names(rig.session)
+        var handedOver = false
+        rig.table.beginsOutsideDrag = { _, _, _, _, _ in handedOver = true }
+        let start = middle(of: 1, in: rig.table)
+        // The controls' top edge, in window coordinates (y up), and a little above it.
+        let above = rig.host.frame.height - rig.session.layerControlsFrame.minY + 12
+        NSApp.postEvent(try mouse(.leftMouseDragged, NSPoint(x: start.x, y: start.y + 30), in: rig.window), atStart: false)
+        NSApp.postEvent(try mouse(.leftMouseDragged, NSPoint(x: start.x, y: above), in: rig.window), atStart: false)
+        rig.table.mouseDown(with: try mouse(.leftMouseDown, start, in: rig.window))
+        #expect(handedOver)
+        #expect(names(rig.session) == before)
+    }
+
+    /// Once a drag has left for the system's (above the controls) and comes back over them, the controls hand it to the
+    /// list as at its top: a release there puts the layer first.
+    @Test func aDragComingBackOverTheControlsGoesFirst() throws {
+        let rig = try rig()
+        defer { rig.window.orderOut(nil) }
+        let dragged = rig.session.filteredLayerRows[2].layer
+        rig.session.layerDragIsOutside = true
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        rig.host.layoutSubtreeIfNeeded()
+        func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants($0) } }
+        let forwarder = try #require(descendants(rig.host).compactMap { $0 as? LayerDropForwarder.ForwardingView }.first,
+                                     "the controls take a returning drag")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("layer-drag-test-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString(dragged.id.uuidString, forType: NativeLayerList.Coordinator.layerType)
+        pasteboard.writeObjects([item])
+        let location = forwarder.convert(NSPoint(x: forwarder.bounds.midX, y: forwarder.bounds.midY), to: nil)
+        let drag = FakeDrag(pasteboard: pasteboard, source: rig.table, location: location, window: rig.window)
+        #expect(forwarder.draggingEntered(drag) == .move)
+        #expect(forwarder.draggingUpdated(drag) == .move)
+        #expect(forwarder.prepareForDragOperation(drag))
+        #expect(forwarder.performDragOperation(drag))
+        #expect(rig.session.filteredLayerRows.first?.layer.id == dragged.id, "the layer should be first: \(names(rig.session))")
+        rig.session.layerDragIsOutside = false
     }
 
     @Test func aClickWithoutMovingStillSelectsAndMovesNothing() throws {
@@ -117,4 +163,28 @@ import Testing
         #expect(handedOver == [rig.session.filteredLayerRows[1].layer.id])
         #expect(names(rig.session) == before, "nothing moves within the list")
     }
+}
+
+/// A drag, made up for a test: the list's own, carrying `pasteboard`, at `location` in `window`.
+private final class FakeDrag: NSObject, NSDraggingInfo {
+    let draggingPasteboard: NSPasteboard
+    let draggingSource: Any?
+    let draggingLocation: NSPoint
+    let draggingDestinationWindow: NSWindow?
+    init(pasteboard: NSPasteboard, source: Any?, location: NSPoint, window: NSWindow) {
+        draggingPasteboard = pasteboard; draggingSource = source; draggingLocation = location; draggingDestinationWindow = window
+    }
+    var draggingSourceOperationMask: NSDragOperation { [.move, .copy] }
+    var draggedImageLocation: NSPoint { draggingLocation }
+    var draggedImage: NSImage? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+                                classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+                                using block: @escaping (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func resetSpringLoading() {}
 }

@@ -13,6 +13,11 @@ struct LayersPanel: View {
             LayersHeader(session: session)
             Divider()
             LayerAppearanceControls(session: session, layerID: session.activeLayerID).id(session.activeLayerID)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.layerControlsFrame = $0 }
+                // A layer drag that left the list and comes back over the controls is the list's again.
+                // It reaches a few points down, over the divider and the list's top edge: in the gap between the two, the
+                // window's own drop briefly took the drag, showing it small with a "+".
+                .overlay { if session.layerDragIsOutside { LayerDropForwarder(session: session).padding(.bottom, -6) } }
             Divider()
             if let layers = session.document?.layers, !layers.isEmpty {
                 if session.isFilteringLayers, session.filteredLayerRows.isEmpty {
