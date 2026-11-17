@@ -72,6 +72,7 @@ Break one of these and Compositor refuses the whole file **without any message**
 - **Blend modes are spelled exactly** as Compositor names them: `Normal`, `Darken`, `Multiply`, `Color Burn`, `Linear Burn`, `Lighten`, `Screen`, `Color Dodge`, `Linear Dodge (Add)`, `Overlay`, `Soft Light`, `Hard Light`, `Vivid Light`, `Linear Light`, `Pin Light`, `Hard Mix`, `Difference`, `Exclusion`, `Subtract`, `Divide`, `Hue`, `Saturation`, `Color`, `Luminosity`.
 - **Every layer the manifest names has its image in place**, and the manifest is valid JSON.
 - **A line's `lineStyle` and `lineCap` need a manifest `version` of at least 15**, and only a `shape` of kind `Line` may carry them: `lineStyle` is `Solid`, `Dashed`, `Long Dash` or `Dotted`, and `lineCap` is `Square` or `Round`.
+- **A rectangle or ellipse's inside stroke needs a manifest `version` of at least 22.** `strokeWidth` is its thickness in document pixels (above 0, at most 5000) and `strokeRed`, `strokeGreen` and `strokeBlue` are 0–1. Leave them out for no stroke. A line cannot carry them.
 
 ## Writing safely while the project is open
 

@@ -85,6 +85,8 @@ struct ShapeToolTests {
         let session = makeSession()
         session.shapeCornerRadius = 8
         drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 40)) // 40 × 30
+        // The selected rectangle owns the radius control, so the next shape's radius is set with it out of the way.
+        session.selectLayer(session.document?.layers.first?.id)
         session.shapeCornerRadius = 500
         drag(session, from: CGPoint(x: 55, y: 50), to: CGPoint(x: 95, y: 70)) // 40 × 20: radius 10
         let pixel = try await pixels(session)
@@ -309,5 +311,164 @@ struct ShapeToolTests {
         session.dragMarquee(to: CGPoint(x: 20, y: 10), square: false, fromCenter: false)
         #expect(session.dragOutSize?.text == "40 × 40 px")
         #expect(session.dragOutSize?.corner == CGPoint(x: 20, y: 10))
+    }
+
+    /// No stroke draws the same pixels as a shape from before strokes existed. An inside stroke replaces the fill
+    /// along the edge and leaves the middle, and the layer stays a shape.
+    @Test func anInsideStrokeRecolorsTheEdgeAndKeepsTheShape() async throws {
+        let session = makeSession()
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 40)) // 40 × 30
+        let plain = try #require(session.activeLayer?.liveShape?.image)
+        let reference = try EditorSession.shapeImage(.rectangle, size: CGSize(width: 40, height: 30), color: session.foregroundColor)
+        #expect(plain.dataProvider?.data == reference.dataProvider?.data)
+        #expect(session.activeLayer?.liveShape?.style.strokeWidth == nil)
+        let foreground = session.foregroundColor
+        session.shapeStrokeColor = .black
+        let count = session.history.undoCount
+        session.beginShapeStyleEdit()
+        session.setDisplayedStrokeWidth(4)
+        session.setDisplayedStrokeWidth(8)
+        session.finishShapeStyleEdit()
+        #expect(session.history.undoCount == count + 1)
+        #expect(session.history.undoName == "Shape Style")
+        #expect(session.foregroundColor == foreground)
+        #expect(session.shapeStrokeWidth == 0, "the next shape's stroke is unchanged")
+        let style = try #require(session.activeLayer?.liveShape?.style)
+        #expect(style.strokeWidth == 8 && style.strokeColor == .black)
+        let pixel = try await pixels(session)
+        #expect(pixel(14, 25) == (0, 255), "inside the stroke")
+        #expect(pixel(30, 25) == (255, 255), "the middle stays the fill")
+        #expect(pixel(9, 25).alpha == 0, "the box does not grow")
+        session.undo()
+        #expect(session.activeLayer?.liveShape?.style.strokeWidth == nil)
+        session.redo()
+        #expect(session.activeLayer?.liveShape?.style.strokeWidth == 8)
+
+        session.setDisplayedCornerRadius(10)
+        #expect(session.activeLayer?.liveShape?.style.cornerRadius == 10)
+        #expect(session.activeLayer?.liveShape?.style.strokeWidth == 8)
+        session.undo()
+        #expect(session.activeLayer?.liveShape?.style.cornerRadius == 0)
+    }
+
+    @Test func anEllipseStrokeStaysInsideAndALineIgnoresTheStrokeWidth() async throws {
+        let session = makeSession()
+        session.shapeKind = .ellipse
+        drag(session, from: CGPoint(x: 30, y: 20), to: CGPoint(x: 70, y: 60)) // 40 × 40
+        session.shapeStrokeColor = PaletteColor(red: 0, green: 0, blue: 1)
+        session.setDisplayedStrokeWidth(8)
+        let pixel = try await pixels(session)
+        #expect(pixel(50, 40) == (255, 255), "the middle is the fill")
+        #expect(pixel(50, 24).red == 0 && pixel(50, 24).alpha == 255, "inside the rim")
+        #expect(pixel(30, 20).alpha == 0, "the corner of the box stays clear")
+        let ellipse = try #require(session.activeLayer?.id)
+
+        session.shapeKind = .line
+        session.shapeLineWidth = 4
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 90, y: 10))
+        let line = try #require(session.activeLayer?.liveShape)
+        let before = line.image.dataProvider?.data
+        session.shapeLineWidth = 30
+        #expect(session.activeLayer?.liveShape?.style.lineWidth == 4)
+        #expect(session.activeLayer?.liveShape?.image.dataProvider?.data == before)
+        #expect(session.activeLayer?.id != ellipse)
+    }
+
+    /// The next rectangle takes the stroke the bar is showing on the selected shape.
+    @Test func theNextShapeCopiesTheBar() async throws {
+        let session = makeSession()
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 40, y: 30))
+        session.shapeStrokeColor = .black
+        session.setDisplayedStrokeWidth(6)
+        session.setDisplayedCornerRadius(4)
+        drag(session, from: CGPoint(x: 50, y: 10), to: CGPoint(x: 80, y: 30))
+        let style = try #require(session.activeLayer?.liveShape?.style)
+        #expect(style.strokeWidth == 6 && style.cornerRadius == 4 && style.color == session.foregroundColor)
+    }
+
+    @Test func fillRecolorsALiveShapeAndASelectionRasterizesIt() async throws {
+        let session = makeSession()
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 40))
+        session.shapeStrokeColor = .black
+        session.setDisplayedStrokeWidth(6)
+        session.foregroundColor = PaletteColor(red: 0, green: 0, blue: 1)
+        await session.fillSelection(with: .foreground)
+        let style = try #require(session.activeLayer?.liveShape?.style)
+        #expect(style.blue == 1 && style.red == 0)
+        #expect(style.strokeWidth == 6 && style.strokeColor == .black)
+        let image = try #require(session.activeLayer?.liveShape?.image)
+        let reference = try EditorSession.shapeImage(style, size: CGSize(width: image.width, height: image.height))
+        #expect(image.dataProvider?.data == reference.dataProvider?.data)
+        session.undo()
+        #expect(session.activeLayer?.liveShape?.style.red == 1)
+
+        session.selectAll()
+        await session.fillSelection(with: .background)
+        #expect(session.activeLayer?.liveShape == nil)
+    }
+
+    @Test func theColorPickerPreviewsAndCancelRestoresTheFill() async throws {
+        let session = makeSession()
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 40))
+        let count = session.history.undoCount
+        session.openShapeFillPicker()
+        let picker = try #require(session.colorPicker)
+        picker.hsb = PickerHSB(PaletteColor(red: 0, green: 1, blue: 0))
+        session.previewShapeColor()
+        let preview = try await pixels(session)
+        #expect(preview(30, 25) == (0, 255))
+        #expect(session.foregroundColor.red == 1, "the foreground swatch stays")
+        session.closeColorPicker(commit: false)
+        #expect(session.history.undoCount == count)
+        #expect(session.activeLayer?.liveShape?.style.red == 1)
+        session.openShapeFillPicker()
+        session.colorPicker?.hsb = PickerHSB(PaletteColor(red: 0, green: 1, blue: 0))
+        session.closeColorPicker(commit: true)
+        #expect(session.activeLayer?.liveShape?.style.green == 1)
+        #expect(session.foregroundColor.red == 1)
+        #expect(session.history.undoCount == count + 1)
+        session.undo()
+        #expect(session.activeLayer?.liveShape?.style.red == 1)
+    }
+
+    @Test func strokeSurvivesSavingAndNeedsVersionTwentyTwo() async throws {
+        let session = makeSession()
+        session.shapeStrokeWidth = 5
+        session.shapeStrokeColor = PaletteColor(red: 0, green: 0, blue: 1)
+        session.shapeCornerRadius = 6
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 50, y: 40))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Stroke-\(UUID()).comp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let snapshot = try #require(session.projectSnapshot())
+        #expect(snapshot.manifest.version == 22)
+        try await ProjectStore.shared.save(snapshot, to: url)
+        let loaded = try await ProjectStore.shared.load(from: url)
+        let style = try #require(loaded.manifest.layers.last?.shape)
+        #expect(style.strokeWidth == 5 && style.strokeBlue == 1 && style.cornerRadius == 6)
+        let reopened = makeSession()
+        reopened.installProject(loaded, from: url)
+        reopened.beginTransform()
+        var transform = try #require(reopened.transformEdit?.draft)
+        transform.size = CGSize(width: 80, height: 50)
+        let layer = try #require(reopened.activeLayer)
+        let preview = try #require(reopened.shapeTransformPreview(for: layer, transform: transform))
+        reopened.previewTransform(transform)
+        reopened.commitTransform()
+        let image = try #require(reopened.activeLayer?.liveShape?.image)
+        #expect(reopened.activeLayer?.liveShape?.style.strokeWidth == 5)
+        #expect(reopened.activeLayer?.liveShape?.style.cornerRadius == 6)
+        let reference = try EditorSession.shapeImage(.rectangle, size: transform.size, color: session.foregroundColor,
+                                                    cornerRadius: 6, strokeWidth: 5, strokeColor: PaletteColor(red: 0, green: 0, blue: 1))
+        #expect(image.dataProvider?.data == reference.dataProvider?.data)
+        #expect(preview.dataProvider?.data == reference.dataProvider?.data)
+
+        var older = snapshot.manifest
+        older.version = 21
+        await #expect(throws: (any Error).self) {
+            try await ProjectStore.shared.save(ProjectSnapshot(manifest: older, images: snapshot.images), to: url)
+        }
+        let unstroked = LayerShapeStyle(kind: .rectangle, red: 1, green: 0, blue: 0, cornerRadius: 0)
+        let decoded = try JSONDecoder().decode(LayerShapeStyle.self, from: JSONEncoder().encode(unstroked))
+        #expect(decoded.strokeWidth == nil && decoded.strokeRed == nil)
     }
 }
