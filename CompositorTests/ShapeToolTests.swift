@@ -385,6 +385,30 @@ struct ShapeToolTests {
         #expect(session.activeLayer?.id != lineID)
     }
 
+    /// The Shape tool opens on the kind of the selected live shape, instead of staying on Rectangle.
+    @Test func theShapeToolAdoptsTheSelectedShape() throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 80, y: 20))
+        session.shapeKind = .ellipse
+        drag(session, from: CGPoint(x: 10, y: 40), to: CGPoint(x: 30, y: 60))
+        let ellipse = try #require(session.activeLayer?.id)
+        let line = try #require(session.document?.layers.first { $0.liveShape?.style.kind == .line }?.id)
+        session.selectTool(.move)
+        session.shapeKind = .rectangle
+        session.selectLayer(line)
+        session.selectTool(.shape)
+        #expect(session.shapeKind == .line)
+        session.selectTool(.move)
+        session.shapeKind = .rectangle
+        session.selectLayer(ellipse)
+        session.selectTool(.shape)
+        #expect(session.shapeKind == .ellipse)
+        let blank = session.document?.layers.first { $0.liveShape == nil }?.id
+        session.selectLayer(blank)
+        #expect(session.shapeKind == .ellipse, "a layer that is not a shape leaves the mode alone")
+    }
+
     /// Color and width on the Shape bar redraw the selected line, around the same two points.
     @Test func editingASelectedLineChangesItsColorAndWidth() async throws {
         let session = makeSession()

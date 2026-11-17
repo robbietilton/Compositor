@@ -331,6 +331,13 @@ extension EditorSession {
         if shapeDraft != nil { shapeDraft = nil }
     }
 
+    /// The Shape tool opens on the kind of the live shape that is selected, so a line is not edited as a rectangle.
+    func adoptShapeKindFromSelection() {
+        guard selectedLayerIDs.count <= 1, let kind = activeLayer?.liveShape?.style.kind else { return }
+        if shapeKind != kind { cancelShape() }
+        shapeKind = kind
+    }
+
     /// Shift-U (and Tab): the Shape tool steps through Rectangle, Ellipse and Line.
     func toggleShapeKind() {
         cancelShape()
