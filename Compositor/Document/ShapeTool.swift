@@ -263,7 +263,7 @@ extension EditorSession {
                                 lineCap: line.map { $0.lineCap ?? .round } ?? shapeLineCap,
                                 fill: line?.color ?? editing?.color ?? foregroundColor,
                                 lineWidth: line?.lineWidth ?? CGFloat(shapeLineWidth),
-                                strokeWidth: shapeKind == .line ? 0 : (editing?.strokeWidth ?? CGFloat(shapeStrokeWidth)),
+                                strokeWidth: shapeKind == .line ? 0 : (editing == nil ? CGFloat(shapeStrokeWidth) : (editing?.strokeWidth ?? 0)),
                                 strokeColor: editing?.strokeColor ?? shapeStrokeColor)
     }
 
@@ -631,7 +631,8 @@ extension EditorSession {
                                        original: bound ? (style?.strokeColor ?? shapeStrokeColor) : shapeStrokeColor)
     }
 
-    /// The canvas follows the picker's working color. Nothing is recorded until OK.
+    /// The canvas follows the picker's working color. The layer itself is unchanged until OK, so a save keeps the
+    /// committed fill.
     func previewShapeColor() {
         guard let picker = colorPicker else { return }
         let layerID: UUID
@@ -641,14 +642,10 @@ extension EditorSession {
         case .shapeStroke(let id?): layerID = id; fill = false
         default: return
         }
-        guard let index = document?.layers.firstIndex(where: { $0.id == layerID }),
-              let layer = document?.layers[index], let shape = layer.liveShape, let asset = layer.asset else { return }
+        guard let layer = document?.layers.first(where: { $0.id == layerID }),
+              let shape = layer.liveShape, let asset = layer.asset else { return }
         if !fill, shape.style.kind == .line { return }
-        if shapeColorPreview?.layerID != layerID {
-            shapeColorPreview = (layerID, asset, shape)
-        }
-        guard let original = shapeColorPreview, original.layerID == layerID else { return }
-        var style = original.shape.style
+        var style = shape.style
         if fill {
             style.red = picker.color.red
             style.green = picker.color.green
@@ -656,21 +653,21 @@ extension EditorSession {
         } else if (style.strokeWidth ?? 0) > 0 {
             style.setStroke(width: style.strokeWidth ?? 0, color: picker.color)
         } else {
+            shapeColorPreview = nil
+            refreshCanvasPreview?()
             return
         }
-        _ = paintShape(at: index, style: style, asset: original.asset)
+        let size = CGSize(width: asset.image.width, height: asset.image.height)
+        guard let image = try? Self.shapeImage(style, size: size) else { return }
+        shapeColorPreview = (layerID, image)
+        refreshCanvasPreview?()
     }
 
-    /// OK records one edit from the shape as it was when the picker opened. Cancel puts that back and records nothing.
+    /// OK records one edit from the shape as it was when the picker opened. Cancel drops the preview and records nothing.
     func finishShapeColorPick(commit: Bool) {
         let picker = colorPicker
-        if let preview = shapeColorPreview,
-           let index = document?.layers.firstIndex(where: { $0.id == preview.layerID }) {
-            document?.layers[index].asset = preview.asset
-            document?.layers[index].shape = preview.shape
-        }
         shapeColorPreview = nil
-        guard commit, let picker else { return }
+        guard commit, let picker else { refreshCanvasPreview?(); return }
         switch picker.target {
         case .shapeStroke(nil):
             shapeStrokeColor = picker.color
@@ -681,18 +678,15 @@ extension EditorSession {
         default:
             break
         }
+        refreshCanvasPreview?()
     }
 
-    /// Puts the preview back and closes the picker, so Undo is not fighting a color that was never committed.
+    /// Drops the preview and closes the picker. The layer was never changed, so there is nothing to undo.
     func cancelShapeColorPreview() {
         guard shapeColorPreview != nil || shapeColorPickerIsOpen else { return }
-        if let preview = shapeColorPreview,
-           let index = document?.layers.firstIndex(where: { $0.id == preview.layerID }) {
-            document?.layers[index].asset = preview.asset
-            document?.layers[index].shape = preview.shape
-        }
         shapeColorPreview = nil
         if shapeColorPickerIsOpen { colorPicker = nil }
+        refreshCanvasPreview?()
     }
 
     /// Paints a live shape's fill, keeping its stroke and the fact that it is still a shape. False when it isn't a

@@ -368,12 +368,21 @@ struct ShapeToolTests {
         session.shapeKind = .line
         session.shapeLineWidth = 4
         drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 90, y: 10))
-        let line = try #require(session.activeLayer?.liveShape)
-        let before = line.image.dataProvider?.data
+        let line = try #require(session.activeLayer)
+        let lineID = line.id
         session.shapeLineWidth = 30
-        #expect(session.activeLayer?.liveShape?.style.lineWidth == 4)
-        #expect(session.activeLayer?.liveShape?.image.dataProvider?.data == before)
-        #expect(session.activeLayer?.id != ellipse)
+        #expect(line.liveShape?.style.lineWidth == 4, "the stored default does not redraw the selected line")
+        session.setDisplayedLineWidth(30)
+        #expect(session.activeLayer?.liveShape?.style.lineWidth == 30, "the Width control does")
+        session.selectLayer(ellipse)
+        session.shapeKind = .line
+        session.setDisplayedLineStyle(.dashed)
+        session.setDisplayedLineCap(.round)
+        session.setDisplayedLineWidth(12)
+        let unchanged = session.document?.layers.first { $0.id == lineID }?.liveShape?.style
+        #expect(unchanged?.lineWidth == 30 && unchanged?.lineStyle == nil)
+        #expect(session.shapeLineWidth == 12 && session.shapeLineStyle == .dashed && session.shapeLineCap == .round)
+        #expect(session.activeLayer?.id != lineID)
     }
 
     /// Color and width on the Shape bar redraw the selected line, around the same two points.
@@ -440,6 +449,21 @@ struct ShapeToolTests {
         drag(session, from: CGPoint(x: 50, y: 10), to: CGPoint(x: 80, y: 30))
         let style = try #require(session.activeLayer?.liveShape?.style)
         #expect(style.strokeWidth == 6 && style.cornerRadius == 4 && style.color == session.foregroundColor)
+
+        // An unstroked rectangle shows 0 even when the next-shape default is wider, and the rectangle drawn from it
+        // stays unstroked.
+        let blank = session.document?.layers.first { $0.liveShape == nil }?.id
+        session.selectLayer(blank)
+        session.shapeStrokeWidth = 0
+        drag(session, from: CGPoint(x: 5, y: 50), to: CGPoint(x: 25, y: 70))
+        let plain = try #require(session.activeLayer?.id)
+        session.selectLayer(blank)
+        session.shapeStrokeWidth = 8
+        session.selectLayer(plain)
+        #expect(session.displayedStrokeWidth == 0)
+        drag(session, from: CGPoint(x: 30, y: 50), to: CGPoint(x: 50, y: 70))
+        #expect(session.activeLayer?.liveShape?.style.strokeWidth == nil)
+        #expect(session.document?.layers.first { $0.id == plain }?.liveShape?.style.strokeWidth == nil)
     }
 
     @Test func fillRecolorsALiveShapeAndASelectionRasterizesIt() async throws {
@@ -471,8 +495,16 @@ struct ShapeToolTests {
         let picker = try #require(session.colorPicker)
         picker.hsb = PickerHSB(PaletteColor(red: 0, green: 1, blue: 0))
         session.previewShapeColor()
-        let preview = try await pixels(session)
-        #expect(preview(30, 25) == (0, 255))
+        let layer = try #require(session.activeLayer)
+        let snapshot = try #require(session.projectSnapshot())
+        let saved = try #require(snapshot.images[layer.id])
+        let committed = try #require(layer.asset?.image)
+        #expect(saved.image === committed, "a save keeps the fill that was committed, not the preview")
+        #expect(snapshot.manifest.layers.last?.shape?.red == 1)
+        let shown = try #require(session.displayedAsset(for: layer)?.image)
+        let green = try EditorSession.shapeImage(.rectangle, size: CGSize(width: shown.width, height: shown.height),
+                                                 color: PaletteColor(red: 0, green: 1, blue: 0))
+        #expect(shown.dataProvider?.data == green.dataProvider?.data, "the canvas shows the color being chosen")
         #expect(session.foregroundColor.red == 1, "the foreground swatch stays")
         session.closeColorPicker(commit: false)
         #expect(session.history.undoCount == count)

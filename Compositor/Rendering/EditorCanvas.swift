@@ -2971,7 +2971,7 @@ extension CanvasView {
     /// The shape being dragged out, drawn by `drawShapeDraft` into a bitmap just big enough for it, in frame pixels.
     private func shapeDraftImage(placement: GPUPlacement) -> CIImage? {
         guard let draft = session.shapeDraft, let renderer = GPUCanvasRenderer.shared else { return nil }
-        let reach = max(draft.lineWidth, draft.strokeWidth) * placement.scale + 4
+        let reach = (draft.kind == .line ? draft.lineWidth * placement.scale : 0) + 4
         let box = draft.rect.applying(placement.mapping).insetBy(dx: -reach, dy: -reach).integral
         guard box.width >= 1, box.height >= 1, box.width * box.height <= DocumentLimits.maxSurfaceExtent,
               let context = try? BrushRaster.context(width: Int(box.width), height: Int(box.height), mask: false) else { return nil }

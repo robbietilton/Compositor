@@ -8,7 +8,7 @@ extension EditorSession {
         var masks: [UUID: ImportedImage] = [:]
         var animations: [UUID: GIFAnimation] = [:]
         let layers = document.layers.map { layer in
-            let asset = displayedAsset(for: layer)
+            let asset = savedAsset(for: layer)
             if let asset { images[layer.id] = asset }
             if let mask = layer.mask { masks[layer.id] = mask.asset }
             var gif: ProjectGIFRecord?
