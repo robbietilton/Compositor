@@ -180,6 +180,7 @@ struct ShapeToolTests {
         session.shapeLineWidth = 4
         drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 90, y: 20))
         #expect(session.activeLayer?.liveShape?.style.lineStyle == nil, "a solid line saves as lines always have")
+        session.selectLayer(session.document?.layers.first?.id)
         session.shapeLineStyle = .dashed
         drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 90, y: 50))
         #expect(session.activeLayer?.liveShape?.style.lineStyle == .dashed)
@@ -197,6 +198,7 @@ struct ShapeToolTests {
         session.shapeLineCap = .round
         drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 50, y: 20))
         #expect(session.activeLayer?.liveShape?.style.lineCap == nil, "a round cap saves as lines always have")
+        session.selectLayer(session.document?.layers.first?.id)
         session.shapeLineCap = .square
         drag(session, from: CGPoint(x: 10, y: 50), to: CGPoint(x: 50, y: 50))
         #expect(session.activeLayer?.liveShape?.style.lineCap == .square)
@@ -372,6 +374,38 @@ struct ShapeToolTests {
         #expect(session.activeLayer?.liveShape?.style.lineWidth == 4)
         #expect(session.activeLayer?.liveShape?.image.dataProvider?.data == before)
         #expect(session.activeLayer?.id != ellipse)
+    }
+
+    /// Color and width on the Shape bar redraw the selected line, around the same two points.
+    @Test func editingASelectedLineChangesItsColorAndWidth() async throws {
+        let session = makeSession()
+        session.shapeKind = .line
+        session.shapeLineWidth = 4
+        drag(session, from: CGPoint(x: 10, y: 20), to: CGPoint(x: 90, y: 20))
+        let foreground = session.foregroundColor
+        session.openShapeFillPicker()
+        let picker = try #require(session.colorPicker)
+        picker.hsb = PickerHSB(PaletteColor(red: 0, green: 1, blue: 0))
+        session.closeColorPicker(commit: true)
+        #expect(session.activeLayer?.liveShape?.style.green == 1)
+        #expect(session.foregroundColor == foreground)
+        let count = session.history.undoCount
+        session.beginShapeStyleEdit()
+        session.setDisplayedLineWidth(10)
+        session.setDisplayedLineWidth(12)
+        session.finishShapeStyleEdit()
+        #expect(session.history.undoCount == count + 1)
+        let layer = try #require(session.activeLayer)
+        #expect(layer.liveShape?.style.lineWidth == 12)
+        #expect(abs(layer.transform.origin.y - 14) < 0.001, "the thicker stroke grows around the same row")
+        #expect(abs((layer.transform.origin.y + layer.transform.size.height / 2) - 20) < 0.001)
+        let pixel = try await pixels(session)
+        #expect(pixel(50, 20) == (0, 255), "the line took the new color")
+        #expect(pixel(50, 15).alpha == 255, "the stroke reaches further")
+        #expect(pixel(50, 13).alpha == 0)
+        session.undo()
+        #expect(session.activeLayer?.liveShape?.style.lineWidth == 4)
+        #expect(session.activeLayer?.liveShape?.style.green == 1)
     }
 
     /// The next rectangle takes the stroke the bar is showing on the selected shape.

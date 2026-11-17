@@ -3,14 +3,16 @@ import SwiftUI
 struct ShapeControls: View {
     @Bindable var session: EditorSession
 
-    /// A selected rectangle or ellipse takes the fill, stroke and radius. Otherwise they set the next shape.
+    /// A selected rectangle or ellipse takes the fill, stroke and radius. A selected line takes its color and width.
     private var editsSelection: Bool { session.editingShapeLayer != nil }
-    private var showsStroke: Bool { editsSelection || session.shapeKind != .line }
+    private var editsLine: Bool { session.editingLineLayer != nil }
+    private var showsStroke: Bool { !editsLine && (editsSelection || session.shapeKind != .line) }
     private var showsRadius: Bool {
+        if editsLine { return false }
         if let kind = session.editingShapeLayer?.liveShape?.style.kind { return kind == .rectangle }
         return session.shapeKind == .rectangle
     }
-    private var showsLine: Bool { !editsSelection && session.shapeKind == .line }
+    private var showsLine: Bool { editsLine || (!editsSelection && session.shapeKind == .line) }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -30,8 +32,8 @@ struct ShapeControls: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Fill color")
-                .help(editsSelection
-                      ? "Fill color of the selected shape"
+                .help(editsLine ? "Color of the selected line"
+                      : editsSelection ? "Fill color of the selected shape"
                       : "Shapes fill with the foreground color; click to change it")
             }
             if showsStroke {
@@ -58,38 +60,42 @@ struct ShapeControls: View {
             }
             if showsLine {
                 HStack(spacing: 6) {
-                    Text("Width").scrubbable(sensitivity: 1, value: $session.shapeLineWidth, range: 1...5000)
+                    Text("Width").scrubbable(sensitivity: 1, value: lineWidth, range: 1...5000,
+                                             onStart: session.beginShapeStyleEdit, onEnd: session.finishShapeStyleEdit)
                     // The slider covers everyday widths; typing or scrubbing reaches up to 5000.
-                    AppSlider(value: Binding(get: { min(50, session.shapeLineWidth) },
-                                          set: { session.shapeLineWidth = $0.rounded() }), in: 1...50)
+                    AppSlider(value: Binding(get: { min(50, lineWidth.wrappedValue) },
+                                          set: { lineWidth.wrappedValue = $0.rounded() }), in: 1...50,
+                              onEditingChanged: { if $0 { session.beginShapeStyleEdit() } else { session.finishShapeStyleEdit() } })
                         .frame(width: 100)
-                    TextField("Width", value: Binding(get: { session.shapeLineWidth },
-                                                      set: { session.shapeLineWidth = $0.isFinite ? min(5000, max(1, $0)) : 4 }),
-                              format: .number.precision(.fractionLength(0)))
+                    TextField("Width", value: lineWidth, format: .number.precision(.fractionLength(0)))
                         .frame(width: 48).textFieldStyle(.roundedBorder)
-                        .arrowSteps(value: { session.shapeLineWidth },
-                                    change: { session.shapeLineWidth = min(5000, max(1, $0)) })
+                        .arrowSteps(value: { session.displayedLineWidth },
+                                    change: { session.setDisplayedLineWidth($0) })
                 }
                 HStack(spacing: 6) {
                     Text("Style")
-                    Picker("Style", selection: $session.shapeLineStyle) {
+                    Picker("Style", selection: Binding(get: { session.displayedLineStyle },
+                                                      set: { session.setDisplayedLineStyle($0) })) {
                         ForEach(ShapeLineStyle.allCases, id: \.self) { style in
                             Image(nsImage: LineSample.style(style)).accessibilityLabel(style.rawValue).tag(style)
                         }
                     }
                     .pickerStyle(.menu).labelsHidden().fixedSize()
                 }
-                .help("Solid, dashed or dotted; dashes grow with the line's width")
+                .help(editsLine ? "Dashes of the selected line; they grow with its width"
+                      : "Solid, dashed or dotted; dashes grow with the line's width")
                 HStack(spacing: 6) {
                     Text("Cap")
-                    Picker("Cap", selection: $session.shapeLineCap) {
+                    Picker("Cap", selection: Binding(get: { session.displayedLineCap },
+                                                    set: { session.setDisplayedLineCap($0) })) {
                         ForEach(ShapeLineCap.allCases, id: \.self) { cap in
                             Label { Text(cap.rawValue) } icon: { Image(nsImage: LineSample.cap(cap)) }.tag(cap)
                         }
                     }
                     .pickerStyle(.menu).labelsHidden().fixedSize()
                 }
-                .help("How the line's ends, and each of its dashes and dots, are finished")
+                .help(editsLine ? "How this line's ends are finished"
+                      : "How the line's ends, and each of its dashes and dots, are finished")
             }
             if showsRadius {
                 HStack(spacing: 6) {
@@ -128,6 +134,9 @@ struct ShapeControls: View {
     }
     private var cornerRadius: Binding<Double> {
         Binding(get: { session.displayedCornerRadius }, set: { session.setDisplayedCornerRadius($0) })
+    }
+    private var lineWidth: Binding<Double> {
+        Binding(get: { session.displayedLineWidth }, set: { session.setDisplayedLineWidth($0) })
     }
 }
 
