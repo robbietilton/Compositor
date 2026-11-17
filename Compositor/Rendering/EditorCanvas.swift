@@ -2453,10 +2453,13 @@ final class CanvasView: NSView {
             session.nudgeSelection(dx: event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0,
                                    dy: event.keyCode == 126 ? -step : event.keyCode == 125 ? step : 0)
         } else if session.tool == .move, [123, 124, 125, 126].contains(event.keyCode),
-                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                  event.modifierFlags.intersection([.command, .control]).isEmpty {
+            // Shift for 10 px; Option moves a copy, leaving the layer where it was.
             let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
-            session.nudgeLayer(dx: event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0,
-                               dy: event.keyCode == 126 ? -step : event.keyCode == 125 ? step : 0)
+            let dx: CGFloat = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
+            let dy: CGFloat = event.keyCode == 126 ? -step : event.keyCode == 125 ? step : 0
+            if event.modifierFlags.contains(.option) { session.duplicateAndNudgeLayer(dx: dx, dy: dy) }
+            else { session.nudgeLayer(dx: dx, dy: dy) }
         } else if (event.keyCode == 51 || event.keyCode == 117),
            event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             session.deleteKeyPressed()

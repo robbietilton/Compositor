@@ -29,6 +29,26 @@ struct TransformTests {
         #expect(session.activeLayerID == original.id)
         #expect(session.history.undoCount == count)
     }
+    /// Option-arrow with the Move tool: a copy, a step over, the original left in place, as one undo step.
+    @Test func optionArrowDuplicatesAndNudgesTheCopy() throws {
+        let session = EditorSession()
+        session.createDocument(width: 400, height: 200)
+        try insertPaintedLayer(into: session)
+        let original = try #require(session.activeLayer)
+        let count = session.history.undoCount
+        session.duplicateAndNudgeLayer(dx: 10, dy: 0)
+        session.duplicateAndNudgeLayer(dx: 0, dy: -1)
+        #expect(session.document?.layers.count == 3)
+        #expect(session.document?.layers.first { $0.id == original.id }?.transform == original.transform)
+        var expected = original.transform.origin
+        expected.x += 10; expected.y -= 1
+        #expect(session.activeLayer?.transform.origin == expected)
+        #expect(session.history.undoCount == count + 2)
+        session.undo()
+        session.undo()
+        #expect(session.document?.layers.count == 1)
+        #expect(session.activeLayerID == original.id)
+    }
     @Test func autoSelectCanBeDisabledAndCommandClickOverridesIt() throws {
         let session = EditorSession()
         session.createDocument(width: 400, height: 200)

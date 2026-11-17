@@ -711,6 +711,14 @@ final class EditorSession {
         if let group = edit.group { return group.originals[layer.id].map { $0.following(from: group.box, to: edit.draft) } }
         return edit.layerID == layer.id ? edit.draft : nil
     }
+    /// Option-arrow with the Move tool: a copy of the selected layers, moved by the arrow's step, as an Option-drag
+    /// makes, in one undo step.
+    func duplicateAndNudgeLayer(dx: CGFloat, dy: CGFloat) {
+        beginDuplicateTransform()
+        guard transformDuplicate != nil else { return }
+        nudgeLayer(dx: dx, dy: dy)
+        commitTransform()
+    }
     func nudgeLayer(dx: CGFloat, dy: CGFloat) {
         let alreadyEditing = transformEdit != nil
         if !alreadyEditing { beginTransform(persistent: false) }
