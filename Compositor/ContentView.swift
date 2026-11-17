@@ -173,7 +173,8 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
-        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
+        .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType],
+                delegate: EditorDropDelegate(session: session, targeted: $isDropTargeted) { providers, location in
             guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
             let point: CGPoint?
             if let document = session.document, canvasFrame.contains(location) {
@@ -189,7 +190,7 @@ struct ContentView: View {
                 Task { await ImageFileDrop.importProviders(providers, into: session, at: point) }
             }
             return true
-        }
+        })
         .overlay {
             if isDropTargeted, acceptsDrop {
                 RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 3)
@@ -487,5 +488,36 @@ private struct WidthReader: ViewModifier {
     @Binding var width: CGFloat
     func body(content: Content) -> some View {
         content.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+}
+
+/// Files, images and layers dropped on the editor. A layer drag over the Layers panel's list or its blend and opacity
+/// controls is the list's own: those take it themselves, and in any sliver between them the editor leaves it alone,
+/// rather than flashing the "+" of a copy into this document for a frame.
+private struct EditorDropDelegate: DropDelegate {
+    let session: EditorSession
+    @Binding var targeted: Bool
+    let perform: ([NSItemProvider], CGPoint) -> Bool
+    private func isListDrag(_ info: DropInfo) -> Bool {
+        guard info.hasItemsConforming(to: [ProjectWorkspace.layerType]), !session.layersPanelFrame.isEmpty,
+              let window = NSApp.windows.first(where: { $0.isVisible && $0.frame.contains(NSEvent.mouseLocation) }),
+              let content = window.contentView else { return false }
+        let inWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let point = CGPoint(x: inWindow.x, y: content.bounds.height - inWindow.y)
+        // Within the panel, from the controls' top edge down; above them a drag is free to copy elsewhere.
+        let top = session.layerControlsFrame.isEmpty ? session.layersPanelFrame.minY : session.layerControlsFrame.minY
+        return session.layersPanelFrame.contains(point) && point.y >= top
+    }
+    func validateDrop(info: DropInfo) -> Bool { !isListDrag(info) }
+    func dropEntered(info: DropInfo) { targeted = !isListDrag(info) }
+    func dropExited(info: DropInfo) { targeted = false }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        targeted = !isListDrag(info)
+        return isListDrag(info) ? DropProposal(operation: .cancel) : nil
+    }
+    func performDrop(info: DropInfo) -> Bool {
+        targeted = false
+        guard !isListDrag(info) else { return false }
+        return perform(info.itemProviders(for: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType]), info.location)
     }
 }

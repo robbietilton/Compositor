@@ -947,7 +947,14 @@ final class LayerTableView: NSTableView {
         let marker = NSView(frame: .zero)
         marker.wantsLayer = true
         addSubview(marker)
-        defer { picture.removeFromSuperview(); marker.removeFromSuperview() }
+        // The Layers panel readies its controls for the drag now, in case it leaves the list and comes straight back.
+        session?.layerDragIsOutside = true
+        var leftList = false
+        defer {
+            picture.removeFromSuperview()
+            marker.removeFromSuperview()
+            if !leftList { session?.layerDragIsOutside = false }
+        }
         let grab = NSPoint(x: start.x - rowFrame.minX, y: start.y - rowFrame.minY)
         var target: (row: Int, intoFolder: Bool)?
 
@@ -1016,6 +1023,7 @@ final class LayerTableView: NSTableView {
                     let frame = NSRect(x: pointer.x - grab.x, y: pointer.y - grab.y, width: rowFrame.width, height: rowFrame.height)
                     picture.removeFromSuperview()
                     marker.removeFromSuperview()
+                    leftList = true
                     beginsOutsideDrag(self, ids, image, frame, event)
                     return
                 }
@@ -1027,7 +1035,15 @@ final class LayerTableView: NSTableView {
     }
 
     /// The system's drag, carrying each row's layer as the list's own drags did, so the tabs and the canvas take it.
-    func beginSystemDrag(ids: [UUID], image: NSImage?, frame: NSRect, event: NSEvent) {
+    func beginSystemDrag(ids: [UUID], image row: NSImage?, frame: NSRect, event: NSEvent) {
+        // macOS draws a drag a little see-through on its own; faded further, the picture reads at the same half strength
+        // it has in the list, wherever it goes.
+        let image = row.map { row in
+            NSImage(size: row.size, flipped: false) { rect in
+                row.draw(in: rect, from: .zero, operation: .copy, fraction: 0.6)
+                return true
+            }
+        }
         session?.layerDragImage = image
         session?.layerDragIsOutside = true
         let items = ids.enumerated().map { index, id in
@@ -1043,6 +1059,13 @@ final class LayerTableView: NSTableView {
         let dragging = beginDraggingSession(with: items, event: event, source: source)
         // Kept as the row looks in the list, full size, rather than gathered into the smaller stacked image.
         dragging.draggingFormation = .none
+        // Handed its picture afresh, macOS shows it smaller until it's set again; set again now, before the drag's first
+        // frame, rather than as it first moves.
+        if let image {
+            dragging.enumerateDraggingItems(options: [], for: nil, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
+                item.setDraggingFrame(NSRect(origin: item.draggingFrame.origin, size: image.size), contents: image)
+            }
+        }
     }
     override func keyDown(with event: NSEvent) {
         guard let event = ShortcutSettings.shared.canvasEvent(event) else { return }

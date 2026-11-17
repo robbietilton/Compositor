@@ -215,8 +215,9 @@ final class EditorSession {
     /// Where the panel's blend and opacity controls are, likewise: a row dragged up over them stays the list's, and
     /// above them it leaves the list.
     @ObservationIgnored var layerControlsFrame: CGRect = .zero
-    /// A layer drag has left the list for the system's drag (above the panel's controls, or out of the panel): while it
-    /// lasts, the controls take it back for the list if it returns over them (`LayerDropForwarder`).
+    /// A layer drag is under way that may leave the list for the system's drag (above the panel's controls, or out of
+    /// the panel): set as the row is picked up, so the controls are ready to take it back for the list if it returns
+    /// over them (`LayerDropForwarder`), and cleared as it ends.
     var layerDragIsOutside = false
     /// The list, and the dragged row as it draws it, for `LayerDropForwarder`.
     @ObservationIgnored weak var layerList: NSTableView?

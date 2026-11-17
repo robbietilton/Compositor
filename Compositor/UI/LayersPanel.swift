@@ -16,7 +16,8 @@ struct LayersPanel: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { session.layerControlsFrame = $0 }
                 // A layer drag that left the list and comes back over the controls is the list's again.
                 // It reaches a few points down, over the divider and the list's top edge: in the gap between the two, the
-                // window's own drop briefly took the drag, showing it small with a "+".
+                // window's own drop briefly took the drag, showing it small with a "+". It's put in place as the row is
+                // picked up, rather than as the drag leaves the list, which came a frame late for a drag turned straight back.
                 .overlay { if session.layerDragIsOutside { LayerDropForwarder(session: session).padding(.bottom, -6) } }
             Divider()
             if let layers = session.document?.layers, !layers.isEmpty {
