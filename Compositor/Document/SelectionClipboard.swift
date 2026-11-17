@@ -328,6 +328,11 @@ extension EditorSession {
         finishOpacityEdit()
         beginEdit(editName)
         self.document?.layers.insert(layer, at: index)
+        // Added in the middle of a clipping group, it joins the group.
+        if var layers = self.document?.layers {
+            Self.adoptClipping(layer.id, in: &layers)
+            self.document?.layers = layers
+        }
         if dropsSelection { self.document?.selection = nil }
         activeLayerID = layer.id
         endEdit()

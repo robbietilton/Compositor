@@ -886,9 +886,13 @@ final class EditorSession {
             }
             if let topmost = document.layers.lastIndex(where: { isInside($0.id) }) { insertion = max(insertion, topmost + 1) }
         }
+        var layers = document.layers
+        layers.insert(layer, at: insertion)
+        // Added in the middle of a clipping group, it joins the group.
+        Self.adoptClipping(layer.id, in: &layers)
         beginEdit("New Blank Layer")
         defer { endEdit() }
-        self.document?.layers.insert(layer, at: insertion)
+        self.document?.layers = layers
         activeLayerID = layer.id
     }
 

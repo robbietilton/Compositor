@@ -35,6 +35,28 @@ import Testing
         for i in 0..<4 { #expect(bytes[i*4] == 255) }
     }
 
+    /// A layer added in the middle of a clipping group joins it, as one dropped there does; added above the group's
+    /// top, it stays unclipped.
+    @Test func newLayerInsideAClippingGroupJoinsIt() throws {
+        let s = EditorSession(); s.createDocument(width: 2, height: 2)
+        s.insert(try asset([255,255,255,255])); let base = try #require(s.activeLayerID)
+        s.insert(try asset([255,255,255,255])); let lower = try #require(s.activeLayerID)
+        s.toggleClippingMask(lower)
+        s.insert(try asset([255,255,255,255])); let upper = try #require(s.activeLayerID)
+        s.toggleClippingMask(upper)
+        #expect(s.document?.layers.first { $0.id == upper }?.maskSourceID == base)
+
+        s.selectLayer(lower)
+        s.addBlankLayer()
+        #expect(s.activeLayer?.maskSourceID == base)
+        s.selectLayer(base)
+        s.addBlankLayer()
+        #expect(s.activeLayer?.maskSourceID == base)
+        s.selectLayer(upper)
+        s.addBlankLayer()
+        #expect(s.activeLayer?.maskSourceID == nil)
+    }
+
     func asset(_ alpha: [UInt8], color: UInt8 = 255) throws -> ImportedImage {
         let bytes = alpha.flatMap { a in [UInt8(Int(color)*Int(a)/255), UInt8(0), UInt8(0), a] }
         let image = try #require(CGImage(width: 2, height: 2, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 8,
