@@ -151,18 +151,18 @@ extension EditorSession {
         return Self.pasteboard.canReadObject(forClasses: [NSImage.self], options: nil)
     }
 
-    /// Cmd-V: pastes as a new layer above the active one. Pixels copied here go back exactly
-    /// where they came from; images copied in other apps are centered.
+    /// Cmd-V: pastes as a new layer above the active one, or with a folder selected, just above the folder rather than
+    /// inside it. Pixels copied here go back exactly where they came from; images copied in other apps are centered.
     func paste() {
         guard canPaste, let document else { return }
         let pasteboard = Self.pasteboard
         if let clip = pixelClipboard, pasteboard.changeCount == clip.changeCount {
-            addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste")
+            addPixelLayer(clip.image, at: clip.origin, name: nextLayerName(), editName: "Paste", besideFolder: true)
         } else if let external = NSImage(pasteboard: pasteboard)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
                   let image = try? Self.sRGBCopy(of: external) {
             let origin = CGPoint(x: floor((document.size.width - CGFloat(image.width)) / 2),
                                  y: floor((document.size.height - CGFloat(image.height)) / 2))
-            addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste")
+            addPixelLayer(image, at: origin, name: nextLayerName(), editName: "Paste", besideFolder: true)
         } else { NSSound.beep() }
     }
 
@@ -315,14 +315,15 @@ extension EditorSession {
     }
 
     /// Inserts pixels as a new layer above the active one (inside its folder), all in one undo
-    /// step. Pasting drops the selection, as in Photoshop; a drawn shape keeps it.
-    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true, shape: LayerShape? = nil, text: LayerText? = nil) {
+    /// step. Pasting drops the selection, as in Photoshop; a drawn shape keeps it. With a folder active, the layer
+    /// goes in at the folder's top, or with `besideFolder`, just above the folder, outside it.
+    func addPixelLayer(_ image: CGImage, at origin: CGPoint, name: String, editName: String, dropsSelection: Bool = true, shape: LayerShape? = nil, text: LayerText? = nil, besideFolder: Bool = false) {
         guard let document, let thumbnail = try? PixelInvert.thumbnail(of: image) else { return }
         var layer = ImageLayer(asset: ImportedImage(image: image, thumbnail: thumbnail, name: name), origin: origin)
         layer.name = name
         layer.shape = shape
         layer.text = text
-        layer.parentID = activeLayer?.isGroup == true ? activeLayerID : activeLayer?.parentID
+        layer.parentID = activeLayer?.isGroup == true && !besideFolder ? activeLayerID : activeLayer?.parentID
         let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
         finishOpacityEdit()
         beginEdit(editName)

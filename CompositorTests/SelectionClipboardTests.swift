@@ -276,4 +276,21 @@ struct SelectionClipboardTests {
         pasted = try #require(session.activeLayer)
         #expect(try await layerPixel(session, pasted.id, x: 65, y: 15) == [0, 0, 255, 255])
     }
+
+    /// With a folder selected, a paste goes just above the folder, outside it, rather than into it.
+    @Test func pasteWithAFolderSelectedGoesAboveTheFolder() async throws {
+        let session = await makeSession()
+        select(session, CGRect(x: 0, y: 0, width: 20, height: 20))
+        session.copyMergedSelection()
+        session.addGroup()
+        let outer = try #require(session.activeLayerID)
+        session.addGroup() // A folder inside the first, so "outside" means its parent, not the top level.
+        let folder = try #require(session.activeLayerID)
+        session.paste()
+        let pasted = try #require(session.activeLayer)
+        #expect(pasted.parentID == outer)
+        let layers = try #require(session.document?.layers)
+        let folderIndex = try #require(layers.firstIndex { $0.id == folder })
+        #expect(layers.firstIndex { $0.id == pasted.id } == folderIndex + 1)
+    }
 }
