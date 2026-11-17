@@ -278,7 +278,7 @@ struct FilterLayerTests {
         session.adjustmentEditingID = nil
         session.updateAdjustment(try #require(session.activeLayerID), value: adjustment)
         let snapshot = try #require(session.projectSnapshot())
-        #expect(snapshot.manifest.version == 21)
+        #expect(snapshot.manifest.version == ProjectManifest.current)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ReduceNoise-\(UUID()).comp")
         defer { try? FileManager.default.removeItem(at: url) }
         try await ProjectStore.shared.save(snapshot, to: url)
