@@ -506,7 +506,8 @@ struct NativeLayerList: NSViewRepresentable {
             guard (0...rows.count).contains(row) else { return false }
             return place([id], at: row, intoFolder: false, copying: false)
         }
-        private func place(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil, copying: Bool) -> Bool {
+        private func place(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil,
+                           clippedTo base: UUID? = nil, unclipped: Bool = false, copying: Bool) -> Bool {
             // Where the drop lands is worked out once: each layer placed shifts the rows beneath it.
             // The filtered rows, so a drop's indexes mean the rows the panel is showing.
             let current = session.filteredLayerRows
@@ -527,10 +528,20 @@ struct NativeLayerList: NSViewRepresentable {
             session.beginEdit(copying ? (ids.count > 1 ? "Duplicate Layers" : "Duplicate Layer")
                                       : (ids.count > 1 ? "Move Layers" : "Move Layer"))
             var placed = false
+            var landed: [UUID] = []
             for id in order {
                 let done = copying ? session.duplicateLayer(id, in: parent, above: above, atBottom: atBottom)
                                    : session.placeLayer(id, in: parent, above: above, atBottom: atBottom)
                 placed = done || placed
+                if done, let copy = copying ? session.activeLayerID : id { landed.append(copy) }
+            }
+            // Over the top of a clipping group, the drop said which side: joining the group, or above it, unclipped.
+            if placed, base != nil || unclipped {
+                for id in landed {
+                    guard let index = session.document?.layers.firstIndex(where: { $0.id == id }),
+                          session.document?.layers[index].isGroup == false else { continue }
+                    session.document?.layers[index].maskSourceID = base
+                }
             }
             // The layers that moved stay selected, so they can be dragged on as a group.
             if placed, !copying { session.selectLayers(Set(ids), primary: ids.first) }
@@ -550,9 +561,11 @@ struct NativeLayerList: NSViewRepresentable {
             return ids.allSatisfy { session.canPlaceLayer($0, in: parent) }
         }
         /// Moves (or copies) `ids` to `row`, as a drop there would.
-        @discardableResult func drop(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil, copying: Bool) -> Bool {
+        @discardableResult func drop(_ ids: [UUID], at row: Int, intoFolder: Bool, bottomOf folder: UUID? = nil,
+                                     clippedTo base: UUID? = nil, unclipped: Bool = false, copying: Bool) -> Bool {
             guard canDrop(ids, at: row, intoFolder: intoFolder, bottomOf: folder) else { return false }
-            return place(ids, at: row, intoFolder: intoFolder, bottomOf: folder, copying: copying)
+            return place(ids, at: row, intoFolder: intoFolder, bottomOf: folder, clippedTo: base, unclipped: unclipped,
+                         copying: copying)
         }
         private func draggedMask(_ info: NSDraggingInfo) -> UUID? {
             info.draggingPasteboard.string(forType: Self.maskType).flatMap(UUID.init(uuidString:))
@@ -903,61 +916,92 @@ final class LayerTableView: NSTableView {
         return picked.filter { !carried.contains($0) }
     }
 
-    /// Where a release at `y` (list coordinates) lands: above a row, past the last, or into a folder over its middle.
     /// Where a dragged row would land: above `row` (or below the last row), into the folder at `row`, or, in the gap
-    /// under a folder's last layer, at the bottom of that folder, `bottomOf`.
+    /// under a folder's last layer, at the bottom of that folder, `bottomOf`. In the gap over the top of a clipping
+    /// group the drop says which side it's on: `clippedTo` the group's base, joining it, or `unclipped`, above it.
     struct DropTarget: Equatable {
         var row: Int
         var intoFolder = false
         var bottomOf: UUID?
+        var clippedTo: UUID?
+        var unclipped = false
     }
 
-    private func dropTarget(at y: CGFloat) -> DropTarget {
+    /// Where a release at `y` (list coordinates) of `ids` lands: above a row, past the last, or into a folder over its
+    /// middle.
+    private func dropTarget(at y: CGFloat, for ids: [UUID]) -> DropTarget {
         let rows = displayedRows
         guard !rows.isEmpty else { return DropTarget(row: 0) }
-        if y < rect(ofRow: 0).minY { return DropTarget(row: 0) }
+        if y < rect(ofRow: 0).minY { return DropTarget(row: 0, unclipped: rows[0].maskSourceID != nil) }
         let index = row(at: NSPoint(x: 1, y: y))
         if index >= 0 {
             let frame = rect(ofRow: index)
             if rows[index].isGroup, abs(y - frame.midY) < frame.height / 4 { return DropTarget(row: index, intoFolder: true) }
         }
         let gap = index < 0 ? rows.count : (y < rect(ofRow: index).midY ? index : index + 1)
-        return DropTarget(row: gap, bottomOf: folderEnding(at: gap, y: y))
+        return choice(at: gap, y: y, for: ids)
     }
 
-    /// The gap above `gap` closes one or more folders when the row over it sits deeper than the row under it: the
-    /// last layer of a folder, then the next layer outside it. There the gap is split by height, as in Photoshop:
-    /// nearer the folder's layer the drop goes in at the bottom of the folder (the innermost first), nearer the
-    /// next row it goes beside the folder. Nil for beside, or for a gap that closes no folder.
-    private func folderEnding(at gap: Int, y: CGFloat) -> UUID? {
+    /// One way a gap between rows can be taken, from the top of the gap down.
+    private enum GapChoice { case bottomOf(UUID), beside, clippedTo(UUID) }
+
+    /// Some gaps can be taken more than one way, and there the gap is split by height, as in Photoshop, each choice
+    /// nearer the row it goes with:
+    /// - under a folder's last layer, with the next row outside the folder: nearer the layer, the bottom of the folder
+    ///   (the innermost first, when the layer closes several); nearer the next row, beside the folder.
+    /// - over the top of a clipping group: nearer the row above, unclipped above the group; nearer the group, clipped
+    ///   to its base along with the rest.
+    private func choice(at gap: Int, y: CGFloat, for ids: [UUID]) -> DropTarget {
         let rows = displayedRows
-        guard gap > 0, rows.indices.contains(gap - 1) else { return nil }
-        let outer = rows.indices.contains(gap) ? rows[gap].parentID : nil
-        // The folders the gap closes, innermost first.
-        var closing: [UUID] = []
-        var parent = rows[gap - 1].parentID
         let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        while let id = parent, id != outer, closing.count < 64 {
-            closing.append(id)
-            parent = byID[id]?.parentID
+        var choices: [GapChoice] = []
+        let outer = rows.indices.contains(gap) ? rows[gap].parentID : nil
+        if gap > 0, rows.indices.contains(gap - 1) {
+            // The folders the gap closes, innermost first: none under a folder's own row, or where the row below
+            // isn't outside them.
+            var closing: [UUID] = []
+            var parent = rows[gap - 1].parentID
+            while let id = parent, id != outer, closing.count < 64 {
+                closing.append(id)
+                parent = byID[id]?.parentID
+            }
+            if parent == outer { choices += closing.map(GapChoice.bottomOf) }
         }
-        // Under a folder's own row (its first layer below) or anywhere the row below isn't outside these folders, the
-        // gap closes nothing.
-        guard !closing.isEmpty, parent == outer else { return nil }
-        // The span a drop at this gap covers: from the middle of the row above to the middle of the row below (a
-        // folder's quarter, its middle being "into"), or half a row past the last row.
-        let above = rect(ofRow: gap - 1)
-        let top = above.midY
-        let bottom: CGFloat
+        choices.append(.beside)
+        // Over the top of a clipping group (the row below clipped, the row above not clipped to the same base), when
+        // what's dragged can be clipped: layers, not folders, and not the base itself.
+        if rows.indices.contains(gap), let base = rows[gap].maskSourceID,
+           gap == 0 || rows[gap - 1].maskSourceID != base,
+           ids.allSatisfy({ $0 != base && byID[$0]?.isGroup == false }) {
+            choices.append(.clippedTo(base))
+        }
+        let clips = choices.count > 1 && { if case .clippedTo = choices.last { true } else { false } }()
+        guard choices.count > 1 else { return DropTarget(row: gap) }
+        // The span a drop at this gap covers: from the middle of the row above (or the top of the first) to the middle
+        // of the row below (a folder's quarter, its middle being "into"), or half a row past the last row.
+        let top: CGFloat, bottom: CGFloat
+        if gap > 0 { top = rect(ofRow: gap - 1).midY } else { top = rect(ofRow: 0).minY }
         if rows.indices.contains(gap) {
             let below = rect(ofRow: gap)
             bottom = rows[gap].isGroup ? below.minY + below.height / 4 : below.midY
         } else {
+            let above = rect(ofRow: gap - 1)
             bottom = above.maxY + above.height / 2
         }
-        let bands = closing.count + 1
-        let band = min(bands - 1, max(0, Int((y - top) / max(1, bottom - top) * CGFloat(bands))))
-        return band < closing.count ? closing[band] : nil
+        let band = min(choices.count - 1, max(0, Int((y - top) / max(1, bottom - top) * CGFloat(choices.count))))
+        switch choices[band] {
+        case .bottomOf(let folder): return DropTarget(row: gap, bottomOf: folder)
+        case .beside: return DropTarget(row: gap, unclipped: clips)
+        case .clippedTo(let base): return DropTarget(row: gap, clippedTo: base)
+        }
+    }
+
+    /// Whether a plain drop above `row` lands clipped: between two rows of the same clipping group, it joins the group,
+    /// as `adoptClipping` has it.
+    private func joinsClipping(at row: Int) -> Bool {
+        let rows = displayedRows
+        guard row > 0, rows.indices.contains(row), let base = rows[row - 1].maskSourceID else { return false }
+        return rows[row].id == base || rows[row].maskSourceID == base
     }
 
     /// How deep `id` sits among folders, for indenting the drop line.
@@ -1030,7 +1074,7 @@ final class LayerTableView: NSTableView {
                                    width: rowFrame.width, height: rowFrame.height)
             // Above the list, the release puts the rows first.
             pointer.y = min(max(pointer.y, shown.minY), shown.maxY - 1)
-            let candidate = dropTarget(at: pointer.y)
+            let candidate = dropTarget(at: pointer.y, for: ids)
             if coordinator.canDrop(ids, at: candidate.row, intoFolder: candidate.intoFolder, bottomOf: candidate.bottomOf) {
                 target = candidate
                 let rows = displayedRows
@@ -1040,10 +1084,14 @@ final class LayerTableView: NSTableView {
                     marker.layer?.cornerRadius = 5
                 } else {
                     let lineY = candidate.row < rows.count ? rect(ofRow: candidate.row).minY : rect(ofRow: rows.count - 1).maxY
-                    // Indented to the depth the layer would land at: inside a folder, in line with its layers.
+                    // Indented to the depth the layer would land at: inside a folder, in line with its layers, and
+                    // clipped, in line with the clipped layers.
                     let level: Int
                     if let folder = candidate.bottomOf { level = depth(of: folder) + 1 }
-                    else { level = candidate.row < rows.count ? depth(of: rows[candidate.row].id) : 0 }
+                    else if candidate.row < rows.count {
+                        let clipped = candidate.clippedTo != nil || (!candidate.unclipped && joinsClipping(at: candidate.row))
+                        level = depth(of: rows[candidate.row].id) + (clipped ? 1 : 0)
+                    } else { level = 0 }
                     let indent = 4 + CGFloat(min(level, 8)) * 24
                     marker.frame = NSRect(x: indent, y: max(0, lineY - 1), width: bounds.width - indent - 4, height: 2)
                     marker.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
@@ -1069,6 +1117,7 @@ final class LayerTableView: NSTableView {
             case .leftMouseUp:
                 if let target {
                     coordinator.drop(ids, at: target.row, intoFolder: target.intoFolder, bottomOf: target.bottomOf,
+                                     clippedTo: target.clippedTo, unclipped: target.unclipped,
                                      copying: event.modifierFlags.contains(.option))
                 }
                 return

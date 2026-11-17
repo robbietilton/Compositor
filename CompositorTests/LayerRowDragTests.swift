@@ -14,10 +14,11 @@ import Testing
         let table: LayerTableView
     }
 
-    private func rig() throws -> Rig {
+    private func rig(layers: Int = 3, prepare: (EditorSession) -> Void = { _ in }) throws -> Rig {
         let session = EditorSession()
         session.createDocument(width: 400, height: 300)
-        for _ in 0..<3 { session.addBlankLayer() }
+        for _ in 0..<layers { session.addBlankLayer() }
+        prepare(session)
         let host = NSHostingView(rootView: LayersPanel(session: session))
         host.frame = CGRect(x: 0, y: 0, width: 261, height: 600)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -92,6 +93,35 @@ import Testing
         #expect(after.first == before[2], "the dragged layer should be first: \(after)")
         for (index, data) in shots.enumerated() where index == 1 || index == 3 || index == shots.count - 1 {
             Attachment.record(data, named: "drag-step-\(index).png")
+        }
+    }
+
+    /// The gap over the top of a clipping group is split: nearer the row above, the dropped layer goes above the group
+    /// unclipped; nearer the group, it joins it, clipped to its base.
+    @Test func theGapOverAClippingGroupSaysWhichSideTheLayerLands() throws {
+        for (fraction, clipped) in [(0.25, false), (0.75, true)] {
+            // Top down: Layer 4, Layer 3 clipped to Layer 2, Layer 2, Layer 1.
+            let rig = try rig(layers: 4) { session in
+                let third = session.document!.layers[2].id
+                session.toggleClippingMask(third)
+            }
+            defer { rig.window.orderOut(nil) }
+            let rows = rig.session.filteredLayerRows.map(\.layer)
+            #expect(rows.map(\.name) == ["Layer 4", "Layer 3", "Layer 2", "Layer 1"])
+            let base = rows[2].id
+            #expect(rows[1].maskSourceID == base)
+            let dragged = rows[3].id
+            let start = middle(of: 3, in: rig.table)
+            // Between the middles of Layer 4 and Layer 3, in list coordinates (y down), then in the window's.
+            let top = rig.table.rect(ofRow: 0).midY, bottom = rig.table.rect(ofRow: 1).midY
+            let point = rig.table.convert(NSPoint(x: rig.table.rect(ofRow: 0).midX, y: top + (bottom - top) * fraction), to: nil)
+            NSApp.postEvent(try mouse(.leftMouseDragged, NSPoint(x: start.x, y: start.y + 20), in: rig.window), atStart: false)
+            NSApp.postEvent(try mouse(.leftMouseDragged, point, in: rig.window), atStart: false)
+            NSApp.postEvent(try mouse(.leftMouseUp, point, in: rig.window), atStart: false)
+            rig.table.mouseDown(with: try mouse(.leftMouseDown, start, in: rig.window))
+            #expect(names(rig.session) == ["Layer 4", "Layer 1", "Layer 3", "Layer 2"])
+            let landed = rig.session.document?.layers.first { $0.id == dragged }
+            #expect(landed?.maskSourceID == (clipped ? base : nil), "at \(fraction) of the gap")
         }
     }
 
