@@ -250,8 +250,10 @@ extension EditorSession {
     func beginShape(at point: CGPoint) {
         guard tool == .shape, canEditLayers, point.x.isFinite, point.y.isFinite else { return }
         let anchor = CGPoint(x: point.x.rounded(), y: point.y.rounded())
-        // A line uses the Line bar: the selected line when one is being edited, otherwise the color and width set
-        // for the next line. A selected rectangle's fill must not paint the line.
+        // A line uses the Line bar: the selected line's width when one is being edited, otherwise the width set for
+        // the next line. A selected rectangle's settings must not shape the line.
+        // Every new shape is the foreground color — or the fill last picked in the bar, until the foreground changes —
+        // never the selected shape's fill: the swatches are for what's drawn next.
         let editing = shapeKind == .line ? nil : editingShapeLayer?.liveShape?.style
         let line = shapeKind == .line ? editingLineLayer?.liveShape?.style : nil
         let radius = editing?.kind == .rectangle ? editing?.cornerRadius : nil
@@ -261,7 +263,7 @@ extension EditorSession {
                                 smoothing: shapeKind == .rectangle && (smooth ?? shapeSmoothing),
                                 lineStyle: line.map { $0.lineStyle ?? .solid } ?? shapeLineStyle,
                                 lineCap: line.map { $0.lineCap ?? .round } ?? shapeLineCap,
-                                fill: line?.color ?? editing?.color ?? foregroundColor,
+                                fill: nextShapeFill,
                                 lineWidth: line?.lineWidth ?? CGFloat(shapeLineWidth),
                                 strokeWidth: shapeKind == .line ? 0 : (editing == nil ? CGFloat(shapeStrokeWidth) : (editing?.strokeWidth ?? 0)),
                                 strokeColor: editing?.strokeColor ?? shapeStrokeColor)
@@ -516,13 +518,18 @@ extension EditorSession {
         return layer
     }
 
-    /// What the Fill swatch shows. In Line mode, with no line selected, it is the foreground color the next line uses.
+    /// The next shape's color: the fill last picked in the Shape bar until the foreground changes, otherwise the
+    /// foreground.
+    var nextShapeFill: PaletteColor {
+        shapeFillChoice.flatMap { $0.foreground == foregroundColor ? $0.fill : nil } ?? foregroundColor
+    }
+
+    /// What the Fill swatch shows: the color the next shape will be, not the selected shape's, so a new foreground
+    /// shows there at once. Picking from it recolors the selected shape too.
     var displayedShapeFill: PaletteColor {
         if let picker = colorPicker, case .shapeFill = picker.target { return picker.color }
         if let draft = shapeDraft, draft.kind == .line { return draft.fill }
-        if let line = editingLineLayer?.liveShape { return line.style.color }
-        if shapeKind != .line, let shape = editingShapeLayer?.liveShape { return shape.style.color }
-        return foregroundColor
+        return nextShapeFill
     }
 
     /// What the Stroke swatch shows. A selected shape's stroke, or the color the next stroke will use.
@@ -634,8 +641,9 @@ extension EditorSession {
             colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
         } else if shapeKind != .line, let layer = editingShapeLayer, let shape = layer.liveShape {
             colorPicker = ColorPickerState(target: .shapeFill(layerID: layer.id), original: shape.style.color)
-        } else {
-            openColorPicker(background: false)
+        } else if !isMaskSelected {
+            // Nothing to recolor: it sets the foreground, starting from the color the swatch shows.
+            colorPicker = ColorPickerState(background: false, original: nextShapeFill)
         }
     }
 
@@ -689,6 +697,7 @@ extension EditorSession {
             shapeStrokeColor = picker.color
         case .shapeFill(let layerID):
             applyShapeColor(picker.color, fill: true, layerID: layerID)
+            shapeFillChoice = (picker.color, foregroundColor)
         case .shapeStroke(let layerID?):
             applyShapeColor(picker.color, fill: false, layerID: layerID)
         default:

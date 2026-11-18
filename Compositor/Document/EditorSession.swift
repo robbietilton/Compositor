@@ -384,6 +384,9 @@ final class EditorSession {
     /// The next rectangle or ellipse's inside stroke. 0 draws none, which is how every shape started.
     var shapeStrokeWidth: Double = 0
     var shapeStrokeColor = PaletteColor.black
+    /// A fill picked in the Shape bar, and the foreground color when it was: the next shape uses it until the
+    /// foreground changes. Otherwise the next shape is the foreground color.
+    var shapeFillChoice: (fill: PaletteColor, foreground: PaletteColor)?
     /// The layer whose stroke or radius a drag is changing, so the drag is one undo step.
     var shapeStyleEditLayerID: UUID?
     /// The preview drawn while a shape's fill or stroke color is being chosen. Not part of the document or its history.

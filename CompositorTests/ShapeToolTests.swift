@@ -65,6 +65,34 @@ struct ShapeToolTests {
         #expect(inside == ["Layer 1", "Layer 2", "Rectangle 1"])
     }
 
+    @Test func theNextShapeIsTheForegroundColorOrTheFillJustPicked() throws {
+        let session = makeSession()
+        let red = session.foregroundColor, blue = PaletteColor(red: 0, green: 0, blue: 1)
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 40, y: 30))
+        let first = try #require(session.activeLayerID)
+        // Swapping colors is for the next shape: the selected one keeps its fill.
+        session.swapPaletteColors()
+        #expect(session.activeLayer?.liveShape?.style.color == red)
+        // The Fill swatch shows what the next shape will be.
+        #expect(session.displayedShapeFill == .white)
+        drag(session, from: CGPoint(x: 50, y: 10), to: CGPoint(x: 80, y: 30))
+        #expect(session.activeLayer?.liveShape?.style.color == .white)
+        // A fill picked in the Shape bar recolors the selected shape and carries on to the next one…
+        session.openShapeFillPicker()
+        session.colorPicker?.hsb = PickerHSB(blue)
+        session.closeColorPicker(commit: true)
+        #expect(session.activeLayer?.liveShape?.style.color == blue && session.foregroundColor == .white)
+        drag(session, from: CGPoint(x: 10, y: 40), to: CGPoint(x: 40, y: 70))
+        #expect(session.activeLayer?.liveShape?.style.color == blue)
+        #expect(session.displayedShapeFill == blue)
+        // …until the foreground changes again.
+        session.swapPaletteColors()
+        #expect(session.displayedShapeFill == red)
+        drag(session, from: CGPoint(x: 50, y: 40), to: CGPoint(x: 80, y: 70))
+        #expect(session.activeLayer?.liveShape?.style.color == red)
+        #expect(session.document?.layers.first { $0.id == first }?.liveShape?.style.color == red)
+    }
+
     @Test func ellipseLeavesItsCornersClearWithShiftCircleAndOptionFromCenter() async throws {
         let session = makeSession()
         session.toggleShapeKind()
