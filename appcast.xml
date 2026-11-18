@@ -3,16 +3,18 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.11</title>
-      <pubDate>Tue, 17 Nov 2026 20:04:30 +0000</pubDate>
-      <sparkle:version>70</sparkle:version>
-      <sparkle:shortVersionString>1.6.11</sparkle:shortVersionString>
+      <title>Version 1.6.12</title>
+      <pubDate>Wed, 18 Nov 2026 01:01:33 +0000</pubDate>
+      <sparkle:version>71</sparkle:version>
+      <sparkle:shortVersionString>1.6.12</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.11</link>
-      <changes><![CDATA[Pasting while a folder is selected now puts the layer above the folder, not inside it
-New layers added between clipped layers are clipped too
-When dragging a layer to the top of a group of clipped layers, drop it a little higher to leave it unclipped, or a little lower to clip it]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.11/Compositor.dmg" sparkle:edSignature="Xvg6TiK4kfX/V9/jTPsF6h5ak9sgpN4uTn8zEvupxpLxjkOXvnJx8rrryST0HrnSwp5/CKG7XQVGP/KWeGRzDw==" length="8882559" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.12</link>
+      <changes><![CDATA[With the Move tool, Option-arrow duplicates the layer and moves the copy 1 px (Option-Shift-arrow moves it 10 px)
+Select a shape with the Shape tool to change its fill, stroke and corner radius, or a line's color, width, style and cap
+Rectangles and ellipses can have a stroke
+Fill with Foreground or Background recolors a shape and keeps it editable
+A shape drawn above a group of clipped layers now shows in full while you drag it out]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.12/Compositor.dmg" sparkle:edSignature="fyTprp8yMr3G8xTUBbDFBsc5zUTNkx7w3luYrB09AbFNKIScQYviyLzuFFl7WnjVMZTmEMf/Osq7uaD7emqNDw==" length="8910610" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
