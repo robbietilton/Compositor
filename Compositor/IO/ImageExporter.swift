@@ -116,6 +116,15 @@ actor ImageExporter {
         try pngData(render(snapshot))
     }
 
+    /// The document as a layered Photoshop file (see `PSDWriter`), and its flattened picture for the preview. 16 bits a
+    /// channel when a layer is.
+    func psdData(_ snapshot: ProjectSnapshot) throws -> (data: Data, preview: CGImage) {
+        let sixteenBit = snapshot.images.values.contains { $0.deep != nil }
+        let composite = try render(snapshot, sixteenBit: sixteenBit)
+        let data = try PSDWriter.write(snapshot, composite: composite.image, sixteenBit: sixteenBit)
+        return (data, sixteenBit ? try DeepLayer.dithered(composite.image) : composite.image)
+    }
+
     /// Export Layers as PNGs: the layer `id` on its own, as it looks in the document, trimmed to its pixels. Nil when it
     /// has none, as an adjustment layer or an empty one.
     func layerPNGData(_ snapshot: ProjectSnapshot, layer id: UUID) throws -> Data? {

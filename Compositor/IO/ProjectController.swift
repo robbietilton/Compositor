@@ -192,7 +192,7 @@ final class ProjectController {
     /// back out as a PNG, otherwise the format last used.
     static func startingFormat(source: URL?, projectURL: URL?) -> ExportFormat {
         guard projectURL == nil, let source, let type = UTType(filenameExtension: source.pathExtension) else { return lastExportFormat }
-        return [ExportFormat.png, .jpeg, .tiff, .gif, .exr].first { type.conforms(to: $0.type) } ?? lastExportFormat
+        return [ExportFormat.png, .jpeg, .tiff, .gif, .exr, .psd].first { type.conforms(to: $0.type) } ?? lastExportFormat
     }
 
     /// The name an export starts with: the project's, or the image the document began as, or Untitled.
@@ -532,6 +532,8 @@ enum ExportFormat: String, CaseIterable {
     case png = "PNG", jpeg = "JPEG", tiff = "TIFF", pdf = "PDF", gif = "GIF", exr = "EXR"
     /// Layers packed into a PNG's red, green, blue and alpha, for game textures (see `ChannelPack`).
     case channelPack = "Channel Pack"
+    /// The layers, for Photoshop and After Effects (see `PSDWriter`). Last, as an interchange format.
+    case psd = "PSD"
     var type: UTType {
         switch self {
         case .png, .channelPack: .png
@@ -540,6 +542,7 @@ enum ExportFormat: String, CaseIterable {
         case .tiff: .tiff
         case .pdf: .pdf
         case .exr: .openEXR
+        case .psd: .photoshopImage
         }
     }
 }
