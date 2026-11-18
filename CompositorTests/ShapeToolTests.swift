@@ -51,6 +51,20 @@ struct ShapeToolTests {
         #expect(session.document?.layers.map(\.name) == ["Layer 1"])
     }
 
+    @Test func aShapeDrawnWithAFolderSelectedGoesToTheTopOfTheFolder() throws {
+        let session = makeSession()
+        session.addBlankLayer()
+        let layers = try #require(session.document?.layers.map(\.id))
+        session.selectLayers(Set(layers), primary: layers.last)
+        session.groupSelectedLayers()
+        let folder = try #require(session.activeLayer)
+        #expect(folder.isGroup)
+        drag(session, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 40, y: 30))
+        let document = try #require(session.document)
+        let inside = document.layers.filter { $0.parentID == folder.id }.map(\.name)
+        #expect(inside == ["Layer 1", "Layer 2", "Rectangle 1"])
+    }
+
     @Test func ellipseLeavesItsCornersClearWithShiftCircleAndOptionFromCenter() async throws {
         let session = makeSession()
         session.toggleShapeKind()

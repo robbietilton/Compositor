@@ -323,8 +323,11 @@ extension EditorSession {
         layer.name = name
         layer.shape = shape
         layer.text = text
-        layer.parentID = activeLayer?.isGroup == true && !besideFolder ? activeLayerID : activeLayer?.parentID
-        let index = document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
+        let intoFolder = activeLayer?.isGroup == true && !besideFolder
+        layer.parentID = intoFolder ? activeLayerID : activeLayer?.parentID
+        // Into a folder, it goes at the top of the folder, as a new blank layer does.
+        let index = intoFolder ? newLayerIndex(in: document.layers)
+            : document.layers.firstIndex { $0.id == activeLayerID }.map { $0 + 1 } ?? document.layers.count
         finishOpacityEdit()
         beginEdit(editName)
         self.document?.layers.insert(layer, at: index)

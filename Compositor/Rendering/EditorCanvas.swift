@@ -2988,14 +2988,29 @@ extension CanvasView {
         case hidden
     }
 
-    /// Just above the active layer — or, when that isn't drawn (hidden, or a folder), above the nearest layer under it
-    /// that is, since that's where the new layer will show. With no active layer, it goes on top.
+    /// Just above the active layer — or, when that isn't drawn (hidden), above the nearest layer under it that is, since
+    /// that's where the new layer will show. With a folder selected, above its topmost contents, where the new layer
+    /// goes. With no active layer, it goes on top.
     private func draftPlace(_ document: CanvasDocument) -> DraftPlace {
         let hierarchy = document.hierarchy
-        guard let active = session.activeLayer, let index = hierarchy.order.firstIndex(of: active.id) else {
+        guard let active = session.activeLayer, var index = hierarchy.order.firstIndex(of: active.id) else {
             return hierarchy.drawn.last.map(DraftPlace.above) ?? .bottom
         }
         if let parent = active.isGroup ? active.id : active.parentID, !hierarchy.visible.contains(parent) { return .hidden }
+        if active.isGroup {
+            // The folder's contents follow it in the order; the new layer goes after the last of them.
+            let parents = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0.parentID) })
+            func isInside(_ id: UUID) -> Bool {
+                var parent = parents[id] ?? nil, steps = 0
+                while let current = parent, steps < 64 {
+                    if current == active.id { return true }
+                    parent = parents[current] ?? nil
+                    steps += 1
+                }
+                return false
+            }
+            while hierarchy.order.indices.contains(index + 1), isInside(hierarchy.order[index + 1]) { index += 1 }
+        }
         let drawn = Set(hierarchy.drawn)
         return hierarchy.order[...index].last(where: drawn.contains).map(DraftPlace.above) ?? .bottom
     }
