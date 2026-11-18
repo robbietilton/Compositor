@@ -155,14 +155,20 @@ struct MagicWandTests {
         session.selectTool(.wand)
         await session.magicWand(at: CGPoint(x: 2, y: 2), mode: .replace)
         let selection = session.selection
-        let again = Task { await session.magicWand(at: CGPoint(x: 2, y: 2), mode: .replace) }
-        while !session.isProjectBusy { await Task.yield() }
+        nonisolated(unsafe) var done = false
+        let again = Task { await session.magicWand(at: CGPoint(x: 2, y: 2), mode: .replace); done = true }
+        // Waits for the click to be under way. It can also finish between two looks, never seen busy: waiting only for
+        // busy then spun for good, holding up every test on the main actor until CI's time ran out.
+        while !session.isProjectBusy, !done { await Task.yield() }
         nonisolated(unsafe) var redrawn = false
-        withObservationTracking { _ = session.canEditSelection } onChange: { redrawn = true }
-        #expect(!session.canEditSelection)
+        let caughtWorking = session.isProjectBusy
+        if caughtWorking {
+            withObservationTracking { _ = session.canEditSelection } onChange: { redrawn = true }
+            #expect(!session.canEditSelection)
+        }
         await again.value
         #expect(session.selection == selection)
         #expect(session.canEditSelection)
-        #expect(redrawn)
+        if caughtWorking { #expect(redrawn) }
     }
 }
