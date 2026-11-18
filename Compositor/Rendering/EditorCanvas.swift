@@ -1256,16 +1256,19 @@ final class CanvasView: NSView {
         // everything, so the layers above it cover it as they will once it is made.
         // Over the top of a clipping stack, the new layer won't be clipped, so the shape previews above the whole stack,
         // unclipped, rather than clipped and then showing in full on release.
+        // With the active layer hidden, it previews above the nearest layer under it that shows (see `draftPlace`).
         let renderIDs = document.renderLayers.map(\.id)
+        let place = draftPlace(document)
+        let anchor: UUID? = if case .above(let id) = place { id } else { nil }
         let stackTop: (base: UUID, top: UUID)? = {
-            guard let active = session.activeLayer, let base = active.maskSourceID,
-                  let index = renderIDs.firstIndex(of: active.id) else { return nil }
+            guard let anchor, let layer = byID[anchor], let base = layer.maskSourceID,
+                  let index = renderIDs.firstIndex(of: anchor) else { return nil }
             let next = renderIDs.indices.contains(index + 1) ? byID[renderIDs[index + 1]] : nil
-            return next?.maskSourceID == base && next?.parentID == active.parentID ? nil : (base, active.id)
+            return next?.maskSourceID == base && next?.parentID == layer.parentID ? nil : (base, anchor)
         }()
         func drawOwnWithDraft(_ id: UUID, _ context: CGContext) {
             drawOwn(id, context)
-            guard id == session.activeLayerID, stackTop?.top != id else { return }
+            guard id == anchor, stackTop?.top != id else { return }
             drawShapeDraft(scale: scale, center: center, in: context)
             drawNewText(context)
         }
@@ -1301,6 +1304,10 @@ final class CanvasView: NSView {
             if let image = layer.mask?.enabledImage {
                 FolderMaskClip(image: image, transform: layer.transform).apply(scale: scale, center: center(layer.transform.center), in: ctx)
             }
+        }
+        if place == .bottom {
+            drawShapeDraft(scale: scale, center: center, in: context)
+            drawNewText(context)
         }
         live.prepareStacks(document.renderLayers.map(\.id), parent: { byID[$0]?.parentID }, blend: { byID[$0].map { session.displayedBlendMode(for: $0) } ?? .normal })
         FolderMaskClip.draw(document.renderLayers.map(\.id), parent: { byID[$0]?.parentID }, clip: { id in
@@ -2971,6 +2978,28 @@ extension CanvasView {
         return gpuFrame(document, renderer: renderer, size: size)
     }
 
+    /// Where a shape being dragged out or new text previews among the layers.
+    private enum DraftPlace: Equatable {
+        /// Just above this layer.
+        case above(UUID)
+        /// Under every layer.
+        case bottom
+        /// Nowhere among the layers: its layer will be in a hidden folder.
+        case hidden
+    }
+
+    /// Just above the active layer — or, when that isn't drawn (hidden, or a folder), above the nearest layer under it
+    /// that is, since that's where the new layer will show. With no active layer, it goes on top.
+    private func draftPlace(_ document: CanvasDocument) -> DraftPlace {
+        let hierarchy = document.hierarchy
+        guard let active = session.activeLayer, let index = hierarchy.order.firstIndex(of: active.id) else {
+            return hierarchy.drawn.last.map(DraftPlace.above) ?? .bottom
+        }
+        if let parent = active.isGroup ? active.id : active.parentID, !hierarchy.visible.contains(parent) { return .hidden }
+        let drawn = Set(hierarchy.drawn)
+        return hierarchy.order[...index].last(where: drawn.contains).map(DraftPlace.above) ?? .bottom
+    }
+
     /// The shape being dragged out, drawn by `drawShapeDraft` into a bitmap just big enough for it, in frame pixels.
     private func shapeDraftImage(placement: GPUPlacement) -> CIImage? {
         guard let draft = session.shapeDraft, let renderer = GPUCanvasRenderer.shared else { return nil }
@@ -3485,11 +3514,11 @@ extension CanvasView {
             return image.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: CIImage.empty(),
                                                                              kCIInputMaskImageKey: coverage])
         }
-        // A shape being dragged out and new text go where their layers will: just above the active layer, or new text on
-        // top when that isn't drawn (see `drawLayers`).
+        // A shape being dragged out and new text go where their layers will (see `draftPlace`), or new text on top when
+        // that is nowhere.
         var drewNewText = false
-        func drafts(after id: UUID, over image: CIImage) -> CIImage {
-            guard id == session.activeLayerID else { return image }
+        let place = draftPlace(document)
+        func drafts(over image: CIImage) -> CIImage {
             var result = image
             if let shape = shapeDraftImage(placement: placement) {
                 result = shape.composited(over: result)
@@ -3502,6 +3531,9 @@ extension CanvasView {
             }
             return result
         }
+        func drafts(after id: UUID, over image: CIImage) -> CIImage {
+            place == .above(id) ? drafts(over: image) : image
+        }
         // An adjustment layer as it's drawn: its settings, its own mask, opacity and blend mode.
         func adjustmentPrint(_ layer: ImageLayer, _ adjustment: LayerAdjustment) -> String {
             if liveMaskEdit(for: layer.id) != nil { return transient() }
@@ -3512,7 +3544,7 @@ extension CanvasView {
         prints.append("frame \(placement.mapping) \(placement.scale) \(hasHDR) \(document.size)")
         var cached = Set<UUID>()
         defer { if cachesAdjustments { adjustmentCache = adjustmentCache.filter { cached.contains($0.key) } } }
-        var result = CIImage.empty()
+        var result = place == .bottom ? drafts(over: CIImage.empty()) : CIImage.empty()
         for id in ids where !stacked.contains(id) {
             guard let layer = byID[id] else { continue }
             let mode = session.displayedBlendMode(for: layer)

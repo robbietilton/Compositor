@@ -77,7 +77,7 @@ import Testing
         return session
     }
 
-    private struct Difference { let mean: Double; let over: Double }
+    private struct Difference { let mean: Double; let over: Double; var cpu: CGImage? = nil }
 
     /// Both canvases drawn for `session`; the share of pixels more than 12 levels apart, and the mean difference.
     private func compare(_ session: EditorSession, name: String, width points: Int = 500, height pointsHigh: Int = 400,
@@ -140,7 +140,7 @@ import Testing
         if let png = NSBitmapImageRep(cgImage: pair.makeImage()!).representation(using: .png, properties: [:]) {
             Attachment.record(png, named: "\(name).png")
         }
-        return Difference(mean: total / Double(width * height * 3), over: Double(over) / Double(width * height))
+        return Difference(mean: total / Double(width * height * 3), over: Double(over) / Double(width * height), cpu: cpu.makeImage())
     }
 
     @Test(arguments: [1.0, 2.0 / 3.0, 1.0 / 3.0, 2.0])
@@ -678,6 +678,31 @@ import Testing
         session.zoom(to: 1)
         let difference = try compare(session, name: "shape-over-stack")
         #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+    }
+
+    /// With a hidden layer active, the shape shows as it's dragged out — its layer goes above the hidden one, and shows.
+    @Test func showsAShapeDrawnWithAHiddenLayerActive() throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = try paintable()
+        let image = try pattern(300, 200, seed: 5)
+        session.insert(ImportedImage(image: image, thumbnail: image, name: "Hidden"))
+        let hidden = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        session.document!.layers[hidden].isVisible = false
+        session.selectTool(.shape)
+        session.beginShape(at: CGPoint(x: 20, y: 20))
+        session.dragShape(to: CGPoint(x: 580, y: 480), square: false, fromCenter: false)
+        session.zoom(to: 1)
+        let difference = try compare(session, name: "shape-over-hidden")
+        #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+        // The middle of the view, inside the shape, is the shape's color.
+        let fill = try #require(session.shapeDraft?.fill)
+        let cpu = try #require(difference.cpu)
+        let pixel = try BrushRaster.context(width: 1, height: 1, mask: false)
+        BrushRaster.draw(cpu, in: CGRect(x: -cpu.width / 2, y: -cpu.height / 2, width: cpu.width, height: cpu.height), mask: false, context: pixel)
+        let bytes = pixel.data!.assumingMemoryBound(to: UInt8.self)
+        let red = Double(bytes[0]) / 255, green = Double(bytes[1]) / 255, blue = Double(bytes[2]) / 255
+        #expect(abs(red - fill.red) < 0.05 && abs(green - fill.green) < 0.05 && abs(blue - fill.blue) < 0.05,
+                "\(red) \(green) \(blue)")
     }
 
     enum EffectsCase: String, CaseIterable {
