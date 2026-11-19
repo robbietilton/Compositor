@@ -306,4 +306,85 @@ struct TiledLayerTests {
         #expect(shift.start <= 3, "starting to paint the mask changed pixels away from the brush by \(shift.start)")
         #expect(shift.finish <= 3, "finishing the mask stroke changed pixels away from the brush by \(shift.finish)")
     }
+
+    /// Painting a mask that has its own placement, on a magnified layer: the canvas while painting is the canvas once the
+    /// stroke is committed. The stroke's tiles used to be resampled into the preview one by one, which drew the tile grid
+    /// across the stroke as lines until mouse-up.
+    @Test(arguments: [false, true], [0.0, 20.0])
+    func paintingAPlacedMaskShowsNoTileLines(gpu: Bool, rotation: Double) throws {
+        let renderer = GPUCanvasRenderer.shared
+        if gpu, renderer == nil { return }
+        let session = EditorSession()
+        session.createDocument(width: 1512, height: 2016)
+        // A smooth picture, where a line would show.
+        let w = 950, h = 1270
+        let context = try BrushRaster.context(width: w, height: h, mask: false)
+        let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: [
+            CGColor(srgbRed: 0.9, green: 0.6, blue: 0.3, alpha: 1), CGColor(srgbRed: 0.2, green: 0.4, blue: 0.8, alpha: 1)] as CFArray,
+            locations: [0, 1])!
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: w, y: h), options: [])
+        let photo = try #require(context.makeImage())
+        session.insert(ImportedImage(image: photo, thumbnail: photo, name: "Photo"))
+        let index = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        var transform = try #require(session.document?.layers[index].transform)
+        transform.origin = CGPoint(x: -3, y: 9)
+        transform.size = CGSize(width: 1518, height: 2028)
+        transform.rotation = rotation
+        session.document?.layers[index].transform = transform
+        // A white mask a little taller than the layer, placed on its own.
+        let maskContext = try BrushRaster.context(width: w, height: 1276, mask: true)
+        maskContext.setFillColor(gray: 1, alpha: 1)
+        maskContext.fill(CGRect(x: 0, y: 0, width: w, height: 1276))
+        let maskImage = try #require(maskContext.makeImage())
+        var placement = transform
+        placement.origin = CGPoint(x: -3, y: -0.07)
+        placement.size = CGSize(width: 1518, height: 2038.07)
+        session.document?.layers[index].mask = LayerMask(asset: ImportedImage(image: maskImage, thumbnail: maskImage, name: "Mask"),
+                                                         placement: placement)
+        session.isMaskSelected = true
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 600, height: 800)
+        let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = canvas
+        defer { _ = window }
+        session.viewport.resize(to: canvas.bounds.size, backingScale: 2, documentSize: session.document?.size)
+        canvas.synchronizeDisplay()
+        let width = 1200, height = 1600
+        func frame() throws -> [UInt8] {
+            if gpu, let renderer {
+                let shot = try #require(canvas.gpuFrame(size: CGSize(width: width, height: height)))
+                let made = try #require(renderer.context.createCGImage(shot, from: CGRect(x: 0, y: 0, width: width, height: height),
+                                                                        format: .RGBA8, colorSpace: renderer.space))
+                let read = try BrushRaster.context(width: width, height: height, mask: false)
+                BrushRaster.draw(made, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: read)
+                return Array(UnsafeBufferPointer(start: try #require(read.data).assumingMemoryBound(to: UInt8.self), count: width * height * 4))
+            }
+            let cpu = try BrushRaster.context(width: width, height: height, mask: false)
+            cpu.translateBy(x: 0, y: CGFloat(height)); cpu.scaleBy(x: 2, y: -2)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: cpu, flipped: true)
+            canvas.allowsGPU = false
+            canvas.draw(canvas.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+            return Array(UnsafeBufferPointer(start: try #require(cpu.data).assumingMemoryBound(to: UInt8.self), count: width * height * 4))
+        }
+        // A wide soft stroke at half strength, across many tiles.
+        session.selectTool(.brush)
+        session.brushSettings.diameter = 400
+        session.brushSettings.hardness = 0
+        session.brushSettings.opacity = 0.5
+        session.beginBrush(at: CGPoint(x: 150, y: 900))
+        for x in stride(from: 175, through: 1350, by: 25) { session.continueBrush(at: CGPoint(x: CGFloat(x), y: 900 + CGFloat(x % 300) / 2)) }
+        canvas.synchronizeDisplay()
+        let painting = try frame()
+        #expect(session.brushStroke?.isMask == true, "painting the mask")
+        _ = session.finishBrushImmediately()
+        canvas.synchronizeDisplay()
+        let after = try frame()
+        var largest = 0
+        for i in stride(from: 0, to: width * height * 4, by: 4) {
+            for c in 0..<3 { largest = max(largest, abs(Int(painting[i + c]) - Int(after[i + c]))) }
+        }
+        #expect(largest <= 4, "\(gpu ? "GPU" : "Core Graphics") canvas at \(rotation)°: committing changed pixels by up to \(largest) levels")
+    }
 }

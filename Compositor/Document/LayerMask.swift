@@ -91,8 +91,11 @@ nonisolated struct LayerMask: Equatable, @unchecked Sendable {
     }
 
     /// `image`'s mask values drawn over `rect` (y down), resampled smoothly (`BrushRaster.draw` samples nearest).
-    static func drawSmooth(_ image: CGImage, in rect: CGRect, context: CGContext) {
+    /// `hardEdged`, the pixels `rect`'s edge cuts through are either replaced or left, not blended toward black: for a
+    /// piece drawn over the same values, where a softened edge showed as a dark line.
+    static func drawSmooth(_ image: CGImage, in rect: CGRect, hardEdged: Bool = false, context: CGContext) {
         context.saveGState()
+        if hardEdged { context.setShouldAntialias(false) }
         context.translateBy(x: rect.minX, y: rect.maxY)
         context.scaleBy(x: 1, y: -1)
         let bounds = CGRect(origin: .zero, size: rect.size)
@@ -416,11 +419,30 @@ extension BrushStroke {
         let w = max(1, Int((CGFloat(gridWidth) * factor).rounded(.up))), h = max(1, Int((CGFloat(gridHeight) * factor).rounded(.up)))
         let old = layer.mask?.asset
         let perMaskPixel = placement.size.width / CGFloat(max(1, width)) * CGFloat(w) / max(1, layer.transform.size.width)
+        let background = old.map { LayerMask.background(of: $0.thumbnail) } ?? 1
+        // The tiles go in as one image, hard-edged: drawn one by one, each tile's softened edge drew a line across the
+        // stroke until it was committed. A margin of the old mask around them means their outer edge changes nothing.
+        let joined = patches.isEmpty ? nil : Self.joined(patches, over: old?.image, at: sourceRect, background: background)
         return try? LayerMask.placed(width: w, height: h, layer: layer.transform, placement: placement, maskWidth: width, maskHeight: height,
-                                     background: old.map { LayerMask.background(of: $0.thumbnail) } ?? 1) { context in
+                                     background: background) { context in
             if let old { LayerMask.drawSmooth(DownsampleCache.shared.image(old.image, drawnAt: perMaskPixel), in: sourceRect, context: context) }
-            for patch in patches { LayerMask.drawSmooth(patch.image, in: patch.rect, context: context) }
+            if let joined { LayerMask.drawSmooth(joined.image, in: joined.rect, hardEdged: true, context: context) }
         }
+    }
+
+    /// `patches` composed over the old mask (at `sourceRect`, `background` past it) into one image covering them and a
+    /// few pixels more, with the grid rect it covers.
+    private static func joined(_ patches: [BrushPatch], over old: CGImage?, at sourceRect: CGRect,
+                               background: CGFloat) -> (image: CGImage, rect: CGRect)? {
+        let union = patches.dropFirst().reduce(patches[0].rect) { $0.union($1.rect) }
+        let rect = union.insetBy(dx: -8, dy: -8).integral
+        guard let context = try? BrushRaster.context(width: Int(rect.width), height: Int(rect.height), mask: true) else { return nil }
+        context.translateBy(x: -rect.minX, y: -rect.minY)
+        context.setFillColor(gray: background, alpha: 1)
+        context.fill(rect)
+        if let old { BrushRaster.draw(old, in: sourceRect, mask: true, context: context) }
+        for patch in patches { BrushRaster.draw(patch.image, in: patch.rect, mask: true, context: context) }
+        return context.makeImage().map { ($0, rect) }
     }
 }
 
