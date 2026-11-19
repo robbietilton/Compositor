@@ -3,17 +3,14 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.13</title>
-      <pubDate>Wed, 18 Nov 2026 03:47:39 +0000</pubDate>
-      <sparkle:version>72</sparkle:version>
-      <sparkle:shortVersionString>1.6.13</sparkle:shortVersionString>
+      <title>Version 1.6.14</title>
+      <pubDate>Thu, 19 Nov 2026 23:51:39 +0000</pubDate>
+      <sparkle:version>73</sparkle:version>
+      <sparkle:shortVersionString>1.6.14</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.13</link>
-      <changes><![CDATA[Export as a layered PSD for Photoshop and After Effects, keeping layers, folders, masks and clipping
-Shapes show while you drag them out, even when a hidden layer is selected
-With a folder selected, new shapes and text go to the top inside the folder
-New shapes use your foreground color, and the Fill swatch shows the color your next shape will be]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.13/Compositor.dmg" sparkle:edSignature="5Vn4dqBufsiFQKfv/W9iEIfX8WcXORQ9WlK2jun9gRbn89iKOFXhhlDwBX2DMzmCAo/IO5ZAWEgmGuOMzNESDw==" length="8940170" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.14</link>
+      <changes><![CDATA[Painting on a layer mask that's been moved or resized apart from its layer no longer shows faint lines across the stroke while you paint]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.14/Compositor.dmg" sparkle:edSignature="F8STaiasfzjRsQP13DCI+v4uYYbAWazk7fX4UGDkrqGkWVMJEB9XlXNXNBQ7qrMXFz2YOnhBtT560Klu7B/+CQ==" length="8941446" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
