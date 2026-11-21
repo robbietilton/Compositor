@@ -13,8 +13,16 @@ nonisolated enum LayerHierarchy {
         func visit(_ parent: UUID?, depth: Int, visible: Bool) {
             guard depth <= 64 else { return }
             let siblings = children[parent] ?? []
+            // Bottom up, as `LayerOrder` works them out: a layer clipped to one below it that doesn't show is hidden too.
+            var shown = Set<UUID>(), below = Set<UUID>()
+            for layer in siblings {
+                if visible && layer.isVisible, !(layer.maskSourceID.map { below.contains($0) && !shown.contains($0) } ?? false) {
+                    shown.insert(layer.id)
+                }
+                below.insert(layer.id)
+            }
             for layer in topFirst ? Array(siblings.reversed()) : siblings {
-                let effective = visible && layer.isVisible
+                let effective = shown.contains(layer.id)
                 result.append(Entry(layer: layer, depth: depth, visible: effective))
                 if layer.isGroup == true, !collapsed.contains(layer.id) {
                     visit(layer.id, depth: depth + 1, visible: effective)
@@ -104,11 +112,13 @@ nonisolated enum LayerOrder {
         let parentID: UUID?
         let isGroup: Bool
         let isVisible: Bool
+        /// The layer it's clipped to.
+        let maskSourceID: UUID?
     }
     struct Result {
         /// Every layer and folder, in the order `LayerHierarchy.entries` lists them.
         let order: [UUID]
-        /// The ones that show: visible, in folders that are.
+        /// The ones that show: visible, in folders that are, and clipped to a layer that shows, if clipped.
         let visible: Set<UUID>
         /// The layers that show, folders left out, bottom to top.
         let drawn: [UUID]
@@ -117,14 +127,19 @@ nonisolated enum LayerOrder {
     nonisolated(unsafe) private static var last: (nodes: [Node], result: Result)?
 
     static func resolve(_ layers: [ImageLayer]) -> Result {
-        let nodes = layers.map { Node(id: $0.id, parentID: $0.parentID, isGroup: $0.isGroup, isVisible: $0.isVisible) }
+        let nodes = layers.map { Node(id: $0.id, parentID: $0.parentID, isGroup: $0.isGroup, isVisible: $0.isVisible, maskSourceID: $0.maskSourceID) }
         if let known = lock.withLock({ last }), known.nodes == nodes { return known.result }
         let children = Dictionary(grouping: nodes, by: \.parentID)
         var order: [UUID] = [], visible = Set<UUID>(), drawn: [UUID] = []
         func visit(_ parent: UUID?, depth: Int, shown: Bool) {
             guard depth <= 64 else { return }
+            var below = Set<UUID>()
             for node in children[parent] ?? [] {
-                let effective = shown && node.isVisible
+                var effective = shown && node.isVisible
+                // Hiding a clipping stack's base hides the layers clipped to it, as in Photoshop; drawn on their own
+                // they showed whole.
+                if let base = node.maskSourceID, below.contains(base), !visible.contains(base) { effective = false }
+                below.insert(node.id)
                 order.append(node.id)
                 if effective {
                     visible.insert(node.id)

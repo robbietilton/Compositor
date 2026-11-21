@@ -125,6 +125,24 @@ import Testing
         s.undo()
         #expect(s.document?.layers.last?.id == ids[2] && s.document?.layers.last?.maskSourceID == ids[0])
     }
+    /// Hiding a clipping stack's base hides the layers clipped to it, rather than leaving them showing on their own, and
+    /// showing it brings them back; hiding a clipped layer leaves the base and the rest of the stack showing.
+    @Test func hidingTheBaseHidesItsClippingStack() async throws {
+        let s = EditorSession(); s.createDocument(width: 2, height: 2)
+        s.insert(try asset([255, 255, 0, 0])); s.insert(try asset([255, 255, 255, 255], color: 0)); s.insert(try asset([255, 255, 255, 255]))
+        let ids = try #require(s.document?.layers.map(\.id))
+        #expect(s.linkMask(source: ids[0], target: ids[1]) && s.linkMask(source: ids[0], target: ids[2]))
+        func shown() async throws -> [UInt8] { try alpha(await ImageExporter.shared.render(#require(s.projectSnapshot())).image) }
+        #expect(try await shown() == [255, 255, 0, 0])
+        s.toggleLayerVisibility(ids[0])
+        #expect(s.document?.effectiveVisibleIDs.isDisjoint(with: ids) == true, "the base and its clipped layers are hidden")
+        #expect(try await shown() == [0, 0, 0, 0])
+        s.toggleLayerVisibility(ids[0])
+        #expect(s.document?.effectiveVisibleIDs.isSuperset(of: ids) == true)
+        #expect(try await shown() == [255, 255, 0, 0])
+        s.toggleLayerVisibility(ids[1])
+        #expect(s.document?.effectiveVisibleIDs == [ids[0], ids[2]])
+    }
     @Test func hiddenBlackSourceSuppliesAlphaAndRasterMasksMultiply() async throws {
         let s = try fixture()
         var raster = try await ImageExporter.shared.render(#require(s.projectSnapshot()))
