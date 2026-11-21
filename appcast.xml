@@ -3,14 +3,17 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.14</title>
-      <pubDate>Thu, 19 Nov 2026 23:51:39 +0000</pubDate>
-      <sparkle:version>73</sparkle:version>
-      <sparkle:shortVersionString>1.6.14</sparkle:shortVersionString>
+      <title>Version 1.6.15</title>
+      <pubDate>Sat, 21 Nov 2026 05:29:29 +0000</pubDate>
+      <sparkle:version>74</sparkle:version>
+      <sparkle:shortVersionString>1.6.15</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.14</link>
-      <changes><![CDATA[Painting on a layer mask that's been moved or resized apart from its layer no longer shows faint lines across the stroke while you paint]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.14/Compositor.dmg" sparkle:edSignature="F8STaiasfzjRsQP13DCI+v4uYYbAWazk7fX4UGDkrqGkWVMJEB9XlXNXNBQ7qrMXFz2YOnhBtT560Klu7B/+CQ==" length="8941446" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.15</link>
+      <changes><![CDATA[Clipping masks now hide with their layer, show again from any eye in the stack, and stay together when duplicated
+Fixed an occasional bug when duplicating layers by Option-dragging
+Return now finishes typing a transform value or text size
+F toggles fullscreen even with the Layers panel selected]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.15/Compositor.dmg" sparkle:edSignature="6nT8nF2dJ/5LJ6k8E48fEG2Q8J0SHZ7CIQmR2+1SU/txOx791F8gKuaNaqo9zsV93F99v45dnS4XD9X314bdAw==" length="8957026" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
