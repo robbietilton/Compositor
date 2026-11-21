@@ -32,8 +32,6 @@ import Testing
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants($0) } }
         let table = try #require(descendants(host).compactMap { $0 as? LayerTableView }.first)
-        // Mouse events another test left in the queue would be taken as this drag's own and land it somewhere else.
-        while NSApp.nextEvent(matching: .any, until: Date(), inMode: .default, dequeue: true) != nil {}
         return Rig(session: session, window: window, host: host, table: table)
     }
 
@@ -235,6 +233,27 @@ import Testing
         #expect(layers[1].maskSourceID == base)
         #expect(layers[2].maskSourceID == nil, "the base's copy is a base")
         #expect(layers[3].maskSourceID == layers[2].id, "the clipped copy is clipped to it")
+    }
+
+    /// A letter typed with the list holding the keys is a shortcut, never a jump to the layer whose name starts with it:
+    /// F, Toggle Fullscreen, used to select a folder called "Folder 1".
+    @Test func lettersDontJumpToALayersName() throws {
+        let rig = try rig { session in
+            if let index = session.document?.layers.indices.first { session.document?.layers[index].name = "Folder 1" }
+        }
+        defer { rig.window.orderOut(nil) }
+        let point = middle(of: 0, in: rig.table)
+        NSApp.postEvent(try mouse(.leftMouseUp, point, in: rig.window), atStart: false)
+        rig.table.mouseDown(with: try mouse(.leftMouseDown, point, in: rig.window))
+        let selected = rig.table.selectedRowIndexes
+        for key in ["f", "k", "q"] {
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: rig.window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
+                isARepeat: false, keyCode: key == "f" ? 3 : key == "k" ? 40 : 12))
+            rig.table.keyDown(with: event)
+        }
+        #expect(rig.table.selectedRowIndexes == selected)
+        #expect(rig.table.allowsTypeSelect == false)
     }
 
     @Test func leavingThePanelHandsOverToAnOrdinaryDrag() throws {

@@ -16,6 +16,8 @@ struct NativeLayerList: NSViewRepresentable {
         table.intercellSpacing = NSSize(width: 0, height: 2)
         table.allowsMultipleSelection = true
         table.allowsEmptySelection = true
+        // Letters are the tools' and the menus' keys here as on the canvas, never typing to jump to a layer's name.
+        table.allowsTypeSelect = false
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layer"))
         column.width = 252
@@ -1221,6 +1223,9 @@ final class LayerTableView: NSTableView {
             session?.resetPaletteColors()
         } else if plain, event.charactersIgnoringModifiers?.lowercased() == "t" {
             session?.selectTool(.type)
+        } else if plain, event.charactersIgnoringModifiers?.lowercased() == "f" {
+            // Toggle Fullscreen, through its menu item, as on the canvas; the list used to take it as typing to a row.
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
         } else if plain, ["a", "v", "h", "z", "b", "e", "g", "l", "m", "w", "j", "s", "u", "r", "i", "c"].contains(event.charactersIgnoringModifiers?.lowercased() ?? "") {
             let key = event.charactersIgnoringModifiers?.lowercased()
             if key == "m" { if !event.isARepeat { session?.pressMarqueeKey() } }
