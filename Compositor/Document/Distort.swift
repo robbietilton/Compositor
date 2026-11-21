@@ -367,8 +367,8 @@ extension EditorSession {
         endEdit()
     }
 
-    /// The layer at `index`, shown by `transform`, resampled so its corners land on `corners`.
-    private func distort(at index: Int, transform: LayerTransform, corners: [CGPoint]) throws {
+    /// The layer at `index`, shown by `transform`, resampled so its corners land on `corners`. Auto-Align uses it too.
+    func distort(at index: Int, transform: LayerTransform, corners: [CGPoint]) throws {
         guard let layer = document?.layers[index], let source = layer.asset else { return }
         // A 16-bit layer is warped from its 16-bit pixels and stays 16-bit (`DeepLayer`).
         let deep = try DeepLayer.flattened(source)
