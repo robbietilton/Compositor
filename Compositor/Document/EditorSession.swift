@@ -966,9 +966,24 @@ final class EditorSession {
 
     func toggleLayerVisibility(_ id: UUID) {
         guard canEditLayers, let index = document?.layers.firstIndex(where: { $0.id == id }) else { return }
+        if let stack = hiddenClippingStack(of: id) {
+            beginEdit("Show Layers")
+            defer { endEdit() }
+            for layer in stack { setVisibilityInSwipe(layer, visible: true) }
+            return
+        }
         beginEdit(document?.layers[index].isVisible == true ? "Hide Layer" : "Show Layer")
         defer { endEdit() }
         document?.layers[index].isVisible.toggle()
+    }
+
+    /// A clipped layer whose base is hidden doesn't show, whatever its own eye says; its eye shows the whole stack
+    /// again, as in Photoshop: the base and every layer clipped to it. Nil when `id` isn't such a layer.
+    func hiddenClippingStack(of id: UUID) -> [UUID]? {
+        guard let layers = document?.layers, let layer = layers.first(where: { $0.id == id }),
+              let base = layer.maskSourceID, let baseLayer = layers.first(where: { $0.id == base }),
+              baseLayer.parentID == layer.parentID, !baseLayer.isVisible else { return nil }
+        return [base] + layers.filter { $0.maskSourceID == base && $0.parentID == baseLayer.parentID }.map(\.id)
     }
 
     /// Hide Layer / Show Layer, from the menus: the selected layers all hidden, or with the active one hidden, all
@@ -995,6 +1010,11 @@ final class EditorSession {
     /// same state, all as one undo step (`beginEdit` at the press, `endEdit` when the button comes up).
     func beginVisibilitySwipe(_ id: UUID) -> Bool? {
         guard canEditLayers, let layer = document?.layers.first(where: { $0.id == id }) else { return nil }
+        if let stack = hiddenClippingStack(of: id) {
+            beginEdit("Show Layers")
+            for layer in stack { setVisibilityInSwipe(layer, visible: true) }
+            return true
+        }
         let visible = !layer.isVisible
         beginEdit(visible ? "Show Layer" : "Hide Layer")
         setVisibilityInSwipe(id, visible: visible)

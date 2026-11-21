@@ -142,6 +142,16 @@ import Testing
         #expect(try await shown() == [255, 255, 0, 0])
         s.toggleLayerVisibility(ids[1])
         #expect(s.document?.effectiveVisibleIDs == [ids[0], ids[2]])
+
+        // With the base hidden, a clipped layer's eye shows the whole stack again, its own hidden layers too.
+        s.toggleLayerVisibility(ids[0])
+        #expect(s.document?.effectiveVisibleIDs.isEmpty == true)
+        #expect(s.beginVisibilitySwipe(ids[2]) == true)
+        s.endVisibilitySwipe()
+        #expect(s.document?.effectiveVisibleIDs.isSuperset(of: ids) == true)
+        #expect(s.document?.layers.allSatisfy(\.isVisible) == true)
+        s.undo()
+        #expect(s.document?.effectiveVisibleIDs.isEmpty == true, "one undo step")
     }
     /// Duplicating a base with the layer clipped to it makes a second stack: the base's copy a base, the clipped
     /// layer's copy clipped to it, rather than both clipped to the original base.
