@@ -3,17 +3,14 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.6.15</title>
-      <pubDate>Sat, 21 Nov 2026 05:29:29 +0000</pubDate>
-      <sparkle:version>74</sparkle:version>
-      <sparkle:shortVersionString>1.6.15</sparkle:shortVersionString>
+      <title>Version 1.7.0</title>
+      <pubDate>Sat, 21 Nov 2026 22:31:57 +0000</pubDate>
+      <sparkle:version>75</sparkle:version>
+      <sparkle:shortVersionString>1.7.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.6.15</link>
-      <changes><![CDATA[Clipping masks now hide with their layer, show again from any eye in the stack, and stay together when duplicated
-Fixed an occasional bug when duplicating layers by Option-dragging
-Return now finishes typing a transform value or text size
-F toggles fullscreen even with the Layers panel selected]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.6.15/Compositor.dmg" sparkle:edSignature="6nT8nF2dJ/5LJ6k8E48fEG2Q8J0SHZ7CIQmR2+1SU/txOx791F8gKuaNaqo9zsV93F99v45dnS4XD9X314bdAw==" length="8957026" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.0</link>
+      <changes><![CDATA[Up and Down arrows now step the numbers in adjustment and filter panels]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.0/Compositor.dmg" sparkle:edSignature="KIF/KELs7xbnS7mzX1auFZ/5YRxB2JGBGfAnOgvvCU/yO5OmR0GWNbhlQ/NbZX/++lEJ/PQ1YZnkIUEhdKDjAw==" length="8983787" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
