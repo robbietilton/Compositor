@@ -32,6 +32,8 @@ import Testing
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants($0) } }
         let table = try #require(descendants(host).compactMap { $0 as? LayerTableView }.first)
+        // Mouse events another test left in the queue would be taken as this drag's own and land it somewhere else.
+        while NSApp.nextEvent(matching: .any, until: Date(), inMode: .default, dequeue: true) != nil {}
         return Rig(session: session, window: window, host: host, table: table)
     }
 
