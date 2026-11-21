@@ -183,6 +183,34 @@ import Testing
         #expect(rig.table.selectedRowIndexes == IndexSet(integer: 1))
     }
 
+    /// Option-dragging a layer from low on its row, where an Option-click clips, and letting go of Option a moment
+    /// before the button, still drops a copy right above it; an Option-click there still clips.
+    @Test func anOptionDragFromLowOnTheRowStillDuplicates() throws {
+        let rig = try rig()
+        defer { rig.window.orderOut(nil) }
+        let original = try #require(rig.session.filteredLayerRows[1].layer)
+        let frame = rig.table.rect(ofRow: 1)
+        let low = rig.table.convert(NSPoint(x: frame.midX, y: frame.maxY - 3), to: nil)
+        let above = rig.table.convert(NSPoint(x: frame.midX, y: frame.minY + 3), to: nil)
+        NSApp.postEvent(try mouse(.leftMouseDragged, NSPoint(x: low.x, y: low.y + 5), in: rig.window, flags: .option), atStart: false)
+        NSApp.postEvent(try mouse(.leftMouseDragged, above, in: rig.window, flags: .option), atStart: false)
+        NSApp.postEvent(try mouse(.leftMouseUp, above, in: rig.window), atStart: false)
+        rig.table.mouseDown(with: try mouse(.leftMouseDown, low, in: rig.window, flags: .option))
+        let rows = rig.session.filteredLayerRows.map(\.layer)
+        #expect(rows.count == 4, "a copy was made")
+        #expect(rows[2].id == original.id && rows[1].id != original.id, "right above the original")
+        #expect(rows.allSatisfy { $0.maskSourceID == nil }, "and nothing was clipped")
+
+        // A click there, without moving, clips the layer to the one below.
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        #expect(rig.table.displayedRows.count == 4)
+        let clicked = try #require(rig.table.displayedRows[2])
+        let strip = rig.table.convert(NSPoint(x: rig.table.rect(ofRow: 2).midX, y: rig.table.rect(ofRow: 2).maxY - 3), to: nil)
+        NSApp.postEvent(try mouse(.leftMouseUp, strip, in: rig.window, flags: .option), atStart: false)
+        rig.table.mouseDown(with: try mouse(.leftMouseDown, strip, in: rig.window, flags: .option))
+        #expect(rig.session.document?.layers.first { $0.id == clicked.id }?.maskSourceID != nil)
+    }
+
     @Test func leavingThePanelHandsOverToAnOrdinaryDrag() throws {
         let rig = try rig()
         defer { rig.window.orderOut(nil) }
