@@ -586,6 +586,10 @@ struct FilterSheet: View {
             TextField(title, value: Binding(get: { settings[keyPath: key] }, set: { value in update { $0[keyPath: key] = value } }),
                       format: .number.precision(.fractionLength(0...decimals)))
                 .frame(width: 56).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                // Up and Down step it by its last digit: 1 for a whole number, as Color Balance's.
+                .arrowSteps(1 / step, value: { settings[keyPath: key] }, change: { stepped in
+                    update { $0[keyPath: key] = min(range.upperBound, max(range.lowerBound, (stepped * step).rounded() / step)) }
+                })
                 .unitSuffix(unit)
         }
     }
