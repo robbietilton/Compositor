@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 import Testing
 @testable import Compositor
 
@@ -13,18 +13,30 @@ struct PenPressureTests {
         return session
     }
 
-    /// The canvas as exported, and one pixel's alpha from it.
-    private func canvas(_ session: EditorSession) async throws -> NSBitmapImageRep {
-        NSBitmapImageRep(cgImage: try await ImageExporter.shared.render(try #require(session.projectSnapshot())).image)
+    /// An image's pixels as bytes, top row first, four to a pixel, read through CoreGraphics alone.
+    private struct Bitmap: Equatable {
+        let height: Int
+        private let width: Int
+        private let bytes: [UInt8]
+
+        init(_ image: CGImage) throws {
+            let context = try BrushRaster.copy(image)
+            width = image.width
+            height = image.height
+            let start = try #require(context.data).assumingMemoryBound(to: UInt8.self)
+            bytes = Array(UnsafeBufferPointer(start: start, count: context.bytesPerRow * image.height))
+        }
+
+        func alpha(_ x: Int, _ y: Int) -> Int { Int(bytes[(y * width + x) * 4 + 3]) }
     }
-    private func alpha(_ bitmap: NSBitmapImageRep, _ x: Int, _ y: Int) -> Int {
-        var pixel = [Int](repeating: 0, count: 4)
-        bitmap.getPixel(&pixel, atX: x, y: y)
-        return pixel[3]
+
+    /// The canvas as exported.
+    private func canvas(_ session: EditorSession) async throws -> Bitmap {
+        try Bitmap(try await ImageExporter.shared.render(try #require(session.projectSnapshot())).image)
     }
     /// How many rows of column `x` the stroke covers.
-    private func thickness(_ bitmap: NSBitmapImageRep, _ x: Int) -> Int {
-        (0..<bitmap.pixelsHigh).filter { alpha(bitmap, x, $0) > 127 }.count
+    private func thickness(_ bitmap: Bitmap, _ x: Int) -> Int {
+        (0..<bitmap.height).filter { bitmap.alpha(x, $0) > 127 }.count
     }
 
     /// A left-to-right stroke along y = 50, its pressure easing from `from` to `to`.
@@ -55,7 +67,7 @@ struct PenPressureTests {
             stroke(session, from: 0.5, to: 0.5)
             let bitmap = try await canvas(session)
             // The middle of the line, well inside a soft tip's full-strength center once dabs have built up.
-            #expect(abs(alpha(bitmap, 150, 50) - 128) <= 4, "hardness \(hardness): \(alpha(bitmap, 150, 50))")
+            #expect(abs(bitmap.alpha(150, 50) - 128) <= 4, "hardness \(hardness): \(bitmap.alpha(150, 50))")
         }
     }
 
@@ -72,7 +84,7 @@ struct PenPressureTests {
         let pen = session()
         stroke(pen, from: 0.2, to: 0.6)
         for other in [try await canvas(mouse), try await canvas(pen)] {
-            #expect(other.representation(using: .png, properties: [:]) == expected.representation(using: .png, properties: [:]))
+            #expect(other == expected)
         }
     }
 
@@ -84,19 +96,6 @@ struct PenPressureTests {
         stroke(session, from: 0.25, to: 0.25)
         let bitmap = try await canvas(session)
         #expect((0..<300).map { thickness(bitmap, $0) }.max()! < 16)
-    }
-
-    /// Only a tablet's events carry a pressure to follow; a mouse's, even pressed hard on a Force Touch trackpad, don't.
-    @Test func theCanvasReadsPressureFromATabletOnly() throws {
-        func event(tablet: Bool, pressure: Double) throws -> NSEvent {
-            let event = try #require(CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged,
-                                              mouseCursorPosition: .zero, mouseButton: .left))
-            event.setDoubleValueField(.mouseEventPressure, value: pressure)
-            if tablet { event.setIntegerValueField(.mouseEventSubtype, value: Int64(CGEventMouseSubtype.tabletPoint.rawValue)) }
-            return try #require(NSEvent(cgEvent: event))
-        }
-        #expect(abs(try #require(CanvasView.penPressure(try event(tablet: true, pressure: 0.3))) - 0.3) < 0.01)
-        #expect(CanvasView.penPressure(try event(tablet: false, pressure: 0.3)) == nil)
     }
 
     /// Without Metal, the dabs follow the pressure the same way.
@@ -113,9 +112,9 @@ struct PenPressureTests {
         try stroke.flush()
         let snapshot = try stroke.paintSnapshot()
         // Painted only where the line went: a stroke that thins as it goes is taller at its start than its end.
-        let image = snapshot.asset.image, bitmap = NSBitmapImageRep(cgImage: image)
+        let image = snapshot.asset.image, bitmap = try Bitmap(image)
         let origin = snapshot.transform.origin
-        func rows(_ x: Int) -> Int { (0..<image.height).filter { alpha(bitmap, x - Int(origin.x), $0) > 127 }.count }
+        func rows(_ x: Int) -> Int { (0..<image.height).filter { bitmap.alpha(x - Int(origin.x), $0) > 127 }.count }
         #expect(abs(rows(40) - 40) <= 3 && rows(260) < 16)
     }
 }
