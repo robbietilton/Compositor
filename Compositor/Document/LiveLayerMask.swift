@@ -293,6 +293,26 @@ extension EditorSession {
         }
     }
     /// A moved layer stops clipping when it no longer belongs to the contiguous stack above its base.
+    /// Layers duplicated together (`copiesOf`, original to copy) keep their clipping among themselves: a copy of a
+    /// layer clipped to another of them clips to that one's copy, and a copy of their base stays a base. Placed one by
+    /// one, a base's copy joined the clipping group it landed in, and the clipped copies stayed on the old base.
+    func relinkCopiedClipping(_ copiesOf: [UUID: UUID]) {
+        guard copiesOf.count > 1, var layers = document?.layers else { return }
+        let byID = Dictionary(uniqueKeysWithValues: layers.map { ($0.id, $0) })
+        let bases = Set(copiesOf.keys.compactMap { byID[$0]?.maskSourceID }.filter { copiesOf[$0] != nil })
+        for (original, copy) in copiesOf {
+            guard let index = layers.firstIndex(where: { $0.id == copy }), !layers[index].isGroup else { continue }
+            if let source = byID[original]?.maskSourceID, let sourceCopy = copiesOf[source] {
+                layers[index].maskSourceID = sourceCopy
+            } else if bases.contains(original) {
+                layers[index].maskSourceID = nil
+            }
+        }
+        Self.releaseDetachedClipping(in: &layers)
+        guard (try? LiveMaskGraph.validate(layers.map(\.hierarchyRecord))) != nil else { return }
+        document?.layers = layers
+    }
+
     static func releaseDetachedClipping(in layers: inout [ImageLayer]) {
         let siblings = Dictionary(grouping: layers, by: \.parentID)
         var release = Set<UUID>()

@@ -211,6 +211,23 @@ import Testing
         #expect(rig.session.document?.layers.first { $0.id == clicked.id }?.maskSourceID != nil)
     }
 
+    /// Option-dragging a base and the layer clipped to it to just above them copies the stack: the base's copy a base,
+    /// the clipped copy clipped to it.
+    @Test func optionDraggingAClippingStackCopiesIt() throws {
+        let rig = try rig(layers: 2)
+        defer { rig.window.orderOut(nil) }
+        let base = try #require(rig.session.document?.layers[0].id), clipped = try #require(rig.session.document?.layers[1].id)
+        #expect(rig.session.linkMask(source: base, target: clipped))
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        let coordinator = try #require(rig.table.delegate as? NativeLayerList.Coordinator)
+        #expect(coordinator.drop([clipped, base], at: 0, intoFolder: false, copying: true))
+        let layers = try #require(rig.session.document?.layers)
+        #expect(layers.count == 4)
+        #expect(layers[1].maskSourceID == base)
+        #expect(layers[2].maskSourceID == nil, "the base's copy is a base")
+        #expect(layers[3].maskSourceID == layers[2].id, "the clipped copy is clipped to it")
+    }
+
     @Test func leavingThePanelHandsOverToAnOrdinaryDrag() throws {
         let rig = try rig()
         defer { rig.window.orderOut(nil) }

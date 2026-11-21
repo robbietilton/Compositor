@@ -529,11 +529,15 @@ struct NativeLayerList: NSViewRepresentable {
                                       : (ids.count > 1 ? "Move Layers" : "Move Layer"))
             var placed = false
             var landed: [UUID] = []
+            var copiesOf: [UUID: UUID] = [:]
             for id in order {
                 let done = copying ? session.duplicateLayer(id, in: parent, above: above, atBottom: atBottom)
                                    : session.placeLayer(id, in: parent, above: above, atBottom: atBottom)
                 placed = done || placed
-                if done, let copy = copying ? session.activeLayerID : id { landed.append(copy) }
+                if done, let copy = copying ? session.activeLayerID : id {
+                    landed.append(copy)
+                    if copying { copiesOf[id] = copy }
+                }
             }
             // Over the top of a clipping group, the drop said which side: joining the group, or above it, unclipped.
             if placed, base != nil || unclipped {
@@ -543,6 +547,8 @@ struct NativeLayerList: NSViewRepresentable {
                     session.document?.layers[index].maskSourceID = base
                 }
             }
+            // A base copied with its clipped layers stays their base, wherever the copies land.
+            if placed, copying { session.relinkCopiedClipping(copiesOf) }
             // The layers that moved stay selected, so they can be dragged on as a group.
             if placed, !copying { session.selectLayers(Set(ids), primary: ids.first) }
             session.endEdit()

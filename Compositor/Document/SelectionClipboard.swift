@@ -249,6 +249,7 @@ extension EditorSession {
                 }
             }
         }
+        relinkCopiedClipping(copiesOf)
         activeLayerID = active.flatMap { copiesOf[$0] } ?? copiesOf[ids[0]] ?? copiesOf.values.first
         selectedLayerIDs = Set(copiesOf.values)
         endEdit()

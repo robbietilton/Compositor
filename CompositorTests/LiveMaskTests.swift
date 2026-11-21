@@ -143,6 +143,24 @@ import Testing
         s.toggleLayerVisibility(ids[1])
         #expect(s.document?.effectiveVisibleIDs == [ids[0], ids[2]])
     }
+    /// Duplicating a base with the layer clipped to it makes a second stack: the base's copy a base, the clipped
+    /// layer's copy clipped to it, rather than both clipped to the original base.
+    @Test func duplicatingABaseWithItsClippedLayerMakesASecondStack() throws {
+        let s = EditorSession(); s.createDocument(width: 2, height: 2)
+        s.insert(try asset([255, 255, 0, 0])); s.insert(try asset([255, 255, 255, 255], color: 0))
+        let base = try #require(s.document?.layers[0].id), clipped = try #require(s.document?.layers[1].id)
+        #expect(s.linkMask(source: base, target: clipped))
+        s.selectLayers([base, clipped], primary: clipped)
+        s.duplicateActiveLayer()
+        let layers = try #require(s.document?.layers)
+        #expect(layers.count == 4)
+        #expect(Array(layers.prefix(2).map(\.id)) == [base, clipped], "the originals stay as they were")
+        #expect(layers[1].maskSourceID == base)
+        #expect(layers[2].maskSourceID == nil, "the base's copy is a base")
+        #expect(layers[3].maskSourceID == layers[2].id, "the clipped copy is clipped to it")
+        s.undo()
+        #expect(s.document?.layers.count == 2, "one undo step")
+    }
     @Test func hiddenBlackSourceSuppliesAlphaAndRasterMasksMultiply() async throws {
         let s = try fixture()
         var raster = try await ImageExporter.shared.render(#require(s.projectSnapshot()))
