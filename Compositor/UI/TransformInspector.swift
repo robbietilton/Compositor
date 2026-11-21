@@ -22,19 +22,19 @@ struct TransformInspector: View {
             HStack(spacing: 12) {
                 field("X", value: value.origin.x) { $0.origin.x = $1 }.fixedSize()
                 field("Y", value: value.origin.y) { $0.origin.y = $1 }.fixedSize()
-                TransformValueField(label: "W", fieldWidth: Self.longField, value: value.size.width, range: 1...30_000, finish: finish) { resize($0, width: true) }.fixedSize()
-                TransformValueField(label: "H", fieldWidth: Self.longField, value: value.size.height, range: 1...30_000, finish: finish) { resize($0, width: false) }.fixedSize()
+                TransformValueField(label: "W", fieldWidth: Self.longField, value: value.size.width, range: 1...30_000, finish: finish, returned: releaseFocus) { resize($0, width: true) }.fixedSize()
+                TransformValueField(label: "H", fieldWidth: Self.longField, value: value.size.height, range: 1...30_000, finish: finish, returned: releaseFocus) { resize($0, width: false) }.fixedSize()
                 // Shift flips the lock while dragging a handle, and the button shows it flipped.
                 Toggle(isOn: Binding(get: { session.locksTransformRatio != held.contains(.shift) },
                                      set: { session.locksTransformRatio = $0 != held.contains(.shift) })) { Image(systemName: "link") }
                     .toggleStyle(.button).help("Lock aspect ratio. Hold Shift while dragging a handle to turn it the other way.")
-                TransformValueField(label: "Scale", suffix: "%", fieldWidth: Self.shortField, value: value.scalePercent(pixelSize: pixelSize), range: 0.1...30_000, finish: finish) { number in
+                TransformValueField(label: "Scale", suffix: "%", fieldWidth: Self.shortField, value: value.scalePercent(pixelSize: pixelSize), range: 0.1...30_000, finish: finish, returned: releaseFocus) { number in
                     change { value in
                         guard number > 0 else { return }
                         value = value.scaled(toPercent: number, pixelSize: pixelSize)
                     }
                 }.fixedSize().help("Scale width and height together, about the center")
-                TransformValueField(label: "°", fieldWidth: Self.shortField, value: value.rotation, range: -360...360, finish: finish) { number in
+                TransformValueField(label: "°", fieldWidth: Self.shortField, value: value.rotation, range: -360...360, finish: finish, returned: releaseFocus) { number in
                     change { $0.rotation = number.truncatingRemainder(dividingBy: 360) }
                 }.fixedSize()
                 Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
@@ -68,7 +68,7 @@ struct TransformInspector: View {
           HStack(spacing: 12) {
               Button("Cancel") { session.cancelTransform() }.configuredNativeShortcut(.escape)
                   .disabled(session.transformEdit == nil)
-              Button("Apply") { session.commitTransform() }.configuredNativeShortcut(.return)
+              Button("Apply") { session.commitTransform(); releaseFocus() }.configuredNativeShortcut(.return)
                   .disabled(session.transformEdit == nil).accessibilityIdentifier("applyTransform")
           }
           .opacity(pending ? 1 : 0).allowsHitTesting(pending).accessibilityHidden(!pending)
@@ -86,7 +86,7 @@ struct TransformInspector: View {
 
     private func field(_ label: String, value: CGFloat, range: ClosedRange<CGFloat> = -30_000...30_000,
                        set: @escaping (inout LayerTransform, CGFloat) -> Void) -> some View {
-        TransformValueField(label: label, fieldWidth: Self.longField, value: value, range: range, finish: finish) { number in change { set(&$0, number) } }
+        TransformValueField(label: label, fieldWidth: Self.longField, value: value, range: range, finish: finish, returned: releaseFocus) { number in change { set(&$0, number) } }
     }
     /// A value typed, stepped or dragged shows on the canvas as it changes, and is applied without Cancel or Apply —
     /// a transform never resamples the layer's pixels, so there is nothing to confirm — as one undo step once the
@@ -101,6 +101,9 @@ struct TransformInspector: View {
         update(&value)
         session.previewTransform(value)
     }
+    /// Return in a field, or Apply: the canvas takes the keyboard back, so the field isn't left editing and the tool
+    /// keys work again.
+    private func releaseFocus() { session.canvasFocusRequest += 1 }
     /// A field done with its value — a drag on its label let go, or the field left (Return, Tab, a click elsewhere):
     /// what the fields changed is applied, one undo step.
     private func finish() {
@@ -129,6 +132,8 @@ struct TransformValueField: View {
     let range: ClosedRange<CGFloat>
     /// The field is done with its value: a drag on its label let go, or the field left.
     let finish: () -> Void
+    /// Return pressed in the field, after it lets go of the keyboard.
+    var returned: () -> Void = {}
     let change: (CGFloat) -> Void
     @State private var text = ""
     @State private var stepper = ArrowStepper()
@@ -147,6 +152,8 @@ struct TransformValueField: View {
                 .onAppear { sync() }
                 .onChange(of: value) { if !focused { sync() } }
                 .onChange(of: focused) { if !focused { finish(); sync() } }
+                // Return applies the value and leaves the field, whichever of it and the bar's Apply takes the key.
+                .onSubmit { focused = false; returned() }
                 .onChange(of: text) {
                     if focused, let number = Double(text), number.isFinite { change(CGFloat(number)) }
                 }
