@@ -3,6 +3,7 @@ import AppKit
 
 struct TypeControls: View {
     @Bindable var session: EditorSession
+    @FocusState private var editingSize: Bool
     private func value<T>(_ key: WritableKeyPath<LayerTextStyle, T>) -> Binding<T> {
         Binding(get: { session.currentTextStyle[keyPath: key] }, set: { value in
             session.changeTextStyle { $0[keyPath: key] = value }
@@ -40,6 +41,9 @@ struct TypeControls: View {
                     HStack(spacing: 6) {
                         Text("Size").scrubbable(sensitivity: 1, value: value(\.fontSize), range: 1...2000, step: 1)
                         TextField("Size", value: number(\.fontSize), format: .number).frame(width: 52)
+                            .focused($editingSize)
+                            // Return applies the size and hands the keys back: to the text being edited, or the canvas.
+                            .onSubmit { editingSize = false; session.canvasFocusRequest += 1 }
                             .arrowSteps(value: { Double(session.currentTextStyle.fontSize) },
                                         change: { stepped in session.changeTextStyle { $0.fontSize = CGFloat(min(2000, max(1, stepped))) } })
                     }
