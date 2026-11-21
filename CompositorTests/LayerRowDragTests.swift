@@ -194,13 +194,20 @@ import Testing
         let frame = rig.table.rect(ofRow: 1)
         let low = rig.table.convert(NSPoint(x: frame.midX, y: frame.maxY - 3), to: nil)
         let above = rig.table.convert(NSPoint(x: frame.midX, y: frame.minY + 3), to: nil)
+        // What the drag did at each step, reported if it lands wrong: it has, now and then, on CI alone.
+        var steps: [String] = []
+        LayerTableView.rowDragStepForTesting = { _, _, target in steps.append("aim \(target.map { String($0.row) } ?? "none")") }
+        LayerTableView.rowDragEndForTesting = { steps.append($0) }
+        defer { LayerTableView.rowDragStepForTesting = nil; LayerTableView.rowDragEndForTesting = nil }
+        let before = names(rig.session)
         NSApp.postEvent(try mouse(.leftMouseDragged, NSPoint(x: low.x, y: low.y + 5), in: rig.window, flags: .option), atStart: false)
         NSApp.postEvent(try mouse(.leftMouseDragged, above, in: rig.window, flags: .option), atStart: false)
         NSApp.postEvent(try mouse(.leftMouseUp, above, in: rig.window), atStart: false)
         rig.table.mouseDown(with: try mouse(.leftMouseDown, low, in: rig.window, flags: .option))
         let rows = rig.session.filteredLayerRows.map(\.layer)
         #expect(rows.count == 4, "a copy was made")
-        #expect(rows[2].id == original.id && rows[1].id != original.id, "right above the original")
+        #expect(rows[2].id == original.id && rows[1].id != original.id,
+                "right above the original: \(before) became \(rows.map(\.name)); \(steps); visible \(rig.table.visibleRect)")
         #expect(rows.allSatisfy { $0.maskSourceID == nil }, "and nothing was clipped")
 
         // A click there, without moving, clips the layer to the one below.

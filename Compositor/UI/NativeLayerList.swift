@@ -884,6 +884,8 @@ final class LayerTableView: NSTableView {
     fileprivate var outsideDragSource: LayerRowDragSource?
     /// Each step of a row drag, for tests: the picked-up row's picture and where a release would land.
     static var rowDragStepForTesting: ((LayerTableView, NSView, DropTarget?) -> Void)?
+    /// How each row drag ended, for tests: "up", "late up", "no up".
+    static var rowDragEndForTesting: ((String) -> Void)?
     /// Takes over from the list's own drag once the pointer leaves the Layers panel; tests swap it to watch.
     var beginsOutsideDrag: (LayerTableView, [UUID], NSImage?, NSRect, NSEvent) -> Void = { table, ids, image, frame, event in
         table.beginSystemDrag(ids: ids, image: image, frame: frame, event: event)
@@ -1138,12 +1140,14 @@ final class LayerTableView: NSTableView {
                 // The button is up but its mouse-up hasn't arrived: let go just as the wait ran out, the mouse-up is
                 // usually on its way. Taken as no release at all, about one quick drag in three dropped nothing.
                 let up = window.nextEvent(matching: .leftMouseUp, until: Date(timeIntervalSinceNow: 0.25), inMode: .eventTracking, dequeue: true)
+                Self.rowDragEndForTesting?(up == nil ? "no up" : "late up")
                 if let up { follow(up) }
                 release(option: (up ?? last).modifierFlags.contains(.option) || NSEvent.modifierFlags.contains(.option))
                 return
             }
             switch event.type {
             case .leftMouseUp:
+                Self.rowDragEndForTesting?("up")
                 follow(event)
                 release(option: event.modifierFlags.contains(.option))
                 return
