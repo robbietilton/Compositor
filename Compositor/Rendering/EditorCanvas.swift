@@ -3233,6 +3233,9 @@ extension CanvasView {
                 if let raster = asset?.raster { pixels = placement.place(raster, transform: transform) }
                 else { pixels = asset.flatMap { placement.place($0.image, transform: transform) } }
                 guard var image = pixels else { return nil }
+                // A gradient fills the tiles the preview is made from only when something reads them: unfilled, it
+                // showed nothing until Return.
+                if let edit = session.gradientEdit, edit.raster === stroke { try? edit.applyFill() }
                 if let preview = stroke.placedMaskPreview(placement: stroke.paintTransform) {
                     guard let mask = placement.place(transient: preview, transform: transform, mask: true) else { return nil }
                     image = GPUBlend.masked(image, by: mask)

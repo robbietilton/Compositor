@@ -206,6 +206,47 @@ import Testing
     }
 
     /// A gradient being dragged, linear and radial, the radial one inside a selection.
+    /// A gradient dragged on a layer's mask shows as it's dragged, as on the Core Graphics canvas, with the mask over its
+    /// layer or placed apart from it: placed apart, it used to show only once Return committed it.
+    @Test(arguments: [false, true])
+    func showsAGradientOnAMaskAsItsDragged(placedApart: Bool) throws {
+        guard GPUCanvasRenderer.shared != nil else { return }
+        let session = try paintable(masked: true)
+        let index = try #require(session.document?.layers.firstIndex { $0.id == session.activeLayerID })
+        if placedApart, let layer = session.document?.layers[index] {
+            var placement = layer.transform
+            placement.origin.y -= 6
+            placement.size.height += 14
+            session.document?.layers[index].mask?.placement = placement
+        }
+        session.isMaskSelected = true
+        session.tool = .gradient
+        session.zoom(to: 1)
+        // The GPU canvas on its own, as on screen: the Core Graphics one fills the gradient's tiles as it draws.
+        let renderer = try #require(GPUCanvasRenderer.shared)
+        let canvas = CanvasView(session: session)
+        canvas.frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+        func frame() throws -> [UInt8] {
+            let shot = try #require(canvas.gpuFrame(size: CGSize(width: 1000, height: 800)))
+            let made = try #require(renderer.context.createCGImage(shot, from: CGRect(x: 0, y: 0, width: 1000, height: 800),
+                                                                    format: .RGBA8, colorSpace: renderer.space))
+            let read = try BrushRaster.context(width: 1000, height: 800, mask: false)
+            BrushRaster.draw(made, in: CGRect(x: 0, y: 0, width: 1000, height: 800), mask: false, context: read)
+            return Array(UnsafeBufferPointer(start: try #require(read.data).assumingMemoryBound(to: UInt8.self), count: 1000 * 800 * 4))
+        }
+        let before = try frame()
+        session.beginGradient(at: CGPoint(x: 150, y: 120))
+        session.moveGradient(end: CGPoint(x: 420, y: 330))
+        #expect(session.gradientEdit?.raster.isMask == true)
+        let during = try frame()
+        let changed = stride(from: 0, to: before.count, by: 4).filter { abs(Int(before[$0]) - Int(during[$0])) > 12 }.count
+        #expect(changed > 1000 * 800 / 20, "the gradient shows while dragging: \(changed) pixels changed")
+        // And as the Core Graphics canvas shows it.
+        let difference = try compare(session, name: "mask-gradient-\(placedApart)")
+        #expect(difference.mean < 1.5 && difference.over < 0.01, "mean \(difference.mean), over 12 levels \(difference.over * 100)%")
+        _ = session.finishBrushImmediately()
+    }
+
     @Test(arguments: [GradientShape.linear, .radial])
     func matchesWhileDraggingAGradient(shape: GradientShape) throws {
         guard GPUCanvasRenderer.shared != nil else { return }
