@@ -127,8 +127,9 @@ struct RasterSnapshotTests {
         let context = try BrushRaster.context(width: 4000, height: 4000, mask: false)
         LayerRenderer.draw(try #require(layer.asset?.image), transform: layer.transform, center: layer.transform.center, in: context)
         let bytes = try #require(context.data).assumingMemoryBound(to: UInt8.self)
-        for y in [1600, 1700, 1800, 1900, 1980] {
-            let alpha = (1000...3000).map { Int(bytes[y * context.bytesPerRow + $0 * 4 + 3]) }
+        // Stay outside both feathered end caps: a soft 800 px tip reaches up to 540 px.
+        for y in [1600, 1700, 1800, 1900, 1980, 2070] {
+            let alpha = (1200...2800).map { Int(bytes[y * context.bytesPerRow + $0 * 4 + 3]) }
             #expect(alpha.max()! - alpha.min()! <= 1)
         }
     }
