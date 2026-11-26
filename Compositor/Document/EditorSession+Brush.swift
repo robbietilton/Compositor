@@ -77,6 +77,7 @@ extension EditorSession {
         finishOpacityEdit()
         do {
             var settings = brushSettings
+            settings.usesAirbrushFalloff = tool == .brush
             settings.healing = tool == .spotHealing
             settings.erasing = tool == .brush && brushMode == .erase && !isMaskSelected
             settings.healingMode = spotHealingMode

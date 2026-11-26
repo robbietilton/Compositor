@@ -63,8 +63,8 @@ final class MetalBrushCoverage {
             let origin = rect.origin.applying(mapping)
             var uniforms = Uniforms(
                 mapping: SIMD4(Float(mapping.a), Float(mapping.b), Float(mapping.c), Float(mapping.d)),
-                geometry: SIMD4(Float(origin.x), Float(origin.y), Float(settings.diameter / 2), Float(settings.hardness)),
-                canvas: SIMD4(Float(canvas.width), Float(canvas.height), Float(max(0.001, min(hypot(mapping.a, mapping.b), hypot(mapping.c, mapping.d)))), Float(max(0.25, settings.diameter * BrushStroke.spacingFraction(settings.hardness)))),
+                geometry: SIMD4(Float(origin.x), Float(origin.y), Float(settings.tipDiameter / 2), Float(settings.hardness)),
+                canvas: SIMD4(Float(canvas.width), Float(canvas.height), Float(max(0.001, min(hypot(mapping.a, mapping.b), hypot(mapping.c, mapping.d)))), Float(settings.dabSpacing)),
                 counts: SIMD4(UInt32(rect.width), UInt32(rect.height), UInt32(settled.count), UInt32(segments.count)),
                 options: SIMD4(tile.cap == nil ? 0 : 1, settings.antialiased ? 0 : 1, 0, 0))
             encoder.setBuffer(tile.permanent, offset: 0, index: 0)

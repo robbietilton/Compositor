@@ -147,10 +147,10 @@ struct BrushTests {
         #expect(try pixel(live, x: 40, y: 40)[3] > 230)
         // 0% hardness feathers along a Gaussian across the whole radius: about half
         // strength at half radius, faint near the rim, nothing beyond it.
-        let half = try pixel(live, x: 50, y: 40)[3]
+        let half = try pixel(live, x: 53, y: 40)[3]
         #expect(half > 95 && half < 140)
-        #expect(try pixel(live, x: 57, y: 40)[3] < 40)
-        #expect(try pixel(live, x: 64, y: 40)[3] == 0)
+        #expect(try pixel(live, x: 64, y: 40)[3] < 40)
+        #expect(try pixel(live, x: 68, y: 40)[3] == 0)
         session.cancelBrush()
         #expect(session.document == before)
         session.beginBrush(at: CGPoint(x: -100, y: -100))
@@ -281,15 +281,16 @@ struct BrushTests {
             await session.finishBrush()
             let layer = try #require(session.activeLayer)
             let image = try #require(layer.asset?.image)
-            #expect(image.width <= 20 && image.height <= 20)
-            #expect(layer.transform.origin.x >= 290 && layer.transform.origin.y >= 90)
+            let extent = hardness == 0 ? 28 : 20
+            #expect(image.width <= extent && image.height <= extent)
+            #expect(layer.transform.origin.x >= 300 - CGFloat(extent) / 2 && layer.transform.origin.y >= 100 - CGFloat(extent) / 2)
             let top = try (0..<image.width).map { try pixel(image, x: $0, y: 0)[3] }
             let bottom = try (0..<image.width).map { try pixel(image, x: $0, y: image.height - 1)[3] }
             let left = try (0..<image.height).map { try pixel(image, x: 0, y: $0)[3] }
             let right = try (0..<image.height).map { try pixel(image, x: image.width - 1, y: $0)[3] }
             #expect([top, bottom, left, right].allSatisfy { $0.contains { $0 > 0 } })
             let result = try await render(session)
-            for x in 288...312 { #expect(try pixel(result, x: x, y: 100) == pixel(live, x: x, y: 100)) }
+            for x in 284...316 { #expect(try pixel(result, x: x, y: 100) == pixel(live, x: x, y: 100)) }
             session.undo()
             #expect(session.activeLayer?.asset == nil)
             session.redo()
@@ -328,7 +329,10 @@ struct BrushTests {
         session.continueBrush(at: CGPoint(x: 180, y: 40))
         let stroke = try pixel(try preview(try #require(session.brushStroke), canvas: session.document!.size), x: 100, y: 50)[3]
         #expect(stroke > single + 60)
-        #expect(stroke <= 255)
+        let image = try preview(try #require(session.brushStroke), canvas: session.document!.size)
+        let feather = try pixel(image, x: 100, y: 60)[3]
+        #expect((25...140).contains(feather), "The nominal brush radius should still be feathered")
+        #expect(try pixel(image, x: 100, y: 40)[3] >= 245)
         session.cancelBrush()
     }
     /// Dabs are spaced apart to keep wide brushes fast, which is only safe while the stroke

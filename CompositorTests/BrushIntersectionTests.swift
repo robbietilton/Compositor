@@ -9,7 +9,7 @@ struct BrushIntersectionTests {
         session.createDocument(width: 800, height: 800)
         session.addBlankLayer()
         return try BrushStroke(layer: #require(session.activeLayer), mask: false,
-            settings: BrushSettings(diameter: diameter, hardness: 0, red: 1, green: 1, blue: 1, opacity: opacity),
+            settings: BrushSettings(diameter: diameter, hardness: 0, red: 1, green: 1, blue: 1, opacity: opacity, usesAirbrushFalloff: true),
             canvas: CGSize(width: 800, height: 800), useGPU: useGPU)
     }
     private func trace(_ stroke: BrushStroke, _ points: [CGPoint], step: CGFloat = 12) throws {
