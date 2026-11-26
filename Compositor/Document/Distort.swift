@@ -400,6 +400,7 @@ extension EditorSession {
             mask?.placement = original.placement ?? layer.transform
         }
         document?.layers[index].asset = asset
+        document?.layers[index].movie = nil
         document?.layers[index].transform = warped.transform
         document?.layers[index].mask = mask
     }
