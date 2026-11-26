@@ -30,17 +30,25 @@ enum MovieFramePicker {
 
     static func frame(in asset: AVAsset, at time: CMTime, range: CMTimeRange, name: String,
                       remainingPixels: Int) async throws -> ImportedImage {
+        let generator = frameGenerator(for: asset)
+        let image = try await generator.image(at: frameTime(time, in: range)).image
+        guard max(image.width, image.height) <= DocumentLimits.maxSide,
+              image.width * image.height <= remainingPixels else { throw ImageImportError.tooLarge }
+        return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: name)
+    }
+
+    static func frameGenerator(for asset: AVAsset) -> AVAssetImageGenerator {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
+        return generator
+    }
+
+    static func frameTime(_ time: CMTime, in range: CMTimeRange) -> CMTime {
         // The end of the track is exclusive. Scrubbing all the way right selects its last frame.
         let last = range.end - CMTime(value: 1, timescale: max(range.end.timescale, 60000))
-        let selected = max(range.start, min(time.isNumeric ? time : range.start, last))
-        let image = try await generator.image(at: selected).image
-        guard max(image.width, image.height) <= DocumentLimits.maxSide,
-              image.width * image.height <= remainingPixels else { throw ImageImportError.tooLarge }
-        return ImportedImage(image: image, thumbnail: try PixelAdjust.thumbnail(of: image), name: name)
+        return max(range.start, min(time.isNumeric ? time : range.start, last))
     }
 }
 
@@ -106,6 +114,13 @@ struct MovieTimeline: View {
               let tracks = try? await item.asset.loadTracks(withMediaType: .video),
               let track = tracks.first, let transform = try? await track.load(.preferredTransform),
               !Task.isCancelled else { return }
+        if let hdrTracks = try? await item.asset.loadTracks(withMediaCharacteristic: .containsHDRVideo),
+           hdrTracks.contains(where: { $0.trackID == track.trackID }),
+           let range = try? await track.load(.timeRange) {
+            await showHDRFrames(from: player, asset: item.asset, range: range, poster: poster)
+            return
+        }
+        guard !Task.isCancelled else { return }
         let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         item.add(output)
         defer { item.remove(output) }
@@ -123,6 +138,29 @@ struct MovieTimeline: View {
                 }
             }
             do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+        }
+    }
+
+    private func showHDRFrames(from player: AVPlayer, asset: AVAsset, range: CMTimeRange, poster: ImportedImage) async {
+        // Use the same native HDR conversion as a paused frame. A single reusable generator
+        // decodes at preview size, and each request follows the player's current clock.
+        let generator = MovieFramePicker.frameGenerator(for: asset)
+        generator.maximumSize = CGSize(width: 960, height: 960)
+        let clock = ContinuousClock()
+        var previous = CMTime.invalid
+        while !Task.isCancelled, session.moviePlayback?.player === player {
+            let nextRefresh = clock.now + .milliseconds(33)
+            let current = MovieFramePicker.frameTime(player.currentTime(), in: range)
+            let time = player.rate == 0 ? current
+                : range.start + CMTimeConvertScale(current - range.start, timescale: 30, method: .roundTowardZero)
+            if !previous.isValid || time != previous {
+                previous = time
+                if let result = try? await generator.image(at: time),
+                   !Task.isCancelled, session.moviePlayback?.player === player {
+                    session.moviePreview = (layer.id, ImportedImage(image: result.image, thumbnail: poster.thumbnail, name: poster.name))
+                }
+            }
+            do { try await clock.sleep(until: nextRefresh) } catch { return }
         }
     }
 
