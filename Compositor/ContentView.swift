@@ -100,22 +100,6 @@ struct ContentView: View {
                         }
                         ZStack {
                             EditorCanvas(session: session)
-                            if let layer = session.activeLayer, session.moviePlayback?.id == layer.id || session.moviePreview?.id == layer.id,
-                               let document = session.document {
-                                let scale = session.viewport.pointsPerPixel
-                                Group {
-                                    if let playback = session.moviePlayback, playback.id == layer.id {
-                                        MoviePlaybackView(player: playback.player, poster: session.moviePreview?.id == layer.id ? session.moviePreview?.frame.image : layer.asset?.image)
-                                    } else if let preview = session.moviePreview {
-                                        Image(decorative: preview.frame.image, scale: 1).resizable()
-                                    }
-                                }
-                                    .frame(width: layer.size.width * scale, height: layer.size.height * scale)
-                                    .scaleEffect(x: layer.transform.flipX ? -1 : 1, y: layer.transform.flipY ? -1 : 1)
-                                    .rotationEffect(.radians(layer.transform.radians))
-                                    .position(session.viewport.viewPoint(from: layer.transform.center, documentSize: document.size))
-                                    .allowsHitTesting(false)
-                            }
                             if session.document == nil { welcome }
                             if session.maskAloneLayer != nil || ((session.proofsColors || session.showsGamutWarning) && session.document != nil) {
                                 // At the foot of the canvas, clear of the transform box's rotation handle.

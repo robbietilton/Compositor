@@ -169,7 +169,8 @@ final class EditorSession {
 
     /// Frame navigation stays in runtime state; pixel edits are immutable assets stored on the animation.
     /// A shape color being chosen is drawn in place of the committed pixels and is not part of the saved document.
-    func displayedAsset(for layer: ImageLayer) -> ImportedImage? {
+    func displayedAsset(for layer: ImageLayer, onCanvas: Bool = false) -> ImportedImage? {
+        if onCanvas, let preview = moviePreview, preview.id == layer.id { return preview.frame }
         let saved = savedAsset(for: layer)
         if let preview = shapeColorPreview, preview.layerID == layer.id, let saved {
             return ImportedImage(image: preview.image, thumbnail: saved.thumbnail, name: saved.name)
@@ -183,8 +184,8 @@ final class EditorSession {
         return layer.gifAnimation?.framePixels[timeline.selectedFrameIndex] ?? timeline.displayedAsset ?? layer.asset
     }
 
-    func displayedLayer(for layer: ImageLayer) -> ImageLayer {
-        guard let asset = displayedAsset(for: layer), asset.image !== layer.asset?.image else { return layer }
+    func displayedLayer(for layer: ImageLayer, onCanvas: Bool = false) -> ImageLayer {
+        guard let asset = displayedAsset(for: layer, onCanvas: onCanvas), asset.image !== layer.asset?.image else { return layer }
         var displayed = layer
         displayed.asset = asset
         return displayed

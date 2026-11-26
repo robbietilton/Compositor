@@ -15,6 +15,7 @@ struct EditorCanvas: NSViewRepresentable {
         _ = session.extrasHideGuides
         _ = session.guideDrag
         _ = session.document?.guides
+        _ = session.moviePreview
         view.synchronizeDisplay()
         view.window?.isDocumentEdited = session.isModified
     }
@@ -662,7 +663,7 @@ final class CanvasView: NSView {
         let state = DisplayState(brushRevision: session.brushRevision, pixelGrid: session.showsPixelGrid, documentID: document?.id, size: document?.size, renderBounds: renderBounds, viewport: session.viewport,
             layers: (document.map { $0.layers.contains(where: { $0.maskSourceID != nil }) ? $0.layers : $0.renderLayers } ?? []).filter { $0.asset != nil || $0.adjustment != nil }.map {
                 DisplayState.Layer(id: $0.id, transform: session.displayedTransform(for: $0),
-                                   imageID: session.displayedAsset(for: $0).map { ObjectIdentifier($0.image) }, maskID: session.displayedLayer(for: $0).mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: visible.contains($0.id), opacity: (opacities[$0.id] ?? $0.opacity), blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment, effects: $0.effects,
+                                   imageID: session.displayedAsset(for: $0, onCanvas: true).map { ObjectIdentifier($0.image) }, maskID: session.displayedLayer(for: $0, onCanvas: true).mask?.enabledImage.map { ObjectIdentifier($0) }, maskSourceID: $0.maskSourceID, parentID: $0.parentID, visible: visible.contains($0.id), opacity: (opacities[$0.id] ?? $0.opacity), blendMode: session.displayedBlendMode(for: $0), adjustment: $0.adjustment, effects: $0.effects,
                                    maskPlacement: session.displayedMaskPlacement(for: $0))
             },
             folderMasks: (document?.layers ?? []).filter { $0.isGroup && $0.mask != nil }.map {
@@ -1088,7 +1089,7 @@ final class CanvasView: NSView {
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         func drawOwn(_ id: UUID, _ context: CGContext) {
             guard let layer = byID[id] else { return }
-            let displayedLayer = session.displayedLayer(for: layer)
+            let displayedLayer = session.displayedLayer(for: layer, onCanvas: true)
             let displayedAsset = displayedLayer.asset
             let displayedMask = displayedLayer.mask
             // Text being edited draws as it will be committed, in its place among the layers.
@@ -1240,11 +1241,11 @@ final class CanvasView: NSView {
                     image: previous?.raster == nil ? previous?.image : nil, raster: previous?.raster,
                     transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer), in: context)
-            } else if let asset = session.displayedAsset(for: layer), let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
+            } else if let asset = session.displayedAsset(for: layer, onCanvas: true), let raster = asset.raster, session.hueSaturation?.previewImage(for: layer.id) == nil && session.levels?.previewImage(for: layer.id) == nil && session.filterEdit?.previewImage(for: layer.id) == nil {
                 TiledLayerRenderer.drawRaster(raster, transform: transform, center: center(transform.center), scale: scale,
                     opacity: opacity, blendMode: blendMode(of: layer),
                     mask: mask, in: context)
-            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? session.displayedAsset(for: layer)?.image {
+            } else if let image = session.filterEdit?.previewImage(for: layer.id) ?? session.levels?.previewImage(for: layer.id) ?? session.hueSaturation?.previewImage(for: layer.id) ?? session.displayedAsset(for: layer, onCanvas: true)?.image {
                 // LayerRenderer picks a sharp reduction for the image and its mask itself.
                 LayerRenderer.draw(image, transform: transform,
                     center: center(transform.center), scale: scale,
@@ -3361,7 +3362,7 @@ extension CanvasView {
                 }
                 return GPUBlend.faded(above.composited(over: below), opacity)
             }
-            let displayedLayer = session.displayedLayer(for: layer)
+            let displayedLayer = session.displayedLayer(for: layer, onCanvas: true)
             let displayedAsset = displayedLayer.asset
             let displayedMask = displayedLayer.mask
             guard displayedAsset != nil || session.filterEdit?.previewImage(for: layer.id) != nil else {

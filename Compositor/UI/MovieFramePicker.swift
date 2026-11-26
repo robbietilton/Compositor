@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import AVKit
+import CoreImage
 import AVFoundation
 
 nonisolated struct MovieLink: Codable, Equatable, Sendable {
@@ -44,51 +44,6 @@ enum MovieFramePicker {
     }
 }
 
-struct MoviePlaybackView: NSViewRepresentable {
-    let player: AVPlayer
-    let poster: CGImage?
-    func makeNSView(context: Context) -> Surface { Surface() }
-    func updateNSView(_ view: Surface, context: Context) { view.show(player, poster: poster) }
-
-    final class Surface: NSView {
-        private let video = AVPlayerLayer()
-        private let still = CALayer()
-        private var readiness: NSKeyValueObservation?
-
-        override init(frame: NSRect) {
-            super.init(frame: frame)
-            wantsLayer = true
-            video.videoGravity = .resize
-            for child in [video, still] {
-                child.frame = bounds
-                child.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-                layer?.addSublayer(child)
-            }
-        }
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-        func show(_ player: AVPlayer, poster: CGImage?) {
-            guard video.player !== player else { return }
-            readiness = nil
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            still.contents = poster
-            still.isHidden = false
-            video.player = player
-            CATransaction.commit()
-            readiness = video.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] _, _ in
-                Task { @MainActor [weak self] in
-                    guard let self, video.player === player else { return }
-                    CATransaction.begin()
-                    CATransaction.setDisableActions(true)
-                    still.isHidden = video.isReadyForDisplay
-                    CATransaction.commit()
-                }
-            }
-        }
-    }
-}
-
 struct MovieTimeline: View {
     let session: EditorSession
     let layer: ImageLayer
@@ -100,6 +55,8 @@ struct MovieTimeline: View {
     @State private var failure: String?
     @State private var reader: AVURLAsset?
     @State private var scopedURL: URL?
+
+    private static let frameContext = CIContext(options: [.cacheIntermediates: false])
 
     @State private var scrubPlayer: AVPlayer?
     @State private var scrubRange: CMTimeRange?
@@ -123,12 +80,6 @@ struct MovieTimeline: View {
                 if !editing { seek(requested ?? link.seconds) }
             })
             .accessibilityLabel("Movie playhead")
-            Button { seek(requested ?? link.seconds, step: -1) } label: { controlIcon("backward.frame") }
-                .accessibilityLabel("Previous frame")
-                .keyboardShortcut(.leftArrow, modifiers: [])
-            Button { seek(requested ?? link.seconds, step: 1) } label: { controlIcon("forward.frame") }
-                .accessibilityLabel("Next frame")
-                .keyboardShortcut(.rightArrow, modifiers: [])
             Text(Duration.seconds(requested ?? link.seconds).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, fractionalSecondsLength: 2))))
                 .monospacedDigit()
         }
@@ -143,7 +94,34 @@ struct MovieTimeline: View {
             if let playback = session.moviePlayback, playback.id == layer.id { playback.player.isMuted = value }
         }
         .overlay(alignment: .topLeading) { if let failure { Text(failure).font(.caption).offset(y: -15) } }
+        .task(id: session.moviePlayback.map { ObjectIdentifier($0.player) }) {
+            guard let playback = session.moviePlayback, playback.id == layer.id else { return }
+            await showFrames(from: playback.player)
+        }
         .onDisappear { stopPlayback(); job?.cancel(); session.moviePreview = nil; releaseSource() }
+    }
+
+    private func showFrames(from player: AVPlayer) async {
+        guard let item = player.currentItem, let poster = layer.asset,
+              let tracks = try? await item.asset.loadTracks(withMediaType: .video),
+              let track = tracks.first, let transform = try? await track.load(.preferredTransform),
+              !Task.isCancelled else { return }
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        item.add(output)
+        defer { item.remove(output) }
+        // Track transforms use a top-left origin. Core Image uses a bottom-left origin.
+        let orientation = CGAffineTransform(a: transform.a, b: -transform.b, c: -transform.c, d: transform.d, tx: 0, ty: 0)
+        while !Task.isCancelled, session.moviePlayback?.player === player {
+            let time = player.rate == 0 ? player.currentTime() : output.itemTime(forHostTime: CACurrentMediaTime())
+            if output.hasNewPixelBuffer(forItemTime: time),
+               let pixels = output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
+                let image = CIImage(cvPixelBuffer: pixels).transformed(by: orientation)
+                if let frame = Self.frameContext.createCGImage(image, from: image.extent.integral) {
+                    session.moviePreview = (layer.id, ImportedImage(image: frame, thumbnail: poster.thumbnail, name: poster.name))
+                }
+            }
+            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+        }
     }
 
     private func controlIcon(_ name: String) -> some View {
@@ -263,7 +241,7 @@ struct MovieTimeline: View {
         }
     }
 
-    private func seek(_ seconds: Double, step: Int64 = 0, keepFrame: Bool = false) {
+    private func seek(_ seconds: Double, keepFrame: Bool = false) {
         cancelScrub()
         stopPlayback(keepFrame: keepFrame)
         job?.cancel()
@@ -274,11 +252,7 @@ struct MovieTimeline: View {
                 let tracks = try await reader.loadTracks(withMediaType: .video)
                 guard let track = tracks.first else { throw ImageImportError.unreadable }
                 let range = try await track.load(.timeRange)
-                var time = range.start + CMTime(seconds: seconds, preferredTimescale: 600000)
-                if step != 0, let cursor = track.makeSampleCursor(presentationTimeStamp: time) {
-                    cursor.stepInPresentationOrder(byCount: step)
-                    time = cursor.presentationTimeStamp
-                }
+                let time = range.start + CMTime(seconds: seconds, preferredTimescale: 600000)
                 try Task.checkCancellation()
                 let frame = try await MovieFramePicker.frame(in: reader, at: time, range: range, name: layer.name,
                                                              remainingPixels: DocumentLimits.documentPixelBudget)
@@ -289,7 +263,7 @@ struct MovieTimeline: View {
                 session.document?.layers[index].asset = frame
                 session.document?.layers[index].movie?.seconds = min(link.duration, max(0, (time - range.start).seconds))
                 session.endEdit()
-                session.moviePreview = step == 0 ? nil : (layer.id, frame)
+                session.moviePreview = nil
                 if keepFrame { stopPlayback() }
                 requested = nil
             } catch {
