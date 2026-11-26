@@ -56,7 +56,7 @@ struct MovieTimeline: View {
     @State private var reader: AVURLAsset?
     @State private var scopedURL: URL?
 
-    private static let frameContext = CIContext(options: [.cacheIntermediates: false])
+    private static let frameContext = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
 
     @State private var scrubPlayer: AVPlayer?
     @State private var scrubRange: CMTimeRange?
@@ -116,7 +116,9 @@ struct MovieTimeline: View {
             if output.hasNewPixelBuffer(forItemTime: time),
                let pixels = output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) {
                 let image = CIImage(cvPixelBuffer: pixels).transformed(by: orientation)
-                if let frame = Self.frameContext.createCGImage(image, from: image.extent.integral) {
+                // Keep the decoder's RGB values and profile together, as the still generator does.
+                if let rendered = Self.frameContext.createCGImage(image, from: image.extent.integral, format: .RGBA8, colorSpace: nil) {
+                    let frame = CVImageBufferGetColorSpace(pixels).flatMap { rendered.copy(colorSpace: $0.takeUnretainedValue()) } ?? rendered
                     session.moviePreview = (layer.id, ImportedImage(image: frame, thumbnail: poster.thumbnail, name: poster.name))
                 }
             }
