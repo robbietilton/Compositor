@@ -1923,6 +1923,7 @@ extension ImageLayer {
     /// The tag after the size of an animated GIF layer, or of a layer keeping 16 bits a channel or light brighter than
     /// white (`DeepLayer`), which goes once it's rasterized to 8.
     var depthLabel: String? {
+        if movie != nil { return "MOV" }
         if gifAnimation != nil { return "GIF" }
         guard let asset, asset.deep != nil, liveText == nil, adjustment == nil, !isGroup else { return nil }
         return asset.isHDR ? "HDR" : "16-Bit"

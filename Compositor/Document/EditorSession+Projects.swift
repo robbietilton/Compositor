@@ -22,7 +22,7 @@ extension EditorSession {
                     timing: animation.timing == GIFFrameTiming() ? nil : ProjectGIFTimingRecord(animation.timing))
             }
             return ProjectLayerRecord(id: layer.id, name: layer.name, isVisible: layer.isVisible,
-                transform: layer.transform, imageFile: asset?.file(for: layer.id), parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.mask == nil ? nil : "\(layer.id.uuidString).mask.png", maskEnabled: layer.mask?.isEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, maskPlacement: layer.mask?.placement, maskLinked: layer.mask?.isLinked, shape: layer.liveShape?.style, effects: layer.effects, text: layer.liveText?.style, gif: gif)
+                transform: layer.transform, imageFile: asset?.file(for: layer.id), parentID: layer.parentID, isGroup: layer.isGroup, opacity: layer.opacity, blendMode: layer.blendMode, maskFile: layer.mask == nil ? nil : "\(layer.id.uuidString).mask.png", maskEnabled: layer.mask?.isEnabled, maskSourceID: layer.maskSourceID, adjustment: layer.adjustment, maskPlacement: layer.mask?.placement, maskLinked: layer.mask?.isLinked, shape: layer.liveShape?.style, effects: layer.effects, text: layer.liveText?.style, gif: gif, movie: layer.movie)
         }
         return ProjectSnapshot(manifest: ProjectManifest(resolution: document.resolution, documentID: document.id, width: document.width,
             height: document.height, activeLayerID: activeLayerID, layers: layers,
@@ -103,7 +103,7 @@ extension ProjectSnapshot {
                        shape: LayerShape.loaded($0.shape, image: images[$0.id]?.image),
                        effects: $0.effects,
                        text: LayerText.loaded($0.text, image: images[$0.id]?.image),
-                       gifAnimation: animations[$0.id])
+                       gifAnimation: animations[$0.id], movie: $0.movie)
         }
     }
 }

@@ -1,8 +1,8 @@
-# Compositor project format, versions 1–22
+# Compositor project format, versions 1–23
 
 A `.comp` file is a macOS document package containing `manifest.json` and an `images/` directory of `<layer UUID>.png` assets.
 
-The manifest identifies `com.compositor.project`, version `21` for new saves (versions `1`–`20` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
+The manifest identifies `com.compositor.project`, version `23` for new saves (versions `1`–`22` remain readable), and the sRGB working space. It stores document UUID, pixel dimensions, active layer UUID, and layers in bottom-to-top order. Each layer stores its UUID, name, visibility, transform (origin, size, clockwise rotation, flips, sampling), and optional image filename. Blank layers have no image asset.
 
 Embedded PNGs preserve source pixels and transparency; transforms remain separate. Projects survive moving or deleting imported source photos. Saving uses a coordinated atomic package replacement. Unsupported versions, invalid metadata, missing assets, unsafe paths, and oversized data are rejected before replacing the live document.
 
@@ -72,3 +72,5 @@ Version 20 adds `prismFringe` 0–100 to the `lens` settings: how far Prism spli
 Version 21 adds the `Reduce Noise` adjustment kind, its settings in a `reduceNoise` object inside `filterLayerSettings`: `strength` (how much grain is smoothed from the brightness), `details` (how much texture is kept from it) and `color` (how much colored speckle is smoothed), each 0–100. Files declaring 1–20 cannot contain it, and older app builds reject v21.
 
 Version 22 lets a rectangle or ellipse carry an inside stroke on its `shape` style: `strokeWidth` in document pixels (above 0, at most 5000) and `strokeRed`, `strokeGreen`, `strokeBlue` (0–1). The stroke is drawn inside the shape's box, so the layer keeps the size it was dragged out to, and the width stays in document pixels when the shape is scaled, as the corner radius does. Missing means no stroke. Lines cannot carry these fields. Files declaring 1–21 cannot contain them, and older app builds reject v22.
+
+Version 23 adds an optional movie link with a read-only sandbox bookmark, duration and playhead in seconds. The layer image stores the selected frame. Relinking restores scrubbing when the original movie is unavailable.

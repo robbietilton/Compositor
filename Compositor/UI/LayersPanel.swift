@@ -74,6 +74,7 @@ private struct LayersUnavailableView<Content: View>: View {
 
 /// The buttons under the layers: new layer, folder, mask, adjustment and filter layers, effects, and delete.
 struct LayersFooter: View {
+    static let height: CGFloat = 48
     let session: EditorSession
 
     var body: some View {
@@ -110,6 +111,7 @@ struct LayersFooter: View {
         }
         .buttonStyle(.plain).foregroundStyle(.secondary)
         .padding(.horizontal, 8).padding(.vertical, 4) // Plus the hit areas' 8 and 12: the original 16.
+        .frame(height: Self.height)
     }
 }
 

@@ -17,7 +17,7 @@ extension UTType {
 
 nonisolated struct ProjectManifest: Codable, Sendable {
     /// The format version new saves write.
-    static let current = 22
+    static let current = 23
     /// Every version `load` accepts: each one a release has written (1 through `current`), and 27 from the
     /// GIF branch's own builds. Leaving out 15 and 16 once locked out projects saved by 1.5.4 and 1.5.5.
     /// The package-header and manifest checks both read this, so they can't drift apart when `current` is bumped.
@@ -61,6 +61,7 @@ nonisolated struct ProjectLayerRecord: Codable, Sendable {
     var text: LayerTextStyle? = nil
     /// The embedded animation and masks scoped to individual frames. Missing before version 27.
     var gif: ProjectGIFRecord? = nil
+    var movie: MovieLink? = nil
 }
 
 nonisolated struct ProjectGIFRecord: Codable, Sendable {
@@ -341,6 +342,10 @@ actor ProjectStore {
         guard (1...DocumentLimits.maxSide).contains(manifest.width), (1...DocumentLimits.maxSide).contains(manifest.height),
               manifest.layers.count <= 10_000 else { throw ProjectError.tooLarge }
         for layer in manifest.layers {
+            if let movie = layer.movie {
+                guard manifest.version == 23, layer.imageFile != nil, layer.isGroup != true, layer.gif == nil,
+                      movie.duration.isFinite, movie.duration > 0, (0...movie.duration).contains(movie.seconds) else { throw ProjectError.invalid }
+            }
             if layer.shape?.smoothing == true {
                 guard manifest.version >= 14 else { throw ProjectError.invalid }
             }
