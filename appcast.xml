@@ -3,15 +3,14 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.7.3</title>
-      <pubDate>Thu, 26 Nov 2026 19:44:22 +0000</pubDate>
-      <sparkle:version>78</sparkle:version>
-      <sparkle:shortVersionString>1.7.3</sparkle:shortVersionString>
+      <title>Version 1.7.4</title>
+      <pubDate>Thu, 26 Nov 2026 20:00:12 +0000</pubDate>
+      <sparkle:version>79</sparkle:version>
+      <sparkle:shortVersionString>1.7.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.3</link>
-      <changes><![CDATA[Fixed a slight brightness shift when playing or pausing video layers.
-Applying a distortion to a video layer now turns the current frame into a regular pixel layer. Moving or scaling the layer keeps it linked to the video.]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.3/Compositor.dmg" sparkle:edSignature="8sOcAsIywdw4y2eRvk+M5gmOJPsUGfgmRyV+p2gOnhTgIv3Q913iZPAu25bDjEuIeUDW342vL7UDcUZu4fnWCw==" length="9031800" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.4</link>
+      <changes><![CDATA[Video layers: Smoother HDR playback and more consistent colors when playing, scrubbing, and pausing.]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.4/Compositor.dmg" sparkle:edSignature="ne+r6+qEggB3aps5t+AgWSOMP+tVd8JRBkx3bRymPS1HoiedNMz5b2P7LCBKhEpqLvEvFKwSlqjYDoael1arAA==" length="9035263" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
