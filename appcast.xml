@@ -3,15 +3,15 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.7.2</title>
-      <pubDate>Thu, 26 Nov 2026 07:08:18 +0000</pubDate>
-      <sparkle:version>77</sparkle:version>
-      <sparkle:shortVersionString>1.7.2</sparkle:shortVersionString>
+      <title>Version 1.7.3</title>
+      <pubDate>Thu, 26 Nov 2026 19:44:22 +0000</pubDate>
+      <sparkle:version>78</sparkle:version>
+      <sparkle:shortVersionString>1.7.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.2</link>
-      <changes><![CDATA[Import MOV and MP4 files as video layers. Play or scrub video directly on the canvas. Projects link to the original video file to keep project sizes small.
-Softer brushes. At 0% hardness, strokes have a wider, smoother fade for a more natural airbrush look.]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.2/Compositor.dmg" sparkle:edSignature="rASQhiYGtAdu7/BniyIYjPVrOJknA5g2IeGMR/EHsg0fa6/fdv4yDXV0X8cKxqI6VOByDMMD3raKvJd6CnYTDA==" length="9031647" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.3</link>
+      <changes><![CDATA[Fixed a slight brightness shift when playing or pausing video layers.
+Applying a distortion to a video layer now turns the current frame into a regular pixel layer. Moving or scaling the layer keeps it linked to the video.]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.3/Compositor.dmg" sparkle:edSignature="8sOcAsIywdw4y2eRvk+M5gmOJPsUGfgmRyV+p2gOnhTgIv3Q913iZPAu25bDjEuIeUDW342vL7UDcUZu4fnWCw==" length="9031800" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
