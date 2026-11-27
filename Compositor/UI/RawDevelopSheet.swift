@@ -68,6 +68,7 @@ struct RawDevelopSheet: View {
                         .help("Import, then open the Camera Raw Filter")
                     Button("Import") { session.finishRawDevelop(settings) }.keyboardShortcut(.defaultAction)
                 }
+                .roundedControls()
             }
             .disabled(session.rawImporting)
         }
