@@ -3,14 +3,15 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.7.4</title>
-      <pubDate>Thu, 26 Nov 2026 20:00:12 +0000</pubDate>
-      <sparkle:version>79</sparkle:version>
-      <sparkle:shortVersionString>1.7.4</sparkle:shortVersionString>
+      <title>Version 1.7.5</title>
+      <pubDate>Fri, 27 Nov 2026 22:05:37 +0000</pubDate>
+      <sparkle:version>80</sparkle:version>
+      <sparkle:shortVersionString>1.7.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.4</link>
-      <changes><![CDATA[Video layers: Smoother HDR playback and more consistent colors when playing, scrubbing, and pausing.]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.4/Compositor.dmg" sparkle:edSignature="ne+r6+qEggB3aps5t+AgWSOMP+tVd8JRBkx3bRymPS1HoiedNMz5b2P7LCBKhEpqLvEvFKwSlqjYDoael1arAA==" length="9035263" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.7.5</link>
+      <changes><![CDATA[The editor toolbar now uses solid buttons, and the active project tab is easier to spot.
+The RAW import panel now uses rounded action buttons.]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.7.5/Compositor.dmg" sparkle:edSignature="XYMytUclARyusMCj0poCU5lweU6ZNSwydj6lrnuBF1ucrJRS+FHQAfCaz63gYoV5mVDDWE47ABzeco4eTnTlDg==" length="9036704" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
