@@ -212,11 +212,16 @@ struct ContentView: View {
         .navigationTitle(session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button { requestNewCanvas() } label: { Label("New canvas", systemImage: "plus") }
+                Button { requestNewCanvas() } label: {
+                    Image(systemName: "plus")
+                }
+                    .buttonStyle(EditorToolbarPillStyle(circular: true))
+                    .accessibilityLabel("New canvas")
                     .help("New canvas (⌘N)").accessibilityIdentifier("newCanvasToolbar")
                     .disabled(session.isImporting || session.showsBusy || session.levels != nil)
                     .modifier(NewProjectDropTarget(workspace: applicationDelegate?.workspace))
             }
+            .sharedBackgroundVisibility(.hidden)
             ToolbarSpacer(.fixed, placement: .navigation)
             if let workspace = applicationDelegate?.workspace {
                 ToolbarItem(placement: .navigation) {
@@ -232,26 +237,26 @@ struct ContentView: View {
             // Without this spacer, the growing tab strip pushes the primary actions left.
             ToolbarSpacer(.flexible, placement: .navigation)
             ToolbarItem(placement: .primaryAction) {
-                Button("Fit") { session.fit() }.help("Fit canvas in window (⌘0)")
-                    .accessibilityIdentifier("fitCanvas").disabled(session.document == nil)
-                    .padding(.horizontal, 4)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("100%") { session.zoom(to: 1) }.help("Actual pixels (⌘1)")
-                    .accessibilityIdentifier("actualPixels").disabled(session.document == nil)
-                    .padding(.horizontal, 4)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Button("Fit") { session.fit() }
+                        .help("Fit canvas in window (⌘0)").accessibilityIdentifier("fitCanvas")
+                    Button { session.zoom(to: 1) } label: {
+                        Text("100%").padding(.horizontal, 8)
+                    }
+                        .help("Actual pixels (⌘1)").accessibilityIdentifier("actualPixels")
                     Button { session.zoomKeyboard(by: 1) } label: {
                         Image(systemName: "plus.magnifyingglass")
-                    }.help("Zoom in (⌘+)").disabled(session.document == nil)
+                    }
+                    .help("Zoom in (⌘+)").accessibilityLabel("Zoom in")
                     Button { session.zoomKeyboard(by: -1) } label: {
                         Image(systemName: "minus.magnifyingglass")
-                    }.help("Zoom out (⌘−)").disabled(session.document == nil)
+                    }
+                    .help("Zoom out (⌘−)").accessibilityLabel("Zoom out")
                 }
-                .padding(.horizontal, 4)
+                .buttonStyle(EditorToolbarPillStyle())
+                .disabled(session.document == nil)
             }
+            .sharedBackgroundVisibility(.hidden)
         }
     }
 

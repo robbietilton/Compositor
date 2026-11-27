@@ -281,9 +281,9 @@ private struct OverflowTabsPill: View {
         }
         .padding(.horizontal, 11)
         .frame(height: 28)
+        .foregroundStyle(Color.secondary)
         .opacity(workspace.canSwitch ? 1 : 0.5)
-        .background(Color.white.opacity(0.035), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .background(EditorToolbarPillStyle.fill, in: Capsule())
         // A SwiftUI Menu draws its own label, chevron first; this keeps the pill reading "3 more tabs ⌄".
         .overlay(OverflowMenuAnchor(label: label) {
             guard workspace.canSwitch else { return [] }
@@ -334,6 +334,22 @@ private struct OverflowMenuAnchor: NSViewRepresentable {
     }
 }
 
+struct EditorToolbarPillStyle: ButtonStyle {
+    static let fill = Color(white: 0.19)
+    var circular = false
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .frame(minWidth: circular ? 28 : 42)
+            .frame(height: 28)
+            .foregroundStyle(enabled ? Color.primary : Color.secondary)
+            .background(configuration.isPressed ? Color(white: 0.25) : Self.fill, in: Capsule())
+            .contentShape(Capsule())
+    }
+}
+
 private struct ProjectTabButton: View {
     let workspace: ProjectWorkspace
     let tab: ProjectTab
@@ -374,8 +390,9 @@ private struct ProjectTabButton: View {
             }
         }
         .frame(height: 28)
-        .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(active ? 0.12 : 0.035), in: Capsule())
-        .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.white.opacity(active ? 0.22 : 0.08), lineWidth: targeted ? 2 : 1))
+        .foregroundStyle(active ? Color.primary : Color.secondary)
+        .background(targeted ? Color.accentColor.opacity(0.3) : EditorToolbarPillStyle.fill, in: Capsule())
+        .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
         .help(targeted ? "Add to \(tab.title)" : tab.title)
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], delegate:
             ProjectTabDropDelegate(workspace: workspace, destination: tab.id, targeted: $targeted))
