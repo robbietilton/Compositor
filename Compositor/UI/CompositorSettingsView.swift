@@ -110,6 +110,7 @@ private struct GeneralSettings: View {
                             access = $0 ? .allowed : .denied
                         }))
                         .toggleStyle(.switch)
+                        .controlSize(.small)
                         .labelsHidden()
                         .accessibilityHint(mcpDescription)
                     }
