@@ -32,9 +32,10 @@ struct PanelTitleColor: ViewModifier {
 /// carries the title for VoiceOver and the Window menu; the panel's content reaches up under it and draws the header
 /// there (`panelTitle`). Nothing is added to the title bar itself.
 enum PanelTitleBar {
-    /// The header: the panel's darker band in Dark, the system's own in Light.
+    /// The header: the panel's lighter band in Dark; in Light, a shade darker than the panel, so it shows where to
+    /// drag as Dark's does.
     static let headerColor = NSColor(name: nil) { appearance in
-        CompositorAppearance.isLight(appearance) ? .windowBackgroundColor : PanelAppearance.darkHeader
+        CompositorAppearance.isLight(appearance) ? .black.withAlphaComponent(0.04) : PanelAppearance.darkHeader
     }
 
     static func install(in window: NSWindow, title: String, showsCloseButton: Bool = false) {

@@ -4,10 +4,16 @@ struct CurvesControls: View {
     @Binding var settings: CurvesSettings
     @State private var selected: Int?
     @State private var dragging: Int?
+    @Environment(\.colorScheme) private var colorScheme
+    private var light: Bool { colorScheme == .light }
     private var points: [CurvePoint] { settings.channels[settings.channel.index] }
     /// Each channel's curve color: RGB in white, then red, green and blue.
     private static let colors: [Color] = [.white, Color(red: 1, green: 0.27, blue: 0.23), Color(red: 0.2, green: 0.85, blue: 0.3),
                                           Color(red: 0.3, green: 0.55, blue: 1)]
+    /// The same, deeper, to stand out on Light's paler graph.
+    private static let lightColors: [Color] = [Color(white: 0.15), Color(red: 0.84, green: 0.16, blue: 0.13),
+                                               Color(red: 0.1, green: 0.55, blue: 0.2), Color(red: 0.15, green: 0.4, blue: 0.9)]
+    private var colors: [Color] { light ? Self.lightColors : Self.colors }
     /// The untouched diagonal, from black to white.
     private static func isStraight(_ points: [CurvePoint]) -> Bool {
         points.count == 2 && points[0].x == 0 && points[0].y == 0 && points[1].x == 255 && points[1].y == 255
@@ -21,11 +27,14 @@ struct CurvesControls: View {
                 func position(_ p: CurvePoint) -> CGPoint { CGPoint(x: p.x/255*size.width, y: (1-p.y/255)*size.height) }
                 // A color channel's graph runs from its color, top left, to its opposite, bottom right, as in Photoshop:
                 // raising the curve adds the color and lowering it adds the opposite (red and cyan, green and magenta,
-                // blue and yellow). Dark, so the curve and grid stay clear.
+                // blue and yellow). Dark, so the curve and grid stay clear; in Light, pale tints under a darker grid.
                 if settings.channel != .rgb {
                     let channel = settings.channel.index - 1
                     let color = (0..<3).map { $0 == channel ? 1.0 : 0.0 }
-                    func tone(_ c: [Double]) -> Color { Color(red: c[0] * 0.32, green: c[1] * 0.27, blue: c[2] * 0.36) }
+                    func tone(_ c: [Double]) -> Color {
+                        light ? Color(red: 0.73 + c[0] * 0.19, green: 0.73 + c[1] * 0.19, blue: 0.73 + c[2] * 0.19)
+                            : Color(red: c[0] * 0.32, green: c[1] * 0.27, blue: c[2] * 0.36)
+                    }
                     context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
                         Gradient(colors: [tone(color), tone(color.map { 1 - $0 })]),
                         startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
@@ -36,7 +45,7 @@ struct CurvesControls: View {
                     grid.move(to: CGPoint(x: f*size.width, y: 0)); grid.addLine(to: CGPoint(x: f*size.width, y: size.height))
                     grid.move(to: CGPoint(x: 0, y: f*size.height)); grid.addLine(to: CGPoint(x: size.width, y: f*size.height))
                 }
-                context.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                context.stroke(grid, with: .color(light ? .black.opacity(0.1) : .white.opacity(0.12)), lineWidth: 1)
                 func curve(_ channel: Int) -> Path {
                     var line = Path()
                     for x in 0...255 {
@@ -50,17 +59,17 @@ struct CurvesControls: View {
                 let current = settings.channel.index
                 if settings.channel == .rgb {
                     for channel in 1...3 where !Self.isStraight(settings.channels[channel]) {
-                        context.stroke(curve(channel), with: .color(Self.colors[channel]), lineWidth: 1.5)
+                        context.stroke(curve(channel), with: .color(colors[channel]), lineWidth: 1.5)
                     }
                 }
-                context.stroke(curve(current), with: .color(Self.colors[current]), lineWidth: 2)
+                context.stroke(curve(current), with: .color(colors[current]), lineWidth: 2)
                 for (i, point) in points.enumerated() {
                     let p = position(point)
                     context.fill(Path(ellipseIn: CGRect(x: p.x-4, y: p.y-4, width: 8, height: 8)),
-                                 with: .color(selected == i ? .accentColor : Self.colors[current]))
+                                 with: .color(selected == i ? .accentColor : colors[current]))
                 }
             }
-            .frame(height: 260).background(Color.black.opacity(0.35))
+            .frame(height: 260).background(Color.black.opacity(light ? 0.06 : 0.35))
             .contentShape(Rectangle())
             .overlay { GeometryReader { geometry in
                 Color.clear.contentShape(Rectangle()).gesture(DragGesture(minimumDistance: 0).onChanged { event in

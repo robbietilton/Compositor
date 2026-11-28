@@ -92,6 +92,7 @@ struct SliderTrackView: View {
     /// A double-click on the knob; nil when the slider has no default to go back to.
     let onReset: (() -> Void)?
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.colorScheme) private var colorScheme
     @State private var grab: CGFloat?
     @State private var resetting = false
     @State private var lastKnobPress: Date?
@@ -121,6 +122,8 @@ struct SliderTrackView: View {
             ZStack(alignment: .leading) {
                 if let colors, colors.count >= 2 {
                     Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                        // In Light, an edge, so a track running to white doesn't fade into the panel.
+                        .overlay { if colorScheme == .light { Capsule().strokeBorder(.black.opacity(0.14), lineWidth: 0.5) } }
                         .frame(height: thickness)
                 } else {
                     Capsule().fill(CompositorAppearance.ink.opacity(0.14))

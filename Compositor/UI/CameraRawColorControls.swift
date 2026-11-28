@@ -67,7 +67,7 @@ struct CameraRawCurveControls: View {
                 var axis = Path()
                 axis.move(to: CGPoint(x: 0, y: canvasSize.height))
                 axis.addLine(to: CGPoint(x: canvasSize.width, y: 0))
-                context.stroke(axis, with: .color(.white.opacity(0.25)), lineWidth: 1)
+                context.stroke(axis, with: .color(CompositorAppearance.ink.opacity(0.25)), lineWidth: 1)
                 if edit?.cameraRawCurvePage == .parametric {
                     stroke(samples: (0..<64).map { raw.curve.parametric(Double($0) / 63) }, in: context, size: canvasSize)
                     for split in [raw.curve.shadowSplit, raw.curve.darkSplit, raw.curve.lightSplit] {
@@ -75,13 +75,13 @@ struct CameraRawCurveControls: View {
                         var line = Path()
                         line.move(to: CGPoint(x: x, y: canvasSize.height - 8))
                         line.addLine(to: CGPoint(x: x, y: canvasSize.height))
-                        context.stroke(line, with: .color(.white), lineWidth: 3)
+                        context.stroke(line, with: .color(CompositorAppearance.ink), lineWidth: 3)
                     }
                 } else {
                     stroke(samples: raw.curve.channelTable(currentPoints).map(Double.init), in: context, size: canvasSize)
                     for (index, point) in currentPoints.enumerated() {
                         let rect = CGRect(x: CGFloat(point.x) * canvasSize.width - 4, y: CGFloat(1 - point.y) * canvasSize.height - 4, width: 8, height: 8)
-                        context.fill(Path(ellipseIn: rect), with: .color(selected == index ? .accentColor : .white))
+                        context.fill(Path(ellipseIn: rect), with: .color(selected == index ? .accentColor : CompositorAppearance.ink))
                     }
                 }
             }
@@ -100,7 +100,7 @@ struct CameraRawCurveControls: View {
                 removePoint(at: value.location, in: size)
             })
         }
-        .background(Color.black.opacity(0.35))
+        .background(CompositorAppearance.graphBackground)
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 
@@ -140,7 +140,7 @@ struct CameraRawCurveControls: View {
             let point = CGPoint(x: CGFloat(index) / CGFloat(max(1, samples.count - 1)) * size.width, y: (1 - sample) * size.height)
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
-        context.stroke(path, with: .color(.white), lineWidth: 1.5)
+        context.stroke(path, with: .color(CompositorAppearance.ink), lineWidth: 1.5)
     }
 
     /// Parametric: pressing along the bottom takes the nearest divider; anywhere else, the tonal region under the pointer,

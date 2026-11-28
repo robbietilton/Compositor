@@ -39,6 +39,10 @@ enum CompositorAppearance: String, CaseIterable {
     static let ink = gray(dark: 1, light: 0)
     static let editorBackground = gray(dark: 0.14, light: lightEditorWhite)
     static let rulerBackground = gray(dark: 0.2, light: lightRulerWhite)
+    /// Under a graph (Levels, Curves, Camera Raw): a dark well in Dark, a faint gray in Light.
+    static let graphBackground = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(white: 0, alpha: isLight(appearance) ? 0.06 : 0.35)
+    })
 }
 
 /// A segmented choice, its label hidden unless asked for.
