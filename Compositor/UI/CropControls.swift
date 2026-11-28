@@ -23,7 +23,7 @@ struct CropControls: View {
                 }
                 Divider()
                 Text("Custom…").tag("Custom")
-            }.frame(width: 170)
+            }.frame(width: 170).disabled(session.cropPerspective)
                 .popover(isPresented: $showsCustomRatio) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Custom ratio").font(.headline)
@@ -44,7 +44,12 @@ struct CropControls: View {
                         }
                     }.padding(16).frame(width: 280)
                 }
-            if let rect = session.cropRect {
+            // Perspective: drag the corners onto something square in the picture, and Apply makes it upright.
+            Toggle("Perspective", isOn: Binding(get: { session.cropPerspective }, set: { session.setCropPerspective($0) }))
+                .help("Place each corner on its own, then Apply to straighten what's inside them")
+            if let corners = session.cropCorners, let size = PerspectiveCrop.size(of: corners) {
+                Text("\(Int(size.width)) × \(Int(size.height)) px").monospacedDigit()
+            } else if let rect = session.cropRect {
                 Text("\(Int(rect.width)) × \(Int(rect.height)) px").monospacedDigit()
             }
             Spacer()
