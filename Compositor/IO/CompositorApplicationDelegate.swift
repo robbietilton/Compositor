@@ -27,6 +27,13 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     // Finder Open With and Dock drops, including files delivered during launch.
     func application(_ application: NSApplication, open urls: [URL]) {
         let requests = urls.filter(EditorAutomation.isRequest)
+        automation.expect(requests.count)
+        // A file an MCP request is waiting for goes to it, not into a tab of its own.
+        let workspace = workspace
+        let others = urls.filter { url in
+            !EditorAutomation.isRequest(url) && !automation.claim(url) { files in Task { await workspace.receive(files) } }
+        }
+        guard !requests.isEmpty || !others.isEmpty else { return }
         // Reopening a window that's already showing makes SwiftUI rebuild it, so the app blinks out and back:
         // only a closed editor is reopened.
         if !application.windows.contains(where: { $0.isVisible && $0.identifier?.rawValue.hasPrefix("editor") == true }) {
@@ -37,10 +44,9 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         }
         if requests.isEmpty {
             application.activate()
-            Task { await workspace.receive(urls) }
+            Task { await workspace.receive(others) }
         } else {
-            let attachments = urls.filter { !EditorAutomation.isRequest($0) }
-            Task { await automation.receive(requests, attachments: attachments, workspace: workspace) }
+            Task { await automation.receive(requests, attachments: others, workspace: workspace) }
         }
     }
 

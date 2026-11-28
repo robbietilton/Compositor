@@ -19,7 +19,7 @@ brew install --cask robbietilton-compositor
 
 ## Automation
 
-Connect an MCP client to inspect and edit live Compositor projects with the [optional local companion](docs/mcp.md).
+AI apps that speak MCP, such as Claude, Claude Code and Codex, can work in Compositor: turn on **Allow MCP control** in Settings and copy the setup for your app from there. See [docs/mcp.md](docs/mcp.md).
 
 ## Features
 

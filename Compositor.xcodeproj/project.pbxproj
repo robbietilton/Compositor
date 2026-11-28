@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5A9C0D1E2F3A4B5C6D7E8F01 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5A9C0D1E2F3A4B5C6D7E8F03 /* Sparkle */; };
+		C0DE5A1E000000000000000C /* compositor-mcp in Embed MCP Helper */ = {isa = PBXBuildFile; fileRef = C0DE5A1E0000000000000001 /* compositor-mcp */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,12 +26,34 @@
 			remoteGlobalIDString = 8F311F98304F03BB0017D14F;
 			remoteInfo = Compositor;
 		};
+		C0DE5A1E000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8F311F91304F03BB0017D14F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0DE5A1E0000000000000005;
+			remoteInfo = "compositor-mcp";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C0DE5A1E000000000000000B /* Embed MCP Helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				C0DE5A1E000000000000000C /* compositor-mcp in Embed MCP Helper */,
+			);
+			name = "Embed MCP Helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		8F311F99304F03BB0017D14F /* Compositor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Compositor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F311FA6304F03BC0017D14F /* CompositorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CompositorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CompositorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DE5A1E0000000000000001 /* compositor-mcp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "compositor-mcp"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -47,6 +70,11 @@
 		8F311FB3304F03BC0017D14F /* CompositorUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CompositorUITests;
+			sourceTree = "<group>";
+		};
+		C0DE5A1E0000000000000002 /* CompositorMCP */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CompositorMCP;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +102,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0DE5A1E0000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -82,6 +117,7 @@
 			children = (
 				8F311F9B304F03BB0017D14F /* Compositor */,
 				8F311FA9304F03BC0017D14F /* CompositorTests */,
+				C0DE5A1E0000000000000002 /* CompositorMCP */,
 				8F311FB3304F03BC0017D14F /* CompositorUITests */,
 				8F311F9A304F03BB0017D14F /* Products */,
 			);
@@ -93,6 +129,7 @@
 				8F311F99304F03BB0017D14F /* Compositor.app */,
 				8F311FA6304F03BC0017D14F /* CompositorTests.xctest */,
 				8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */,
+				C0DE5A1E0000000000000001 /* compositor-mcp */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -107,10 +144,12 @@
 				8F311F95304F03BB0017D14F /* Sources */,
 				8F311F96304F03BB0017D14F /* Frameworks */,
 				8F311F97304F03BB0017D14F /* Resources */,
+				C0DE5A1E000000000000000B /* Embed MCP Helper */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C0DE5A1E0000000000000009 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8F311F9B304F03BB0017D14F /* Compositor */,
@@ -169,6 +208,27 @@
 			productReference = 8F311FB0304F03BC0017D14F /* CompositorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C0DE5A1E0000000000000005 /* compositor-mcp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE5A1E0000000000000006 /* Build configuration list for PBXNativeTarget "compositor-mcp" */;
+			buildPhases = (
+				C0DE5A1E0000000000000003 /* Sources */,
+				C0DE5A1E0000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0DE5A1E0000000000000002 /* CompositorMCP */,
+			);
+			name = "compositor-mcp";
+			packageProductDependencies = (
+			);
+			productName = "compositor-mcp";
+			productReference = C0DE5A1E0000000000000001 /* compositor-mcp */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -189,6 +249,9 @@
 					8F311FAF304F03BC0017D14F = {
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 8F311F98304F03BB0017D14F;
+					};
+					C0DE5A1E0000000000000005 = {
+						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
@@ -212,6 +275,7 @@
 				8F311F98304F03BB0017D14F /* Compositor */,
 				8F311FA5304F03BC0017D14F /* CompositorTests */,
 				8F311FAF304F03BC0017D14F /* CompositorUITests */,
+				C0DE5A1E0000000000000005 /* compositor-mcp */,
 			);
 		};
 /* End PBXProject section */
@@ -262,6 +326,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0DE5A1E0000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +345,11 @@
 			isa = PBXTargetDependency;
 			target = 8F311F98304F03BB0017D14F /* Compositor */;
 			targetProxy = 8F311FB1304F03BC0017D14F /* PBXContainerItemProxy */;
+		};
+		C0DE5A1E0000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0DE5A1E0000000000000005 /* compositor-mcp */;
+			targetProxy = C0DE5A1E000000000000000A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -567,6 +643,31 @@
 			};
 			name = Release;
 		};
+		C0DE5A1E0000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C0DE5A1E0000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 3E4X3B9Z9T;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -602,6 +703,15 @@
 			buildConfigurations = (
 				8F311FC1304F03BC0017D14F /* Debug */,
 				8F311FC2304F03BC0017D14F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0DE5A1E0000000000000006 /* Build configuration list for PBXNativeTarget "compositor-mcp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0DE5A1E0000000000000007 /* Debug */,
+				C0DE5A1E0000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

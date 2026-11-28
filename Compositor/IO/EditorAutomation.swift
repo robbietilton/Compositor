@@ -14,6 +14,51 @@ enum MCPAccess: String {
 @MainActor
 final class EditorAutomation {
     private var handling = false
+    /// Files requests name, not yet arrived: the companion opens a request and then its file, which macOS delivers
+    /// as an open event of its own.
+    private var awaited: [String: CheckedContinuation<URL?, Never>] = [:]
+
+    private static func key(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
+
+    /// Requests delivered and not yet answered.
+    private var inFlight = 0
+    /// Files that arrived while a request was in flight, before it asked for them (launched by a request, the app can
+    /// be handed both opens at once): kept for it, and opened as usual if no request takes them.
+    private var early: [String: URL] = [:]
+
+    /// Called as requests are delivered, before they're read, so a file arriving alongside waits for them.
+    func expect(_ requests: Int) { inFlight += requests }
+
+    /// Hands a file just opened to the request waiting for it, or keeps it for one in flight; `open` takes it if no
+    /// request does. False when no request is waiting or in flight.
+    func claim(_ url: URL, open: @escaping ([URL]) -> Void) -> Bool {
+        guard url.isFileURL else { return false }
+        let key = Self.key(url)
+        if let waiting = awaited.removeValue(forKey: key) {
+            waiting.resume(returning: url)
+            return true
+        }
+        guard inFlight > 0 || handling else { return false }
+        early[key] = url
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            if let unclaimed = self?.early.removeValue(forKey: key) { open([unclaimed]) }
+        }
+        return true
+    }
+
+    /// The file at `path`, once it's been opened in the app; nil if it doesn't come within a few seconds.
+    private func arrival(of path: String) async -> URL? {
+        let key = Self.key(URL(fileURLWithPath: path))
+        if let arrived = early.removeValue(forKey: key) { return arrived }
+        return await withCheckedContinuation { continuation in
+            awaited[key] = continuation
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(10))
+                self?.awaited.removeValue(forKey: key)?.resume(returning: nil)
+            }
+        }
+    }
 
     private static var mailbox: String {
         URL(fileURLWithPath: "/private/tmp/compositor-mcp-\(getuid())", isDirectory: true)
@@ -28,6 +73,7 @@ final class EditorAutomation {
 
     func receive(_ requests: [URL], attachments: [URL], workspace: ProjectWorkspace) async {
         for folder in requests {
+            defer { inFlight = max(0, inFlight - 1) }
             let scoped = folder.startAccessingSecurityScopedResource()
             defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
             let root = Self.mailbox
@@ -55,9 +101,11 @@ final class EditorAutomation {
                     guard deadline >= Date().timeIntervalSince1970 else {
                         throw Failure("The MCP request expired. Send it again.")
                     }
-                    let input = (request["input"] as? String).flatMap { path in
-                        let canonical = URL(fileURLWithPath: path).standardizedFileURL.path
-                        return attachments.first { $0.isFileURL && $0.standardizedFileURL.path == canonical }
+                    var input: URL?
+                    if let path = request["input"] as? String {
+                        let canonical = Self.key(URL(fileURLWithPath: path))
+                        input = attachments.first { $0.isFileURL && Self.key($0) == canonical }
+                        if input == nil { input = await arrival(of: path) }
                     }
                     reply = ["result": try await perform(action, arguments, input: input, folder: folder, workspace: workspace)]
                 } catch {
@@ -144,8 +192,12 @@ final class EditorAutomation {
             break
         }
 
-        guard try identifier(args, "project_id") == workspace.selectedID else {
-            throw Failure("The active tab changed. Call select_project before editing.")
+        let target = try identifier(args, "project_id")
+        guard workspace.tabs.contains(where: { $0.id == target }) else {
+            throw Failure("No project has that ID. Call list_projects for the open ones.")
+        }
+        guard target == workspace.selectedID else {
+            throw Failure("That project isn't the active tab. Call select_project before editing.")
         }
         if action == "get_project" { return project(workspace.current) }
         if action == "list_commands" {
@@ -222,7 +274,11 @@ final class EditorAutomation {
                 throw Failure("That editor command is unavailable. Call list_commands to get the current IDs.")
             }
             command.perform()
-            return ["started": true, "command": command.title]
+            // A dialog or panel it opened waits for the person: Compositor comes forward so it's seen (in the
+            // background, a panel stays hidden while the editor waits on it).
+            let waiting = !session.canEditLayers || NSApp.modalWindow != nil || workspace.window?.attachedSheet != nil
+            if waiting { NSApp.activate() }
+            return ["started": true, "command": command.title, "waiting_for_person": waiting]
         case "select_layer", "edit_layer", "delete_layer", "duplicate_layer", "move_layer":
             let id = try identifier(args, "layer_id")
             guard let target = document.layers.first(where: { $0.id == id }) else { throw Failure("Layer was not found.") }
