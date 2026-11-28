@@ -463,6 +463,11 @@ final class EditorSession {
             ToolDefaults.set(gridAppearance.opacity, "gridOpacity")
         }
     }
+    /// The floating Grid panel previews without writing to the saved tool preferences.
+    var gridPreview: (grid: LayoutGrid, appearance: GridAppearance)?
+    var visibleGrid: (grid: LayoutGrid, appearance: GridAppearance)? {
+        gridPreview ?? (showsGrid ? (layoutGrid, gridAppearance) : nil)
+    }
     /// User guides, as View › Show › Guides (⌘;) and ⌘H leave them. Hidden guides do not snap. Turning them on, or making
     /// a guide, also brings them back from ⌘H.
     var showsGuides: Bool {

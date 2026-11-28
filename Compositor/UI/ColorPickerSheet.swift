@@ -233,10 +233,13 @@ struct DialogColorSwatch: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
-        .onChange(of: session.colorPicker?.color) { _, _ in session.previewDialogColor() }
-        .onDisappear { Self.closePicker(session) }
+        .onChange(of: session.colorPicker?.color) { _, _ in
+            if session.colorPicker?.target == .dialog(title: title) { session.previewDialogColor() }
+        }
+        .onDisappear { Self.closePicker(session, title: title) }
     }
-    static func closePicker(_ session: EditorSession) {
+    static func closePicker(_ session: EditorSession, title: String? = nil) {
+        if let title, session.colorPicker?.target != .dialog(title: title) { return }
         if session.pickingForDialog { session.closeColorPicker(commit: true) }
     }
 }

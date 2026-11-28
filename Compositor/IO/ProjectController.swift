@@ -8,6 +8,7 @@ final class ProjectController {
     weak var window: NSWindow?
     weak var workspace: ProjectWorkspace?
     private var saveGeneration = 0
+    private lazy var gridPanel = FloatingPanelController(name: "gridSettings")
     /// Keeps the document in step with its package when something else writes it. See ProjectController+ExternalChanges.
     let externalChanges = ExternalChangeState()
     var canStart: Bool {
@@ -291,31 +292,37 @@ final class ProjectController {
 
     /// View > Grid Settings…: changes only how the grid is drawn and snapped to, so nothing is saved or undone. The
     /// grid shows while the sheet is open, changing as it's edited, and goes back to how it was on Cancel.
-    func gridSettings() async {
-        guard let window, window.attachedSheet == nil else { return }
-        let original = (grid: session.layoutGrid, appearance: session.gridAppearance, shown: session.showsGrid)
-        session.showsGrid = true
-        let settings: (LayoutGrid, GridAppearance)? = await withCheckedContinuation { continuation in
-            let sheet = NSWindow()
-            sheet.styleMask = [.titled, .fullSizeContentView]
-            sheet.title = "Grid"
-            sheet.titleVisibility = .hidden
-            sheet.contentViewController = NSHostingController(rootView: GridSettingsSheet(
-                session: session, grid: original.grid, appearance: original.appearance,
-                preview: { [session] grid, appearance in
-                    session.layoutGrid = grid
-                    session.gridAppearance = appearance
-                }) { settings in
-                    window.endSheet(sheet)
-                    sheet.orderOut(nil)
-                    sheet.contentViewController = nil
-                    continuation.resume(returning: settings)
-                })
-            window.beginSheet(sheet)
+    func gridSettings() {
+        guard let window, window.attachedSheet == nil, session.document != nil else { return }
+        if session.gridPreview != nil {
+            gridPanel.bringToFront()
+            return
         }
-        session.showsGrid = original.shown
-        session.layoutGrid = settings?.0 ?? original.grid
-        session.gridAppearance = settings?.1 ?? original.appearance
+        guard canStart else { return }
+        session.gridPreview = (session.layoutGrid, session.gridAppearance)
+        gridPanel.onClose = { [weak self] in self?.cancelGridSettings() }
+        gridPanel.show(title: "Grid Settings", content: GridSettingsSheet(
+            session: session, grid: session.layoutGrid, appearance: session.gridAppearance,
+            preview: { [session] grid, appearance in
+                guard session.gridPreview != nil else { return }
+                session.gridPreview = (grid, appearance)
+            }, finish: { [weak self] settings in
+                guard let self, self.session.gridPreview != nil else { return }
+                if let (grid, appearance) = settings {
+                    self.session.layoutGrid = grid
+                    self.session.gridAppearance = appearance
+                }
+                self.cancelGridSettings()
+            }))
+    }
+
+    func cancelGridSettings() {
+        guard session.gridPreview != nil else { return }
+        if session.colorPicker?.target == .dialog(title: GridSettingsSheet.colorPickerTitle) {
+            session.closeColorPicker(commit: false)
+        }
+        session.gridPreview = nil
+        gridPanel.close()
     }
 
     private func saveCurrent(asNew: Bool = false) async -> Bool {

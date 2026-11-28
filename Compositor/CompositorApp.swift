@@ -187,7 +187,7 @@ struct CompositorApp: App {
                                 Toggle("Distances", isOn: Binding(get: { session.showsDistances }, set: { session.showsDistances = $0 }))
                                     .disabled(session.document == nil)
                             }
-                            Button("Grid Settings…") { Task { await applicationDelegate.projects.gridSettings() } }
+                            Button("Grid Settings…") { applicationDelegate.projects.gridSettings() }
                                 .disabled(session.document == nil)
                             Toggle("Rulers", isOn: Binding(get: { session.showsRulers }, set: { session.showsRulers = $0 }))
                                 .configuredKeyboardShortcut("r").disabled(session.document == nil)

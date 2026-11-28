@@ -23,7 +23,7 @@ struct PSDConversionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(request.title).font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
+            Text(request.title).font(.title2.bold()).foregroundStyle(PanelAppearance.title)
             Text(request.isReading ? "Reading the file to see what needs converting."
                  : "Compositor will convert these Photoshop features. Nothing is applied until you continue.")
                 .foregroundStyle(.secondary)

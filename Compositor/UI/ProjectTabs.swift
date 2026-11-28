@@ -7,8 +7,11 @@ struct ProjectWorkspaceView: View {
     let applicationDelegate: CompositorApplicationDelegate
     private var workspace: ProjectWorkspace { applicationDelegate.workspace }
     var body: some View {
-        ContentView(session: workspace.current.session, applicationDelegate: applicationDelegate)
-            .id(workspace.current.id)
+        let tab = workspace.current
+        ContentView(session: tab.session, applicationDelegate: applicationDelegate)
+            .onDisappear { tab.controller.cancelGridSettings() }
+            .onChange(of: tab.session.document?.id) { tab.controller.cancelGridSettings() }
+            .id(tab.id)
             .disabled(workspace.isManaging)
             .psdConversionSheet(workspace.current.session)
             .rawDevelopSheet(workspace.current.session)

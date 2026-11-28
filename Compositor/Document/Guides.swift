@@ -271,9 +271,9 @@ extension EditorSession {
             }
         }
         // Hidden extras do not snap, matching Photoshop.
-        if snapToGrid, showsGrid {
-            xs += layoutGrid.lines(along: document.size.width)
-            ys += layoutGrid.lines(along: document.size.height)
+        if snapToGrid, let grid = visibleGrid?.grid {
+            xs += grid.lines(along: document.size.width)
+            ys += grid.lines(along: document.size.height)
         }
         if snapToGuides, showsGuides {
             for guide in displayedGuides {
@@ -289,7 +289,7 @@ extension EditorSession {
         let tolerance = TransformSnap.distance / max(viewport.pointsPerPixel, 0.0001)
         var targets: [CGFloat] = []
         let length = axis == .vertical ? document.size.width : document.size.height
-        if snapToGrid, showsGrid { targets += layoutGrid.lines(along: length) }
+        if snapToGrid, let grid = visibleGrid?.grid { targets += grid.lines(along: length) }
         if snapToGuides, showsGuides {
             targets += displayedGuides.filter { $0.axis == axis && $0.id != excluding }.map { CGFloat($0.position) }
         }

@@ -8,9 +8,7 @@ struct EditorCanvas: NSViewRepresentable {
         view.consumeFocusRequest(session.canvasFocusRequest)
         _ = session.showsTransformControls // observed here so ⌘H redraws the transform box at once
         _ = session.hiddenSelectionEdges // and the selection's outline
-        _ = session.showsGrid
-        _ = session.layoutGrid
-        _ = session.gridAppearance
+        _ = session.visibleGrid
         _ = session.showsGuides
         _ = session.extrasHideGuides
         _ = session.guideDrag

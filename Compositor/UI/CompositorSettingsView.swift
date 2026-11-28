@@ -68,7 +68,7 @@ struct SettingsWindowMarker: NSViewRepresentable {
             window?.identifier = SettingsWindowMarker.identifier
             DispatchQueue.main.async { [weak self] in
                 guard let window = self?.window else { return }
-                PanelTitleBar.install(in: window, title: "Settings")
+                PanelTitleBar.install(in: window, title: "Settings", showsCloseButton: true)
             }
         }
     }

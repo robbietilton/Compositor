@@ -158,6 +158,7 @@ final class ProjectWorkspace {
     /// applied that wasn't OK'd.
     func settlePendingEdits() async {
         let session = current.session
+        current.controller.cancelGridSettings()
         if session.gradientEdit != nil { await session.commitGradient() }
         if session.pixelMove != nil { await session.finishPixelMove() }
         session.cancelFilter()

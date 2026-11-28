@@ -306,10 +306,8 @@ final class TransformOverlay: NSView {
     /// Non-printing layout grid over the document: majors in the chosen style, dotted subdivisions, both in the
     /// chosen color.
     private func drawLayoutGrid() {
-        guard session.showsGrid, let document = session.document, let transform = documentToView,
+        guard let (grid, appearance) = session.visibleGrid, let document = session.document, let transform = documentToView,
               let context = NSGraphicsContext.current?.cgContext else { return }
-        let grid = session.layoutGrid
-        let appearance = session.gridAppearance
         let color = appearance.color.nsColor
         let size = document.size
         let scale = session.viewport.pointsPerPixel

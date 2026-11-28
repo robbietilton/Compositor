@@ -66,7 +66,7 @@ struct CanvasSizeSheet: View {
     var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Canvas Size").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
+            Text("Canvas Size").font(.title2.bold()).foregroundStyle(PanelAppearance.title)
             Text("Current: \(draft.originalWidth) × \(draft.originalHeight) pixels")
             Text("\(bytes(draft.originalWidth, draft.originalHeight)) uncompressed RGBA canvas")
                 .font(.callout).foregroundStyle(.secondary)

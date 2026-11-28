@@ -12,7 +12,7 @@ struct TrimSheet: View {
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Trim").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
+            Text("Trim").font(.title2.bold()).foregroundStyle(PanelAppearance.title)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Based On").font(.headline)
                 Picker("", selection: $basedOn) {

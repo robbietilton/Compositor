@@ -2,6 +2,8 @@ import SwiftUI
 
 /// View > Grid Settings…: every change shows on the canvas at once through `preview`; Cancel puts back what was there.
 struct GridSettingsSheet: View {
+    static let colorPickerTitle = "Grid Color"
+
     let session: EditorSession
     let preview: (LayoutGrid, GridAppearance) -> Void
     let finish: ((LayoutGrid, GridAppearance)?) -> Void
@@ -48,17 +50,14 @@ struct GridSettingsSheet: View {
         appearance.opacity = min(max(value, GridAppearance.opacityRange.lowerBound), GridAppearance.opacityRange.upperBound)
     }
 
-    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
-
-    @ViewBuilder private var sheet: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Grid").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
             HStack {
                 Text("Color").frame(width: 110, alignment: .leading)
                 Picker("Color", selection: $appearance.preset) {
                     ForEach(GridAppearance.Preset.allCases) { Text($0.rawValue).tag($0) }
                 }.labelsHidden()
-                DialogColorSwatch(title: "Grid Color", color: swatchColor, session: session)
+                DialogColorSwatch(title: Self.colorPickerTitle, color: swatchColor, session: session)
                     .help("Choose a custom grid color")
             }
             HStack {
@@ -94,7 +93,7 @@ struct GridSettingsSheet: View {
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Cancel") { DialogColorSwatch.closePicker(session); finish(nil) }.configuredNativeShortcut(.escape)
+                Button("Cancel") { finish(nil) }.configuredNativeShortcut(.escape)
                 Button("Restore Defaults") {
                     spacing = LayoutGrid().spacing
                     subdivisions = LayoutGrid().subdivisions
@@ -107,7 +106,7 @@ struct GridSettingsSheet: View {
                 Spacer()
                 Button("OK") {
                     guard valid else { return }
-                    DialogColorSwatch.closePicker(session)
+                    DialogColorSwatch.closePicker(session, title: Self.colorPickerTitle)
                     finish((grid, appearance))
                 }
                 .configuredNativeShortcut(.return)

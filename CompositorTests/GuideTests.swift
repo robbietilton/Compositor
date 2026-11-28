@@ -182,6 +182,15 @@ struct GuideTests {
         session.layoutGrid = LayoutGrid(spacing: 100, subdivisions: 2)
         #expect(Set(session.cropSnapTargets().xs) == Set<CGFloat>([0, 50, 100, 150, 200, 250, 300, 350, 400]))
         #expect(session.snappedGuidePosition(52, axis: .vertical, excluding: nil) == 50)
+
+        session.showsGrid = false
+        session.gridPreview = (LayoutGrid(spacing: 80, subdivisions: 2), session.gridAppearance)
+        #expect(session.visibleGrid?.grid.spacing == 80)
+        #expect(session.snappedGuidePosition(42, axis: .vertical, excluding: nil) == 40)
+        #expect(session.layoutGrid.spacing == 100 && !session.showsGrid)
+        session.gridPreview = nil
+        #expect(session.visibleGrid == nil)
+        #expect(session.snappedGuidePosition(42, axis: .vertical, excluding: nil) == 42)
     }
 
     @Test func moveToolDragsAGuideAndRulerDropDeletesIt() throws {

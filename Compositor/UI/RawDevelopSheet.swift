@@ -23,7 +23,7 @@ struct RawDevelopSheet: View {
                 .font(.title2.bold())
                 .foregroundStyle(PanelAppearance.title)
                 .lineLimit(1)
-                .frame(width: 560)
+                .frame(width: 560, alignment: .leading)
                 .help(url.lastPathComponent)
             ZStack {
                 RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.35))
