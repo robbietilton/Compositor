@@ -1,14 +1,14 @@
 # Compositor MCP
 
-AI apps that speak the Model Context Protocol (MCP), such as Claude, Claude Code and Codex, can work in Compositor: open and make projects, add layers, text and shapes, paint, adjust, mask, preview, export and save. They work in the editor you see, in its normal undo history.
+AI apps that speak the Model Context Protocol (MCP), such as ChatGPT, Claude and Claude Code, can work in Compositor: open and make projects, add layers, text and shapes, paint, adjust, mask, preview, export and save. They work in the editor you see, in its normal undo history.
 
 ## Connect
 
 1. In **Compositor → Settings → General**, turn on **Allow MCP control**.
 2. Under **Add Compositor to your AI app**, click **Copy Setup** next to your app and paste it where the row says:
-   - **Claude Code**: paste into Terminal.
+   - **ChatGPT**: add it to `~/.codex/config.toml`, then restart ChatGPT.
    - **Claude**: add it under `"mcpServers"` in Claude's Settings › Developer › Edit Config, then restart Claude.
-   - **Codex**: add it to `~/.codex/config.toml`, then restart Codex.
+   - **Claude Code**: paste into Terminal.
 3. Ask your AI app to do something in Compositor.
 
 The setup points your AI app at `compositor-mcp`, a small program inside Compositor.app. Nothing else needs installing. If Compositor moves (into Applications, say), copy the setup again.

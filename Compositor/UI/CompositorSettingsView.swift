@@ -190,7 +190,7 @@ private struct UpdateSettings: View {
 /// The AI apps an MCP connection is set up in, and the setup each takes: the companion inside this app, which the
 /// app, sandboxed, can't write into their settings itself.
 private enum MCPClient: String, CaseIterable {
-    case claudeCode = "Claude Code", claude = "Claude", codex = "Codex"
+    case chatGPT = "ChatGPT", claude = "Claude", claudeCode = "Claude Code"
 
     static var helper: String { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/compositor-mcp").path }
 
@@ -198,7 +198,7 @@ private enum MCPClient: String, CaseIterable {
         switch self {
         case .claudeCode: "Paste into Terminal."
         case .claude: "Add under \"mcpServers\" in Claude's Settings › Developer › Edit Config, then restart Claude."
-        case .codex: "Add to ~/.codex/config.toml, then restart Codex."
+        case .chatGPT: "Add to ~/.codex/config.toml, then restart ChatGPT."
         }
     }
 
@@ -211,7 +211,7 @@ private enum MCPClient: String, CaseIterable {
             let json = (try? JSONSerialization.data(withJSONObject: path, options: .fragmentsAllowed))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "\"\(path)\""
             return "\"compositor\": { \"command\": \(json.replacingOccurrences(of: "\\/", with: "/")) }"
-        case .codex:
+        case .chatGPT:
             let toml = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             return "[mcp_servers.compositor]\ncommand = \"\(toml)\""
         }
