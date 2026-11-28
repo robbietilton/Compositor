@@ -40,7 +40,6 @@ struct NativeLayerList: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        _ = context.environment.compositorAmber
         if let table = scroll.documentView as? NSTableView { context.coordinator.update(table) }
     }
 
@@ -1098,7 +1097,7 @@ final class LayerTableView: NSTableView {
                 let rows = displayedRows
                 if candidate.intoFolder {
                     marker.frame = rect(ofRow: candidate.row).insetBy(dx: 2, dy: 1)
-                    marker.layer?.backgroundColor = CompositorAppearance.controlAccent.withAlphaComponent(0.25).cgColor
+                    marker.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.25).cgColor
                     marker.layer?.cornerRadius = 5
                 } else {
                     let lineY = candidate.row < rows.count ? rect(ofRow: candidate.row).minY : rect(ofRow: rows.count - 1).maxY
@@ -1112,7 +1111,7 @@ final class LayerTableView: NSTableView {
                     } else { level = 0 }
                     let indent = 4 + CGFloat(min(level, 8)) * 24
                     marker.frame = NSRect(x: indent, y: max(0, lineY - 1), width: bounds.width - indent - 4, height: 2)
-                    marker.layer?.backgroundColor = CompositorAppearance.controlAccent.cgColor
+                    marker.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
                     marker.layer?.cornerRadius = 1
                 }
                 marker.isHidden = false
@@ -1496,24 +1495,12 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         alphaValue = visible ? 1 : 0.35
     }
     private var maskThumbnailKey: ThumbnailKey?
-    private var usesAmberLabels = false
     func selectEffect(at point: NSPoint, editing: Bool) -> Bool {
         guard let row = effectButtons.first(where: { $0.bounds.contains($0.convert(point, from: nil)) }) else { return false }
         row.select(editing: editing)
         return true
     }
     func updateTarget() {
-        let amber = CompositorAppearance.applied == .amber
-        if usesAmberLabels != amber {
-            usesAmberLabels = amber
-            nameLabel.textColor = amber ? CompositorAppearance.amberText : .labelColor
-            dimensions.textColor = amber ? CompositorAppearance.amberSecondary : .secondaryLabelColor
-            eye.contentTintColor = amber ? CompositorAppearance.amberSecondary : nil
-            linkButton.contentTintColor = amber ? CompositorAppearance.amberSecondary : .secondaryLabelColor
-            if let document = session?.document, let layer = document.layers.first(where: { $0.id == layerID }) {
-                updateThumbnail(for: layer, canvas: document.size)
-            }
-        }
         effectButtons.forEach { $0.updateSelection() }
         if let layer = session?.document?.layers.first(where: { $0.id == layerID }),
            let sourceID = layer.maskSourceID,
@@ -1523,8 +1510,8 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         }
         let active = session?.activeLayerID == layerID && session?.selectedLayerIDs.count == 1
         let mask = session?.isMaskSelected == true
-        thumbnail.layer?.borderColor = CompositorAppearance.controlAccent.cgColor
-        maskThumbnail.layer?.borderColor = CompositorAppearance.controlAccent.cgColor
+        thumbnail.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        maskThumbnail.layer?.borderColor = NSColor.controlAccentColor.cgColor
         thumbnail.layer?.borderWidth = active && !mask ? 2 : 0
         maskThumbnail.layer?.borderWidth = active && mask ? 2 : 0
         // Shown alone on the canvas, the mask is outlined in white rather than the accent.
@@ -1614,15 +1601,14 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         let editableText = layer.liveText != nil
         let framed = layer.adjustment == nil && !layer.isGroup && !editableText
         let light = framed && CompositorAppearance.isLight(effectiveAppearance)
-        let amber = framed && CompositorAppearance.applied == .amber
         let key = ThumbnailKey(image: layer.asset.map { ObjectIdentifier($0.thumbnail) }, transform: layer.transform,
-                               canvas: canvas, editableText: editableText, lightAppearance: light, amberAppearance: amber)
+                               canvas: canvas, editableText: editableText, lightAppearance: light)
         guard layerID != layer.id || thumbnailKey != key else { return }
         thumbnail.image = layer.adjustment.map { Self.adjustmentIcon($0.kind.symbol, description: $0.kind.rawValue, quarterTurnClockwise: $0.kind == .curves) }
             ?? (layer.isGroup ? Self.folderIcon
                 : editableText ? Self.adjustmentIcon("textformat", description: "Editable text")
                 : CanvasThumbnail.layer(layer.asset?.thumbnail, transform: layer.transform, canvas: canvas,
-                                       box: 36, lightAppearance: light, amberAppearance: amber))
+                                       box: 36, lightAppearance: light))
         thumbnailKey = key
     }
     @objc private func toggleVisibility() { if let layerID { session?.toggleLayerVisibility(layerID) } }
@@ -1753,7 +1739,7 @@ private final class LayerEffectRow: NSView, NSDraggingSource {
     @objc private func toggle() { session?.toggleEffect(kind, on: layerID) }
     func updateSelection() {
         let selected = session?.selectedEffect == LayerEffectSelection(layerID: layerID, kind: kind)
-        layer?.backgroundColor = selected ? CompositorAppearance.controlAccent.withAlphaComponent(0.3).cgColor : NSColor.clear.cgColor
+        layer?.backgroundColor = selected ? NSColor.controlAccentColor.withAlphaComponent(0.3).cgColor : NSColor.clear.cgColor
     }
 }
 
@@ -1935,7 +1921,6 @@ private struct ThumbnailKey: Equatable {
     let canvas: CGSize
     var editableText = false
     var lightAppearance = false
-    var amberAppearance = false
 }
 
 extension ImageLayer {

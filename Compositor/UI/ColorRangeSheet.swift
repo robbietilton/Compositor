@@ -41,7 +41,7 @@ struct ColorRangeSheet: View {
                 Button("Cancel") { session.cancelColorRange() }.configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") { session.commitColorRange() }
-                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
         .padding(24).frame(width: 340).fixedSize()

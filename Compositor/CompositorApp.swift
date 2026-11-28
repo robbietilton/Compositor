@@ -13,7 +13,7 @@ struct CompositorApp: App {
     }
     var body: some Scene {
         Window("Compositor", id: "editor") {
-            ProjectWorkspaceView(applicationDelegate: applicationDelegate).roundedControls().compositorChrome()
+            ProjectWorkspaceView(applicationDelegate: applicationDelegate).roundedControls()
         }
             .defaultSize(width: 1180, height: 780)
             // Files opened from Finder or dropped on the Dock icon go to the app delegate, which imports them into
@@ -440,7 +440,7 @@ struct CompositorApp: App {
                 }
             }
         Settings {
-            CompositorSettingsView(updater: applicationDelegate.updater).roundedControls().compositorChrome()
+            CompositorSettingsView(updater: applicationDelegate.updater).roundedControls()
         }
     }
 

@@ -107,7 +107,7 @@ struct ImageSizeSheet: View {
         }
     }
 
-    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(.checkbox) }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Image Size").font(.title2.bold()).modifier(PanelTitleColor())
@@ -171,7 +171,6 @@ struct ImageSizeSheet: View {
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))
                 }.configuredNativeShortcut(.return)
-                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                     .disabled(!valid)
             }
         }.textFieldStyle(.roundedBorder).padding(24).frame(width: 430)

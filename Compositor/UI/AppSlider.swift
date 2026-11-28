@@ -92,7 +92,6 @@ struct SliderTrackView: View {
     /// A double-click on the knob; nil when the slider has no default to go back to.
     let onReset: (() -> Void)?
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.compositorAmber) private var amber
     @State private var grab: CGFloat?
     @State private var resetting = false
     @State private var lastKnobPress: Date?
@@ -105,7 +104,7 @@ struct SliderTrackView: View {
             if grab != nil {
                 shape.fill(.clear).glassEffect(.clear, in: shape)
             } else {
-                shape.fill(amber ? CompositorAppearance.amberForeground : Color(white: 0.92))
+                shape.fill(Color(white: 0.92))
                     .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
             }
         }
@@ -124,7 +123,7 @@ struct SliderTrackView: View {
                     Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
                         .frame(height: thickness)
                 } else {
-                    Capsule().fill(amber ? CompositorAppearance.amberButton : CompositorAppearance.ink.opacity(0.14))
+                    Capsule().fill(CompositorAppearance.ink.opacity(0.14))
                         .frame(height: thickness)
                     Capsule().fill(Color.accentColor).frame(width: SliderGeometry.fillWidth(fraction: fraction, width: width), height: thickness)
                 }

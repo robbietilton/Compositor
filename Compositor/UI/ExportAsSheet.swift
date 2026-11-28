@@ -98,7 +98,7 @@ struct ExportAsSheet: View {
         zoom ?? JPEGPreview.fitZoom(width: width, height: height, in: JPEGPreview.frame, displayScale: displayScale)
     }
 
-    var body: some View { sheet.roundedControls().panelSurface().compositorChrome() }
+    var body: some View { sheet.roundedControls().panelSurface() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
@@ -188,7 +188,7 @@ struct ExportAsSheet: View {
                     GridRow {
                         Text("Depth")
                         Toggle("16 bits per channel", isOn: $sixteenBit)
-                            .toggleStyle(CompositorCheckboxStyle())
+                            .toggleStyle(.checkbox)
                             .help("Keep the 16-bit layers' full precision, in a file about twice the size")
                     }
                 }
@@ -232,7 +232,7 @@ struct ExportAsSheet: View {
                     GridRow {
                         Text("Transparency")
                         Toggle("Keep transparent areas", isOn: $gifOptions.keepsTransparency)
-                            .toggleStyle(CompositorCheckboxStyle())
+                            .toggleStyle(.checkbox)
                             .help("GIF keeps fully transparent or opaque pixels; soft edges use a 50% threshold.")
                     }
                     GridRow {
@@ -271,7 +271,6 @@ struct ExportAsSheet: View {
                     if let result { finish((result.data, result.settings.format)) }
                 }
                     .configuredNativeShortcut(.return)
-                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                     .disabled(!isReady)
             }
             if let error { Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).frame(maxWidth: JPEGPreview.frame.width, alignment: .leading) }
@@ -425,11 +424,11 @@ struct ExportAsSheet: View {
             }
             .pickerStyle(.inline).labelsHidden()
         } label: {
-            Text(chosen ? format.rawValue : "More").modifier(CompositorAccentLabel(selected: chosen))
+            Text(chosen ? format.rawValue : "More")
         }
         .menuStyle(.button).fixedSize()
         .help("Other formats: TIFF, PDF and GIF\(others.contains(.exr) ? ", EXR to keep light brighter than white" : ""), Channel Pack for game textures, and PSD to keep the layers for Photoshop")
-        if chosen { menu.buttonStyle(CompositorProminentButtonStyle()) } else { menu.buttonStyle(.bordered) }
+        if chosen { menu.buttonStyle(.borderedProminent) } else { menu.buttonStyle(.bordered) }
     }
 
     /// A channel's source: one of the document's layers or groups, top first, or solid black or white.
@@ -495,7 +494,6 @@ struct JPEGPreview: View {
     @Binding var zoom: Double?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.compositorAmber) private var amber
     @State private var position = ScrollPosition()
     @State private var offset = CGPoint.zero
     @State private var dragStart: CGPoint?
@@ -548,12 +546,10 @@ struct JPEGPreview: View {
     /// The canvas's checkerboard behind the image, 10-point squares of two grays, so a transparent PNG shows where its
     /// edges are and what's see-through. A small tile repeated, however far the preview is zoomed.
     private var checkerboard: Image {
-        if amber { return Self.amberCheckerboard }
         return colorScheme == .light ? Self.lightCheckerboard : Self.darkCheckerboard
     }
     private static let lightCheckerboard = grayCheckerboard(CompositorAppearance.lightCheckerboard)
     private static let darkCheckerboard = grayCheckerboard(CompositorAppearance.darkCheckerboard)
-    private static let amberCheckerboard = checkerboardTile(CompositorAppearance.amberCheckerboard)
 
     private static func grayCheckerboard(_ tones: (base: CGFloat, alternate: CGFloat)) -> Image {
         checkerboardTile((NSColor(white: tones.base, alpha: 1), NSColor(white: tones.alternate, alpha: 1)))

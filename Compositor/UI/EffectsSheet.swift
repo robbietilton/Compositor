@@ -21,7 +21,7 @@ struct EffectsSheet: View {
                     .configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") { session.finishEffectsEditing(commit: true) }
-                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
         .padding(20).frame(width: 340).fixedSize()

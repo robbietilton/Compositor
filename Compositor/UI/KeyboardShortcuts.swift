@@ -316,7 +316,7 @@ struct KeyboardShortcutsSettings: View {
                 Button("Revert Changes") { recording = nil; draft = settings.overrides }
                     .disabled(recording == nil && draft == settings.overrides)
                 Button("Save") { settings.save(draft) }.keyboardShortcut(.defaultAction)
-                    .buttonStyle(CompositorProminentButtonStyle())
+                    .buttonStyle(.borderedProminent)
                     .disabled(recording != nil || draft == settings.overrides || ShortcutSettings.problem(in: draft) != nil)
             }
         }.padding(24)

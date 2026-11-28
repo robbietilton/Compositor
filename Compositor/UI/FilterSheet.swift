@@ -242,7 +242,7 @@ struct FilterSheet: View {
                         .disabled(volumetricWaiting)
                 }
                 Button("OK") { Task { await session.commitFilter() } }
-                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
                     .disabled(edit?.kind.isAutomatic == true && (edit?.preparing == true || edit?.previewError != nil) || volumetricWaiting)
             }
         }

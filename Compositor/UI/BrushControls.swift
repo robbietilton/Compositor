@@ -140,13 +140,12 @@ struct BrushControls: View {
 
 /// A pressure button: square, the height of the field beside it, which it sits close to.
 private struct PenPressureToggleStyle: ToggleStyle {
-    @Environment(\.compositorAmber) private var amber
 
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
             configuration.label
-                .foregroundStyle(configuration.isOn ? (amber ? CompositorAppearance.amberOnAccent : .white) : .primary)
+                .foregroundStyle(configuration.isOn ? .white : .primary)
                 .frame(width: 22, height: 22)
                 .background(configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: shape)
                 .contentShape(shape)

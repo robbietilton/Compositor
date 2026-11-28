@@ -8,7 +8,7 @@ struct TrimSheet: View {
     @State private var trimLeft: Bool = true
     @State private var trimRight: Bool = true
 
-    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(.checkbox) }
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -57,7 +57,7 @@ struct TrimSheet: View {
                     finish(options)
                 }
                 .configuredNativeShortcut(.return)
-                .buttonStyle(CompositorProminentButtonStyle())
+                .buttonStyle(.borderedProminent)
                 .disabled(!trimTop && !trimBottom && !trimLeft && !trimRight)
             }
         }

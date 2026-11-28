@@ -267,7 +267,7 @@ struct SelectionAmountSheet: View {
                 Button("OK") {
                     if let amount { session.confirmSelectionAmount(amount) }
                 }
-                .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
                 .disabled(amount == nil)
             }
         }

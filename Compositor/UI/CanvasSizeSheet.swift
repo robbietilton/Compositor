@@ -63,7 +63,7 @@ struct CanvasSizeSheet: View {
         return CanvasExtensionColor(red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent)
     }
 
-    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(.checkbox) }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Canvas Size").font(.title2.bold()).modifier(PanelTitleColor())
@@ -140,7 +140,6 @@ struct CanvasSizeSheet: View {
                     DialogColorSwatch.closePicker(session)
                     finish(CanvasSizeOptions(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()), anchor: anchor, fill: fill))
                 }.configuredNativeShortcut(.return)
-                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                     .disabled(!draft.valid)
             }
         }.textFieldStyle(.roundedBorder).padding(24).frame(width: 450)

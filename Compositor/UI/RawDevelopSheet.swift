@@ -72,7 +72,6 @@ struct RawDevelopSheet: View {
                     Button("Camera Raw…") { session.finishRawDevelop(settings, openingCameraRaw: true) }
                         .help("Import, then open the Camera Raw Filter")
                     Button("Import") { session.finishRawDevelop(settings) }.keyboardShortcut(.defaultAction)
-                        .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                 }
                 .roundedControls()
             }
@@ -80,8 +79,7 @@ struct RawDevelopSheet: View {
         }
         .padding(24).fixedSize()
         .panelSurface()
-        .toggleStyle(CompositorCheckboxStyle())
-        .compositorChrome()
+        .toggleStyle(.checkbox)
         .interactiveDismissDisabled(session.rawImporting)
         .task(id: revision) { await refreshPreview() }
         .onChange(of: settings) { _, _ in revision += 1 }

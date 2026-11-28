@@ -65,7 +65,7 @@ final class FontListPanel: NSPanel, NSTableViewDataSource, NSTableViewDelegate, 
         box.wantsLayer = true
         box.layer?.cornerRadius = 6
         box.layer?.borderWidth = 1
-        box.layer?.borderColor = CompositorAppearance.controlAccent.cgColor
+        box.layer?.borderColor = NSColor.controlAccentColor.cgColor
         box.autoresizingMask = [.width, .minYMargin]
         // A plain field beside a magnifier of its own: a borderless search field draws its icon over its text.
         let icon = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil) ?? NSImage())
@@ -266,7 +266,7 @@ final class FontListTable: NSTableView {
 /// A face's row: its name inset from the edges, on a rounded highlight when it's the one highlighted.
 final class FontListRow: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
-        CompositorAppearance.controlAccent.withAlphaComponent(0.35).setFill()
+        NSColor.controlAccentColor.withAlphaComponent(0.35).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 1), xRadius: 5, yRadius: 5).fill()
     }
     override func layout() {

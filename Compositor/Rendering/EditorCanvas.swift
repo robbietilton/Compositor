@@ -5,7 +5,6 @@ struct EditorCanvas: NSViewRepresentable {
     let session: EditorSession
     func makeNSView(context: Context) -> CanvasView { CanvasView(session: session) }
     func updateNSView(_ view: CanvasView, context: Context) {
-        view.usesAmberChrome = context.environment.compositorAmber
         view.consumeFocusRequest(session.canvasFocusRequest)
         _ = session.showsTransformControls // observed here so ⌘H redraws the transform box at once
         _ = session.hiddenSelectionEdges // and the selection's outline
@@ -955,9 +954,6 @@ final class CanvasView: NSView {
     }
 
     private var surroundGray: CGFloat = 0.105
-    var usesAmberChrome = false {
-        didSet { if oldValue != usesAmberChrome { needsDisplay = true } }
-    }
     private var canvasShadowOpacity: CGFloat = 0.35
     private var checkerboardTones = CompositorAppearance.darkCheckerboard
 
@@ -976,14 +972,13 @@ final class CanvasView: NSView {
 
     /// The gray around the canvas, black in Canvas Only (F).
     private var surround: CGFloat { session.canvasOnly ? 0 : surroundGray }
-    private var amberSurround: NSColor? { usesAmberChrome && !session.canvasOnly ? CompositorAppearance.amberSurround : nil }
 
     override func draw(_ dirtyRect: NSRect) {
         // The grid and a text frame being dragged follow the pixels under them.
         if lines.frame != bounds { lines.frame = bounds }
         lines.needsDisplay = true
         if drawOnGPU(dirtyRect) { return }
-        (amberSurround ?? NSColor(white: surround, alpha: 1)).setFill()
+        NSColor(white: surround, alpha: 1).setFill()
         dirtyRect.fill()
         guard let document = session.document,
               let context = NSGraphicsContext.current?.cgContext else { return }
@@ -1000,8 +995,7 @@ final class CanvasView: NSView {
         context.restoreGState()
         context.saveGState()
         context.clip(to: rect.intersection(dirtyRect))
-        context.setFillColor(usesAmberChrome ? CompositorAppearance.amberCheckerboard.base.cgColor
-                                           : NSColor(white: checkerboardTones.base, alpha: 1).cgColor)
+        context.setFillColor(NSColor(white: checkerboardTones.base, alpha: 1).cgColor)
         context.fill(rect)
         // Work scales with the visible viewport, not document dimensions.
         let tile: CGFloat = 10
@@ -1011,8 +1005,7 @@ final class CanvasView: NSView {
             let maxX = Int(ceil((visible.maxX - rect.minX) / tile))
             let minY = Int(floor((visible.minY - rect.minY) / tile))
             let maxY = Int(ceil((visible.maxY - rect.minY) / tile))
-            context.setFillColor(usesAmberChrome ? CompositorAppearance.amberCheckerboard.alternate.cgColor
-                                               : NSColor(white: checkerboardTones.alternate, alpha: 1).cgColor)
+            context.setFillColor(NSColor(white: checkerboardTones.alternate, alpha: 1).cgColor)
             for row in minY..<maxY {
                 for column in minX..<maxX where (row + column).isMultiple(of: 2) {
                     context.fill(CGRect(x: rect.minX + CGFloat(column) * tile,
@@ -3066,16 +3059,15 @@ extension CanvasView {
         func gray(_ white: CGFloat, alpha: CGFloat = 1) -> CIImage {
             CIImage(color: CIColor(red: white, green: white, blue: white, alpha: alpha))
         }
-        let surroundImage = amberSurround.map { CIImage(color: CIColor(cgColor: $0.cgColor)) } ?? gray(surround)
-        var frame = surroundImage.cropped(to: full)
+        var frame = gray(surround).cropped(to: full)
         guard rect.intersects(full) else { return frame }
         // The document's shadow, then its checkerboard: 10-point squares from its top-left corner.
         let shadow = gray(0, alpha: canvasShadowOpacity).cropped(to: rect)
             .transformed(by: CGAffineTransform(translationX: 0, y: 3 * device)).applyingGaussianBlur(sigma: 7 * device)
         frame = shadow.composited(over: frame)
         let tile = 10 * device
-        let base = usesAmberChrome ? CIImage(color: CIColor(cgColor: CompositorAppearance.amberCheckerboard.base.cgColor)) : gray(checkerboardTones.base)
-        let alternate = usesAmberChrome ? CIImage(color: CIColor(cgColor: CompositorAppearance.amberCheckerboard.alternate.cgColor)) : gray(checkerboardTones.alternate)
+        let base = gray(checkerboardTones.base)
+        let alternate = gray(checkerboardTones.alternate)
         let squares = alternate.cropped(to: CGRect(x: 0, y: 0, width: tile, height: tile))
             .composited(over: base.cropped(to: CGRect(x: tile, y: 0, width: tile, height: tile)))
             .composited(over: base.cropped(to: CGRect(x: 0, y: tile, width: tile, height: tile)))

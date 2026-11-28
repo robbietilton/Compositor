@@ -36,7 +36,7 @@ struct ColorPickerSheet: View {
                 }
                 Spacer(minLength: 12)
                 Button("Cancel") { finish(false) }.configuredNativeShortcut(.escape)
-                Button("OK") { finish(true) }.configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                Button("OK") { finish(true) }.configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
             }
         }
         .padding(20)

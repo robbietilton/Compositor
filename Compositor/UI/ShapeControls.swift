@@ -117,7 +117,7 @@ struct ShapeControls: View {
                       : "Round the rectangle's corners by this many pixels; 0 keeps them square")
                 Toggle("Smooth Corners", isOn: Binding(get: { session.displayedShapeSmoothing },
                                                       set: { session.setDisplayedShapeSmoothing($0) }))
-                    .toggleStyle(CompositorCheckboxStyle())
+                    .toggleStyle(.checkbox)
                     .fixedSize()
                     .disabled(session.displayedCornerRadius <= 0)
                     .help(session.displayedCornerRadius <= 0

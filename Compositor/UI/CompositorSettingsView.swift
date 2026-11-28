@@ -15,7 +15,6 @@ struct CompositorSettingsView: View {
     }
 
     let updater: SPUUpdater
-    @Environment(\.compositorAmber) private var amber
     @State private var page = Page.general
 
     var body: some View {
@@ -31,7 +30,7 @@ struct CompositorSettingsView: View {
                         }
                         .frame(width: 78, height: 52)
                         .foregroundStyle(page == tab ? .primary : .secondary)
-                        .background(page == tab ? (amber ? CompositorAppearance.amberButton : CompositorAppearance.ink.opacity(0.09)) : .clear,
+                        .background(page == tab ? CompositorAppearance.ink.opacity(0.09) : .clear,
                                     in: .rect(cornerRadius: 8))
                         .contentShape(.rect(cornerRadius: 8))
                     }
@@ -53,7 +52,10 @@ struct CompositorSettingsView: View {
         }
         .frame(width: 560, height: 580)
         .panelSurface()
+        .panelTitle("Settings")
         .toolbar(removing: .title)
+        // The toolbar's glass blurred the header drawn under it.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .background(SettingsWindowMarker())
     }
 }
@@ -86,11 +88,14 @@ private struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("General").font(.title2.weight(.semibold))
                 SettingsCard {
-                    Text("Appearance").font(.headline)
-                    HStack(spacing: 12) {
-                        ForEach(CompositorAppearance.allCases, id: \.self) { option in
-                            appearanceButton(option)
-                        }
+                    HStack {
+                        Text("Appearance").font(.headline)
+                        Spacer()
+                        CompositorSegmentedPicker("Appearance", selection: Binding(get: { appearance }, set: { option in
+                            appearance = option
+                            option.apply()
+                        }), options: CompositorAppearance.allCases) { Text($0.rawValue) }
+                        .fixedSize()
                     }
                 }
                 SettingsCard {
@@ -108,93 +113,13 @@ private struct GeneralSettings: View {
                         .labelsHidden()
                         .accessibilityHint(mcpDescription)
                     }
+                    Divider()
+                    Text("Add Compositor to your AI app").font(.subheadline.weight(.semibold))
+                    ForEach(MCPClient.allCases, id: \.self) { MCPClientRow(client: $0) }
                 }
             }
             .padding(24)
         }
-    }
-
-    private func appearanceButton(_ option: CompositorAppearance) -> some View {
-        let selected = appearance == option
-        return Button {
-            appearance = option
-            option.apply()
-        } label: {
-            VStack(spacing: 7) {
-                AppearancePreview(option: option)
-                    .frame(height: 76)
-                    .clipShape(.rect(cornerRadius: 7))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7).strokeBorder(
-                            selected ? Color.accentColor : CompositorAppearance.ink.opacity(0.14),
-                            lineWidth: selected ? 2 : 1
-                        )
-                    }
-                    .accessibilityHidden(true)
-                Text(option.rawValue)
-                    .fontWeight(selected ? .semibold : .regular)
-                    .foregroundStyle(selected ? .primary : .secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-private struct AppearancePreview: View {
-    let option: CompositorAppearance
-
-    var body: some View {
-        if option == .auto {
-            editor(light: true).overlay {
-                editor(light: false).mask {
-                    HStack(spacing: 0) { Color.clear; Color.black }
-                }
-            }
-        } else {
-            editor(light: option == .light, amber: option == .amber)
-        }
-    }
-
-    private func editor(light: Bool, amber: Bool = false) -> some View {
-        let ink = amber ? Color(nsColor: CompositorAppearance.amberText) : light ? .black : .white
-        return VStack(spacing: 0) {
-            HStack(spacing: 3) {
-                Capsule().fill(ink.opacity(0.25)).frame(width: 18, height: 3)
-                Capsule().fill(ink.opacity(0.15)).frame(width: 12, height: 3)
-                Spacer()
-                Capsule().fill(ink.opacity(0.20)).frame(width: 12, height: 3)
-            }
-            .padding(6)
-            .background(ink.opacity(0.06))
-            HStack(spacing: 0) {
-                VStack(spacing: 4) {
-                    ForEach(0..<4) { tool in
-                        RoundedRectangle(cornerRadius: 1).fill(ink.opacity(tool == 0 ? 0.46 : 0.22))
-                            .frame(width: 5, height: 5)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(width: 14)
-                .padding(.top, 6)
-                Rectangle().fill(amber ? Color(nsColor: CompositorAppearance.amberSurround)
-                                       : Color(white: light ? CompositorAppearance.lightSurroundWhite : 0.105)).overlay {
-                    RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.57))
-                        .aspectRatio(1.5, contentMode: .fit).padding(9)
-                }
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(0..<3) { layer in
-                        Capsule().fill(ink.opacity(layer == 0 ? 0.34 : 0.18)).frame(width: 13, height: 3)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(width: 24)
-                .padding(.top, 7)
-            }
-        }
-        .background(amber ? CompositorAppearance.amberEditor : Color(white: light ? CompositorAppearance.lightEditorWhite : 0.14))
     }
 }
 
@@ -225,7 +150,7 @@ private struct UpdateSettings: View {
                         checksAutomatically = $0
                         updater.automaticallyChecksForUpdates = $0
                     }))
-                    .toggleStyle(CompositorCheckboxStyle())
+                    .toggleStyle(.checkbox)
                     Button {
                         updater.checkForUpdates()
                     } label: {
@@ -262,9 +187,61 @@ private struct UpdateSettings: View {
     }
 }
 
+/// The AI apps an MCP connection is set up in, and the setup each takes: the companion inside this app, which the
+/// app, sandboxed, can't write into their settings itself.
+private enum MCPClient: String, CaseIterable {
+    case claudeCode = "Claude Code", claude = "Claude", codex = "Codex"
+
+    static var helper: String { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/compositor-mcp").path }
+
+    var whereItGoes: String {
+        switch self {
+        case .claudeCode: "Paste into Terminal."
+        case .claude: "Add under \"mcpServers\" in Claude's Settings › Developer › Edit Config, then restart Claude."
+        case .codex: "Add to ~/.codex/config.toml, then restart Codex."
+        }
+    }
+
+    var setup: String {
+        let path = Self.helper
+        switch self {
+        case .claudeCode:
+            return "claude mcp add --scope user compositor -- '\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+        case .claude:
+            let json = (try? JSONSerialization.data(withJSONObject: path, options: .fragmentsAllowed))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "\"\(path)\""
+            return "\"compositor\": { \"command\": \(json.replacingOccurrences(of: "\\/", with: "/")) }"
+        case .codex:
+            let toml = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            return "[mcp_servers.compositor]\ncommand = \"\(toml)\""
+        }
+    }
+}
+
+private struct MCPClientRow: View {
+    let client: MCPClient
+    @State private var copied = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(client.rawValue)
+                Text(client.whereItGoes).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button(copied ? "Copied" : "Copy Setup") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(client.setup, forType: .string)
+                copied = true
+                Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+            }
+            .help(client.setup)
+        }
+    }
+}
+
 private struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: Content
-    @Environment(\.compositorAmber) private var amber
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -272,7 +249,7 @@ private struct SettingsCard<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(amber ? CompositorAppearance.amberInactiveTab : CompositorAppearance.ink.opacity(0.04),
+        .background(CompositorAppearance.ink.opacity(0.04),
                     in: RoundedRectangle(cornerRadius: 12))
     }
 }

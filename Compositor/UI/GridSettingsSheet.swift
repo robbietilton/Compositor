@@ -110,7 +110,7 @@ struct GridSettingsSheet: View {
                     finish((grid, appearance))
                 }
                 .configuredNativeShortcut(.return)
-                .buttonStyle(CompositorProminentButtonStyle())
+                .buttonStyle(.borderedProminent)
                 .disabled(!valid)
             }
         }

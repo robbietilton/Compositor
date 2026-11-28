@@ -7,7 +7,6 @@ struct ProjectWindowBridge: NSViewRepresentable {
     func makeNSView(context: Context) -> ProjectWindowView { ProjectWindowView(controller: controller) }
     func updateNSView(_ view: ProjectWindowView, context: Context) {
         view.update(controller)
-        view.updateToolbarBackground(amber: context.environment.compositorAmber)
         view.window?.representedURL = controller.session.projectURL
         view.window?.isDocumentEdited = controller.session.isModified
         view.window?.titleVisibility = .hidden
@@ -35,19 +34,12 @@ final class ProjectWindowView: NSView {
             guard let self, let window = self.window else { return }
             self.controller.window = window
             self.controller.workspace?.window = window
-            self.updateToolbarBackground(amber: CompositorAppearance.applied == .amber)
             if window.delegate !== self.proxy {
                 self.proxy.previous = window.delegate
                 window.delegate = self.proxy
             }
             Self.fillScreenOnceForThisBuild(window)
         }
-    }
-
-    func updateToolbarBackground(amber: Bool) {
-        guard let window else { return }
-        if amber { window.backgroundColor = CompositorAppearance.amberHeader }
-        else if window.backgroundColor == CompositorAppearance.amberHeader { window.backgroundColor = .windowBackgroundColor }
     }
 
     /// The first launch of each build, a new download or an update, fills the screen (without going full screen), as

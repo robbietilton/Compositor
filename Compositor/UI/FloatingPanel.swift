@@ -58,7 +58,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         // and SwiftUI's measurement invalidates layout re-entrantly, which AppKit treats
         // as a fatal exception.
         let host = NSHostingView(rootView: AnyView(content.roundedControls().panelSurface()
-            .toggleStyle(CompositorCheckboxStyle()).compositorChrome()))
+            .toggleStyle(.checkbox).panelTitle(title)))
         // Docked panels fill the window we size. An intrinsic SwiftUI height of zero (a scroll view
         // waiting for a proposed height) must not collapse the content.
         if placement == .dockedToMainWindowRight {
@@ -66,13 +66,17 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             host.autoresizingMask = [.width, .height]
         }
         panel.contentView = host
+        PanelTitleBar.install(in: panel, title: title)
         if placement == .dockedToMainWindowRight {
             applyDockedFrame(panel: panel)
             installFrameObserver(for: panel)
         } else {
             removeFrameObserver()
+            // The content reaches up under the title bar, so the panel is that much taller than it.
             let size = host.fittingSize
-            if size.width > 0, size.height > 0 { panel.setContentSize(size) }
+            if size.width > 0, size.height > 0 {
+                panel.setContentSize(NSSize(width: size.width, height: size.height + PanelTitleBar.standardHeight))
+            }
             if wasVisible {
                 panel.setFrameTopLeftPoint(topLeft) // Content changes must not shift the panel.
             } else if let saved = Self.positions[positionKey] {
@@ -87,7 +91,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 panel.center()
             }
         }
-        PanelTitleBar.install(in: panel, title: title)
         panel.makeKeyAndOrderFront(nil)
         remember(panel)
     }

@@ -56,6 +56,7 @@ nonisolated enum NewCanvasBackground: String, CaseIterable, Sendable {
 }
 
 struct NewCanvasSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     let session: EditorSession
     var onOpen: (() -> Void)? = nil
     @AppStorage("newCanvas.width") private var lastWidth = 1920
@@ -161,7 +162,7 @@ struct NewCanvasSheet: View {
                     lastWidth = w
                     lastHeight = h
                 }
-                .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
+                .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
                 .disabled(!valid).accessibilityIdentifier("createCanvas")
             }
         }
@@ -211,7 +212,10 @@ struct NewCanvasSheet: View {
                     .accessibilityIdentifier(title.lowercased() + "Input")
                 Text(unit.rawValue).foregroundStyle(.secondary)
             }
-            .padding(12).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
+            // In Light, white at 60% over the surround: a gray field read as disabled, and solid white glared. Dark keeps
+            // its faint tint.
+            .padding(12).background(colorScheme == .light ? AnyShapeStyle(Color.white.opacity(0.6)) : AnyShapeStyle(.quaternary.opacity(0.5)),
+                                    in: RoundedRectangle(cornerRadius: 7))
         }
     }
 }

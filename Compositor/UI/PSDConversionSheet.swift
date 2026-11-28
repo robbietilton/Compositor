@@ -46,7 +46,6 @@ struct PSDConversionSheet: View {
                 Spacer()
                 Button("Cancel") { finish(false) }.keyboardShortcut(.cancelAction)
                 Button(request.confirmTitle) { finish(true) }.keyboardShortcut(.defaultAction)
-                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                     .disabled(request.isReading)
             }
         }
@@ -54,7 +53,6 @@ struct PSDConversionSheet: View {
         .frame(minWidth: 520, minHeight: 360)
         .roundedControls()
         .panelSurface()
-        .compositorChrome()
     }
 }
 
