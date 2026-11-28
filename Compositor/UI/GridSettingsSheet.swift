@@ -48,11 +48,11 @@ struct GridSettingsSheet: View {
         appearance.opacity = min(max(value, GridAppearance.opacityRange.lowerBound), GridAppearance.opacityRange.upperBound)
     }
 
-    var body: some View { sheet.roundedControls() }
+    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Grid").font(.title2.bold()).frame(maxWidth: .infinity)
+            Text("Grid").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
             HStack {
                 Text("Color").frame(width: 110, alignment: .leading)
                 Picker("Color", selection: $appearance.preset) {

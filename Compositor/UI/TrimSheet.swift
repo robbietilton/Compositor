@@ -8,11 +8,11 @@ struct TrimSheet: View {
     @State private var trimLeft: Bool = true
     @State private var trimRight: Bool = true
 
-    var body: some View { sheet.roundedControls() }
+    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Trim").font(.title2.bold()).frame(maxWidth: .infinity)
+            Text("Trim").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Based On").font(.headline)
                 Picker("", selection: $basedOn) {

@@ -21,6 +21,7 @@ struct RawDevelopSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Develop “\(url.lastPathComponent)”")
                 .font(.title2.bold())
+                .foregroundStyle(PanelAppearance.title)
                 .lineLimit(1)
                 .frame(width: 560)
                 .help(url.lastPathComponent)
@@ -77,6 +78,7 @@ struct RawDevelopSheet: View {
             .disabled(session.rawImporting)
         }
         .padding(24).fixedSize()
+        .background(PanelAppearance.content)
         .interactiveDismissDisabled(session.rawImporting)
         .task(id: revision) { await refreshPreview() }
         .onChange(of: settings) { _, _ in revision += 1 }

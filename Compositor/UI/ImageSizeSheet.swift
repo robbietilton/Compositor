@@ -107,10 +107,10 @@ struct ImageSizeSheet: View {
         }
     }
 
-    var body: some View { sheet.roundedControls() }
+    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Image Size").font(.title2.bold()).frame(maxWidth: .infinity)
+            Text("Image Size").font(.title2.bold()).foregroundStyle(PanelAppearance.title).frame(maxWidth: .infinity)
             Text("Current: \(document.width) × \(document.height) pixels").foregroundStyle(.secondary)
             Picker("Units", selection: $unit) {
                 ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0) }

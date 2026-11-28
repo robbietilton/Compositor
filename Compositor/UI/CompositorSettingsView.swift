@@ -50,7 +50,8 @@ struct CompositorSettingsView: View {
             }
         }
         .frame(width: 560, height: 580)
-        .navigationTitle("Settings")
+        .background(PanelAppearance.content)
+        .toolbar(removing: .title)
         .background(SettingsWindowMarker())
     }
 }

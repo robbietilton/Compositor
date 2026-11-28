@@ -98,7 +98,7 @@ struct ExportAsSheet: View {
         zoom ?? JPEGPreview.fitZoom(width: width, height: height, in: JPEGPreview.frame, displayScale: displayScale)
     }
 
-    var body: some View { sheet.roundedControls() }
+    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
@@ -125,7 +125,7 @@ struct ExportAsSheet: View {
                     .help("Zoom out (⌘−), now \(percent)")
             }
             .overlay {
-                Text("Export As").font(.title2.bold()).allowsHitTesting(false)
+                Text("Export As").font(.title2.bold()).foregroundStyle(PanelAppearance.title).allowsHitTesting(false)
             }
             .padding(.bottom, -8)
             ZStack {
