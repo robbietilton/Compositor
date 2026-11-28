@@ -3,18 +3,16 @@
   <channel>
     <title>Compositor</title>
     <item>
-      <title>Version 1.8.0</title>
-      <pubDate>Sat, 28 Nov 2026 07:31:18 +0000</pubDate>
-      <sparkle:version>82</sparkle:version>
-      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
+      <title>Version 1.8.1</title>
+      <pubDate>Sat, 28 Nov 2026 16:17:34 +0000</pubDate>
+      <sparkle:version>83</sparkle:version>
+      <sparkle:shortVersionString>1.8.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.8.0</link>
-      <changes><![CDATA[New Settings window with Light and Auto appearances
-Connect ChatGPT, Claude or Claude Code to work in Compositor for you (MCP)
-Curves shows each color channel in its own color
-Cleaner panel title bars
-Fixed a bug with the color picker's input fields]]></changes>
-      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.8.0/Compositor.dmg" sparkle:edSignature="1G9y3S03OoQbPEoqlpf9iYFXv7hYjkmgt4urXVEmzTYpe0KszE69pRuKrrxEAXsr+bBqTaMnk5IthHkJPlSyCg==" length="9226933" type="application/octet-stream"/>
+      <link>https://github.com/robbietilton/Compositor/releases/tag/v1.8.1</link>
+      <changes><![CDATA[Light mode polish: lighter graphs in Levels, Curves and Camera Raw, clearer slider ends, and panel headers you can see
+Cleaner MCP settings with consistent text sizes
+More reliable Claude connection when Compositor has moved or been updated]]></changes>
+      <enclosure url="https://github.com/robbietilton/Compositor/releases/download/v1.8.1/Compositor.dmg" sparkle:edSignature="L9OHZFSX8vy8il/TqJKOkbcz6Cfs4nAyxmn3LOPwppqfB4bt8cMr7Jdx75YmZVWHpIcjsipFuB2gzpgpQ+zRCw==" length="9232922" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
