@@ -9,41 +9,41 @@ struct LassoControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     if session.tool == .marquee {
-                        Picker("Shape", selection: Binding(get: { session.marqueeKind }, set: { kind in
+                        CompositorSegmentedPicker("Shape", selection: Binding(get: { session.marqueeKind }, set: { kind in
                             session.cancelLasso()
                             session.marqueeKind = kind
-                        })) {
-                            ForEach(LassoKind.marqueeChoices, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        }),
+                                                 options: LassoKind.marqueeChoices) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .help("Press M to switch between Rectangle and Ellipse")
                     }
                     if session.tool == .wand {
-                        Picker("Mode", selection: Binding(get: { session.wandMode }, set: { mode in
+                        CompositorSegmentedPicker("Mode", selection: Binding(get: { session.wandMode }, set: { mode in
                             session.cancelLasso()
                             session.wandMode = mode
-                        })) {
-                            ForEach(WandMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        }),
+                                                 options: WandMode.allCases) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .help("Press Tab to switch between Wand and Object")
                     }
                     if session.tool == .lasso {
-                        Picker("Lasso", selection: Binding(get: { session.lassoKind }, set: { kind in
+                        CompositorSegmentedPicker("Lasso", selection: Binding(get: { session.lassoKind }, set: { kind in
                             session.cancelLasso()
                             session.lassoKind = kind
-                        })) {
-                            ForEach(LassoKind.lassoChoices, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        }),
+                                                 options: LassoKind.lassoChoices) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .help("Press L to switch between Freehand and Polygonal")
                     }
                     // Shows held Shift/Option (or an outline's mode) live; clicking sets the choice.
-                    Picker("Mode", selection: Binding(get: { session.displayedSelectionMode },
-                                                      set: { session.selectionModeChoice = $0 })) {
-                        ForEach(SelectionMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                                                      .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    CompositorSegmentedPicker("Mode", selection: Binding(get: { session.displayedSelectionMode },
+                                                      set: { session.selectionModeChoice = $0 }),
+                                             options: SelectionMode.allCases) {
+                        Text($0.rawValue)
+                    }.fixedSize()
                                                       .help("Hold Shift to add or Option to subtract for one outline")
                     if session.tool == .wand, session.wandMode == .wand { wandControls }
                     if session.tool == .wand, session.wandMode == .object { objectSelectionControls }
@@ -85,11 +85,10 @@ struct LassoControls: View {
             }
             .labelsHidden().fixedSize()
             .help("Match the clicked pixel, or the average of the pixels around it")
-            Picker("Sample", selection: $session.wandSettings.sampleAllLayers) {
-                Text("This Layer").tag(false)
-                Text("All Layers").tag(true)
-            }
-            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            CompositorSegmentedPicker("Sample", selection: $session.wandSettings.sampleAllLayers,
+                                     options: [false, true]) {
+                $0 ? Text("All Layers") : Text("This Layer")
+            }.fixedSize()
             .help("Read colors from the active layer only, or from every visible layer as shown")
             Toggle("Contiguous", isOn: $session.wandSettings.contiguous)
                 .help("Select only similar pixels connected to the one you click; off selects them everywhere")
@@ -98,11 +97,10 @@ struct LassoControls: View {
 
     private var objectSelectionControls: some View {
         HStack(spacing: 12) {
-            Picker("Sample", selection: $session.objectSelectionSettings.sampleAllLayers) {
-                Text("This Layer").tag(false)
-                Text("All Layers").tag(true)
-            }
-            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            CompositorSegmentedPicker("Sample", selection: $session.objectSelectionSettings.sampleAllLayers,
+                                     options: [false, true]) {
+                $0 ? Text("All Layers") : Text("This Layer")
+            }.fixedSize()
             .help("Analyze the active layer only, or every visible layer as shown")
             HStack(spacing: 6) {
                 Text("Edge").scrubbable(sensitivity: 1, value: $session.objectSelectionSettings.edgeOffset, range: -10...10)
@@ -269,7 +267,7 @@ struct SelectionAmountSheet: View {
                 Button("OK") {
                     if let amount { session.confirmSelectionAmount(amount) }
                 }
-                .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
                 .disabled(amount == nil)
             }
         }

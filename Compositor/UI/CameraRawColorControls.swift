@@ -12,18 +12,16 @@ struct CameraRawCurveControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Curve", selection: Binding(get: { edit?.cameraRawCurvePage ?? .parametric }, set: { session.filterEdit?.cameraRawCurvePage = $0 })) {
-                ForEach(CameraRawCurvePage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            CompositorSegmentedPicker("Curve", selection: Binding(get: { edit?.cameraRawCurvePage ?? .parametric }, set: { session.filterEdit?.cameraRawCurvePage = $0 }),
+                                     options: CameraRawCurvePage.allCases) {
+                Text($0.rawValue)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .help("Parametric lifts tonal regions. Point places anchors on the curve.")
             if edit?.cameraRawCurvePage == .point {
-                Picker("Channel", selection: Binding(get: { edit?.cameraRawPointChannel ?? .rgb }, set: { session.filterEdit?.cameraRawPointChannel = $0 })) {
-                    ForEach(CameraRawPointChannel.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                CompositorSegmentedPicker("Channel", selection: Binding(get: { edit?.cameraRawPointChannel ?? .rgb }, set: { session.filterEdit?.cameraRawPointChannel = $0 }),
+                                         options: CameraRawPointChannel.allCases) {
+                    Text($0.rawValue)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 .help("RGB changes brightness. Red, green, and blue also shift the color.")
                 .onChange(of: edit?.cameraRawPointChannel) { _, _ in selected = nil; drag = nil }
             }
@@ -271,18 +269,17 @@ struct CameraRawMixerControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Mixer", selection: Binding(get: { edit?.cameraRawMixerPage ?? .hsl }, set: { session.filterEdit?.cameraRawMixerPage = $0 })) {
-                ForEach(CameraRawMixerPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            CompositorSegmentedPicker("Mixer", selection: Binding(get: { edit?.cameraRawMixerPage ?? .hsl }, set: { session.filterEdit?.cameraRawMixerPage = $0 }),
+                                     options: CameraRawMixerPage.allCases) {
+                Text($0.rawValue)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .help("HSL lists every color. Color edits one family. Point Color adjusts a color you pick.")
             switch edit?.cameraRawMixerPage ?? .hsl {
             case .hsl:
-                Picker("Component", selection: Binding(get: { edit?.cameraRawMixerTab ?? .hue }, set: { session.filterEdit?.cameraRawMixerTab = $0 })) {
-                    ForEach(CameraRawMixerTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                CompositorSegmentedPicker("Component", selection: Binding(get: { edit?.cameraRawMixerTab ?? .hue }, set: { session.filterEdit?.cameraRawMixerTab = $0 }),
+                                         options: CameraRawMixerTab.allCases) {
+                    Text($0.rawValue)
                 }
-                .pickerStyle(.segmented).labelsHidden()
                 .help("Hue shifts the color, Saturation its strength, and Luminance its brightness.")
                 ForEach(0..<8, id: \.self) { index in familySlider(index) }
             case .color:

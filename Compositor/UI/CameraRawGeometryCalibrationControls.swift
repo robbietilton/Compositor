@@ -9,11 +9,10 @@ struct CameraRawGeometryControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Upright").font(.subheadline)
-            Picker("Upright", selection: uprightBinding) {
-                ForEach(CameraRawUprightMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            CompositorSegmentedPicker("Upright", selection: uprightBinding,
+                                     options: CameraRawUprightMode.allCases) {
+                Text($0.rawValue)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
             .help("Off leaves the picture as it is. Guided straightens from lines you draw on the picture.")
             if raw.geometry.upright == .guided {
                 Button {

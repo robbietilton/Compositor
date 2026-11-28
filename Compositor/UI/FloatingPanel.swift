@@ -57,7 +57,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         // that option makes AppKit measure the SwiftUI view during its constraint pass,
         // and SwiftUI's measurement invalidates layout re-entrantly, which AppKit treats
         // as a fatal exception.
-        let host = NSHostingView(rootView: AnyView(content.roundedControls().background(PanelAppearance.content)))
+        let host = NSHostingView(rootView: AnyView(content.roundedControls().panelSurface()
+            .toggleStyle(CompositorCheckboxStyle()).compositorChrome()))
         // Docked panels fill the window we size. An intrinsic SwiftUI height of zero (a scroll view
         // waiting for a proposed height) must not collapse the content.
         if placement == .dockedToMainWindowRight {

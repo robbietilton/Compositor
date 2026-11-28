@@ -8,11 +8,11 @@ struct TrimSheet: View {
     @State private var trimLeft: Bool = true
     @State private var trimRight: Bool = true
 
-    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Trim").font(.title2.bold()).foregroundStyle(PanelAppearance.title)
+            Text("Trim").font(.title2.bold()).modifier(PanelTitleColor())
             VStack(alignment: .leading, spacing: 8) {
                 Text("Based On").font(.headline)
                 Picker("", selection: $basedOn) {
@@ -57,7 +57,7 @@ struct TrimSheet: View {
                     finish(options)
                 }
                 .configuredNativeShortcut(.return)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(CompositorProminentButtonStyle())
                 .disabled(!trimTop && !trimBottom && !trimLeft && !trimRight)
             }
         }

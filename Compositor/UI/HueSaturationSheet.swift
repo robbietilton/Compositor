@@ -67,7 +67,7 @@ struct HueSaturationSheet: View {
                 Button("Cancel") { session.cancelHueSaturation() }.configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") { Task { await session.commitHueSaturation() } }
-                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
             }
         }
         .padding(24).frame(width: 460).fixedSize()

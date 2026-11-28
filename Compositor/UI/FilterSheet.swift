@@ -68,11 +68,11 @@ struct FilterSheet: View {
             case .removeBackground:
                 Text("Hide the background behind a layer mask, keeping the foreground subjects. The pixels stay, so the background can be painted back at any time.")
                     .fixedSize(horizontal: false, vertical: true)
-                Picker("Quality", selection: Binding(get: { settings.backgroundQuality },
-                                                     set: { new in update { $0.backgroundQuality = new } })) {
-                    ForEach(BackgroundQuality.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                CompositorSegmentedPicker("Quality", selection: Binding(get: { settings.backgroundQuality },
+                                                     set: { new in update { $0.backgroundQuality = new } }),
+                                         options: BackgroundQuality.allCases) {
+                    Text($0.rawValue)
                 }
-                .pickerStyle(.segmented).labelsHidden()
                 .help("Basic is quick; Advanced refines the mask against the layer's own detail, for hair and fur")
                 if settings.backgroundQuality == .advanced {
                     control("Refine", \.refineEdges, range: 0...40, unit: "px", decimals: 0, logarithmic: false)
@@ -94,11 +94,10 @@ struct FilterSheet: View {
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     Text("Shape")
-                    Picker("Shape", selection: flag(\.progressiveRadial)) {
-                        Text("Linear").tag(false)
-                        Text("Radial").tag(true)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    CompositorSegmentedPicker("Shape", selection: flag(\.progressiveRadial),
+                                             options: [false, true]) {
+                        $0 ? Text("Radial") : Text("Linear")
+                    }.fixedSize()
                     .help("Linear blurs along the line; Radial keeps the start sharp and blurs outwards")
                 }
                 control("From", \.progressiveFrom, range: 0...250, unit: "px", decimals: 1, logarithmic: false)
@@ -110,11 +109,10 @@ struct FilterSheet: View {
             case .rgbSplit:
                 HStack(spacing: 10) {
                     Text("Shape")
-                    Picker("Shape", selection: flag(\.rgbSplitRadial)) {
-                        Text("Linear").tag(false)
-                        Text("Radial").tag(true)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    CompositorSegmentedPicker("Shape", selection: flag(\.rgbSplitRadial),
+                                             options: [false, true]) {
+                        $0 ? Text("Radial") : Text("Linear")
+                    }.fixedSize()
                     .help("Linear splits along one direction; Radial splits outwards from a center, sharp there")
                 }
                 if settings.rgbSplitRadial {
@@ -142,11 +140,10 @@ struct FilterSheet: View {
                 control("Amount", \.amount, range: 0.1...400, unit: "%", decimals: 1, logarithmic: true)
                 HStack(spacing: 10) {
                     Text("Distribution")
-                    Picker("Distribution", selection: flag(\.gaussian)) {
-                        Text("Uniform").tag(false)
-                        Text("Gaussian").tag(true)
+                    CompositorSegmentedPicker("Distribution", selection: flag(\.gaussian),
+                                             options: [false, true]) {
+                        $0 ? Text("Gaussian") : Text("Uniform")
                     }
-                    .pickerStyle(.segmented).labelsHidden()
                 }
                 Toggle("Monochromatic", isOn: flag(\.monochromatic))
             case .dither:
@@ -245,7 +242,7 @@ struct FilterSheet: View {
                         .disabled(volumetricWaiting)
                 }
                 Button("OK") { Task { await session.commitFilter() } }
-                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
                     .disabled(edit?.kind.isAutomatic == true && (edit?.preparing == true || edit?.previewError != nil) || volumetricWaiting)
             }
         }
@@ -491,10 +488,10 @@ struct FilterSheet: View {
             control("Angle", \.lens.starAngle, range: -180...180, unit: "°", decimals: 0, logarithmic: false)
             HStack(spacing: 10) {
                 Text("Points")
-                Picker("Points", selection: Binding(get: { settings.lens.starPoints }, set: { new in update { $0.lens.starPoints = new } })) {
-                    ForEach(LensEffectSettings.starPointChoices, id: \.self) { Text("\($0)").tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                CompositorSegmentedPicker("Points", selection: Binding(get: { settings.lens.starPoints }, set: { new in update { $0.lens.starPoints = new } }),
+                                         options: LensEffectSettings.starPointChoices) {
+                    Text("\($0)")
+                }.fixedSize()
                 .help("How many spikes each light has, as the lens's aperture blades make them")
             }
         case .mist:
@@ -516,11 +513,10 @@ struct FilterSheet: View {
                 .help("Split each copy's red and blue apart, as glass does; 0 keeps the copies crisp")
             HStack(spacing: 10) {
                 Text("Direction")
-                Picker("Direction", selection: Binding(get: { settings.lens.prismBothWays }, set: { new in update { $0.lens.prismBothWays = new } })) {
-                    Text("One Way").tag(false)
-                    Text("Both Ways").tag(true)
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                CompositorSegmentedPicker("Direction", selection: Binding(get: { settings.lens.prismBothWays }, set: { new in update { $0.lens.prismBothWays = new } }),
+                                         options: [false, true]) {
+                    $0 ? Text("Both Ways") : Text("One Way")
+                }.fixedSize()
                 .help("Copies to one side of the picture, or out to both")
             }
         case .bokeh:

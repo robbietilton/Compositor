@@ -15,6 +15,7 @@ struct CompositorSettingsView: View {
     }
 
     let updater: SPUUpdater
+    @Environment(\.compositorAmber) private var amber
     @State private var page = Page.general
 
     var body: some View {
@@ -30,7 +31,8 @@ struct CompositorSettingsView: View {
                         }
                         .frame(width: 78, height: 52)
                         .foregroundStyle(page == tab ? .primary : .secondary)
-                        .background(CompositorAppearance.ink.opacity(page == tab ? 0.09 : 0), in: .rect(cornerRadius: 8))
+                        .background(page == tab ? (amber ? CompositorAppearance.amberButton : CompositorAppearance.ink.opacity(0.09)) : .clear,
+                                    in: .rect(cornerRadius: 8))
                         .contentShape(.rect(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
@@ -50,7 +52,7 @@ struct CompositorSettingsView: View {
             }
         }
         .frame(width: 560, height: 580)
-        .background(PanelAppearance.content)
+        .panelSurface()
         .toolbar(removing: .title)
         .background(SettingsWindowMarker())
     }
@@ -152,12 +154,12 @@ private struct AppearancePreview: View {
                 }
             }
         } else {
-            editor(light: option == .light)
+            editor(light: option == .light, amber: option == .amber)
         }
     }
 
-    private func editor(light: Bool) -> some View {
-        let ink = light ? Color.black : Color.white
+    private func editor(light: Bool, amber: Bool = false) -> some View {
+        let ink = amber ? Color(nsColor: CompositorAppearance.amberText) : light ? .black : .white
         return VStack(spacing: 0) {
             HStack(spacing: 3) {
                 Capsule().fill(ink.opacity(0.25)).frame(width: 18, height: 3)
@@ -177,7 +179,8 @@ private struct AppearancePreview: View {
                 }
                 .frame(width: 14)
                 .padding(.top, 6)
-                Rectangle().fill(Color(white: light ? CompositorAppearance.lightSurroundWhite : 0.105)).overlay {
+                Rectangle().fill(amber ? Color(nsColor: CompositorAppearance.amberSurround)
+                                       : Color(white: light ? CompositorAppearance.lightSurroundWhite : 0.105)).overlay {
                     RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.57))
                         .aspectRatio(1.5, contentMode: .fit).padding(9)
                 }
@@ -191,7 +194,7 @@ private struct AppearancePreview: View {
                 .padding(.top, 7)
             }
         }
-        .background(Color(white: light ? CompositorAppearance.lightEditorWhite : 0.14))
+        .background(amber ? CompositorAppearance.amberEditor : Color(white: light ? CompositorAppearance.lightEditorWhite : 0.14))
     }
 }
 
@@ -222,7 +225,7 @@ private struct UpdateSettings: View {
                         checksAutomatically = $0
                         updater.automaticallyChecksForUpdates = $0
                     }))
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(CompositorCheckboxStyle())
                     Button {
                         updater.checkForUpdates()
                     } label: {
@@ -261,6 +264,7 @@ private struct UpdateSettings: View {
 
 private struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: Content
+    @Environment(\.compositorAmber) private var amber
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -268,6 +272,7 @@ private struct SettingsCard<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CompositorAppearance.ink.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+        .background(amber ? CompositorAppearance.amberInactiveTab : CompositorAppearance.ink.opacity(0.04),
+                    in: RoundedRectangle(cornerRadius: 12))
     }
 }

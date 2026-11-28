@@ -8,6 +8,7 @@ struct ContentView: View {
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.compositorAmber) private var amber
     @State private var canvasFrame: CGRect = .zero
     @State private var levelsPanel = FloatingPanelController(name: "levelsPanel", sharing: "editPanel")
     @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel", sharing: "editPanel")
@@ -53,7 +54,7 @@ struct ContentView: View {
             if session.tool == .eyedropper {
                 HStack(spacing: 16) {
                     Text("Eyedropper").font(ToolHeaderStyle.titleFont)
-                    Toggle("Sample Ring", isOn: $session.showsSampleRing).toggleStyle(.checkbox)
+                    Toggle("Sample Ring", isOn: $session.showsSampleRing).toggleStyle(CompositorCheckboxStyle())
                     Spacer()
                 }.padding(.horizontal, 18).toolHeaderBar()
                 Divider()
@@ -168,7 +169,7 @@ struct ContentView: View {
     // Split again for 1.1: the chain outgrew the type checker once more.
     @ViewBuilder private var editorChrome: some View {
         editorStack
-        .background(CompositorAppearance.editorBackground)
+        .background(amber ? CompositorAppearance.amberEditor : CompositorAppearance.editorBackground)
         .background {
             if let applicationDelegate, applicationDelegate.projects.workspace == nil {
                 ProjectWindowBridge(controller: applicationDelegate.projects).frame(width: 0, height: 0)
@@ -208,6 +209,13 @@ struct ContentView: View {
         // again properly; hidden here instead, it came back with the tabs over the window buttons.
         .ignoresSafeArea(.container, edges: session.canvasOnly ? .top : [])
         .navigationTitle(session.projectURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
+        .background {
+            if amber, !session.canvasOnly {
+                Color.clear
+                    .toolbarBackground(Color(nsColor: CompositorAppearance.amberHeader), for: .windowToolbar)
+                    .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button { requestNewCanvas() } label: {

@@ -63,10 +63,10 @@ struct CanvasSizeSheet: View {
         return CanvasExtensionColor(red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent)
     }
 
-    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Canvas Size").font(.title2.bold()).foregroundStyle(PanelAppearance.title)
+            Text("Canvas Size").font(.title2.bold()).modifier(PanelTitleColor())
             Text("Current: \(draft.originalWidth) × \(draft.originalHeight) pixels")
             Text("\(bytes(draft.originalWidth, draft.originalHeight)) uncompressed RGBA canvas")
                 .font(.callout).foregroundStyle(.secondary)
@@ -139,7 +139,9 @@ struct CanvasSizeSheet: View {
                     guard draft.valid else { return }
                     DialogColorSwatch.closePicker(session)
                     finish(CanvasSizeOptions(width: Int(draft.width.rounded()), height: Int(draft.height.rounded()), anchor: anchor, fill: fill))
-                }.configuredNativeShortcut(.return).disabled(!draft.valid)
+                }.configuredNativeShortcut(.return)
+                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
+                    .disabled(!draft.valid)
             }
         }.textFieldStyle(.roundedBorder).padding(24).frame(width: 450)
     }

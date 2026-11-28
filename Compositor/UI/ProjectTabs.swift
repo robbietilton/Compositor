@@ -276,6 +276,7 @@ private struct NewTabDropSlot: View {
 private struct OverflowTabsPill: View {
     let workspace: ProjectWorkspace
     let hiddenIDs: [UUID]
+    @Environment(\.compositorAmber) private var amber
     private var label: String { projectTabOverflowLabel(for: hiddenIDs.count) }
     var body: some View {
         HStack(spacing: 4) {
@@ -284,9 +285,9 @@ private struct OverflowTabsPill: View {
         }
         .padding(.horizontal, 11)
         .frame(height: 28)
-        .foregroundStyle(EditorToolbarPillStyle.inactiveTabText)
+        .foregroundStyle(amber ? CompositorAppearance.amberMuted : EditorToolbarPillStyle.inactiveTabText)
         .opacity(workspace.canSwitch ? 1 : 0.5)
-        .background(EditorToolbarPillStyle.inactiveTabFill, in: Capsule())
+        .background(amber ? CompositorAppearance.amberInactiveTab : EditorToolbarPillStyle.inactiveTabFill, in: Capsule())
         // A SwiftUI Menu draws its own label, chevron first; this keeps the pill reading "3 more tabs ⌄".
         .overlay(OverflowMenuAnchor(label: label) {
             guard workspace.canSwitch else { return [] }
@@ -344,14 +345,18 @@ struct EditorToolbarPillStyle: ButtonStyle {
     static let inactiveTabText = Color.secondary.opacity(0.85)
     var circular = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.compositorAmber) private var amber
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let fill = amber ? (configuration.isPressed ? CompositorAppearance.amberPressedButton : CompositorAppearance.amberButton)
+            : (configuration.isPressed ? Self.pressedFill : Self.fill)
+        return configuration.label
             .font(.system(size: 13, weight: .medium))
             .frame(minWidth: circular ? 28 : 42)
             .frame(height: 28)
-            .foregroundStyle(enabled ? Color.primary : Color.secondary)
-            .background(configuration.isPressed ? Self.pressedFill : Self.fill, in: Capsule())
+            .foregroundStyle(amber ? (enabled ? CompositorAppearance.amberForeground : CompositorAppearance.amberMuted)
+                                   : (enabled ? Color.primary : Color.secondary))
+            .background(fill, in: Capsule())
             .contentShape(Capsule())
     }
 }
@@ -361,9 +366,12 @@ private struct ProjectTabButton: View {
     let tab: ProjectTab
     let onReorder: (TabDragPhase) -> Void
     @State private var targeted = false
+    @Environment(\.compositorAmber) private var amber
     private var active: Bool { workspace.selectedID == tab.id }
+    private var inactiveText: Color { amber ? CompositorAppearance.amberMuted : EditorToolbarPillStyle.inactiveTabText }
     private var tabFill: Color {
         if targeted { return Color.accentColor.opacity(0.3) }
+        if amber { return active ? CompositorAppearance.amberButton : CompositorAppearance.amberInactiveTab }
         return active ? EditorToolbarPillStyle.fill : EditorToolbarPillStyle.inactiveTabFill
     }
     var body: some View {
@@ -392,7 +400,7 @@ private struct ProjectTabButton: View {
             if workspace.canClose(tab) {
                 Button { Task { await workspace.close(tab.id) } } label: {
                     Image(systemName: "xmark").font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(active ? Color.secondary : EditorToolbarPillStyle.inactiveTabText)
+                        .foregroundStyle(active && !amber ? Color.secondary : inactiveText)
                         .frame(width: 16, height: 28)
                         .padding(.trailing, 5)
                         .contentShape(Rectangle())
@@ -401,7 +409,7 @@ private struct ProjectTabButton: View {
             }
         }
         .frame(height: 28)
-        .foregroundStyle(active ? Color.primary : EditorToolbarPillStyle.inactiveTabText)
+        .foregroundStyle(active ? (amber ? CompositorAppearance.amberForeground : Color.primary) : inactiveText)
         .background(tabFill, in: Capsule())
         .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : .clear, lineWidth: 2))
         .help(targeted ? "Add to \(tab.title)" : tab.title)

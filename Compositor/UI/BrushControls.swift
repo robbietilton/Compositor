@@ -8,34 +8,33 @@ struct BrushControls: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
                     if session.tool == .brush {
-                        Picker("Mode", selection: $session.brushMode) {
-                            ForEach(BrushToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        CompositorSegmentedPicker("Mode", selection: $session.brushMode,
+                                                 options: BrushToolMode.allCases) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .help("Paint with the foreground color (B), or erase pixels away (E)")
                     }
                     if session.tool == .blur {
-                        Picker("Mode", selection: $session.blurMode) {
-                            ForEach(BlurToolMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        CompositorSegmentedPicker("Mode", selection: $session.blurMode,
+                                                 options: BlurToolMode.allCases) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .help("Liquify pushes pixels · Blur softens · Smudge drags color along")
                     }
                     if session.tool == .spotHealing {
-                        Picker("Type", selection: $session.spotHealingMode) {
-                            ForEach(SpotHealingMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        CompositorSegmentedPicker("Type", selection: $session.spotHealingMode,
+                                                 options: SpotHealingMode.allCases) {
+                            Text($0.rawValue)
+                        }.fixedSize()
                         .accessibilityIdentifier("spotHealingType")
                     }
                     if session.tool == .cloneStamp {
                         Toggle("Aligned", isOn: $session.cloneSettings.aligned)
                             .help("Keep the source moving with the brush between strokes; off starts every stroke at the source point")
-                        Picker("Sample", selection: $session.cloneSettings.sampleAllLayers) {
-                            Text("This Layer").tag(false)
-                            Text("All Layers").tag(true)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        CompositorSegmentedPicker("Sample", selection: $session.cloneSettings.sampleAllLayers,
+                                                 options: [false, true]) {
+                            $0 ? Text("All Layers") : Text("This Layer")
+                        }.fixedSize()
                         .help("Copy from the active layer only, or from every visible layer as shown")
                     }
                     HStack(spacing: 6) {
@@ -141,11 +140,13 @@ struct BrushControls: View {
 
 /// A pressure button: square, the height of the field beside it, which it sits close to.
 private struct PenPressureToggleStyle: ToggleStyle {
+    @Environment(\.compositorAmber) private var amber
+
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
             configuration.label
-                .foregroundStyle(configuration.isOn ? .white : .primary)
+                .foregroundStyle(configuration.isOn ? (amber ? CompositorAppearance.amberOnAccent : .white) : .primary)
                 .frame(width: 22, height: 22)
                 .background(configuration.isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: shape)
                 .contentShape(shape)

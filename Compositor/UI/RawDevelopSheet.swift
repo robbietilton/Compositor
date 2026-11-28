@@ -21,7 +21,7 @@ struct RawDevelopSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Develop “\(url.lastPathComponent)”")
                 .font(.title2.bold())
-                .foregroundStyle(PanelAppearance.title)
+                .modifier(PanelTitleColor())
                 .lineLimit(1)
                 .frame(width: 560, alignment: .leading)
                 .help(url.lastPathComponent)
@@ -72,13 +72,16 @@ struct RawDevelopSheet: View {
                     Button("Camera Raw…") { session.finishRawDevelop(settings, openingCameraRaw: true) }
                         .help("Import, then open the Camera Raw Filter")
                     Button("Import") { session.finishRawDevelop(settings) }.keyboardShortcut(.defaultAction)
+                        .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                 }
                 .roundedControls()
             }
             .disabled(session.rawImporting)
         }
         .padding(24).fixedSize()
-        .background(PanelAppearance.content)
+        .panelSurface()
+        .toggleStyle(CompositorCheckboxStyle())
+        .compositorChrome()
         .interactiveDismissDisabled(session.rawImporting)
         .task(id: revision) { await refreshPreview() }
         .onChange(of: settings) { _, _ in revision += 1 }

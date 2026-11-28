@@ -23,7 +23,7 @@ struct PSDConversionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(request.title).font(.title2.bold()).foregroundStyle(PanelAppearance.title)
+            Text(request.title).font(.title2.bold()).modifier(PanelTitleColor())
             Text(request.isReading ? "Reading the file to see what needs converting."
                  : "Compositor will convert these Photoshop features. Nothing is applied until you continue.")
                 .foregroundStyle(.secondary)
@@ -46,13 +46,15 @@ struct PSDConversionSheet: View {
                 Spacer()
                 Button("Cancel") { finish(false) }.keyboardShortcut(.cancelAction)
                 Button(request.confirmTitle) { finish(true) }.keyboardShortcut(.defaultAction)
+                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
                     .disabled(request.isReading)
             }
         }
         .padding(24)
         .frame(minWidth: 520, minHeight: 360)
         .roundedControls()
-        .background(PanelAppearance.content)
+        .panelSurface()
+        .compositorChrome()
     }
 }
 

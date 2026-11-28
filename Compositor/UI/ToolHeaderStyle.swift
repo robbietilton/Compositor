@@ -68,6 +68,7 @@ extension View {
 
     func toolHeaderBar() -> some View {
         font(ToolHeaderStyle.controlFont)
+            .toggleStyle(CompositorCheckboxStyle())
             .controlSize(.regular)
             .frame(height: ToolHeaderStyle.height)
             .fixedSize(horizontal: false, vertical: true)

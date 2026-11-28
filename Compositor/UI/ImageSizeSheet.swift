@@ -107,10 +107,10 @@ struct ImageSizeSheet: View {
         }
     }
 
-    var body: some View { sheet.roundedControls().background(PanelAppearance.content) }
+    var body: some View { sheet.roundedControls().panelSurface().toggleStyle(CompositorCheckboxStyle()).compositorChrome() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Image Size").font(.title2.bold()).foregroundStyle(PanelAppearance.title)
+            Text("Image Size").font(.title2.bold()).modifier(PanelTitleColor())
             Text("Current: \(document.width) × \(document.height) pixels").foregroundStyle(.secondary)
             Picker("Units", selection: $unit) {
                 ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0) }
@@ -170,7 +170,9 @@ struct ImageSizeSheet: View {
                     guard valid else { return }
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))
-                }.configuredNativeShortcut(.return).disabled(!valid)
+                }.configuredNativeShortcut(.return)
+                    .buttonStyle(CompositorProminentButtonStyle(nativeProminent: false))
+                    .disabled(!valid)
             }
         }.textFieldStyle(.roundedBorder).padding(24).frame(width: 430)
     }

@@ -21,7 +21,7 @@ struct EffectsSheet: View {
                     .configuredNativeShortcut(.escape)
                 Spacer()
                 Button("OK") { session.finishEffectsEditing(commit: true) }
-                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
             }
         }
         .padding(20).frame(width: 340).fixedSize()
@@ -45,12 +45,12 @@ struct EffectsSheet: View {
             }), range: 0...100, unit: "%")
             HStack(spacing: 10) {
                 Text("Position").frame(width: 64, alignment: .leading)
-                Picker("Position", selection: Binding(get: { effect.inside }, set: { inside in
+                CompositorSegmentedPicker("Position", selection: Binding(get: { effect.inside }, set: { inside in
                     session.changeEffects { $0.stroke?.inside = inside }
-                })) {
-                    Text("Outside").tag(false)
-                    Text("Inside").tag(true)
-                }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                }),
+                                         options: [false, true]) {
+                    $0 ? Text("Inside") : Text("Outside")
+                }.fixedSize()
                 Spacer()
             }
         }

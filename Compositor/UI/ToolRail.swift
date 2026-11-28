@@ -39,6 +39,7 @@ struct ToolRail: View {
 struct ToolRailStack: View {
     @Bindable var session: EditorSession
     let columns: Int
+    @Environment(\.compositorAmber) private var amber
 
     private var tools: [NavigationTool] { NavigationTool.allCases.filter { $0 != .idle } }
 
@@ -76,7 +77,8 @@ struct ToolRailStack: View {
                 }
             }
             .frame(width: ToolRailLayout.buttonSize, height: ToolRailLayout.buttonSize)
-            .background(session.tool == tool ? CompositorAppearance.ink.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+            .background(session.tool == tool ? (amber ? CompositorAppearance.amberButton : CompositorAppearance.ink.opacity(0.12)) : .clear,
+                        in: RoundedRectangle(cornerRadius: 7))
             .overlay {
                 RoundedRectangle(cornerRadius: 7)
                     .strokeBorder(session.tool == tool ? CompositorAppearance.ink.opacity(0.14) : .clear)
@@ -84,7 +86,7 @@ struct ToolRailStack: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
-        .foregroundStyle(.primary)
+        .foregroundStyle(amber ? CompositorAppearance.amberForeground : .primary)
         .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
     }
 }

@@ -161,7 +161,7 @@ struct NewCanvasSheet: View {
                     lastWidth = w
                     lastHeight = h
                 }
-                .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
                 .disabled(!valid).accessibilityIdentifier("createCanvas")
             }
         }

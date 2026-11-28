@@ -8,10 +8,10 @@ struct GradientControls: View {
             Text("Gradient").font(ToolHeaderStyle.titleFont)
             ScrollView(.horizontal) {
                 HStack(spacing: 12) {
-                    Picker("Shape", selection: $session.gradientSettings.shape) {
-                        ForEach(GradientShape.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    CompositorSegmentedPicker("Shape", selection: $session.gradientSettings.shape,
+                                             options: GradientShape.allCases) {
+                        Text($0.rawValue)
+                    }.fixedSize()
                     .help("Linear runs along the line; Radial spreads out from the start point")
                     swatch
                     Picker("Colors", selection: $session.gradientSettings.style) {

@@ -18,12 +18,14 @@ enum CanvasThumbnail {
     /// The transparency checkerboard with the layer's pixels (`image`, usually its small preview) placed
     /// on the canvas by `transform`. Without an image it is an empty canvas.
     static func layer(_ image: CGImage?, transform: LayerTransform, canvas: CGSize, box: CGFloat,
-                      lightAppearance: Bool = false) -> NSImage {
+                      lightAppearance: Bool = false, amberAppearance: Bool = false) -> NSImage {
         let tones = lightAppearance ? CompositorAppearance.lightCheckerboard : (base: 0.22, alternate: 0.32)
         return render(canvas: canvas, box: box) { context, size, scale in
-            context.setFillColor(gray: tones.base, alpha: 1)
+            if amberAppearance { context.setFillColor(CompositorAppearance.amberCheckerboard.base.cgColor) }
+            else { context.setFillColor(gray: tones.base, alpha: 1) }
             context.fill(CGRect(origin: .zero, size: size))
-            context.setFillColor(gray: tones.alternate, alpha: 1)
+            if amberAppearance { context.setFillColor(CompositorAppearance.amberCheckerboard.alternate.cgColor) }
+            else { context.setFillColor(gray: tones.alternate, alpha: 1) }
             let tile = 6 * backingScale
             for row in 0..<Int(ceil(size.height / tile)) {
                 for column in 0..<Int(ceil(size.width / tile)) where (row + column).isMultiple(of: 2) {

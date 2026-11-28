@@ -84,7 +84,7 @@ struct LevelsSheet: View {
                 Spacer()
                 if edit?.committing == true { ProgressView().controlSize(.small) }
                 Button("OK") { Task { await session.commitLevels() } }
-                    .configuredNativeShortcut(.return).buttonStyle(.borderedProminent)
+                    .configuredNativeShortcut(.return).buttonStyle(CompositorProminentButtonStyle())
             }
         }
         .padding(24).frame(width: 440).fixedSize()

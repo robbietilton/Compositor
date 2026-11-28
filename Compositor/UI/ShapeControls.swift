@@ -18,13 +18,13 @@ struct ShapeControls: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("Shape").font(ToolHeaderStyle.titleFont)
-            Picker("Shape", selection: Binding(get: { session.shapeKind }, set: { kind in
+            CompositorSegmentedPicker("Shape", selection: Binding(get: { session.shapeKind }, set: { kind in
                 session.cancelShape()
                 session.shapeKind = kind
-            })) {
-                ForEach(ShapeKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            }),
+                                     options: ShapeKind.allCases) {
+                Text($0.rawValue)
+            }.fixedSize()
             .help("Shift-U (or Tab) steps through Rectangle, Ellipse and Line")
             HStack(spacing: 6) {
                 Text(showsStroke ? "Fill" : "Color")
@@ -117,7 +117,7 @@ struct ShapeControls: View {
                       : "Round the rectangle's corners by this many pixels; 0 keeps them square")
                 Toggle("Smooth Corners", isOn: Binding(get: { session.displayedShapeSmoothing },
                                                       set: { session.setDisplayedShapeSmoothing($0) }))
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(CompositorCheckboxStyle())
                     .fixedSize()
                     .disabled(session.displayedCornerRadius <= 0)
                     .help(session.displayedCornerRadius <= 0

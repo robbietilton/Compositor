@@ -13,13 +13,44 @@ enum PanelAppearance {
         guard !CompositorAppearance.isLight(appearance) else { return .labelColor }
         return NSColor(srgbRed: 161.0 / 255, green: 160.0 / 255, blue: 161.0 / 255, alpha: 1)
     }
-    static let title = Color(nsColor: titleColor)
+    static var nativeTitle: NSColor {
+        CompositorAppearance.applied == .amber ? CompositorAppearance.amberSecondary : titleColor
+    }
+}
+
+extension View {
+    func panelSurface() -> some View { modifier(PanelSurface()) }
+}
+
+private struct PanelSurface: ViewModifier {
+    @Environment(\.compositorAmber) private var amber
+
+    func body(content: Content) -> some View {
+        content.background(amber ? CompositorAppearance.amberPanel : PanelAppearance.content)
+    }
+}
+
+struct PanelTitleColor: ViewModifier {
+    @Environment(\.compositorAmber) private var amber
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(Color(nsColor: amber ? CompositorAppearance.amberSecondary : PanelAppearance.titleColor))
+    }
 }
 
 /// Draws the centered title in the existing title bar without adding an AppKit toolbar.
 final class PanelTitleBar: NSView {
     private let label = NSTextField(labelWithString: "")
     private var closeButtonFrame: NSRect?
+
+    static func refreshAppearance() {
+        for window in NSApp.windows {
+            for case let bar as PanelTitleBar in window.contentView?.superview?.subviews ?? [] {
+                bar.label.textColor = PanelAppearance.nativeTitle
+                bar.needsDisplay = true
+            }
+        }
+    }
 
     static func install(in window: NSWindow, title: String, showsCloseButton: Bool = false) {
         guard let content = window.contentView, let frameView = content.superview else { return }
@@ -71,7 +102,7 @@ final class PanelTitleBar: NSView {
         super.init(frame: frame)
         label.alignment = .center
         label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        label.textColor = PanelAppearance.titleColor
+        label.textColor = PanelAppearance.nativeTitle
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         label.autoresizingMask = [.width]
@@ -98,7 +129,7 @@ final class PanelTitleBar: NSView {
             shape.windingRule = .evenOdd
             shape.addClip()
         }
-        PanelAppearance.darkHeader.setFill()
+        (CompositorAppearance.applied == .amber ? CompositorAppearance.amberHeader : PanelAppearance.darkHeader).setFill()
         dirtyRect.intersection(bounds).fill()
     }
 
