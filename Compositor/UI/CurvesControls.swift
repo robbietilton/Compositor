@@ -5,6 +5,13 @@ struct CurvesControls: View {
     @State private var selected: Int?
     @State private var dragging: Int?
     private var points: [CurvePoint] { settings.channels[settings.channel.index] }
+    /// Each channel's curve color: RGB in white, then red, green and blue.
+    private static let colors: [Color] = [.white, Color(red: 1, green: 0.27, blue: 0.23), Color(red: 0.2, green: 0.85, blue: 0.3),
+                                          Color(red: 0.3, green: 0.55, blue: 1)]
+    /// The untouched diagonal, from black to white.
+    private static func isStraight(_ points: [CurvePoint]) -> Bool {
+        points.count == 2 && points[0].x == 0 && points[0].y == 0 && points[1].x == 255 && points[1].y == 255
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("Channel", selection: $settings.channel) {
@@ -12,6 +19,17 @@ struct CurvesControls: View {
             }.onChange(of: settings.channel) { _, _ in selected = nil; dragging = nil }
             Canvas { context, size in
                 func position(_ p: CurvePoint) -> CGPoint { CGPoint(x: p.x/255*size.width, y: (1-p.y/255)*size.height) }
+                // A color channel's graph runs from its color, top left, to its opposite, bottom right, as in Photoshop:
+                // raising the curve adds the color and lowering it adds the opposite (red and cyan, green and magenta,
+                // blue and yellow). Dark, so the curve and grid stay clear.
+                if settings.channel != .rgb {
+                    let channel = settings.channel.index - 1
+                    let color = (0..<3).map { $0 == channel ? 1.0 : 0.0 }
+                    func tone(_ c: [Double]) -> Color { Color(red: c[0] * 0.32, green: c[1] * 0.27, blue: c[2] * 0.36) }
+                    context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
+                        Gradient(colors: [tone(color), tone(color.map { 1 - $0 })]),
+                        startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+                }
                 var grid = Path()
                 for i in 0...4 {
                     let f = CGFloat(i)/4
@@ -19,15 +37,27 @@ struct CurvesControls: View {
                     grid.move(to: CGPoint(x: 0, y: f*size.height)); grid.addLine(to: CGPoint(x: size.width, y: f*size.height))
                 }
                 context.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 1)
-                var line = Path()
-                for x in 0...255 {
-                    let p = position(CurvePoint(x: Double(x), y: settings.value(Double(x), channel: settings.channel.index)))
-                    if x == 0 { line.move(to: p) } else { line.addLine(to: p) }
+                func curve(_ channel: Int) -> Path {
+                    var line = Path()
+                    for x in 0...255 {
+                        let p = position(CurvePoint(x: Double(x), y: settings.value(Double(x), channel: channel)))
+                        if x == 0 { line.move(to: p) } else { line.addLine(to: p) }
+                    }
+                    return line
                 }
-                context.stroke(line, with: .color(.white), lineWidth: 2)
+                // On RGB, each color channel that's been changed shows behind it in its own color, as in Photoshop; a
+                // channel left straight would only lie on the diagonal.
+                let current = settings.channel.index
+                if settings.channel == .rgb {
+                    for channel in 1...3 where !Self.isStraight(settings.channels[channel]) {
+                        context.stroke(curve(channel), with: .color(Self.colors[channel]), lineWidth: 1.5)
+                    }
+                }
+                context.stroke(curve(current), with: .color(Self.colors[current]), lineWidth: 2)
                 for (i, point) in points.enumerated() {
                     let p = position(point)
-                    context.fill(Path(ellipseIn: CGRect(x: p.x-4, y: p.y-4, width: 8, height: 8)), with: .color(selected == i ? .accentColor : .white))
+                    context.fill(Path(ellipseIn: CGRect(x: p.x-4, y: p.y-4, width: 8, height: 8)),
+                                 with: .color(selected == i ? .accentColor : Self.colors[current]))
                 }
             }
             .frame(height: 260).background(Color.black.opacity(0.35))
