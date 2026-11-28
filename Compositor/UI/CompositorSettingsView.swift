@@ -81,7 +81,7 @@ struct SettingsWindowMarker: NSViewRepresentable {
 private struct GeneralSettings: View {
     @AppStorage(CompositorAppearance.defaultsKey) private var appearance = CompositorAppearance.dark
     @AppStorage(MCPAccess.defaultsKey) private var access = MCPAccess.undecided
-    private let mcpDescription = "Lets local MCP clients view and edit open projects."
+    private let mcpDescription = "Lets AI apps view and edit your open projects."
 
     var body: some View {
         ScrollView {
@@ -89,20 +89,21 @@ private struct GeneralSettings: View {
                 Text("General").font(.title2.weight(.semibold))
                 SettingsCard {
                     HStack {
-                        Text("Appearance").font(.headline)
+                        Text("Appearance").font(SettingsText.title)
                         Spacer()
                         CompositorSegmentedPicker("Appearance", selection: Binding(get: { appearance }, set: { option in
                             appearance = option
                             option.apply()
                         }), options: CompositorAppearance.allCases) { Text($0.rawValue) }
+                        .controlSize(.small)
                         .fixedSize()
                     }
                 }
                 SettingsCard {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Allow MCP control").font(.headline)
-                            Text(mcpDescription).foregroundStyle(.secondary)
+                            Text("Allow MCP control").font(SettingsText.title)
+                            Text(mcpDescription).font(SettingsText.note).foregroundStyle(.secondary)
                         }
                         .accessibilityHidden(true)
                         Spacer()
@@ -115,16 +116,16 @@ private struct GeneralSettings: View {
                         .accessibilityHint(mcpDescription)
                     }
                     Divider()
-                    Text("Add Compositor to your AI app").font(.subheadline.weight(.semibold))
+                    Text("Add Compositor to your AI app").font(SettingsText.note).foregroundStyle(.secondary)
                     // With MCP control off, no AI app can use Compositor: the rows are dimmed and show no connection,
                     // though what's connected is kept for when it's turned on again.
                     ForEach(MCPClient.allCases, id: \.self) { MCPClientRow(client: $0, allowed: access == .allowed) }
                         .disabled(access != .allowed)
                     if access != .allowed {
-                        Text("Turn on Allow MCP control to connect AI apps.").font(.caption).foregroundStyle(.secondary)
+                        Text("Turn on Allow MCP control to connect AI apps.").font(SettingsText.note).foregroundStyle(.secondary)
                     }
                     if let problem = MCPConnect.shared.problem {
-                        Text(problem).font(.caption).foregroundStyle(.red)
+                        Text(problem).font(SettingsText.note).foregroundStyle(.red)
                     }
                 }
             }
@@ -225,7 +226,8 @@ private struct MCPClientRow: View {
         switch client {
         case .chatGPT:
             if MCPConnect.installed(MCPConnect.chatGPTBundleIDs) == nil { return "ChatGPT isn't on this Mac." }
-            return connect.chatGPTConnected ? "Connected. Quit and reopen ChatGPT to use it." : "Adds Compositor to ChatGPT."
+            if !connect.chatGPTConnected { return "Adds Compositor to ChatGPT." }
+            return connect.chatGPTNeedsRestart ? "Connected. Restart ChatGPT to start using it." : "Connected. Ask ChatGPT in a new chat."
         case .claude:
             if MCPConnect.installed([MCPConnect.claudeBundleID]) == nil { return "Claude isn't on this Mac." }
             if connect.claudeConnected { return "Connected. Ask Claude in a new chat." }
@@ -240,14 +242,15 @@ private struct MCPClientRow: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    Text(client.rawValue)
+                    Text(client.rawValue).font(SettingsText.name)
                     if allowed, client == .chatGPT ? connect.chatGPTConnected : client == .claude && connect.claudeConnected {
                         Circle().fill(.green).frame(width: 6, height: 6).accessibilityLabel("Connected")
                     }
                 }
-                Text(note).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(note).font(SettingsText.note).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
+            Group {
             switch client {
             case .chatGPT:
                 if connect.chatGPTConnected {
@@ -272,11 +275,20 @@ private struct MCPClientRow: View {
                 }
                 .help(claudeCodeSetup)
             }
+            }
+            .controlSize(.small)
         }
         .onAppear { connect.refresh() }
         // Back from Claude or ChatGPT: see what changed there.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in connect.refresh() }
     }
+}
+
+/// The General page's three kinds of text: a card's title, an app's name under it, and every note in gray.
+private enum SettingsText {
+    static let title = Font.system(size: 13, weight: .semibold)
+    static let name = Font.system(size: 13)
+    static let note = Font.system(size: 11)
 }
 
 private struct SettingsCard<Content: View>: View {

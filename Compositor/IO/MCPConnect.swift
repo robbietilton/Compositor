@@ -15,6 +15,15 @@ final class MCPConnect {
     static let header = "[mcp_servers.compositor]"
 
     private(set) var chatGPTConnected = false
+    /// When Connect added Compositor to ChatGPT's settings, this session: a ChatGPT already running then reads them
+    /// only once it's started again.
+    private var chatGPTConnectedAt: Date?
+    var chatGPTNeedsRestart: Bool {
+        guard chatGPTConnected, let at = chatGPTConnectedAt else { return false }
+        return NSWorkspace.shared.runningApplications.contains {
+            Self.chatGPTBundleIDs.contains($0.bundleIdentifier ?? "") && ($0.launchDate ?? .distantFuture) < at
+        }
+    }
     /// Compositor's extension is in Claude and hasn't been disconnected here.
     var claudeConnected: Bool { claudeInstalled && !claudeDisconnected }
     private(set) var claudeInstalled = false
@@ -58,12 +67,16 @@ final class MCPConnect {
             problem = "Open ChatGPT once first, so it makes its settings, then connect."
             return
         }
-        do { try Self.addCompositor(in: Self.chatGPTFolder) } catch { problem = "Couldn't add Compositor to ChatGPT's settings." }
+        do {
+            try Self.addCompositor(in: Self.chatGPTFolder)
+            chatGPTConnectedAt = Date()
+        } catch { problem = "Couldn't add Compositor to ChatGPT's settings." }
         refresh()
     }
 
     func disconnectChatGPT() {
         problem = nil
+        chatGPTConnectedAt = nil
         do { try Self.removeCompositor(in: Self.chatGPTFolder) } catch { problem = "Couldn't take Compositor out of ChatGPT's settings." }
         refresh()
     }
