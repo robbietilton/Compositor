@@ -72,10 +72,16 @@ struct MCPConnectTests {
         #expect((mode ?? 0) & 0o111 != 0, "executable")
     }
 
-    /// The extension starts a Compositor's companion that's there, even when the one it was made with is gone.
-    @Test func theClaudeExtensionFindsACompositorWhenItsOwnIsGone() throws {
-        let script = MCPConnect.launcher("/nowhere/Compositor.app/Contents/MacOS/compositor-mcp")
-            .replacingOccurrences(of: "exec \"$app\"", with: "echo \"$app\"")
+    /// The extension starts a Compositor's companion that's there: the running one's or the one in Applications when
+    /// there is one, else the one it was made with (a Mac without Compositor installed, as CI's, has only that).
+    @Test func theClaudeExtensionStartsACompanionThatsThere() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent("ext-\(UUID().uuidString)/Compositor.app", isDirectory: true)
+        let helper = app.appendingPathComponent("Contents/MacOS/compositor-mcp")
+        try FileManager.default.createDirectory(at: helper.deletingLastPathComponent(), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: app.deletingLastPathComponent()) }
+        try "#!/bin/sh\n".write(to: helper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+        let script = MCPConnect.launcher(helper.path).replacingOccurrences(of: "exec \"$app\"", with: "echo \"$app\"")
         let finder = Process()
         finder.executableURL = URL(fileURLWithPath: "/bin/sh")
         finder.arguments = ["-c", script]
