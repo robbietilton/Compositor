@@ -116,6 +116,17 @@ actor ImageExporter {
         try pngData(render(snapshot))
     }
 
+    func automationPreview(_ snapshot: ProjectSnapshot) throws -> Data {
+        let image = try render(snapshot).image
+        let scale = min(1, 960 / CGFloat(max(image.width, image.height)))
+        let width = max(1, Int(CGFloat(image.width) * scale))
+        let height = max(1, Int(CGFloat(image.height) * scale))
+        let context = try BrushRaster.context(width: width, height: height, mask: false)
+        BrushRaster.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height), mask: false, context: context)
+        guard let preview = context.makeImage() else { throw ExportError.render }
+        return try encode(preview, type: .png)
+    }
+
     /// The document as a layered Photoshop file (see `PSDWriter`), and its flattened picture for the preview. 16 bits a
     /// channel when a layer is.
     func psdData(_ snapshot: ProjectSnapshot) throws -> (data: Data, preview: CGImage) {

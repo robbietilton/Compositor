@@ -8,13 +8,13 @@ enum CanvasRuler {
 struct CanvasRulerCorner: View {
     var body: some View {
         Rectangle()
-            .fill(Color(white: 0.2))
+            .fill(CompositorAppearance.rulerBackground)
             .overlay(alignment: .bottomTrailing) {
                 Path { path in
                     path.move(to: CGPoint(x: 5, y: CanvasRuler.thickness - 4))
                     path.addLine(to: CGPoint(x: CanvasRuler.thickness - 4, y: 5))
                 }
-                .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                .stroke(CompositorAppearance.ink.opacity(0.28), lineWidth: 1)
             }
             .frame(width: CanvasRuler.thickness, height: CanvasRuler.thickness)
     }
@@ -55,8 +55,14 @@ final class CanvasRulerNSView: NSView {
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.2, alpha: 1).setFill()
+        let light = CompositorAppearance.isLight(effectiveAppearance)
+        NSColor(white: light ? CompositorAppearance.lightRulerWhite : 0.2, alpha: 1).setFill()
         bounds.fill()
         guard let document = session.document else { return }
         let size = document.size
@@ -64,8 +70,8 @@ final class CanvasRulerNSView: NSView {
         let step = Self.majorStep(pointsPerPixel: scale)
         let minor = step / 10
         let hairline = 1 / max(window?.backingScaleFactor ?? 1, 1)
-        let tick = NSColor(white: 0.62, alpha: 1)
-        let labels = NSColor(white: 0.78, alpha: 1)
+        let tick = NSColor(white: light ? 0.42 : 0.62, alpha: 1)
+        let labels = NSColor(white: light ? 0.25 : 0.78, alpha: 1)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular),
             .foregroundColor: labels
@@ -121,7 +127,7 @@ final class CanvasRulerNSView: NSView {
             }
             value += minor
         }
-        NSColor(white: 0.08, alpha: 1).setFill()
+        NSColor(white: light ? 0.75 : 0.08, alpha: 1).setFill()
         if axis == .horizontal {
             NSRect(x: 0, y: bounds.height - hairline, width: bounds.width, height: hairline).fill()
         } else {

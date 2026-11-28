@@ -260,7 +260,7 @@ nonisolated struct LayerAdjustment: Codable, Equatable, Sendable {
 }
 
 extension EditorSession {
-    func addAdjustment(_ kind: AdjustmentKind) {
+    func addAdjustment(_ kind: AdjustmentKind, opensEditor: Bool = true) {
         guard canEditLayers, let document, document.layers.count < 10_000 else { return }
         var layer = ImageLayer(name: kind.rawValue, blankSize: document.size)
         var adjustment = LayerAdjustment(kind: kind)
@@ -290,7 +290,7 @@ extension EditorSession {
         activeLayerID = layer.id
         endEdit()
         // Invert has nothing to set, so the new layer just applies rather than opening an editor.
-        if kind.isEditable { adjustmentEditingID = layer.id }
+        if opensEditor, kind.isEditable { adjustmentEditingID = layer.id }
     }
     func updateAdjustment(_ id: UUID, value: LayerAdjustment) {
         guard let index = document?.layers.firstIndex(where: { $0.id == id }), value.isValid else { return }

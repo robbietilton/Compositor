@@ -64,7 +64,7 @@ struct TypeControls: View {
                             } label: {
                                 Image(systemName: alignment == .left ? "text.alignleft" : alignment == .center ? "text.aligncenter" : "text.alignright")
                                     .frame(width: 30, height: 26)
-                                    .background(selected ? Color.white.opacity(0.14) : .clear,
+                                    .background(selected ? CompositorAppearance.ink.opacity(0.14) : .clear,
                                                 in: RoundedRectangle(cornerRadius: 4))
                                     // Without this the glyph's own strokes are the only thing a click lands on.
                                     .contentShape(RoundedRectangle(cornerRadius: 4))

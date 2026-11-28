@@ -21,14 +21,14 @@ struct ToolHeaderPill<Content: View>: View {
         HStack(spacing: 0) {
             Group(subviews: content) { segments in
                 ForEach(segments.indices, id: \.self) { index in
-                    if index > 0 { Rectangle().fill(.white.opacity(isEnabled ? 0.12 : 0.06)).frame(width: 1, height: 12) }
+                    if index > 0 { Rectangle().fill(CompositorAppearance.ink.opacity(isEnabled ? 0.12 : 0.06)).frame(width: 1, height: 12) }
                     segments[index]
                 }
             }
         }
         .buttonStyle(ToolHeaderPillButtonStyle(width: segmentWidth))
         // Fainter while disabled, as the system's own buttons go, so a dimmed pill doesn't stand out from them.
-        .background(.white.opacity(isEnabled ? 0.09 : 0.045))
+        .background(CompositorAppearance.ink.opacity(isEnabled ? 0.09 : 0.045))
         .clipShape(Capsule())
     }
 }
@@ -42,7 +42,7 @@ private struct ToolHeaderPillButtonStyle: ButtonStyle {
             .opacity(isEnabled ? 1 : 0.4)
             .frame(width: width, height: 24)
             .contentShape(Rectangle())
-            .background(.white.opacity(configuration.isPressed ? 0.14 : 0))
+            .background(CompositorAppearance.ink.opacity(configuration.isPressed ? 0.14 : 0))
     }
 }
 

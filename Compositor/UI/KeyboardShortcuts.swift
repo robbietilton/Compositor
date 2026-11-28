@@ -147,7 +147,6 @@ struct ShortcutDefinition: Identifiable {
 final class ShortcutSettings {
     static let shared = ShortcutSettings()
     private(set) var overrides: [String: ShortcutChord] = [:]
-    @ObservationIgnored private let panel = FloatingPanelController(name: "keyboardShortcuts")
     private static let storageKey = "keyboardShortcuts.v1"
     private let defaults: UserDefaults
     /// `defaults` is the app's own everywhere but tests, which use a throwaway suite.
@@ -185,15 +184,10 @@ final class ShortcutSettings {
         guard let definition = ShortcutDefinition.all.first(where: { !$0.isMenu && $0.original == original }) else { return original }
         return chord(definition)
     }
-    func show() {
-        panel.show(title: "Keyboard Shortcuts", content: KeyboardShortcutsSheet(settings: self))
-    }
-    func close() { panel.close() }
     func save(_ values: [String: ShortcutChord]) {
         guard Self.problem(in: values) == nil, let data = try? JSONEncoder().encode(values) else { return }
         overrides = values
         defaults.set(data, forKey: Self.storageKey)
-        close()
     }
     static func problem(in values: [String: ShortcutChord]) -> String? {
         var assigned: [ShortcutChord: String] = [:]
@@ -262,7 +256,7 @@ extension View {
     }
 }
 
-private struct KeyboardShortcutsSheet: View {
+struct KeyboardShortcutsSettings: View {
     let settings: ShortcutSettings
     @State private var draft: [String: ShortcutChord]
     @State private var search = ""
@@ -305,10 +299,10 @@ private struct KeyboardShortcutsSheet: View {
                     }
                     Divider().padding(.vertical, 8)
                     Text("Contextual keys & mouse gestures").font(.headline)
-                    Text("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen. The shortcut editor itself always uses Return to save and Esc to cancel when not recording.")
+                    Text("Text fields keep standard macOS editing keys. Dialogs share the Apply/Cancel assignments above. Numeric fields use Up/Down, with Shift for larger steps. Standard macOS commands include ⌘Q to quit and ⌃⌘F for full screen.")
                     Text("Option temporarily selects the eyedropper in painting tools. Shift constrains shapes/movement or adds to a selection; Option subtracts from selections or draws from center. Command-drag moves selected pixels; Command-Option-drag copies them. Option-drag duplicates layers/folders/effects; Option-click at a layer boundary toggles clipping. Command-click a thumbnail loads its selection. Control bypasses snapping. Right-drag adjusts brush size. Modifier-and-mouse gestures are fixed.")
                 }.padding(.trailing, 8)
-            }.frame(height: 465)
+            }
             // Only a conflict takes room here; an empty line left a wide gap above the buttons.
             if let problem = ShortcutSettings.problem(in: draft) {
                 Text(problem)
@@ -319,12 +313,13 @@ private struct KeyboardShortcutsSheet: View {
             HStack {
                 Button("Restore Defaults") { recording = nil; draft = [:] }
                 Spacer()
-                Button("Cancel") { settings.close() }.keyboardShortcut(.cancelAction)
+                Button("Revert Changes") { recording = nil; draft = settings.overrides }
+                    .disabled(recording == nil && draft == settings.overrides)
                 Button("Save") { settings.save(draft) }.keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(recording != nil || ShortcutSettings.problem(in: draft) != nil)
+                    .disabled(recording != nil || draft == settings.overrides || ShortcutSettings.problem(in: draft) != nil)
             }
-        }.padding(24).frame(width: 660).fixedSize()
+        }.padding(24)
     }
 }
 

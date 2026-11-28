@@ -122,7 +122,7 @@ struct SliderTrackView: View {
                     Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
                         .frame(height: thickness)
                 } else {
-                    Capsule().fill(Color.white.opacity(0.14)).frame(height: thickness)
+                    Capsule().fill(CompositorAppearance.ink.opacity(0.14)).frame(height: thickness)
                     Capsule().fill(Color.accentColor).frame(width: SliderGeometry.fillWidth(fraction: fraction, width: width), height: thickness)
                 }
                 knob

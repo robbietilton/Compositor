@@ -76,10 +76,10 @@ struct ToolRailStack: View {
                 }
             }
             .frame(width: ToolRailLayout.buttonSize, height: ToolRailLayout.buttonSize)
-            .background(session.tool == tool ? Color.white.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+            .background(session.tool == tool ? CompositorAppearance.ink.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
             .overlay {
                 RoundedRectangle(cornerRadius: 7)
-                    .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
+                    .strokeBorder(session.tool == tool ? CompositorAppearance.ink.opacity(0.14) : .clear)
             }
             .contentShape(Rectangle())
         }

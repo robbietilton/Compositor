@@ -775,6 +775,7 @@ final class CanvasView: NSView {
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        updateSurroundAppearance()
         syncGeometry()
         if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor); self.modifierMonitor = nil }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
@@ -954,8 +955,20 @@ final class CanvasView: NSView {
         }
     }
 
+    private var surroundGray: CGFloat = 0.105
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateSurroundAppearance()
+        needsDisplay = true
+    }
+
+    private func updateSurroundAppearance() {
+        surroundGray = CompositorAppearance.isLight(effectiveAppearance) ? CompositorAppearance.lightSurroundWhite : 0.105
+    }
+
     /// The gray around the canvas, black in Canvas Only (F).
-    private var surround: CGFloat { session.canvasOnly ? 0 : 0.105 }
+    private var surround: CGFloat { session.canvasOnly ? 0 : surroundGray }
 
     override func draw(_ dirtyRect: NSRect) {
         // The grid and a text frame being dragged follow the pixels under them.

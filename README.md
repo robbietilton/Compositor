@@ -17,6 +17,10 @@ Get Compositor from [robbietilton.com/compositor](https://robbietilton.com/compo
 brew install --cask robbietilton-compositor
 ```
 
+## Automation
+
+Connect an MCP client to inspect and edit live Compositor projects with the [optional local companion](docs/mcp.md).
+
 ## Features
 
 ### Layers

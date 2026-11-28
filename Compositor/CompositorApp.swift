@@ -251,7 +251,6 @@ struct CompositorApp: App {
                 }
                 CommandGroup(after: .pasteboard) {
                     Divider()
-                    Button("Keyboard Shortcuts…") { ShortcutSettings.shared.show() }
                     // Photoshop's fill shortcuts; in a text field they keep their text meaning.
                     Button("Fill with Foreground Color") {
                         if NSApp.isEditingText {
@@ -436,6 +435,9 @@ struct CompositorApp: App {
                         .disabled(!session.canEditLayers || session.activeLayer == nil)
                 }
             }
+        Settings {
+            CompositorSettingsView(updater: applicationDelegate.updater).roundedControls()
+        }
     }
 
     /// View › CMYK › Profile › Load Profile: a CMYK ICC profile picked from anywhere, kept and chosen.

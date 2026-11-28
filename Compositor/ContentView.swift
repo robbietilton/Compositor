@@ -168,7 +168,7 @@ struct ContentView: View {
     // Split again for 1.1: the chain outgrew the type checker once more.
     @ViewBuilder private var editorChrome: some View {
         editorStack
-        .background(Color(white: 0.14))
+        .background(CompositorAppearance.editorBackground)
         .background {
             if let applicationDelegate, applicationDelegate.projects.workspace == nil {
                 ProjectWindowBridge(controller: applicationDelegate.projects).frame(width: 0, height: 0)
@@ -203,7 +203,6 @@ struct ContentView: View {
             }
         }
         .onAppear { applicationDelegate?.showEditor = { openWindow(id: "editor") } }
-        .preferredColorScheme(.dark)
         // Canvas Only (F): the canvas runs up under where the title bar was, so no gray strip is left across the top.
         // The toolbar itself is hidden and shown by the window (see `toggleCanvasOnly`), which lays its buttons out
         // again properly; hidden here instead, it came back with the tabs over the window buttons.

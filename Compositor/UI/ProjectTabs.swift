@@ -256,7 +256,7 @@ private struct NewTabDropSlot: View {
         Label("New", systemImage: "plus")
             .font(.system(size: 12, weight: .medium))
             .padding(.horizontal, 14).frame(height: 28)
-            .background(targeted ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.04), in: Capsule())
+            .background(targeted ? Color.accentColor.opacity(0.3) : CompositorAppearance.ink.opacity(0.04), in: Capsule())
             .overlay(Capsule().strokeBorder(targeted ? Color.accentColor : Color.secondary,
                 style: StrokeStyle(lineWidth: targeted ? 2 : 1, dash: targeted ? [] : [4, 3])))
             .contentShape(Capsule())
@@ -335,8 +335,9 @@ private struct OverflowMenuAnchor: NSViewRepresentable {
 }
 
 struct EditorToolbarPillStyle: ButtonStyle {
-    static let fill = Color(white: 0.19)
-    static let inactiveTabFill = Color(.sRGB, white: 45.0 / 255.0)
+    static let fill = CompositorAppearance.gray(dark: 0.19, light: 0.83)
+    static let inactiveTabFill = CompositorAppearance.gray(dark: 45.0 / 255.0, light: 0.90)
+    private static let pressedFill = CompositorAppearance.gray(dark: 0.25, light: 0.77)
     static let inactiveTabText = Color.secondary.opacity(0.85)
     var circular = false
     @Environment(\.isEnabled) private var enabled
@@ -347,7 +348,7 @@ struct EditorToolbarPillStyle: ButtonStyle {
             .frame(minWidth: circular ? 28 : 42)
             .frame(height: 28)
             .foregroundStyle(enabled ? Color.primary : Color.secondary)
-            .background(configuration.isPressed ? Color(white: 0.25) : Self.fill, in: Capsule())
+            .background(configuration.isPressed ? Self.pressedFill : Self.fill, in: Capsule())
             .contentShape(Capsule())
     }
 }

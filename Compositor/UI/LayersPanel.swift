@@ -129,7 +129,7 @@ struct FooterMenu<Icon: View>: View {
                 icon()
                 Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
             }
-            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.white.opacity(0.5)))
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(CompositorAppearance.ink.opacity(0.5)))
             .background(FooterMenuAnchorView(anchor: anchor))
             // As wide as a pop-up button's, its arrow taking the room the plain buttons give to padding; as tall as theirs.
             .padding(.horizontal, 4).padding(.vertical, 12)
@@ -219,7 +219,7 @@ struct FooterIcon: View {
         // Disabled, as dim as the menus' icons (a quarter-strength white, measured): SwiftUI halves a disabled
         // button's own color again, so the button asks for half-strength white.
         Image(systemName: systemName)
-            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.white.opacity(0.5)))
+            .foregroundStyle(isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(CompositorAppearance.ink.opacity(0.5)))
             .footerHitArea()
     }
 }

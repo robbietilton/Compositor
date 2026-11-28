@@ -127,7 +127,7 @@ struct GIFTimeline: View {
                 .resizable().interpolation(.medium).aspectRatio(contentMode: .fit)
                 .frame(width: 56, height: 56)
                 .background(Color.black.opacity(0.25), in: box)
-                .overlay { box.strokeBorder(selected ? Color.accentColor : Color.white.opacity(0.12), lineWidth: selected ? 2 : 1) }
+                .overlay { box.strokeBorder(selected ? Color.accentColor : CompositorAppearance.ink.opacity(0.12), lineWidth: selected ? 2 : 1) }
             Text("\(number)").font(.caption2.monospacedDigit()).foregroundStyle(selected ? .primary : .secondary)
         }
         .contentShape(Rectangle())

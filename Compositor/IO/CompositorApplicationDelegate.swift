@@ -17,6 +17,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     /// Started only after launch: its first-run prompt, shown during launch, kept the editor window from ever opening.
     private let updateDriver = UpdateDriver()
     private let updaterDelegate = UpdaterDelegate()
+    private lazy var automation = EditorAutomation()
     lazy var updater: SPUUpdater = {
         let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: updateDriver, delegate: updaterDelegate)
         updateDriver.updater = updater
@@ -25,6 +26,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
 
     // Finder Open With and Dock drops, including files delivered during launch.
     func application(_ application: NSApplication, open urls: [URL]) {
+        let requests = urls.filter(EditorAutomation.isRequest)
         // Reopening a window that's already showing makes SwiftUI rebuild it, so the app blinks out and back:
         // only a closed editor is reopened.
         if !application.windows.contains(where: { $0.isVisible && $0.identifier?.rawValue.hasPrefix("editor") == true }) {
@@ -33,8 +35,13 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
             // appears. A Dock click's reopen event makes the window, so the app sends itself one once launched.
             else { DispatchQueue.main.async { Self.reopen() } }
         }
-        application.activate()
-        Task { await workspace.receive(urls) }
+        if requests.isEmpty {
+            application.activate()
+            Task { await workspace.receive(urls) }
+        } else {
+            let attachments = urls.filter { !EditorAutomation.isRequest($0) }
+            Task { await automation.receive(requests, attachments: attachments, workspace: workspace) }
+        }
     }
 
     private static func reopen() {
@@ -47,8 +54,7 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // AppKit's own switches for two of the Edit menu's text extras (see `removeSystemExtras`).
         UserDefaults.standard.register(defaults: ["NSDisabledDictationMenuItem": true, "NSDisabledCharacterPaletteMenuItem": true])
-        // Always dark, alerts and open/save panels included, whatever the Mac is set to.
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        CompositorAppearance.saved.apply()
         // The Brush's pressure buttons wait for a tablet pen.
         PenInput.install()
     }
