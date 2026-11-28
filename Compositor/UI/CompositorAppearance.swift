@@ -32,6 +32,8 @@ enum CompositorAppearance: String, CaseIterable {
     static let lightEditorWhite: CGFloat = 0.94
     static let lightSurroundWhite: CGFloat = 0.78
     static let lightRulerWhite: CGFloat = 0.90
+    static let darkCheckerboard: (base: CGFloat, alternate: CGFloat) = (0.30, 0.35)
+    static let lightCheckerboard: (base: CGFloat, alternate: CGFloat) = (0.85, 0.92)
 
     static let ink = gray(dark: 1, light: 0)
     static let editorBackground = gray(dark: 0.14, light: lightEditorWhite)

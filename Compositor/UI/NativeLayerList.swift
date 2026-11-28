@@ -1442,14 +1442,7 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
         let layerSize = framed ? CanvasThumbnail.fittedSize(canvas: canvas, box: 36) : CGSize(width: 36, height: 36)
         thumbnailWidth.constant = layerSize.width
         thumbnailHeight.constant = layerSize.height
-        let key = ThumbnailKey(image: layer.asset.map { ObjectIdentifier($0.thumbnail) }, transform: layer.transform, canvas: canvas, editableText: editableText)
-        if layerID != layer.id || thumbnailKey != key {
-            thumbnail.image = layer.adjustment.map { Self.adjustmentIcon($0.kind.symbol, description: $0.kind.rawValue, quarterTurnClockwise: $0.kind == .curves) }
-                ?? (layer.isGroup ? Self.folderIcon
-                    : editableText ? Self.adjustmentIcon("textformat", description: "Editable text")
-                    : CanvasThumbnail.layer(layer.asset?.thumbnail, transform: layer.transform, canvas: canvas, box: 36))
-            thumbnailKey = key
-        }
+        updateThumbnail(for: layer, canvas: canvas)
         let maskSize = CanvasThumbnail.fittedSize(canvas: canvas, box: 30)
         maskThumbnailWidth.constant = maskSize.width
         maskThumbnailHeight.constant = maskSize.height
@@ -1597,6 +1590,26 @@ private final class LayerCell: NSTableCellView, NSTextFieldDelegate {
     }
     @objc private func toggleExpansion() { if let layerID { session?.toggleGroupExpansion(layerID) } }
     private var thumbnailKey: ThumbnailKey?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard let document = session?.document, let layer = document.layers.first(where: { $0.id == layerID }) else { return }
+        updateThumbnail(for: layer, canvas: document.size)
+    }
+
+    private func updateThumbnail(for layer: ImageLayer, canvas: CGSize) {
+        let editableText = layer.liveText != nil
+        let light = layer.adjustment == nil && !layer.isGroup && !editableText && CompositorAppearance.isLight(effectiveAppearance)
+        let key = ThumbnailKey(image: layer.asset.map { ObjectIdentifier($0.thumbnail) }, transform: layer.transform,
+                               canvas: canvas, editableText: editableText, lightAppearance: light)
+        guard layerID != layer.id || thumbnailKey != key else { return }
+        thumbnail.image = layer.adjustment.map { Self.adjustmentIcon($0.kind.symbol, description: $0.kind.rawValue, quarterTurnClockwise: $0.kind == .curves) }
+            ?? (layer.isGroup ? Self.folderIcon
+                : editableText ? Self.adjustmentIcon("textformat", description: "Editable text")
+                : CanvasThumbnail.layer(layer.asset?.thumbnail, transform: layer.transform, canvas: canvas,
+                                       box: 36, lightAppearance: light))
+        thumbnailKey = key
+    }
     @objc private func toggleVisibility() { if let layerID { session?.toggleLayerVisibility(layerID) } }
     /// Adjustment layers' icons, a little smaller than a bare symbol shows in the thumbnail (roughly
     /// 15.5 pt instead of 18). Drawn into a 36 pt template image (the thumbnail's size), which the button
@@ -1906,6 +1919,7 @@ private struct ThumbnailKey: Equatable {
     let transform: LayerTransform
     let canvas: CGSize
     var editableText = false
+    var lightAppearance = false
 }
 
 extension ImageLayer {

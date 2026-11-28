@@ -338,9 +338,9 @@ private struct OverflowMenuAnchor: NSViewRepresentable {
 }
 
 struct EditorToolbarPillStyle: ButtonStyle {
-    static let fill = CompositorAppearance.gray(dark: 0.19, light: 0.83)
-    static let inactiveTabFill = CompositorAppearance.gray(dark: 45.0 / 255.0, light: 0.90)
-    private static let pressedFill = CompositorAppearance.gray(dark: 0.25, light: 0.77)
+    static let fill = CompositorAppearance.gray(dark: 0.19, light: 0.92)
+    static let inactiveTabFill = CompositorAppearance.gray(dark: 45.0 / 255.0, light: 0.96)
+    private static let pressedFill = CompositorAppearance.gray(dark: 0.25, light: 0.87)
     static let inactiveTabText = Color.secondary.opacity(0.85)
     var circular = false
     @Environment(\.isEnabled) private var enabled

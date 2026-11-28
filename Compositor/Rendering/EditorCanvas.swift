@@ -773,7 +773,7 @@ final class CanvasView: NSView {
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        updateSurroundAppearance()
+        updateCanvasAppearance()
         syncGeometry()
         if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor); self.modifierMonitor = nil }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
@@ -954,15 +954,18 @@ final class CanvasView: NSView {
     }
 
     private var surroundGray: CGFloat = 0.105
+    private var checkerboardTones = CompositorAppearance.darkCheckerboard
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateSurroundAppearance()
+        updateCanvasAppearance()
         needsDisplay = true
     }
 
-    private func updateSurroundAppearance() {
-        surroundGray = CompositorAppearance.isLight(effectiveAppearance) ? CompositorAppearance.lightSurroundWhite : 0.105
+    private func updateCanvasAppearance() {
+        let light = CompositorAppearance.isLight(effectiveAppearance)
+        surroundGray = light ? CompositorAppearance.lightSurroundWhite : 0.105
+        checkerboardTones = light ? CompositorAppearance.lightCheckerboard : CompositorAppearance.darkCheckerboard
     }
 
     /// The gray around the canvas, black in Canvas Only (F).
@@ -990,7 +993,7 @@ final class CanvasView: NSView {
         context.restoreGState()
         context.saveGState()
         context.clip(to: rect.intersection(dirtyRect))
-        context.setFillColor(NSColor(white: 0.30, alpha: 1).cgColor)
+        context.setFillColor(NSColor(white: checkerboardTones.base, alpha: 1).cgColor)
         context.fill(rect)
         // Work scales with the visible viewport, not document dimensions.
         let tile: CGFloat = 10
@@ -1000,7 +1003,7 @@ final class CanvasView: NSView {
             let maxX = Int(ceil((visible.maxX - rect.minX) / tile))
             let minY = Int(floor((visible.minY - rect.minY) / tile))
             let maxY = Int(ceil((visible.maxY - rect.minY) / tile))
-            context.setFillColor(NSColor(white: 0.35, alpha: 1).cgColor)
+            context.setFillColor(NSColor(white: checkerboardTones.alternate, alpha: 1).cgColor)
             for row in minY..<maxY {
                 for column in minX..<maxX where (row + column).isMultiple(of: 2) {
                     context.fill(CGRect(x: rect.minX + CGFloat(column) * tile,
@@ -3061,10 +3064,12 @@ extension CanvasView {
             .transformed(by: CGAffineTransform(translationX: 0, y: 3 * device)).applyingGaussianBlur(sigma: 7 * device)
         frame = shadow.composited(over: frame)
         let tile = 10 * device
-        let squares = gray(0.35).cropped(to: CGRect(x: 0, y: 0, width: tile, height: tile))
-            .composited(over: gray(0.30).cropped(to: CGRect(x: tile, y: 0, width: tile, height: tile)))
-            .composited(over: gray(0.30).cropped(to: CGRect(x: 0, y: tile, width: tile, height: tile)))
-            .composited(over: gray(0.35).cropped(to: CGRect(x: tile, y: tile, width: tile, height: tile)))
+        let base = gray(checkerboardTones.base)
+        let alternate = gray(checkerboardTones.alternate)
+        let squares = alternate.cropped(to: CGRect(x: 0, y: 0, width: tile, height: tile))
+            .composited(over: base.cropped(to: CGRect(x: tile, y: 0, width: tile, height: tile)))
+            .composited(over: base.cropped(to: CGRect(x: 0, y: tile, width: tile, height: tile)))
+            .composited(over: alternate.cropped(to: CGRect(x: tile, y: tile, width: tile, height: tile)))
         let offset = NSAffineTransform()
         offset.translateX(by: rect.minX, yBy: rect.minY)
         let checkerboard = squares.applyingFilter("CIAffineTile", parameters: [kCIInputTransformKey: offset]).cropped(to: rect)
