@@ -93,7 +93,16 @@ struct CurvesControls: View {
                     if let selected, selected > 0, selected < points.count-1 { settings.channels[settings.channel.index].remove(at: selected); self.selected = nil }
                 }.disabled(selected == nil || selected == 0 || selected == points.count-1)
             }
-            Button("Reset curve") { settings.channels[settings.channel.index] = [CurvePoint(x: 0,y: 0), CurvePoint(x: 255,y: 255)]; selected = nil }
+            // On RGB, where the color channels show too, it resets them all; on a color channel, just that one.
+            Button(settings.channel == .rgb ? "Reset all" : "Reset curve") {
+                let straight = [CurvePoint(x: 0, y: 0), CurvePoint(x: 255, y: 255)]
+                if settings.channel == .rgb {
+                    for channel in settings.channels.indices { settings.channels[channel] = straight }
+                } else {
+                    settings.channels[settings.channel.index] = straight
+                }
+                selected = nil
+            }
         }
     }
 }
