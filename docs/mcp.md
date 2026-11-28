@@ -7,7 +7,7 @@ AI apps that speak the Model Context Protocol (MCP), such as ChatGPT, Claude and
 1. In **Compositor → Settings → General**, turn on **Allow MCP control**.
 2. Under **Add Compositor to your AI app**:
    - **ChatGPT**: click **Connect**, then quit and reopen ChatGPT. Compositor keeps a copy of ChatGPT's settings as they were, and **Disconnect** takes Compositor back out.
-   - **Claude**: click **Connect**, then **Install** in Claude. To remove it, use Claude's Settings › Extensions.
+   - **Claude**: click **Connect**, then **Install** in Claude. To remove it, use Claude's Settings › Plugins.
    - **Claude Code**: click **Copy Setup** and paste it into Terminal.
 3. Ask your AI app to do something in Compositor.
 

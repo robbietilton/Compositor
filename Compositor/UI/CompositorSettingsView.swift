@@ -95,7 +95,6 @@ private struct GeneralSettings: View {
                             appearance = option
                             option.apply()
                         }), options: CompositorAppearance.allCases) { Text($0.rawValue) }
-                        .controlSize(.small)
                         .fixedSize()
                     }
                 }
@@ -231,7 +230,7 @@ private struct MCPClientRow: View {
         case .claude:
             if MCPConnect.installed([MCPConnect.claudeBundleID]) == nil { return "Claude isn't on this Mac." }
             if connect.claudeConnected { return "Connected. Ask Claude in a new chat." }
-            if connect.claudeInstalled { return "Disconnected. To remove the extension too, use Claude's Settings › Extensions." }
+            if connect.claudeInstalled { return "Disconnected. To remove it from Claude too, use Claude's Settings › Plugins." }
             return connect.claudeWaiting ? "Click Install in Claude to finish." : "Adds Compositor to Claude as an extension."
         case .claudeCode:
             return "Paste into Terminal."

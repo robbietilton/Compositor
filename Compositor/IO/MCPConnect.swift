@@ -237,11 +237,17 @@ final class MCPConnect {
         let quoted = "'" + helper.replacingOccurrences(of: "'", with: "'\\''") + "'"
         return """
         #!/bin/sh
-        # Starts Compositor's companion for AI apps, finding Compositor if it has moved.
-        app=\(quoted)
+        # Starts the companion of the Compositor that's running, else the one in Applications, else the one this was
+        # made with, else any Compositor this Mac has: an old copy left elsewhere mustn't win over the one in use.
+        helper() { echo "$1/Contents/MacOS/compositor-mcp"; }
+        running=$(/bin/ps -axo comm= | /usr/bin/grep '/Contents/MacOS/Compositor$' | /usr/bin/head -n 1)
+        app=
+        [ -n "$running" ] && app=$(helper "${running%/Contents/MacOS/Compositor}")
+        [ -x "$app" ] || app=$(helper /Applications/Compositor.app)
+        [ -x "$app" ] || app=\(quoted)
         if [ ! -x "$app" ]; then
           found=$(/usr/bin/mdfind 'kMDItemCFBundleIdentifier == "com.wonderassembly.compositor"' | /usr/bin/head -n 1)
-          [ -n "$found" ] && app="$found/Contents/MacOS/compositor-mcp"
+          [ -n "$found" ] && app=$(helper "$found")
         fi
         exec "$app"
 

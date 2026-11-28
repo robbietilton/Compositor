@@ -72,6 +72,22 @@ struct MCPConnectTests {
         #expect((mode ?? 0) & 0o111 != 0, "executable")
     }
 
+    /// The extension starts a Compositor's companion that's there, even when the one it was made with is gone.
+    @Test func theClaudeExtensionFindsACompositorWhenItsOwnIsGone() throws {
+        let script = MCPConnect.launcher("/nowhere/Compositor.app/Contents/MacOS/compositor-mcp")
+            .replacingOccurrences(of: "exec \"$app\"", with: "echo \"$app\"")
+        let finder = Process()
+        finder.executableURL = URL(fileURLWithPath: "/bin/sh")
+        finder.arguments = ["-c", script]
+        let output = Pipe()
+        finder.standardOutput = output
+        try finder.run()
+        finder.waitUntilExit()
+        let found = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(found.hasSuffix("/Contents/MacOS/compositor-mcp") && FileManager.default.isExecutableFile(atPath: found), "\(found)")
+    }
+
     /// The sandbox lets Compositor into ChatGPT's settings folder and Claude's extensions (a Mac without them just has
     /// no such folder).
     @Test func theSandboxReachesChatGPTAndClaudesSettings() {
