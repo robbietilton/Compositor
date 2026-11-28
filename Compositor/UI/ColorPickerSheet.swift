@@ -5,19 +5,13 @@ import AppKit
 /// new/current preview, RGB and hex entry, with Cancel and OK below as in the app's other panels. Lives in a movable floating panel so
 /// the canvas stays visible and can be clicked to sample a color.
 struct ColorPickerSheet: View {
-    @Bindable var state: ColorPickerState
+    let state: ColorPickerState
     let finish: (Bool) -> Void
-    @State private var hexDraft = ""
     @FocusState private var hexFocused: Bool
-    /// What's typed in R, G and B, which sets the color with each digit.
-    @State private var channelDrafts = ["", "", ""]
-    @FocusState private var focusedChannel: Int?
+    @FocusState private var focusedChannel: ColorPickerState.Channel?
     private let fieldSize: CGFloat = 245
 
-    private var hsb: PickerHSB {
-        get { state.hsb }
-        nonmutating set { state.hsb = newValue }
-    }
+    private var hsb: PickerHSB { state.hsb }
     private var color: PaletteColor { state.color }
 
     var body: some View {
@@ -47,18 +41,9 @@ struct ColorPickerSheet: View {
         }
         .padding(20)
         .fixedSize()
-        .onAppear { hexDraft = color.hex; syncChannels() }
-        // The fields follow the color, except the one being typed in, which would otherwise rewrite itself mid-entry.
-        .onChange(of: color) { _, new in
-            if !hexFocused { hexDraft = new.hex }
-            syncChannels()
-        }
-        .onChange(of: hexFocused) { _, focused in if !focused { commitHex() } }
-        .onChange(of: focusedChannel) { _, _ in syncChannels() }
-        // Each digit typed sets the color: the value as it stands, the missing digits read as zeros.
-        .onChange(of: hexDraft) { _, draft in
-            guard hexFocused, let parsed = PaletteColor(typedHex: draft), parsed != color else { return }
-            hsb.setRGB(parsed)
+        .onChange(of: hexFocused) { _, focused in if !focused { state.finishEditingHex() } }
+        .onChange(of: focusedChannel) { previous, _ in
+            if let previous { state.finishEditingChannel(previous) }
         }
     }
 
@@ -85,8 +70,10 @@ struct ColorPickerSheet: View {
         }
         .contentShape(shape)
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-            hsb.saturation = min(1, max(0, value.location.x / fieldSize))
-            hsb.brightness = 1 - min(1, max(0, value.location.y / fieldSize))
+            var updated = hsb
+            updated.saturation = min(1, max(0, value.location.x / fieldSize))
+            updated.brightness = 1 - min(1, max(0, value.location.y / fieldSize))
+            state.hsb = updated
         })
         .accessibilityLabel("Saturation and brightness")
     }
@@ -117,7 +104,9 @@ struct ColorPickerSheet: View {
         .frame(width: stripWidth + (arrow.width + gap) * 2, height: fieldSize + overhang * 2)
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-            hsb.hue = (1 - min(1, max(0, (value.location.y - overhang) / fieldSize))) * 360
+            var updated = hsb
+            updated.hue = (1 - min(1, max(0, (value.location.y - overhang) / fieldSize))) * 360
+            state.hsb = updated
         })
         .padding(.vertical, -overhang)
         .accessibilityLabel("Hue")
@@ -130,7 +119,7 @@ struct ColorPickerSheet: View {
             color.swiftUI.accessibilityLabel("New color")
             state.original.swiftUI
                 .contentShape(Rectangle())
-                .onTapGesture { hsb.setRGB(state.original) }
+                .onTapGesture { state.pick(state.original) }
                 .help("The color before: click to go back to it")
                 .accessibilityLabel("Current color")
         }
@@ -140,58 +129,38 @@ struct ColorPickerSheet: View {
     }
 
     private var fields: some View {
-        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-            channelRow("R", 0, \.red)
-            channelRow("G", 1, \.green)
-            channelRow("B", 2, \.blue)
+        _ = state.hexDraft // Observe changes even when a sample picks the same color.
+        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+            channelRow("R", .red, accessibilityLabel: "Red")
+            channelRow("G", .green, accessibilityLabel: "Green")
+            channelRow("B", .blue, accessibilityLabel: "Blue")
             GridRow {
                 Text("#").frame(width: 12, alignment: .leading)
-                TextField("Hex", text: $hexDraft)
+                TextField("Hex", text: Binding(get: { state.hexDraft }, set: state.editHex))
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 62)
                     .focused($hexFocused)
                     // A field's own submit swallows Return, so it confirms the picker itself, as OK does.
-                    .onSubmit { commitHex(); finish(true) }
+                    .onSubmit { state.finishEditingHex(); finish(true) }
                     .accessibilityLabel("Hex color")
             }
         }
     }
 
-    private func channelRow(_ label: String, _ index: Int, _ channel: WritableKeyPath<PaletteColor, CGFloat>) -> some View {
-        func set(_ value: Int) {
-            var rgb = color
-            rgb[keyPath: channel] = CGFloat(min(255, max(0, value))) / 255
-            hsb.setRGB(rgb)
-        }
-        let channelValue = Binding<Int>(get: { Int((color[keyPath: channel] * 255).rounded()) }, set: set)
-        // Each digit typed sets the channel; an empty field leaves it as it was until something is typed.
-        let draft = Binding<String>(get: { channelDrafts[index] }, set: { text in
-            channelDrafts[index] = text
-            if let value = Int(text.trimmingCharacters(in: .whitespaces)) { set(value) }
-        })
+    private func channelRow(_ label: String, _ channel: ColorPickerState.Channel, accessibilityLabel: String) -> some View {
+        _ = state.channelDraft(channel)
+        let channelValue = Binding(get: { state.channelValue(channel) }, set: { state.setChannel(channel, to: $0) })
+        let draft = Binding(get: { state.channelDraft(channel) }, set: { state.editChannel(channel, draft: $0) })
         return GridRow {
             Text(label).frame(width: 12, alignment: .leading)
                 .scrubbable(sensitivity: 1, value: channelValue, range: 0...255)
             TextField(label, text: draft)
                 .frame(width: 52)
-                .focused($focusedChannel, equals: index)
+                .focused($focusedChannel, equals: channel)
                 .onSubmit { finish(true) }
-                .arrowSteps(value: { Double(channelValue.wrappedValue) }, change: { set(Int($0.rounded())) })
-                .accessibilityLabel(label == "R" ? "Red" : label == "G" ? "Green" : "Blue")
+                .arrowSteps(value: { Double(channelValue.wrappedValue) }, change: { state.setChannel(channel, to: Int($0.rounded())) })
+                .accessibilityLabel(accessibilityLabel)
         }
-    }
-
-    /// Puts each channel's value in its field, but the one being typed in.
-    private func syncChannels() {
-        for (index, channel) in [\PaletteColor.red, \.green, \.blue].enumerated() where focusedChannel != index {
-            let value = String(Int((color[keyPath: channel] * 255).rounded()))
-            if channelDrafts[index] != value { channelDrafts[index] = value }
-        }
-    }
-
-    private func commitHex() {
-        if let parsed = PaletteColor(hex: hexDraft) { hsb.setRGB(parsed) }
-        hexDraft = color.hex
     }
 }
 

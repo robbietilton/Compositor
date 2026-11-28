@@ -52,7 +52,7 @@ struct GridSettingsSheet: View {
 
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Grid").font(.title2.bold())
+            Text("Grid").font(.title2.bold()).frame(maxWidth: .infinity)
             HStack {
                 Text("Color").frame(width: 110, alignment: .leading)
                 Picker("Color", selection: $appearance.preset) {

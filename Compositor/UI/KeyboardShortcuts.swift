@@ -323,17 +323,18 @@ struct KeyboardShortcutsSettings: View {
     }
 }
 
-private struct ShortcutRecorder: NSViewRepresentable {
+struct ShortcutRecorder: NSViewRepresentable {
     let chord: ShortcutChord
     let recording: Bool
     let start: () -> Void
     let finish: (ShortcutChord?) -> Void
     func makeNSView(context: Context) -> RecorderButton { RecorderButton() }
     func updateNSView(_ button: RecorderButton, context: Context) {
-        button.start = start; button.finish = finish; button.recording = recording
+        button.start = start; button.finish = finish
+        button.recording = recording && context.environment.isEnabled
         button.title = recording ? "Press keys…" : chord.label
         button.setAccessibilityLabel(recording ? "Press a shortcut" : chord.label)
-        if recording, button.window?.firstResponder !== button { button.window?.makeFirstResponder(button) }
+        if button.recording, button.window?.firstResponder !== button { button.window?.makeFirstResponder(button) }
     }
     final class RecorderButton: NSButton {
         var start: (() -> Void)?

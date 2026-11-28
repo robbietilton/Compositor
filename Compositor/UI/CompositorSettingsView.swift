@@ -2,20 +2,74 @@ import Sparkle
 import SwiftUI
 
 struct CompositorSettingsView: View {
-    private enum Page { case general, shortcuts, updates }
+    private enum Page: String, CaseIterable {
+        case general = "General", shortcuts = "Shortcuts", updates = "Updates"
+
+        var symbol: String {
+            switch self {
+            case .general: "gearshape"
+            case .shortcuts: "keyboard"
+            case .updates: "arrow.down.circle"
+            }
+        }
+    }
 
     let updater: SPUUpdater
     @State private var page = Page.general
 
     var body: some View {
-        TabView(selection: $page) {
-            Tab("General", systemImage: "gearshape", value: Page.general) { GeneralSettings() }
-            Tab("Shortcuts", systemImage: "keyboard", value: Page.shortcuts) {
-                KeyboardShortcutsSettings(settings: .shared)
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                ForEach(Page.allCases, id: \.self) { tab in
+                    Button {
+                        page = tab
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.symbol).font(.system(size: 20)).frame(height: 24)
+                            Text(tab.rawValue)
+                        }
+                        .frame(width: 78, height: 52)
+                        .foregroundStyle(page == tab ? .primary : .secondary)
+                        .background(CompositorAppearance.ink.opacity(page == tab ? 0.09 : 0), in: .rect(cornerRadius: 8))
+                        .contentShape(.rect(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.rawValue)
+                    .accessibilityAddTraits(page == tab ? .isSelected : [])
+                }
             }
-            Tab("Updates", systemImage: "arrow.down.circle", value: Page.updates) { UpdateSettings(updater: updater) }
+            .padding(.vertical, 6)
+            Divider()
+            ZStack {
+                GeneralSettings().opacity(page == .general ? 1 : 0).allowsHitTesting(page == .general)
+                    .accessibilityHidden(page != .general)
+                KeyboardShortcutsSettings(settings: .shared).opacity(page == .shortcuts ? 1 : 0)
+                    .disabled(page != .shortcuts).allowsHitTesting(page == .shortcuts).accessibilityHidden(page != .shortcuts)
+                UpdateSettings(updater: updater).opacity(page == .updates ? 1 : 0).allowsHitTesting(page == .updates)
+                    .accessibilityHidden(page != .updates)
+            }
         }
         .frame(width: 560, height: 580)
+        .navigationTitle("Settings")
+        .background(SettingsWindowMarker())
+    }
+}
+
+struct SettingsWindowMarker: NSViewRepresentable {
+    static let identifier = NSUserInterfaceItemIdentifier("compositorSettings")
+
+    func makeNSView(context: Context) -> MarkerView { MarkerView() }
+    func updateNSView(_ view: MarkerView, context: Context) {}
+
+    final class MarkerView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.identifier = SettingsWindowMarker.identifier
+            DispatchQueue.main.async { [weak self] in
+                guard let window = self?.window else { return }
+                PanelTitleBar.install(in: window, title: "Settings")
+            }
+        }
     }
 }
 

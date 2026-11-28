@@ -102,7 +102,6 @@ struct ExportAsSheet: View {
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
-                Text("Export As").font(.title2.bold())
                 Spacer()
                 if format == .gif, let result, result.durations.count > 1 {
                     Button {
@@ -124,6 +123,9 @@ struct ExportAsSheet: View {
                 Button { zoomBy(-1) } label: { Image(systemName: "minus.magnifyingglass") }
                     .disabled(JPEGPreview.step(from: shownZoom, in: -1) == nil)
                     .help("Zoom out (⌘−), now \(percent)")
+            }
+            .overlay {
+                Text("Export As").font(.title2.bold()).allowsHitTesting(false)
             }
             .padding(.bottom, -8)
             ZStack {

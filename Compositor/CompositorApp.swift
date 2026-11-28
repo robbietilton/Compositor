@@ -100,6 +100,10 @@ struct CompositorApp: App {
                         .disabled(session.document == nil || !applicationDelegate.projects.canStart)
                     Divider()
                     Button("Close Project") {
+                        if let window = NSApp.keyWindow, window.identifier == SettingsWindowMarker.identifier {
+                            window.close()
+                            return
+                        }
                         if let window = applicationDelegate.projects.window {
                             Task { await applicationDelegate.projects.close(window) }
                         }

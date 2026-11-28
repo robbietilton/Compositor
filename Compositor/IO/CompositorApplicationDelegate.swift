@@ -70,8 +70,14 @@ final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
         // before the menu sees it.
         // Escape leaves fullscreen too, once there's nothing in progress for it to cancel first.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.keyCode == 53, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
-                  self.session.canvasOnly, self.session.escapeHasNothingToCancel, NSApp.keyWindow === self.projects.window,
+            guard let self, event.keyCode == 53, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
+            if let window = event.window, window.identifier == SettingsWindowMarker.identifier {
+                // Escape is assignable while the shortcut recorder has focus.
+                guard (window.firstResponder as? ShortcutRecorder.RecorderButton)?.recording != true else { return event }
+                window.close()
+                return nil
+            }
+            guard self.session.canvasOnly, self.session.escapeHasNothingToCancel, NSApp.keyWindow === self.projects.window,
                   !(NSApp.keyWindow?.firstResponder is NSText) else { return event }
             self.toggleCanvasOnly()
             return nil

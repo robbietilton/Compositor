@@ -159,6 +159,7 @@ final class ProjectController {
                 let sheet = NSWindow()
                 sheet.styleMask = [.titled, .fullSizeContentView]
                 sheet.title = "Export As"
+                sheet.titleVisibility = .hidden
                 sheet.contentViewController = NSHostingController(rootView: ExportAsSheet(
                     raster: raster, deepRaster: deepRaster, hdrRaster: hdrRaster, snapshot: snapshot, session: session,
                     format: exportedFormat ?? Self.startingFormat(source: session.sourceImageURL, projectURL: session.projectURL)) { chosen in
@@ -224,6 +225,7 @@ final class ProjectController {
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
             sheet.title = "Canvas Size"
+            sheet.titleVisibility = .hidden
             sheet.contentViewController = NSHostingController(rootView: CanvasSizeSheet(document: document, session: session) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -246,6 +248,7 @@ final class ProjectController {
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
             sheet.title = "Image Size"
+            sheet.titleVisibility = .hidden
             sheet.contentViewController = NSHostingController(rootView: ImageSizeSheet(document: document) { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -268,6 +271,7 @@ final class ProjectController {
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
             sheet.title = "Trim"
+            sheet.titleVisibility = .hidden
             sheet.contentViewController = NSHostingController(rootView: TrimSheet { options in
                 window.endSheet(sheet)
                 sheet.orderOut(nil)
@@ -295,6 +299,7 @@ final class ProjectController {
             let sheet = NSWindow()
             sheet.styleMask = [.titled, .fullSizeContentView]
             sheet.title = "Grid"
+            sheet.titleVisibility = .hidden
             sheet.contentViewController = NSHostingController(rootView: GridSettingsSheet(
                 session: session, grid: original.grid, appearance: original.appearance,
                 preview: { [session] grid, appearance in

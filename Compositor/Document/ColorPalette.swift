@@ -275,13 +275,13 @@ extension EditorSession {
     }
     /// Loads a palette swatch's color into the open picker: the foreground or background color is one more to sample.
     func sampleSwatchIntoColorPicker(background: Bool) {
-        colorPicker?.hsb.setRGB(paletteColor(background: background))
+        colorPicker?.pick(paletteColor(background: background))
     }
 
     /// Loads the canvas color under a document point into the open picker.
     func sampleIntoColorPicker(at point: CGPoint) {
         guard let colorPicker, let color = sampleCompositeColor(at: point) else { return }
-        colorPicker.hsb.setRGB(color)
+        colorPicker.pick(color)
     }
 
     /// Composited sRGB color of the visible layers at one document pixel, as shown on
@@ -350,20 +350,96 @@ enum ColorPickerTarget: Equatable {
 /// The open color picker's working color. Nothing is written to the palette until OK.
 @Observable
 final class ColorPickerState {
+    enum Channel: Int, CaseIterable {
+        case red, green, blue
+
+        var component: WritableKeyPath<PaletteColor, CGFloat> {
+            switch self {
+            case .red: \.red
+            case .green: \.green
+            case .blue: \.blue
+            }
+        }
+    }
+
+    private enum Field: Equatable { case hex, channel(Channel) }
+
     let target: ColorPickerTarget
     var background: Bool { target == .palette(background: true) }
     let original: PaletteColor
     /// The foreground picker opened while text was being edited: that text and the color it had.
     var editedText: (draftID: UUID, style: LayerTextStyle)?
-    var hsb: PickerHSB
+    private var workingHSB: PickerHSB
+    var hsb: PickerHSB {
+        get { workingHSB }
+        set { update(newValue, keeping: nil) }
+    }
     var color: PaletteColor { hsb.rgb.quantized }
+    private(set) var hexDraft: String
+    private var channelDrafts: [String]
+
     init(target: ColorPickerTarget, original: PaletteColor) {
         self.target = target
         self.original = original
-        hsb = PickerHSB(original)
+        workingHSB = PickerHSB(original)
+        hexDraft = original.hex
+        channelDrafts = Channel.allCases.map { String(Int((original[keyPath: $0.component] * 255).rounded())) }
     }
     convenience init(background: Bool, original: PaletteColor) {
         self.init(target: .palette(background: background), original: original)
+    }
+
+    func pick(_ rgb: PaletteColor) { update(rgb, keeping: nil) }
+
+    func editHex(_ draft: String) {
+        hexDraft = draft
+        if let rgb = PaletteColor(typedHex: draft), rgb != color { update(rgb, keeping: .hex) }
+    }
+
+    func finishEditingHex() {
+        if let rgb = PaletteColor(hex: hexDraft) { pick(rgb) }
+        else { hexDraft = color.hex }
+    }
+
+    func channelValue(_ channel: Channel) -> Int { Int((color[keyPath: channel.component] * 255).rounded()) }
+    func channelDraft(_ channel: Channel) -> String { channelDrafts[channel.rawValue] }
+
+    func setChannel(_ channel: Channel, to value: Int) {
+        pick(color(replacing: channel, with: value))
+    }
+
+    func editChannel(_ channel: Channel, draft: String) {
+        channelDrafts[channel.rawValue] = draft
+        if let value = Int(draft.trimmingCharacters(in: .whitespaces)) {
+            update(color(replacing: channel, with: value), keeping: .channel(channel))
+        }
+    }
+
+    func finishEditingChannel(_ channel: Channel) {
+        let text = String(channelValue(channel))
+        if channelDraft(channel) != text { channelDrafts[channel.rawValue] = text }
+    }
+
+    private func color(replacing channel: Channel, with value: Int) -> PaletteColor {
+        var rgb = color
+        rgb[keyPath: channel.component] = CGFloat(min(255, max(0, value))) / 255
+        return rgb
+    }
+
+    private func update(_ rgb: PaletteColor, keeping field: Field?) {
+        var updated = hsb
+        updated.setRGB(rgb)
+        update(updated, keeping: field)
+    }
+
+    /// Only preserve the field that supplied this edit. A sample refreshes every field, even if it picks the same RGB.
+    private func update(_ updated: PickerHSB, keeping field: Field?) {
+        if workingHSB != updated { workingHSB = updated }
+        if field != .hex {
+            let text = color.hex
+            if hexDraft != text { hexDraft = text }
+        }
+        for channel in Channel.allCases where field != .channel(channel) { finishEditingChannel(channel) }
     }
 }
 

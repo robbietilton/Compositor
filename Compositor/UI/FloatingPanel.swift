@@ -16,7 +16,7 @@ enum FloatingPanelPlacement: Sendable {
 
 /// A movable, non-modal panel for tool dialogs: it never dims the editor, opens over the canvas's right edge the
 /// first time, so the picture's middle stays in view, and reopens wherever it was last left (for the app session).
-/// The close button reports through `onClose` so callers can treat it as Cancel.
+/// A window close reports through `onClose` so callers can treat it as Cancel.
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     /// Where a panel was left, in screen coordinates: its top corner on the side it was moved toward, so a wider
@@ -53,7 +53,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let panel = self.panel ?? makePanel()
         let wasVisible = panel.isVisible
         let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
-        panel.title = title
         // A hosting *view* sized once, not a controller with `.preferredContentSize`:
         // that option makes AppKit measure the SwiftUI view during its constraint pass,
         // and SwiftUI's measurement invalidates layout re-entrantly, which AppKit treats
@@ -87,6 +86,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 panel.center()
             }
         }
+        PanelTitleBar.install(in: panel, title: title)
         panel.makeKeyAndOrderFront(nil)
         remember(panel)
     }
