@@ -10,6 +10,18 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- Settings' Connect for ChatGPT adds Compositor to ChatGPT's settings (~/.codex/config.toml) and takes it out again:
+         that folder only. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+    <array>
+        <string>/.codex/</string>
+    </array>
+    <!-- Settings shows whether Claude has Compositor's extension, or Compositor in its settings file: read only. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+    <array>
+        <string>/Library/Application Support/Claude/Claude Extensions/</string>
+        <string>/Library/Application Support/Claude/claude_desktop_config.json</string>
+    </array>
     <!-- Sparkle installs updates through its helper services, which a sandboxed app reaches by name. -->
     <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>

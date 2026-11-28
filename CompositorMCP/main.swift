@@ -184,6 +184,10 @@ struct Options {
     }
 }
 
+/// The AI app on the other end, as it named itself in its hello: passed with each request, so Compositor can turn away
+/// one the person has disconnected.
+nonisolated(unsafe) var clientName = ""
+
 struct Editor {
     let options: Options
     let mailbox = URL(fileURLWithPath: "/private/tmp/compositor-mcp-\(getuid())", isDirectory: true)
@@ -242,6 +246,7 @@ struct Editor {
         var payload: JSON = ["id": id, "action": action, "arguments": arguments,
                              "deadline": Date().timeIntervalSince1970 + options.timeout]
         if let source { payload["input"] = source.path }
+        if !clientName.isEmpty { payload["client"] = clientName }
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard data.count <= limit else { throw Problem("Compositor request is too large.") }
         // Made new and readable by this user only: the app refuses a request anyone else could have written.
@@ -319,6 +324,7 @@ func handle(_ editor: Editor, _ message: Any) -> JSON? {
     let result: JSON
     switch method {
     case "initialize":
+        clientName = (params["clientInfo"] as? JSON)?["name"] as? String ?? ""
         let asked = params["protocolVersion"] as? String
         result = ["protocolVersion": asked.flatMap { protocols.contains($0) ? $0 : nil } ?? protocols[0],
                   "capabilities": ["tools": JSON()], "serverInfo": ["name": "compositor", "version": "1.0.0"],

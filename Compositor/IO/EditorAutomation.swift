@@ -97,6 +97,10 @@ final class EditorAutomation {
                           deadline <= Date().timeIntervalSince1970 + 300,
                           let action = request["action"] as? String,
                           let arguments = request["arguments"] as? [String: Any] else { throw Failure("Invalid request.") }
+                    // Disconnected in Settings: Claude's extension stays in Claude, and this is what turns it away.
+                    if MCPConnect.isClaude(request["client"] as? String), MCPConnect.shared.claudeDisconnected {
+                        throw Failure("Compositor is disconnected from Claude. Connect it again in Compositor's Settings.")
+                    }
                     try await authorize(in: workspace.window)
                     guard deadline >= Date().timeIntervalSince1970 else {
                         throw Failure("The MCP request expired. Send it again.")

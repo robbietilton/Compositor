@@ -116,7 +116,16 @@ private struct GeneralSettings: View {
                     }
                     Divider()
                     Text("Add Compositor to your AI app").font(.subheadline.weight(.semibold))
-                    ForEach(MCPClient.allCases, id: \.self) { MCPClientRow(client: $0) }
+                    // With MCP control off, no AI app can use Compositor: the rows are dimmed and show no connection,
+                    // though what's connected is kept for when it's turned on again.
+                    ForEach(MCPClient.allCases, id: \.self) { MCPClientRow(client: $0, allowed: access == .allowed) }
+                        .disabled(access != .allowed)
+                    if access != .allowed {
+                        Text("Turn on Allow MCP control to connect AI apps.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let problem = MCPConnect.shared.problem {
+                        Text(problem).font(.caption).foregroundStyle(.red)
+                    }
                 }
             }
             .padding(24)
@@ -188,56 +197,85 @@ private struct UpdateSettings: View {
     }
 }
 
-/// The AI apps an MCP connection is set up in, and the setup each takes: the companion inside this app, which the
-/// app, sandboxed, can't write into their settings itself.
+/// The AI apps an MCP connection is set up in. ChatGPT and Claude connect from here (see MCPConnect); Claude Code takes
+/// a line pasted into Terminal, which the sandboxed app can't run itself.
 private enum MCPClient: String, CaseIterable {
     case chatGPT = "ChatGPT", claude = "Claude", claudeCode = "Claude Code"
-
-    static var helper: String { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/compositor-mcp").path }
-
-    var whereItGoes: String {
-        switch self {
-        case .claudeCode: "Paste into Terminal."
-        case .claude: "Add under \"mcpServers\" in Claude's Settings › Developer › Edit Config, then restart Claude."
-        case .chatGPT: "Add to ~/.codex/config.toml, then restart ChatGPT."
-        }
-    }
-
-    var setup: String {
-        let path = Self.helper
-        switch self {
-        case .claudeCode:
-            return "claude mcp add --scope user compositor -- '\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
-        case .claude:
-            let json = (try? JSONSerialization.data(withJSONObject: path, options: .fragmentsAllowed))
-                .flatMap { String(data: $0, encoding: .utf8) } ?? "\"\(path)\""
-            return "\"compositor\": { \"command\": \(json.replacingOccurrences(of: "\\/", with: "/")) }"
-        case .chatGPT:
-            let toml = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            return "[mcp_servers.compositor]\ncommand = \"\(toml)\""
-        }
-    }
 }
 
 private struct MCPClientRow: View {
     let client: MCPClient
+    /// MCP control is on: off, a connected app shows no dot.
+    var allowed = true
+    @State private var connect = MCPConnect.shared
     @State private var copied = false
+
+    private var claudeCodeSetup: String {
+        "claude mcp add --scope user compositor -- '\(MCPConnect.helper.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private var note: String {
+        if !allowed {
+            switch client {
+            case .chatGPT: return "Adds Compositor to ChatGPT."
+            case .claude: return "Adds Compositor to Claude as an extension."
+            case .claudeCode: return "Paste into Terminal."
+            }
+        }
+        switch client {
+        case .chatGPT:
+            if MCPConnect.installed(MCPConnect.chatGPTBundleIDs) == nil { return "ChatGPT isn't on this Mac." }
+            return connect.chatGPTConnected ? "Connected. Quit and reopen ChatGPT to use it." : "Adds Compositor to ChatGPT."
+        case .claude:
+            if MCPConnect.installed([MCPConnect.claudeBundleID]) == nil { return "Claude isn't on this Mac." }
+            if connect.claudeConnected { return "Connected. Ask Claude in a new chat." }
+            if connect.claudeInstalled { return "Disconnected. To remove the extension too, use Claude's Settings › Extensions." }
+            return connect.claudeWaiting ? "Click Install in Claude to finish." : "Adds Compositor to Claude as an extension."
+        case .claudeCode:
+            return "Paste into Terminal."
+        }
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(client.rawValue)
-                Text(client.whereItGoes).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 5) {
+                    Text(client.rawValue)
+                    if allowed, client == .chatGPT ? connect.chatGPTConnected : client == .claude && connect.claudeConnected {
+                        Circle().fill(.green).frame(width: 6, height: 6).accessibilityLabel("Connected")
+                    }
+                }
+                Text(note).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Button(copied ? "Copied" : "Copy Setup") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(client.setup, forType: .string)
-                copied = true
-                Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+            switch client {
+            case .chatGPT:
+                if connect.chatGPTConnected {
+                    Button("Disconnect") { connect.disconnectChatGPT() }
+                } else {
+                    Button("Connect") { connect.connectChatGPT() }
+                        .disabled(MCPConnect.installed(MCPConnect.chatGPTBundleIDs) == nil)
+                }
+            case .claude:
+                if connect.claudeConnected {
+                    Button("Disconnect") { connect.disconnectClaude() }
+                } else {
+                    Button(connect.claudeWaiting ? "Open Again" : "Connect") { connect.connectClaude() }
+                        .disabled(MCPConnect.installed([MCPConnect.claudeBundleID]) == nil)
+                }
+            case .claudeCode:
+                Button(copied ? "Copied" : "Copy Setup") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(claudeCodeSetup, forType: .string)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                }
+                .help(claudeCodeSetup)
             }
-            .help(client.setup)
         }
+        .onAppear { connect.refresh() }
+        // Back from Claude or ChatGPT: see what changed there.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in connect.refresh() }
     }
 }
 

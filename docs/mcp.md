@@ -5,15 +5,17 @@ AI apps that speak the Model Context Protocol (MCP), such as ChatGPT, Claude and
 ## Connect
 
 1. In **Compositor → Settings → General**, turn on **Allow MCP control**.
-2. Under **Add Compositor to your AI app**, click **Copy Setup** next to your app and paste it where the row says:
-   - **ChatGPT**: add it to `~/.codex/config.toml`, then restart ChatGPT.
-   - **Claude**: add it under `"mcpServers"` in Claude's Settings › Developer › Edit Config, then restart Claude.
-   - **Claude Code**: paste into Terminal.
+2. Under **Add Compositor to your AI app**:
+   - **ChatGPT**: click **Connect**, then quit and reopen ChatGPT. Compositor keeps a copy of ChatGPT's settings as they were, and **Disconnect** takes Compositor back out.
+   - **Claude**: click **Connect**, then **Install** in Claude. To remove it, use Claude's Settings › Extensions.
+   - **Claude Code**: click **Copy Setup** and paste it into Terminal.
 3. Ask your AI app to do something in Compositor.
 
-The setup points your AI app at `compositor-mcp`, a small program inside Compositor.app. Nothing else needs installing. If Compositor moves (into Applications, say), copy the setup again.
+Each connection starts `compositor-mcp`, a small program inside Compositor.app, so nothing else needs installing. If Compositor moves (into Applications, say), connect again. Claude's extension finds Compositor wherever it is.
 
 If Allow MCP control is off, Compositor asks the first time an AI app tries to use it, and remembers your answer. Turning it off blocks new requests, including from AI apps that are still running.
+
+Compositor runs in macOS's app sandbox, which keeps it out of other apps' files. It makes two narrow exceptions, for these buttons: it can change ChatGPT's settings folder (`~/.codex`) and read Claude's extensions folder and settings file, nothing else. Claude Code needs a command run in Terminal, which the sandbox doesn't allow, so it takes a pasted line.
 
 ## How it works
 

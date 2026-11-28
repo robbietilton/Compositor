@@ -19,7 +19,7 @@ brew install --cask robbietilton-compositor
 
 ## Automation
 
-AI apps that speak MCP, such as ChatGPT, Claude and Claude Code, can work in Compositor: turn on **Allow MCP control** in Settings and copy the setup for your app from there. See [docs/mcp.md](docs/mcp.md).
+AI apps that speak MCP, such as ChatGPT, Claude and Claude Code, can work in Compositor: turn on **Allow MCP control** in Settings and connect your app from there. See [docs/mcp.md](docs/mcp.md).
 
 ## Features
 
