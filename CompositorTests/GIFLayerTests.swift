@@ -98,6 +98,8 @@ struct GIFLayerTests {
         timing.mode = .uniform
         timing.uniformDelay = 0.1
         session.setGIFFrameTiming(timing, for: id)
+        #expect(session.gifTimelineFrames.map(\.duration) == [0.04, 0.16, 0.08, 0.24],
+                "The Original menu still needs the source delays while a uniform delay is active")
         #expect(frames.allSatisfy { session.gifTimelineTiming.delay(for: $0) == 0.1 })
         timing.mode = .perFrame
         session.setGIFFrameTiming(timing, for: id)

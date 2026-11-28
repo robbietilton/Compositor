@@ -137,7 +137,8 @@ final class EditorSession {
     }
     var gifTimelineFrames: [GIFTimelineFrame] {
         guard let animation = activeLayer?.gifAnimation else { return [] }
-        return animation.frames.map { frame in
+        // The timeline applies timing overrides for playback and needs the source delays for Original.
+        return animation.sourceFrames.map { frame in
             GIFTimelineFrame(index: frame.index, thumbnail: animation.framePixels[frame.index]?.thumbnail ?? frame.thumbnail,
                              duration: frame.duration)
         }

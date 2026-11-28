@@ -146,7 +146,6 @@ struct ContentView: View {
                                     onDuplicateFrame: { await session.duplicateGIFFrame(at: $0, for: gifLayerID) },
                                     onDeleteFrame: { await session.deleteGIFFrames(at: [$0], for: gifLayerID) })
                             .id(gifLayerID)
-                            .frame(height: 110)
                             .releasesFocusOnCommit(session)
                     }
                 }

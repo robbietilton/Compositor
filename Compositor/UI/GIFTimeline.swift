@@ -22,31 +22,13 @@ struct GIFTimeline: View {
         (timing.mode == .uniform ? timing.uniformDelay : GIFFrameTiming.defaultUniformDelay(for: frames)) * 1000
     }
 
+    @State private var requestedFrame: Int?
+
+    private var shownFrame: Int { requestedFrame ?? selectedFrameIndex }
+    private var frameNumber: Int { (frames.firstIndex { $0.index == shownFrame } ?? 0) + 1 }
+
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Button(action: onTogglePlayback) {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: 70, height: 40)
-                        .background(Color.white.opacity(0.1), in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canPlay)
-                .help(isPlaying ? "Pause" : "Play")
-                // The delay as a menu of common ones, as the Layers panel's adjustment button offers its kinds.
-                Menu { delayMenu } label: {
-                    Text(timing.mode == .uniform ? "\(Int(delay.rounded()))ms" : originalDelays(spaced: false))
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-                .disabled(!canEditTiming)
-                .help("How long each frame shows")
-            }
-            // The same room either side of the button.
-            .padding(.horizontal, 18)
-            Divider()
+        VStack(spacing: 0) {
             ScrollViewReader { scroller in
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 8) {
@@ -54,17 +36,69 @@ struct GIFTimeline: View {
                             thumbnail(frame, number: position + 1)
                         }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
                 }
-                .onChange(of: selectedFrameIndex) { _, index in
-                    withAnimation(.easeOut(duration: 0.15)) { scroller.scrollTo(index) }
+                .frame(height: 88)
+                .onChange(of: shownFrame, initial: true) { _, index in
+                    scroller.scrollTo(index)
                 }
             }
+            Divider()
+            playbackBar
         }
         // Decoding must not lengthen the layer's saved frame delays.
         .task(id: Playback(isPlaying: isPlaying, frames: frames.map(\.index), timing: timing)) { await play() }
+        .task(id: requestedFrame != nil) {
+            // Finish one decode at a time. A fast drag replaces any intermediate request with the latest frame.
+            while let index = requestedFrame, !Task.isCancelled {
+                await onSelectFrame(index)
+                guard !Task.isCancelled else { return }
+                if requestedFrame == index { requestedFrame = nil }
+            }
+        }
         .onChange(of: canPlay) { if !canPlay, isPlaying { onStopPlayback() } }
         .onDisappear { onStopPlayback() }
+    }
+
+    private var playbackBar: some View {
+        HStack(spacing: 8) {
+            Button(action: onTogglePlayback) {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .frame(width: 20, height: 18)
+            }
+            .disabled(!canPlay || requestedFrame != nil)
+            .help(isPlaying ? "Pause" : "Play")
+            .accessibilityLabel(isPlaying ? "Pause" : "Play")
+
+            Menu { delayMenu } label: {
+                Text(timing.mode == .uniform ? "\(Int(delay.rounded())) ms" : originalDelays())
+                    .monospacedDigit()
+            }
+            .menuStyle(.button).buttonStyle(.bordered).menuIndicator(.hidden).fixedSize()
+            .disabled(!canEditTiming)
+            .help("How long each frame shows")
+            .accessibilityLabel("Frame delay")
+            .accessibilityValue(timing.mode == .uniform ? "\(Int(delay.rounded())) ms" : originalDelays())
+
+            AppSlider(value: Binding(get: { Double(frameNumber) }, set: { value in
+                let position = Int(value) - 1
+                if frames.indices.contains(position) { requestFrame(frames[position].index) }
+            }), in: 1...Double(max(1, frames.count)), step: 1)
+            .disabled(frames.count < 2)
+            .accessibilityLabel("GIF frame")
+
+            Text(String(format: "%02d / %02d", frameNumber, frames.count))
+                .monospacedDigit()
+                .accessibilityLabel("Frame \(frameNumber) of \(frames.count)")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: LayersFooter.height)
+    }
+
+    private func requestFrame(_ index: Int) {
+        if isPlaying { onStopPlayback() }
+        guard index != shownFrame else { return }
+        requestedFrame = index
     }
 
     private struct Playback: Equatable {
@@ -86,21 +120,18 @@ struct GIFTimeline: View {
     }
 
     private func thumbnail(_ frame: GIFTimelineFrame, number: Int) -> some View {
-        let selected = frame.index == selectedFrameIndex
+        let selected = frame.index == shownFrame
         let box = RoundedRectangle(cornerRadius: 5, style: .continuous)
         return VStack(spacing: 4) {
             Image(decorative: frame.thumbnail, scale: 1)
                 .resizable().interpolation(.medium).aspectRatio(contentMode: .fit)
-                .frame(width: 72, height: 72)
+                .frame(width: 56, height: 56)
                 .background(Color.black.opacity(0.25), in: box)
                 .overlay { box.strokeBorder(selected ? Color.accentColor : Color.white.opacity(0.12), lineWidth: selected ? 2 : 1) }
             Text("\(number)").font(.caption2.monospacedDigit()).foregroundStyle(selected ? .primary : .secondary)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            if isPlaying { onStopPlayback() }
-            Task { await onSelectFrame(frame.index) }
-        }
+        .onTapGesture { requestFrame(frame.index) }
         .contextMenu {
             Button("Duplicate Frame") { Task { await onDuplicateFrame(frame.index) } }.disabled(!canEditFrames)
             Button("Delete Frame") { Task { await onDeleteFrame(frame.index) } }.disabled(!canEditFrames || frames.count < 2)
@@ -125,12 +156,11 @@ struct GIFTimeline: View {
         }
     }
 
-    /// The GIF's own delays: one, or the shortest to the longest when its frames differ. The menu spaces the unit
-    /// as its presets do; the label under the play button doesn't.
-    private func originalDelays(spaced: Bool = true) -> String {
+    /// The GIF's own delays: one, or the shortest to the longest when its frames differ.
+    private func originalDelays() -> String {
         let delays = frames.map { Int(((timing.frameDelays[$0.index] ?? $0.duration) * 1000).rounded()) }
         guard let shortest = delays.min(), let longest = delays.max() else { return "" }
-        return (shortest == longest ? "\(shortest)" : "\(shortest)–\(longest)") + (spaced ? " ms" : "ms")
+        return (shortest == longest ? "\(shortest)" : "\(shortest)–\(longest)") + " ms"
     }
 
     private func fps(_ milliseconds: Int) -> String {
